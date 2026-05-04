@@ -75,11 +75,16 @@ def test_null_file_hash_excluded(tmp_path):
     conn = open_db(tmp_path / "c.db")
     _seed(conn, path="/a/x.als", file_hash="h", mtime=1000.0)
     _seed(conn, path="/b/x.als", file_hash="h", mtime=1000.0)
-    pid = upsert_project(
+    # Two NULL-hash rows would form a phantom group via GROUP BY (SQLite treats
+    # NULLs as equal for grouping). The filter must drop them.
+    upsert_project(
         conn, path="/c/x.als", name="x", parent_dir="/c",
         file_hash=None, last_modified=1000.0, meta=ProjectMetadata(),
     )
-    assert pid is not None
+    upsert_project(
+        conn, path="/d/y.als", name="y", parent_dir="/d",
+        file_hash=None, last_modified=1000.0, meta=ProjectMetadata(),
+    )
     groups = find_duplicates(conn)
     assert len(groups) == 1
-    assert all(m["file_hash"] == "h" for m in [groups[0].keeper, *groups[0].losers])
+    assert groups[0].file_hash == "h"
