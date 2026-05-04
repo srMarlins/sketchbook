@@ -31,3 +31,7 @@ Projects/
 
 # local-only test fixtures (real .als files, not committed)
 packages/core/tests/fixtures/
+
+# stray JS toolchain output if a tool runs from the repo root instead of web/
+node_modules/
+.vite/

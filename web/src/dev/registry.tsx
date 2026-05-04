@@ -1,0 +1,356 @@
+import { Sprite } from '../components/primitives/Sprite';
+import { DOODLE_SPRITES, FIELD_SPRITES, type SpriteName } from '../components/primitives/sprite-names';
+import { Button, type ButtonVariant } from '../components/inputs/Button';
+import { TextInput } from '../components/inputs/TextInput';
+import { SearchBar } from '../components/inputs/SearchBar';
+import { FilterChip } from '../components/data/FilterChip';
+import { SongStrip } from '../components/data/SongStrip';
+import { NavStrip } from '../components/data/NavStrip';
+import { MarginStickyNote } from '../components/data/MarginStickyNote';
+import { ProposalCard } from '../components/data/ProposalCard';
+import { EmptyState } from '../components/feedback/EmptyState';
+import { ErrorState } from '../components/feedback/ErrorState';
+import { LoadingState } from '../components/feedback/LoadingState';
+import { Toast, ToastProvider, ToastViewport } from '../components/feedback/Toast';
+import { BrandingHeader } from '../components/surface/BrandingHeader';
+import { Desk } from '../components/surface/Desk';
+import { Sidebar } from '../components/surface/Sidebar';
+import { NotebookPage } from '../components/surface/NotebookPage';
+import { NotebookSpine } from '../components/surface/NotebookSpine';
+import { Shelf } from '../components/surface/Shelf';
+import { CorkboardPanel } from '../components/surface/CorkboardPanel';
+import { TornPagePile } from '../components/surface/TornPagePile';
+import projectsJson from '../mocks/projects.json';
+import { useState } from 'react';
+import type { ProjectSummary, Proposal } from '../lib/types';
+import type { DevEntry } from './types';
+
+const sampleProjects = (projectsJson as ProjectSummary[]).slice(0, 14).map((p, i) => ({
+  ...p,
+  color_tag: i, // 0..13
+}));
+
+const sampleProposal: Proposal = {
+  proposal_id: 'demo-1',
+  actor: 'claude',
+  actions: [
+    { type: 'RenameProject', args: { project_id: sampleProjects[0]!.id, new_dir_name: `${sampleProjects[0]!.name} (rev)` } },
+  ],
+  rationale: 'Filename has trailing whitespace.',
+};
+
+const sampleProposals: Proposal[] = sampleProjects.slice(0, 4).map((p, i) => ({
+  proposal_id: `demo-${i + 1}`,
+  actor: 'claude',
+  actions: [
+    i % 2 === 0
+      ? { type: 'SetTags', args: { project_id: p.id, tags: [...p.tags, 'review'] } }
+      : { type: 'ArchiveProject', args: { project_id: p.id } },
+  ],
+  rationale: i % 2 === 0 ? 'New incoming sketches need a review tag.' : 'No edits in 18 months.',
+}));
+
+function ToastDemo() {
+  const [open, setOpen] = useState(false);
+  return (
+    <ToastProvider>
+      <div className="space-y-3">
+        <Button onClick={() => setOpen(true)}>fire toast</Button>
+        <Toast open={open} onOpenChange={setOpen} title="Saved" description="2 changes applied" tone="success" />
+        <ToastViewport />
+      </div>
+    </ToastProvider>
+  );
+}
+
+export const registry: DevEntry[] = [
+  {
+    id: 'sprite',
+    group: 'primitives',
+    label: 'Sprite',
+    controls: {
+      name: {
+        type: 'select',
+        label: 'name',
+        defaultValue: 'metronome' as SpriteName,
+        options: [...DOODLE_SPRITES, ...FIELD_SPRITES] as readonly SpriteName[],
+      },
+      size: { type: 'number', label: 'size', defaultValue: 48 },
+    },
+    render: (c) => (
+      <Sprite name={(c['name'] as SpriteName) ?? 'metronome'} size={(c['size'] as number) ?? 48} />
+    ),
+  },
+
+  {
+    id: 'button',
+    group: 'inputs',
+    label: 'Button',
+    controls: {
+      variant: {
+        type: 'select',
+        label: 'variant',
+        defaultValue: 'primary' as ButtonVariant,
+        options: ['primary', 'secondary', 'ghost'] as ButtonVariant[],
+      },
+      label: { type: 'text', label: 'label', defaultValue: 'Save' },
+      disabled: { type: 'toggle', label: 'disabled', defaultValue: false },
+    },
+    render: (c) => (
+      <div className="flex flex-wrap gap-3">
+        <Button variant={c['variant'] as ButtonVariant} disabled={c['disabled'] as boolean}>
+          {String(c['label'] ?? 'Save')}
+        </Button>
+        <Button variant={c['variant'] as ButtonVariant} size="sm" disabled={c['disabled'] as boolean}>
+          small
+        </Button>
+      </div>
+    ),
+  },
+  {
+    id: 'text-input',
+    group: 'inputs',
+    label: 'TextInput',
+    render: () => (
+      <div className="max-w-sm space-y-4">
+        <TextInput label="Project name" placeholder="lazy ridge" hint="must be unique" />
+        <TextInput label="Tempo" defaultValue="120" />
+        <TextInput label="Project name" defaultValue="" invalid hint="cannot be empty" />
+      </div>
+    ),
+  },
+  {
+    id: 'search-bar',
+    group: 'inputs',
+    label: 'SearchBar',
+    render: () => (
+      <div className="max-w-md">
+        <SearchBar />
+        <p className="mt-2 text-xs text-ink-muted">try ⌘K, /, esc</p>
+      </div>
+    ),
+  },
+
+  {
+    id: 'filter-chip',
+    group: 'data',
+    label: 'FilterChip',
+    render: () => (
+      <div className="flex flex-wrap gap-2">
+        <FilterChip label="tempo" value="120 BPM" icon="bpm" onDismiss={() => undefined} />
+        <FilterChip label="key" value="Cmin" icon="key" onDismiss={() => undefined} />
+        <FilterChip label="archived" icon="folder" onDismiss={() => undefined} />
+        <FilterChip label="vox" icon="microphone" />
+      </div>
+    ),
+  },
+  {
+    id: 'song-strip',
+    group: 'data',
+    label: 'SongStrip',
+    render: () => (
+      <div className="space-y-3">
+        {sampleProjects.map((p) => (
+          <SongStrip key={p.id} project={p} onOpen={() => undefined} />
+        ))}
+      </div>
+    ),
+  },
+  {
+    id: 'nav-strip',
+    group: 'data',
+    label: 'NavStrip',
+    render: () => (
+      <div className="max-w-xs space-y-2">
+        <NavStrip label="Home" icon="house" />
+        <NavStrip label="Projects" icon="folder" active />
+        <NavStrip label="Proposals" icon="paper-airplane" badge={3} />
+        <NavStrip label="Claude" icon="cassette-tape" />
+      </div>
+    ),
+  },
+  {
+    id: 'margin-sticky-note',
+    group: 'data',
+    label: 'MarginStickyNote',
+    render: () => (
+      <div className="flex gap-6 flex-wrap">
+        <MarginStickyNote id="n-1" text="rename for clarity?" onOpenSuggestion={() => undefined} />
+        <MarginStickyNote id="n-2" text="archive — not opened in 18mo" onOpenSuggestion={() => undefined} />
+        <MarginStickyNote id="n-3" text="tag as draft?" onOpenSuggestion={() => undefined} />
+      </div>
+    ),
+  },
+  {
+    id: 'proposal-card',
+    group: 'data',
+    label: 'ProposalCard',
+    render: () => (
+      <ProposalCard
+        proposal={sampleProposal}
+        onApprove={() => undefined}
+        onReject={() => undefined}
+      />
+    ),
+  },
+
+  {
+    id: 'empty-state',
+    group: 'feedback',
+    label: 'EmptyState',
+    render: () => <EmptyState title="no sketches yet" body="run claude scan to populate" icon="cloud" />,
+  },
+  {
+    id: 'error-state',
+    group: 'feedback',
+    label: 'ErrorState',
+    render: () => (
+      <ErrorState body="500 from /api/projects" onRetry={() => undefined} />
+    ),
+  },
+  {
+    id: 'loading-state',
+    group: 'feedback',
+    label: 'LoadingState',
+    render: () => <LoadingState label="finding sketches…" />,
+  },
+  {
+    id: 'toast',
+    group: 'feedback',
+    label: 'Toast',
+    render: () => <ToastDemo />,
+  },
+
+  {
+    id: 'branding-header',
+    group: 'surface',
+    label: 'BrandingHeader',
+    render: () => <BrandingHeader />,
+  },
+  {
+    id: 'sidebar',
+    group: 'surface',
+    label: 'Sidebar',
+    render: () => (
+      <div className="max-w-xs">
+        <Sidebar
+          activeId="projects"
+          items={[
+            { id: 'home', label: 'Home', icon: 'house' },
+            { id: 'projects', label: 'Projects', icon: 'folder' },
+            { id: 'proposals', label: 'Proposals', icon: 'paper-airplane', badge: 3 },
+            { id: 'claude', label: 'Claude', icon: 'cassette-tape' },
+            { id: 'archive', label: 'Archive', icon: 'bookmark' },
+            { id: 'settings', label: 'Settings', icon: 'pencil-stub' },
+            { id: 'help', label: 'Help', icon: 'magnifying-glass' },
+          ]}
+        />
+      </div>
+    ),
+  },
+  {
+    id: 'desk',
+    group: 'surface',
+    label: 'Desk',
+    render: () => (
+      <div className="h-[60vh] overflow-hidden rounded">
+        <Desk
+          branding={<BrandingHeader />}
+          search={<SearchBar />}
+          sidebar={
+            <Sidebar
+              activeId="projects"
+              items={[
+                { id: 'home', label: 'Home', icon: 'house' },
+                { id: 'projects', label: 'Projects', icon: 'folder' },
+                { id: 'proposals', label: 'Proposals', icon: 'paper-airplane', badge: 3 },
+              ]}
+            />
+          }
+        >
+          <NotebookPage>
+            <p className="font-display text-2xl">desk + notebook composition</p>
+          </NotebookPage>
+        </Desk>
+      </div>
+    ),
+  },
+  {
+    id: 'notebook-page',
+    group: 'surface',
+    label: 'NotebookPage',
+    controls: {
+      kind: {
+        type: 'select',
+        label: 'kind',
+        defaultValue: 'plain' as const,
+        options: ['plain', 'ruled', 'tinted'] as const,
+      },
+    },
+    render: (c) => (
+      <NotebookPage
+        kind={c['kind'] as 'plain' | 'ruled' | 'tinted'}
+        header={<h2 className="text-xl font-semibold tracking-tight">2024</h2>}
+      >
+        <div className="space-y-3">
+          {sampleProjects.slice(0, 4).map((p) => (
+            <SongStrip key={p.id} project={p} />
+          ))}
+        </div>
+      </NotebookPage>
+    ),
+  },
+  {
+    id: 'shelf',
+    group: 'surface',
+    label: 'Shelf + NotebookSpine',
+    render: () => (
+      <Shelf title="library">
+        <NotebookSpine id="inbox" title="Inbox" kind="tinted-cream" count={42} />
+        <NotebookSpine id="2024" title="2024" count={128} lastUpdated="2024-09-12" />
+        <NotebookSpine id="2025" title="2025" count={73} lastUpdated="2025-04-18" />
+        <NotebookSpine id="2026" title="2026" count={11} lastUpdated="2026-05-04" />
+        <NotebookSpine id="claude" title="Claude" kind="tinted-rose" count={20} />
+      </Shelf>
+    ),
+  },
+  {
+    id: 'corkboard-panel',
+    group: 'surface',
+    label: 'CorkboardPanel',
+    render: () => <CorkboardDemo />,
+  },
+  {
+    id: 'torn-page-pile',
+    group: 'surface',
+    label: 'TornPagePile',
+    render: () => (
+      <TornPagePile>
+        {sampleProposals.map((p) => (
+          <ProposalCard key={p.proposal_id} proposal={p} />
+        ))}
+      </TornPagePile>
+    ),
+  },
+];
+
+function CorkboardDemo() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <Button onClick={() => setOpen(true)}>open corkboard</Button>
+      <CorkboardPanel
+        open={open}
+        onOpenChange={setOpen}
+        title="lazy ridge"
+        tabs={[
+          { id: 'overview', label: 'Overview', content: <p>Project metadata.</p> },
+          { id: 'tracks', label: 'Tracks', content: <p>Track listing.</p> },
+          { id: 'samples', label: 'Samples', content: <p>Sample paths.</p> },
+          { id: 'plugins', label: 'Plugins', content: <p>Plugin map.</p> },
+          { id: 'history', label: 'History', content: <p>Journal.</p> },
+        ]}
+      />
+    </div>
+  );
+}
