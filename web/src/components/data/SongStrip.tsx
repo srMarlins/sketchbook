@@ -122,9 +122,9 @@ export function SongStrip({ project, onOpen, onLaunch }: SongStripProps) {
         <span className="font-mono text-[11px] text-ink-muted truncate min-w-0 flex-1">
           {project.parent_dir}
         </span>
-        {project.tags.length > 0 ? (
+        {(project.tags?.length ?? 0) > 0 ? (
           <span className="hidden sm:flex shrink-0 items-center gap-1">
-            {project.tags.slice(0, 3).map((t) => (
+            {project.tags!.slice(0, 3).map((t) => (
               <span
                 key={t}
                 className="px-1.5 py-0.5 text-[10px] font-mono rounded-chip bg-paper-tint-blue text-ink-secondary border border-rule-line leading-none"
@@ -132,9 +132,9 @@ export function SongStrip({ project, onOpen, onLaunch }: SongStripProps) {
                 {t}
               </span>
             ))}
-            {project.tags.length > 3 ? (
+            {project.tags!.length > 3 ? (
               <span className="text-[10px] font-mono text-ink-muted">
-                +{project.tags.length - 3}
+                +{project.tags!.length - 3}
               </span>
             ) : null}
           </span>
