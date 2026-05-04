@@ -96,3 +96,44 @@ def get_project_by_path(conn: sqlite3.Connection, path: str) -> dict | None:
     conn.row_factory = sqlite3.Row
     row = conn.execute("SELECT * FROM projects WHERE path = ?", (path,)).fetchone()
     return dict(row) if row else None
+
+
+def _safe_fts_query(query: str) -> str:
+    """Wrap each whitespace-separated token in double quotes so FTS5 treats them as
+    literal phrases (avoids parsing pitfalls like ``Pro-Q`` being read as a column op).
+    Multiple tokens are AND-ed by FTS5 default."""
+    tokens = [t for t in query.split() if t]
+    return " ".join('"' + t.replace('"', '""') + '"' for t in tokens)
+
+
+def search_projects(
+    conn: sqlite3.Connection,
+    *,
+    query: str | None = None,
+    tempo_min: float | None = None,
+    tempo_max: float | None = None,
+    archived: bool | None = False,
+    limit: int = 200,
+) -> list[dict]:
+    conn.row_factory = sqlite3.Row
+    where: list[str] = []
+    params: list = []
+    if query and query.strip():
+        base = "SELECT p.* FROM projects p JOIN projects_fts f ON f.rowid = p.id"
+        where.append("projects_fts MATCH ?")
+        params.append(_safe_fts_query(query))
+    else:
+        base = "SELECT p.* FROM projects p"
+    if tempo_min is not None:
+        where.append("p.tempo >= ?")
+        params.append(tempo_min)
+    if tempo_max is not None:
+        where.append("p.tempo <= ?")
+        params.append(tempo_max)
+    if archived is not None:
+        where.append("p.is_archived = ?")
+        params.append(1 if archived else 0)
+    sql = base + ((" WHERE " + " AND ".join(where)) if where else "")
+    sql += " ORDER BY p.last_modified DESC LIMIT ?"
+    params.append(limit)
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
