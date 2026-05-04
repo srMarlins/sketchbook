@@ -7,7 +7,7 @@ from pathlib import Path
 
 from lxml import etree
 
-from audio_core.parser.model import PluginRef, SampleRef
+from audio_core.parser.model import PluginRef, ProjectMetadata, SampleRef
 
 # Live encodes the song-level time signature as a single int in <TimeSignature><Manual Value="N"/>.
 # Numerator = (value % 99) + 1, denominator index = value // 99 → table below.
@@ -231,6 +231,24 @@ def _path_from_fileref(file_ref: etree._Element) -> str | None:
         if joined:
             return joined
     return None
+
+
+def parse_als(path: str | Path) -> ProjectMetadata:
+    root = als_xml(path)
+    n, d = parse_time_signature(root)
+    counts = parse_tracks(root)
+    return ProjectMetadata(
+        tempo=parse_tempo(root),
+        time_sig_numerator=n,
+        time_sig_denominator=d,
+        track_count=counts.total,
+        audio_track_count=counts.audio,
+        midi_track_count=counts.midi,
+        return_track_count=counts.return_,
+        live_version=parse_live_version(root),
+        plugins=parse_plugins(root),
+        samples=parse_samples(root),
+    )
 
 
 def parse_samples(root: etree._Element) -> list[SampleRef]:
