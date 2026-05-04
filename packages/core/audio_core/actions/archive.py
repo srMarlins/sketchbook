@@ -30,6 +30,8 @@ class ArchiveProject:
 
     def validate(self, conn: sqlite3.Connection) -> None:
         row = self._row(conn)
+        if row["is_archived"]:
+            return  # idempotent: already archived, execute() will be a no-op
         old_dir = Path(row["parent_dir"])
         ensure_within(old_dir, self.root)
         archive = self.root / ARCHIVE_DIR_NAME
@@ -41,6 +43,16 @@ class ArchiveProject:
 
     def execute(self, conn: sqlite3.Connection) -> dict:
         row = self._row(conn)
+        if row["is_archived"]:
+            # No filesystem move; record a noop entry so the journal stays linear.
+            return {
+                "type": "ArchiveProject",
+                "project_id": self.project_id,
+                "from_": row["parent_dir"],
+                "to": row["parent_dir"],
+                "hash_before": row["file_hash"],
+                "noop": True,
+            }
         old_dir = Path(row["parent_dir"])
         archive = self.root / ARCHIVE_DIR_NAME
         archive.mkdir(exist_ok=True)

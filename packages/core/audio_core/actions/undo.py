@@ -15,6 +15,8 @@ def undo_batch(conn: sqlite3.Connection, journal_dir: str | Path, batch_id: str)
         t = entry["type"]
 
         if t in {"RenameProject", "MoveProject", "ArchiveProject"}:
+            if entry.get("noop"):
+                continue  # idempotent ArchiveProject noop — nothing to reverse
             from_, to = entry["from_"], entry["to"]
             Path(from_).parent.mkdir(parents=True, exist_ok=True)
             shutil.move(to, from_)
