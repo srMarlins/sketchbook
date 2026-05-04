@@ -12,6 +12,14 @@ import { EmptyState } from '../components/feedback/EmptyState';
 import { ErrorState } from '../components/feedback/ErrorState';
 import { LoadingState } from '../components/feedback/LoadingState';
 import { Toast, ToastProvider, ToastViewport } from '../components/feedback/Toast';
+import { BrandingHeader } from '../components/surface/BrandingHeader';
+import { Desk } from '../components/surface/Desk';
+import { Sidebar } from '../components/surface/Sidebar';
+import { NotebookPage } from '../components/surface/NotebookPage';
+import { NotebookSpine } from '../components/surface/NotebookSpine';
+import { Shelf } from '../components/surface/Shelf';
+import { CorkboardPanel } from '../components/surface/CorkboardPanel';
+import { TornPagePile } from '../components/surface/TornPagePile';
 import projectsJson from '../mocks/projects.json';
 import proposalsJson from '../mocks/proposals.json';
 import { useState } from 'react';
@@ -195,4 +203,137 @@ export const registry: DevEntry[] = [
     label: 'Toast',
     render: () => <ToastDemo />,
   },
+
+  {
+    id: 'branding-header',
+    group: 'surface',
+    label: 'BrandingHeader',
+    render: () => <BrandingHeader />,
+  },
+  {
+    id: 'sidebar',
+    group: 'surface',
+    label: 'Sidebar',
+    render: () => (
+      <div className="max-w-xs">
+        <Sidebar
+          activeId="projects"
+          items={[
+            { id: 'home', label: 'Home', icon: 'house' },
+            { id: 'projects', label: 'Projects', icon: 'folder' },
+            { id: 'proposals', label: 'Proposals', icon: 'paper-airplane', badge: 3 },
+            { id: 'claude', label: 'Claude', icon: 'cassette-tape' },
+            { id: 'archive', label: 'Archive', icon: 'bookmark' },
+            { id: 'settings', label: 'Settings', icon: 'pencil-stub' },
+            { id: 'help', label: 'Help', icon: 'magnifying-glass' },
+          ]}
+        />
+      </div>
+    ),
+  },
+  {
+    id: 'desk',
+    group: 'surface',
+    label: 'Desk',
+    render: () => (
+      <div className="h-[60vh] overflow-hidden rounded">
+        <Desk
+          branding={<BrandingHeader />}
+          search={<SearchBar />}
+          sidebar={
+            <Sidebar
+              activeId="projects"
+              items={[
+                { id: 'home', label: 'Home', icon: 'house' },
+                { id: 'projects', label: 'Projects', icon: 'folder' },
+                { id: 'proposals', label: 'Proposals', icon: 'paper-airplane', badge: 3 },
+              ]}
+            />
+          }
+        >
+          <NotebookPage>
+            <p className="font-display text-2xl">desk + notebook composition</p>
+          </NotebookPage>
+        </Desk>
+      </div>
+    ),
+  },
+  {
+    id: 'notebook-page',
+    group: 'surface',
+    label: 'NotebookPage',
+    controls: {
+      kind: {
+        type: 'select',
+        label: 'kind',
+        defaultValue: 'lined' as const,
+        options: ['lined', 'kraft', 'manila'] as const,
+      },
+    },
+    render: (c) => (
+      <NotebookPage
+        kind={c['kind'] as 'lined' | 'kraft' | 'manila'}
+        header={<h2 className="font-display text-2xl">2024</h2>}
+      >
+        <div className="space-y-3">
+          {sampleProjects.slice(0, 4).map((p) => (
+            <SongStrip key={p.id} project={p} />
+          ))}
+        </div>
+      </NotebookPage>
+    ),
+  },
+  {
+    id: 'shelf',
+    group: 'surface',
+    label: 'Shelf + NotebookSpine',
+    render: () => (
+      <Shelf>
+        <NotebookSpine id="inbox" title="Inbox" kind="manila" count={42} />
+        <NotebookSpine id="2024" title="2024" count={128} lastUpdated="2024-09-12" />
+        <NotebookSpine id="2025" title="2025" count={73} lastUpdated="2025-04-18" />
+        <NotebookSpine id="2026" title="2026" count={11} lastUpdated="2026-05-04" />
+        <NotebookSpine id="claude" title="Claude" kind="kraft" count={20} />
+      </Shelf>
+    ),
+  },
+  {
+    id: 'corkboard-panel',
+    group: 'surface',
+    label: 'CorkboardPanel',
+    render: () => <CorkboardDemo />,
+  },
+  {
+    id: 'torn-page-pile',
+    group: 'surface',
+    label: 'TornPagePile',
+    render: () => (
+      <TornPagePile>
+        {(proposalsJson as Proposal[]).slice(0, 4).map((p) => (
+          <ProposalCard key={p.id} proposal={p} />
+        ))}
+      </TornPagePile>
+    ),
+  },
 ];
+
+function CorkboardDemo() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <Button onClick={() => setOpen(true)}>open corkboard</Button>
+      <CorkboardPanel
+        open={open}
+        onOpenChange={setOpen}
+        title="lazy ridge"
+        tabs={[
+          { id: 'overview', label: 'Overview', content: <p>Project metadata.</p> },
+          { id: 'tracks', label: 'Tracks', content: <p>Track listing.</p> },
+          { id: 'samples', label: 'Samples', content: <p>Sample paths.</p> },
+          { id: 'plugins', label: 'Plugins', content: <p>Plugin map.</p> },
+          { id: 'history', label: 'History', content: <p>Journal.</p> },
+        ]}
+      />
+    </div>
+  );
+}
