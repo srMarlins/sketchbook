@@ -87,7 +87,7 @@ def _shelf_forgotten_gems(conn: sqlite3.Connection, *, now: float) -> Shelf:
               AND last_modified < ?
               AND (color_tag IS NULL OR color_tag NOT IN (?, ?))
             ORDER BY effort_score DESC
-            LIMIT 40
+            LIMIT 150
             """,
             (cutoff, *excluded),
         )
