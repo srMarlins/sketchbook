@@ -10,10 +10,11 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const VARIANT_CLS: Record<ButtonVariant, string> = {
   primary:
-    'bg-accent-action text-surface-page hover:translate-y-[-1px] active:translate-y-[1px] shadow-lift',
+    'bg-accent text-ink-on-fill hover:bg-accent/90 shadow-card border border-accent-soft/40',
   secondary:
-    'bg-surface-strip text-ink-primary border border-rule-line hover:bg-surface-page',
-  ghost: 'bg-transparent text-ink-primary hover:bg-surface-strip/60',
+    'bg-surface-card text-ink-primary border border-rule-line hover:bg-surface-sunken',
+  ghost:
+    'bg-transparent text-ink-secondary border border-transparent hover:bg-surface-sunken hover:text-ink-primary',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
@@ -25,12 +26,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       className={clsx(
-        'inline-flex items-center gap-2 font-display rounded-[10px] transition-transform duration-fast ease-paper',
-        size === 'sm' ? 'px-3 py-1 text-base' : 'px-4 py-2 text-lg',
+        'inline-flex items-center gap-2 rounded-input font-medium transition-colors duration-fast',
+        size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
         VARIANT_CLS[variant],
-        'disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0',
-        // rough-edge effect via SVG mask (uses asset from public/raw/torn-edges-4.png as a CSS mask)
-        'sketchbook-button',
+        'disabled:opacity-50 disabled:cursor-not-allowed',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-page',
         className,
       )}
       {...rest}

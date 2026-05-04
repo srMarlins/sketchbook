@@ -33,8 +33,8 @@ describe('<Button />', () => {
     expect(screen.getAllByRole('button')).toHaveLength(3);
   });
 
-  test('uses font-display class', () => {
+  test('renders the label text', () => {
     render(<Button>Save</Button>);
-    expect(screen.getByRole('button')).toHaveClass('font-display');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
   });
 });
