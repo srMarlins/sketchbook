@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { deriveNotebooks } from './notebooks';
-import type { Project } from '../lib/types';
+import type { ProjectSummary } from '../lib/types';
 
-const baseProject: Project = {
+const baseProject: ProjectSummary = {
   id: 1,
   path: '/x/foo.als',
   name: 'foo',
@@ -10,7 +10,6 @@ const baseProject: Project = {
   tempo: 120,
   time_sig_num: 4,
   time_sig_den: 4,
-  key: 'C',
   track_count: 1,
   audio_tracks: 1,
   midi_tracks: 0,
@@ -28,7 +27,7 @@ const baseProject: Project = {
 
 describe('deriveNotebooks', () => {
   test('produces inbox + per-year + per-tag + archive + claude', () => {
-    const projects: Project[] = [
+    const projects: ProjectSummary[] = [
       { ...baseProject, id: 1, parent_dir: '/Projects/2024', tags: ['vox'] },
       { ...baseProject, id: 2, parent_dir: '/Projects/2024', tags: ['vox', 'beats'] },
       { ...baseProject, id: 3, parent_dir: '/Projects/2025', tags: ['ambient'] },

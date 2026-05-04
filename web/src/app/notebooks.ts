@@ -1,4 +1,4 @@
-import type { Project } from '../lib/types';
+import type { ProjectSummary } from '../lib/types';
 
 export interface DerivedNotebook {
   id: string;
@@ -6,10 +6,10 @@ export interface DerivedNotebook {
   kind: 'lined' | 'kraft' | 'manila';
   count: number;
   lastUpdated: number | null;
-  filter: (p: Project) => boolean;
+  filter: (p: ProjectSummary) => boolean;
 }
 
-export function deriveNotebooks(projects: Project[]): DerivedNotebook[] {
+export function deriveNotebooks(projects: ProjectSummary[]): DerivedNotebook[] {
   const out: DerivedNotebook[] = [];
 
   // Inbox: projects with parent_dir directly under the root (no year subfolder).
@@ -26,7 +26,7 @@ export function deriveNotebooks(projects: Project[]): DerivedNotebook[] {
   }
 
   // Years: one notebook per year.
-  const yearMap = new Map<string, Project[]>();
+  const yearMap = new Map<string, ProjectSummary[]>();
   for (const p of projects) {
     const m = /\b(19|20)\d{2}\b/.exec(p.parent_dir);
     if (!m) continue;
@@ -46,7 +46,7 @@ export function deriveNotebooks(projects: Project[]): DerivedNotebook[] {
   }
 
   // Tags: one notebook per active tag.
-  const tagMap = new Map<string, Project[]>();
+  const tagMap = new Map<string, ProjectSummary[]>();
   for (const p of projects) {
     for (const t of p.tags) {
       if (!tagMap.has(t)) tagMap.set(t, []);
