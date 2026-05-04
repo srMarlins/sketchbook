@@ -12,8 +12,9 @@ import { LoadingState } from '../components/feedback/LoadingState';
 import { ErrorState } from '../components/feedback/ErrorState';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { useKeyboard } from '../hooks/useKeyboard';
-import { useProjects, useProposals } from '../app/queries';
+import { useHome, useOpenProject, useProjects, useProposals } from '../app/queries';
 import { deriveNotebooks } from '../app/notebooks';
+import { deriveProjectGroups, type ProjectGroup } from '../lib/project-groups';
 import type { ProjectSummary } from '../lib/types';
 import { ClaudeJournal } from './claude-notebook';
 
@@ -23,11 +24,16 @@ export function NotebookRoute() {
   const navigate = useNavigate();
   const projectsQ = useProjects({ limit: 1000 });
   const proposals = useProposals();
+  const homeQ = useHome();
+  const openProjectMut = useOpenProject();
   const query = useSearchStore((s) => s.query);
   const clear = useSearchStore((s) => s.clear);
 
   const [openProjectId, setOpenProjectId] = useState<number | null>(null);
   const [corkOpen, setCorkOpen] = useState(false);
+
+  const isCategory = notebookId.startsWith('cat-');
+  const categoryId = isCategory ? notebookId.slice('cat-'.length) : null;
 
   const notebooks = useMemo(
     () => (projectsQ.data ? deriveNotebooks(projectsQ.data) : []),
@@ -35,10 +41,20 @@ export function NotebookRoute() {
   );
   const notebook = notebooks.find((n) => n.id === notebookId);
 
+  const categoryShelf = useMemo(() => {
+    if (!categoryId || !homeQ.data) return null;
+    return homeQ.data.shelves.find((s) => s.id === categoryId) ?? null;
+  }, [categoryId, homeQ.data]);
+
   const filtered = useMemo(() => {
-    if (!projectsQ.data) return [];
     if (notebookId === 'claude') return [];
-    const list = projectsQ.data.filter(notebook?.filter ?? (() => true));
+    let list: ProjectSummary[];
+    if (isCategory) {
+      list = categoryShelf?.projects ?? [];
+    } else {
+      if (!projectsQ.data) return [];
+      list = projectsQ.data.filter(notebook?.filter ?? (() => true));
+    }
     if (!query) return list;
     const lower = query.toLowerCase();
     return list.filter(
@@ -47,7 +63,9 @@ export function NotebookRoute() {
         p.path.toLowerCase().includes(lower) ||
         p.tags.some((t) => t.toLowerCase().includes(lower)),
     );
-  }, [projectsQ.data, notebook, query, notebookId]);
+  }, [projectsQ.data, notebook, query, notebookId, isCategory, categoryShelf]);
+
+  const groups = useMemo(() => deriveProjectGroups(filtered), [filtered]);
 
   useKeyboard({
     combo: 'esc',
@@ -99,12 +117,16 @@ export function NotebookRoute() {
         header={
           <div className="flex items-baseline gap-3 flex-wrap">
             <h2 className="text-xl font-semibold tracking-tight">
-              {notebookId === 'claude' ? 'Claude' : notebook?.title ?? notebookId}
+              {notebookId === 'claude'
+                ? 'Claude'
+                : isCategory
+                  ? categoryShelf?.title ?? categoryId ?? notebookId
+                  : notebook?.title ?? notebookId}
             </h2>
             <span className="font-mono text-xs text-ink-muted">
               {notebookId === 'claude'
                 ? ''
-                : `${filtered.length} project${filtered.length === 1 ? '' : 's'}`}
+                : `${filtered.length} project${filtered.length === 1 ? '' : 's'} · ${groups.length} group${groups.length === 1 ? '' : 's'}`}
             </span>
           </div>
         }
@@ -116,22 +138,26 @@ export function NotebookRoute() {
               setCorkOpen(true);
             }}
           />
-        ) : projectsQ.isLoading ? (
+        ) : (isCategory ? homeQ.isLoading : projectsQ.isLoading) ? (
           <LoadingState />
-        ) : projectsQ.isError ? (
-          <ErrorState body={String(projectsQ.error)} onRetry={() => projectsQ.refetch()} />
+        ) : (isCategory ? homeQ.isError : projectsQ.isError) ? (
+          <ErrorState
+            body={String(isCategory ? homeQ.error : projectsQ.error)}
+            onRetry={() => (isCategory ? homeQ.refetch() : projectsQ.refetch())}
+          />
         ) : filtered.length === 0 ? (
           <EmptyState
             title={query ? 'no matches' : 'empty notebook'}
             body={query ? `nothing matches "${query}"` : 'this notebook has no projects yet'}
           />
         ) : (
-          <VirtualStrips
-            projects={filtered}
+          <GroupedStrips
+            groups={groups}
             onOpen={(p) => {
               setOpenProjectId(p.id);
               setCorkOpen(true);
             }}
+            onLaunch={(id) => openProjectMut.mutate(id)}
           />
         )}
       </NotebookPage>
@@ -140,19 +166,45 @@ export function NotebookRoute() {
   );
 }
 
-function VirtualStrips({
-  projects,
+interface FlatRow {
+  kind: 'header' | 'variant';
+  group: ProjectGroup;
+  project?: ProjectSummary;
+  /** Stable key. */
+  key: string;
+}
+
+function flattenGroups(groups: ProjectGroup[]): FlatRow[] {
+  const rows: FlatRow[] = [];
+  for (const g of groups) {
+    if (g.variant_count > 1) {
+      rows.push({ kind: 'header', group: g, key: `h:${g.id}` });
+      for (const v of g.variants) {
+        rows.push({ kind: 'variant', group: g, project: v, key: `v:${v.id}` });
+      }
+    } else {
+      rows.push({ kind: 'variant', group: g, project: g.representative, key: `v:${g.representative.id}` });
+    }
+  }
+  return rows;
+}
+
+function GroupedStrips({
+  groups,
   onOpen,
+  onLaunch,
 }: {
-  projects: ProjectSummary[];
+  groups: ProjectGroup[];
   onOpen: (project: ProjectSummary) => void;
+  onLaunch: (projectId: number) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const rows = useMemo(() => flattenGroups(groups), [groups]);
 
   const rowVirtualizer = useVirtualizer({
-    count: projects.length,
+    count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 68,
+    estimateSize: (index) => (rows[index]?.kind === 'header' ? 32 : 68),
     overscan: 8,
   });
 
@@ -160,22 +212,38 @@ function VirtualStrips({
     <div ref={parentRef} className="relative max-h-[72vh] overflow-y-auto pr-1">
       <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
         {rowVirtualizer.getVirtualItems().map((vRow) => {
-          const project = projects[vRow.index]!;
+          const row = rows[vRow.index]!;
           return (
             <div
-              key={project.id}
+              key={row.key}
               data-index={vRow.index}
+              data-row-kind={row.kind}
               style={{
                 position: 'absolute',
                 top: 0,
                 left: 0,
                 width: '100%',
                 transform: `translateY(${vRow.start}px)`,
-                paddingTop: 4,
-                paddingBottom: 4,
+                paddingTop: row.kind === 'header' ? 8 : 4,
+                paddingBottom: row.kind === 'header' ? 0 : 4,
               }}
             >
-              <SongStrip project={project} onOpen={() => onOpen(project)} />
+              {row.kind === 'header' ? (
+                <div className="flex items-baseline gap-2 pl-1 pb-1 border-b border-rule-line/60">
+                  <span className="font-display text-sm text-ink-primary">{row.group.title}</span>
+                  <span className="font-mono text-[11px] text-ink-muted">
+                    {row.group.variant_count} variants
+                  </span>
+                </div>
+              ) : (
+                <div className={row.group.variant_count > 1 ? 'pl-3' : ''}>
+                  <SongStrip
+                    project={row.project!}
+                    onOpen={() => onOpen(row.project!)}
+                    onLaunch={onLaunch}
+                  />
+                </div>
+              )}
             </div>
           );
         })}

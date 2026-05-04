@@ -4,12 +4,13 @@ import { Desk } from '../components/surface/Desk';
 import { Sidebar } from '../components/surface/Sidebar';
 import { HomeShelf } from '../components/surface/HomeShelf';
 import { ProjectCard } from '../components/data/ProjectCard';
+import { HighlightsStrip, type HighlightShelfId } from '../components/data/HighlightsStrip';
 import { SearchBar } from '../components/inputs/SearchBar';
 import { LoadingState } from '../components/feedback/LoadingState';
 import { ErrorState } from '../components/feedback/ErrorState';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { useHome, useProposals } from '../app/queries';
-import type { HomeResponse } from '../lib/types';
+import type { HomeResponse, Shelf } from '../lib/types';
 
 export function HomeRoute() {
   const home = useHome();
@@ -43,12 +44,60 @@ export function HomeRoute() {
       }
     >
       <h1 className="sr-only">Audio catalog</h1>
+      <HighlightsRow
+        shelves={home.data?.shelves ?? []}
+        loading={home.isLoading}
+        error={home.isError}
+        onSelect={(id) =>
+          void navigate({ to: '/n/$notebookId', params: { notebookId: `cat-${id}` } })
+        }
+      />
       {home.isLoading ? <LoadingState label="loading shelves…" /> : null}
       {home.isError ? (
         <ErrorState body={String(home.error)} onRetry={() => home.refetch()} />
       ) : null}
       {home.data ? <HomeShelves home={home.data} /> : null}
     </Desk>
+  );
+}
+
+function HighlightsRow({
+  shelves,
+  loading,
+  error,
+  onSelect,
+}: {
+  shelves: Shelf[];
+  loading: boolean;
+  error: boolean;
+  onSelect: (id: HighlightShelfId) => void;
+}) {
+  if (error) return null;
+  if (loading) {
+    // Show 5 dim placeholder chips while data loads.
+    const placeholders: Shelf[] = [
+      'currently-working',
+      'forgotten-gems',
+      'almost-done',
+      'has-potential',
+      'untriaged',
+    ].map((id) => ({
+      id: id as Shelf['id'],
+      title: id.replace(/-/g, ' '),
+      description: '',
+      see_all_query: '',
+      projects: [],
+    }));
+    return (
+      <div className="mb-4 opacity-70" aria-busy>
+        <HighlightsStrip shelves={placeholders} onSelect={onSelect} />
+      </div>
+    );
+  }
+  return (
+    <div className="mb-4">
+      <HighlightsStrip shelves={shelves} onSelect={onSelect} />
+    </div>
   );
 }
 
