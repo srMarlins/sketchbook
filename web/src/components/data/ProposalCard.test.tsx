@@ -2,46 +2,91 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 import { ProposalCard } from './ProposalCard';
-import type { Proposal } from '../../lib/types';
+import type { ProjectSummary, Proposal } from '../../lib/types';
 
-const fakeProposal = (overrides: Partial<Proposal> = {}): Proposal => ({
-  id: 'p-1',
-  project_id: 1,
-  verb: 'rename',
-  target: '/x/foo.als',
-  diff: { before: 'foo', after: 'foo (rev)' },
-  reason: 'Filename has trailing whitespace.',
-  source: 'claude-cli',
-  created_at: 1700000000,
-  status: 'pending',
+const fakeProject: ProjectSummary = {
+  id: 1,
+  path: '/x/foo.als',
+  name: 'foo',
+  parent_dir: '/x',
+  tempo: 120,
+  time_sig_num: 4,
+  time_sig_den: 4,
+  track_count: 4,
+  audio_tracks: 2,
+  midi_tracks: 2,
+  return_tracks: 0,
+  length_seconds: 100,
+  live_version: '12.0',
+  last_modified: 0,
+  last_scanned: 0,
+  file_hash: 'h',
+  is_archived: 0,
+  color_tag: 0,
+  notes: null,
+  tags: ['vox'],
+};
+
+const renameProposal = (overrides: Partial<Proposal> = {}): Proposal => ({
+  proposal_id: 'p-1',
+  actor: 'claude',
+  actions: [{ type: 'RenameProject', args: { project_id: 1, new_dir_name: 'foo (rev)' } }],
+  rationale: 'Filename has trailing whitespace.',
   ...overrides,
 });
 
 describe('<ProposalCard />', () => {
-  test('shows verb, target, and diff', () => {
-    render(<ProposalCard proposal={fakeProposal()} />);
+  test('shows verb, label, and translated diff', () => {
+    render(<ProposalCard proposal={renameProposal()} project={fakeProject} />);
     expect(screen.getByText('rename')).toBeInTheDocument();
-    expect(screen.getByText('/x/foo.als')).toBeInTheDocument();
+    expect(screen.getAllByText('foo (rev)').length).toBeGreaterThan(0);
     expect(screen.getByText('foo')).toBeInTheDocument();
-    expect(screen.getByText('foo (rev)')).toBeInTheDocument();
   });
 
-  test('approve and reject fire correct handlers', async () => {
+  test('approve and reject fire correct handlers with proposal_id', async () => {
     const onApprove = vi.fn();
     const onReject = vi.fn();
-    render(<ProposalCard proposal={fakeProposal()} onApprove={onApprove} onReject={onReject} />);
+    render(
+      <ProposalCard
+        proposal={renameProposal()}
+        project={fakeProject}
+        onApprove={onApprove}
+        onReject={onReject}
+      />,
+    );
     await userEvent.click(screen.getByRole('button', { name: 'approve' }));
     await userEvent.click(screen.getByRole('button', { name: 'reject' }));
     expect(onApprove).toHaveBeenCalledWith('p-1');
     expect(onReject).toHaveBeenCalledWith('p-1');
   });
 
-  test('rotation is deterministic per id', () => {
-    const a = render(<ProposalCard proposal={fakeProposal({ id: 'p-deterministic' })} />);
-    const rotA = (a.container.querySelector('[data-testid="proposal-card"]') as HTMLElement).style.transform;
-    a.unmount();
-    const b = render(<ProposalCard proposal={fakeProposal({ id: 'p-deterministic' })} />);
-    const rotB = (b.container.querySelector('[data-testid="proposal-card"]') as HTMLElement).style.transform;
-    expect(rotB).toBe(rotA);
+  test('multi-action proposal shows +N more', () => {
+    render(
+      <ProposalCard
+        proposal={renameProposal({
+          actions: [
+            { type: 'RenameProject', args: { project_id: 1, new_dir_name: 'foo (rev)' } },
+            { type: 'SetTags', args: { project_id: 1, tags: ['vox', 'rough'] } },
+          ],
+        })}
+        project={fakeProject}
+      />,
+    );
+    expect(screen.getByText('+1 more')).toBeInTheDocument();
+  });
+
+  test('rationale renders when set', () => {
+    render(<ProposalCard proposal={renameProposal()} project={fakeProject} />);
+    expect(screen.getByText('Filename has trailing whitespace.')).toBeInTheDocument();
+  });
+
+  test('rationale is hidden when null', () => {
+    render(
+      <ProposalCard
+        proposal={renameProposal({ rationale: null })}
+        project={fakeProject}
+      />,
+    );
+    expect(screen.queryByText('Filename has trailing whitespace.')).not.toBeInTheDocument();
   });
 });

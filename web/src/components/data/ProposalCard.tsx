@@ -1,53 +1,79 @@
 import clsx from 'clsx';
-import { useMemo } from 'react';
-import { mulberry32, seedFromString } from '../../lib/seed';
+import { translateProposalHead } from '../../lib/proposal-translate';
+import type { ProjectSummary, Proposal } from '../../lib/types';
 import { Button } from '../inputs/Button';
-import type { Proposal } from '../../lib/types';
 
 export interface ProposalCardProps {
   proposal: Proposal;
-  onApprove?: (id: string) => void;
-  onReject?: (id: string) => void;
+  /** Optional: pass the project so before-state can be filled in. */
+  project?: ProjectSummary;
+  onApprove?: (proposalId: string) => void;
+  onReject?: (proposalId: string) => void;
 }
 
-export function ProposalCard({ proposal, onApprove, onReject }: ProposalCardProps) {
-  const rotation = useMemo(() => {
-    const r = mulberry32(seedFromString(`prop:${proposal.id}`));
-    return (r() * 6 - 3).toFixed(2);
-  }, [proposal.id]);
+const VERB_TINT: Record<string, string> = {
+  rename: 'bg-paper-tint-blue',
+  move: 'bg-paper-tint-blue',
+  archive: 'bg-paper-tint-rose',
+  color: 'bg-paper-tint-cream',
+  tag: 'bg-paper-tint-sage',
+};
+
+export function ProposalCard({ proposal, project, onApprove, onReject }: ProposalCardProps) {
+  const head = translateProposalHead(proposal, project);
 
   return (
     <article
-      className={clsx(
-        'relative bg-surface-strip text-ink-primary',
-        'p-4 rounded-sm shadow-page max-w-md',
-        'border-t border-rule-line/60',
-      )}
-      style={{ transform: `rotate(${rotation}deg)` }}
       data-testid="proposal-card"
+      className={clsx(
+        'rounded-card border border-rule-line shadow-card',
+        'bg-surface-card',
+      )}
     >
-      <header className="flex flex-wrap items-baseline gap-2">
-        <span className="font-display text-2xl text-accent-action capitalize">{proposal.verb}</span>
-        <span className="font-mono text-sm text-ink-muted truncate">{proposal.target}</span>
+      <header
+        className={clsx(
+          'flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2 rounded-t-card',
+          'border-b border-rule-line',
+          VERB_TINT[head.verb] ?? 'bg-surface-sunken',
+        )}
+      >
+        <span className="text-xs font-mono uppercase tracking-wider text-ink-secondary">
+          {head.verb}
+        </span>
+        <span className="text-sm font-medium text-ink-primary truncate min-w-0 flex-1">
+          {head.label}
+        </span>
+        {head.extra > 0 ? (
+          <span className="text-[11px] font-mono text-ink-muted">
+            +{head.extra} more
+          </span>
+        ) : null}
+        <span className="text-[11px] font-mono text-ink-muted">{proposal.actor}</span>
       </header>
 
-      <p className="mt-2 font-sans text-sm text-ink-secondary">{proposal.reason}</p>
+      <div className="px-4 py-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 font-mono text-[12px]">
+        <span className="text-ink-muted">before</span>
+        <span className="text-ink-secondary line-through decoration-accent/60 truncate">
+          {head.before}
+        </span>
+        <span className="text-ink-muted">after</span>
+        <span className="text-accent-positive font-semibold truncate">{head.after}</span>
+      </div>
 
-      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-sm">
-        <dt className="text-ink-muted">before</dt>
-        <dd className="line-through decoration-accent-action/70">{proposal.diff.before || '—'}</dd>
-        <dt className="text-ink-muted">after</dt>
-        <dd className="text-pin-green font-semibold">{proposal.diff.after}</dd>
-      </dl>
+      {proposal.rationale ? (
+        <p className="px-4 pb-3 text-[13px] text-ink-secondary">{proposal.rationale}</p>
+      ) : null}
 
-      <footer className="mt-4 flex items-center gap-2">
-        <Button variant="primary" size="sm" onClick={() => onApprove?.(proposal.id)}>
+      <footer className="flex items-center gap-2 px-4 py-2 border-t border-rule-line bg-surface-sunken/40 rounded-b-card">
+        <Button variant="primary" size="sm" onClick={() => onApprove?.(proposal.proposal_id)}>
           approve
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => onReject?.(proposal.id)}>
+        <Button variant="ghost" size="sm" onClick={() => onReject?.(proposal.proposal_id)}>
           reject
         </Button>
-        <span className="ml-auto font-mono text-xs text-ink-muted">{proposal.source}</span>
+        <span className="ml-auto text-[10px] font-mono text-ink-muted truncate">
+          {proposal.proposal_id}
+        </span>
       </footer>
     </article>
   );
