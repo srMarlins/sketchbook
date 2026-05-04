@@ -5,6 +5,7 @@ dist-tsbuild-node
 *.local
 *.tsbuildinfo
 .vite
+.playwright-mcp
 coverage
 playwright-report
 test-results

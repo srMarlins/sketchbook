@@ -38,8 +38,7 @@ export function DevShell() {
   return (
     <div className="min-h-screen flex bg-surface-page text-ink-primary">
       {reducedMotion ? <ReducedMotionStyles /> : null}
-      <h1 className="sr-only">Sketchbook component viewer</h1>
-      <aside className="w-56 shrink-0 border-r border-rule-line p-3 sticky top-0 h-screen overflow-y-auto">
+      <aside aria-label="Component navigation" className="w-56 shrink-0 border-r border-rule-line p-3 sticky top-0 h-screen overflow-y-auto">
         <div className="text-xs uppercase tracking-wide text-ink-muted mb-2">/_dev</div>
         <nav className="space-y-3">
           {groups.map(({ group, items }) => (
@@ -67,6 +66,7 @@ export function DevShell() {
       </aside>
 
       <main className="flex-1 p-6 space-y-4">
+        <h1 className="sr-only">Sketchbook component viewer</h1>
         <header className="flex flex-wrap gap-3 items-center text-sm">
           <span className="font-mono text-ink-muted">component viewer</span>
           <ToggleGroup
