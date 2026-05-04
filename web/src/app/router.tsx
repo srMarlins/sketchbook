@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import {
   Outlet,
   RouterProvider,
@@ -7,9 +8,14 @@ import {
 } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HomeRoute } from '../routes/index';
-import { DevRoute } from '../routes/_dev';
 import { ProposalsRoute } from '../routes/proposals';
 import { NotebookRoute } from '../routes/notebook';
+
+// /_dev pulls in the entire component registry; lazy-load so it doesn't
+// land in the main user bundle.
+const DevRouteLazy = lazy(() =>
+  import('../routes/_dev').then((m) => ({ default: m.DevRoute })),
+);
 
 const queryClient = new QueryClient();
 
@@ -30,7 +36,11 @@ const indexRoute = createRoute({
 const devRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/_dev',
-  component: DevRoute,
+  component: () => (
+    <Suspense fallback={<div className="p-6">loading dev viewer…</div>}>
+      <DevRouteLazy />
+    </Suspense>
+  ),
 });
 
 const proposalsRoute = createRoute({
