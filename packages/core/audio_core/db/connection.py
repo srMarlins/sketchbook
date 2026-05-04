@@ -13,5 +13,18 @@ def open_db(path: str | Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    _apply_migrations(conn)
     conn.commit()
     return conn
+
+
+def _apply_migrations(conn: sqlite3.Connection) -> None:
+    """Idempotent ALTER TABLE migrations for older DBs that pre-date columns
+    added to schema.sql. SQLite has no ADD COLUMN IF NOT EXISTS, so we check
+    PRAGMA table_info first.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(projects)")}
+    if "effort_score" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN effort_score INTEGER")
+    if "effort_breakdown" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN effort_breakdown TEXT")
