@@ -21,17 +21,34 @@ import { Shelf } from '../components/surface/Shelf';
 import { CorkboardPanel } from '../components/surface/CorkboardPanel';
 import { TornPagePile } from '../components/surface/TornPagePile';
 import projectsJson from '../mocks/projects.json';
-import proposalsJson from '../mocks/proposals.json';
 import { useState } from 'react';
-import type { Project, Proposal } from '../lib/types';
+import type { ProjectSummary, Proposal } from '../lib/types';
 import type { DevEntry } from './types';
 
-const sampleProjects = (projectsJson as Project[]).slice(0, 14).map((p, i) => ({
+const sampleProjects = (projectsJson as ProjectSummary[]).slice(0, 14).map((p, i) => ({
   ...p,
-  color_tag: i + 1,
+  color_tag: i, // 0..13
 }));
 
-const sampleProposal = (proposalsJson as Proposal[])[0]!;
+const sampleProposal: Proposal = {
+  proposal_id: 'demo-1',
+  actor: 'claude',
+  actions: [
+    { type: 'RenameProject', args: { project_id: sampleProjects[0]!.id, new_dir_name: `${sampleProjects[0]!.name} (rev)` } },
+  ],
+  rationale: 'Filename has trailing whitespace.',
+};
+
+const sampleProposals: Proposal[] = sampleProjects.slice(0, 4).map((p, i) => ({
+  proposal_id: `demo-${i + 1}`,
+  actor: 'claude',
+  actions: [
+    i % 2 === 0
+      ? { type: 'SetTags', args: { project_id: p.id, tags: [...p.tags, 'review'] } }
+      : { type: 'ArchiveProject', args: { project_id: p.id } },
+  ],
+  rationale: i % 2 === 0 ? 'New incoming sketches need a review tag.' : 'No edits in 18 months.',
+}));
 
 function ToastDemo() {
   const [open, setOpen] = useState(false);
@@ -266,14 +283,14 @@ export const registry: DevEntry[] = [
       kind: {
         type: 'select',
         label: 'kind',
-        defaultValue: 'lined' as const,
-        options: ['lined', 'kraft', 'manila'] as const,
+        defaultValue: 'plain' as const,
+        options: ['plain', 'ruled', 'tinted'] as const,
       },
     },
     render: (c) => (
       <NotebookPage
-        kind={c['kind'] as 'lined' | 'kraft' | 'manila'}
-        header={<h2 className="font-display text-2xl">2024</h2>}
+        kind={c['kind'] as 'plain' | 'ruled' | 'tinted'}
+        header={<h2 className="text-xl font-semibold tracking-tight">2024</h2>}
       >
         <div className="space-y-3">
           {sampleProjects.slice(0, 4).map((p) => (
@@ -288,12 +305,12 @@ export const registry: DevEntry[] = [
     group: 'surface',
     label: 'Shelf + NotebookSpine',
     render: () => (
-      <Shelf>
-        <NotebookSpine id="inbox" title="Inbox" kind="manila" count={42} />
+      <Shelf title="library">
+        <NotebookSpine id="inbox" title="Inbox" kind="tinted-cream" count={42} />
         <NotebookSpine id="2024" title="2024" count={128} lastUpdated="2024-09-12" />
         <NotebookSpine id="2025" title="2025" count={73} lastUpdated="2025-04-18" />
         <NotebookSpine id="2026" title="2026" count={11} lastUpdated="2026-05-04" />
-        <NotebookSpine id="claude" title="Claude" kind="kraft" count={20} />
+        <NotebookSpine id="claude" title="Claude" kind="tinted-rose" count={20} />
       </Shelf>
     ),
   },
@@ -309,8 +326,8 @@ export const registry: DevEntry[] = [
     label: 'TornPagePile',
     render: () => (
       <TornPagePile>
-        {(proposalsJson as Proposal[]).slice(0, 4).map((p) => (
-          <ProposalCard key={p.id} proposal={p} />
+        {sampleProposals.map((p) => (
+          <ProposalCard key={p.proposal_id} proposal={p} />
         ))}
       </TornPagePile>
     ),

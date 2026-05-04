@@ -16,20 +16,36 @@ describe('api (mock mode)', () => {
     expect(rows[0]).toHaveProperty('color_tag');
   });
 
-  test('listProposals returns 8 pending proposals', async () => {
+  test('getProject returns ProjectDetail with plugins/samples arrays', async () => {
+    const rows = await api.listProjects();
+    const id = rows[0]!.id;
+    const detail = await api.getProject(id);
+    expect(detail).toBeDefined();
+    expect(detail!.plugins).toBeInstanceOf(Array);
+    expect(detail!.samples).toBeInstanceOf(Array);
+  });
+
+  test('listProposals returns array of new-shape proposals', async () => {
     const ps = await api.listProposals();
-    expect(ps).toHaveLength(8);
+    expect(ps.length).toBeGreaterThan(0);
+    expect(ps[0]).toHaveProperty('proposal_id');
+    expect(ps[0]).toHaveProperty('actions');
+    expect(Array.isArray(ps[0]!.actions)).toBe(true);
   });
 
-  test('listJournal returns 20 entries when unfiltered', async () => {
+  test('approveProposal returns a batch_id and removes from list', async () => {
+    const before = await api.listProposals();
+    const target = before[0]!;
+    const res = await api.approveProposal(target.proposal_id);
+    expect(res.batch_id).toMatch(/^mock-batch-/);
+    const after = await api.listProposals();
+    expect(after.find((p) => p.proposal_id === target.proposal_id)).toBeUndefined();
+  });
+
+  test('listJournal returns batches', async () => {
     const j = await api.listJournal();
-    expect(j).toHaveLength(20);
-  });
-
-  test('approveProposal flips status to approved', async () => {
-    const all = await api.listProposals();
-    const target = all[0]!;
-    const res = await api.approveProposal(target.id);
-    expect(res.status).toBe('approved');
+    expect(j.length).toBeGreaterThan(0);
+    expect(j[0]).toHaveProperty('batch_id');
+    expect(j[0]).toHaveProperty('actions');
   });
 });

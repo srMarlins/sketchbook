@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { BrandingHeader } from '../components/surface/BrandingHeader';
 import { Desk } from '../components/surface/Desk';
 import { Sidebar } from '../components/surface/Sidebar';
@@ -11,26 +11,24 @@ import { SearchBar } from '../components/inputs/SearchBar';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { LoadingState } from '../components/feedback/LoadingState';
 import { ErrorState } from '../components/feedback/ErrorState';
-import { useProposals } from '../app/queries';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { approveProposal, rejectProposal } from '../lib/api';
+import {
+  useApproveProposal,
+  useProjects,
+  useProposals,
+  useRejectProposal,
+} from '../app/queries';
 
 export function ProposalsRoute() {
   const navigate = useNavigate();
   const proposals = useProposals();
-  const qc = useQueryClient();
-  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const projects = useProjects();
+  const approve = useApproveProposal();
+  const reject = useRejectProposal();
 
-  const approve = useMutation({
-    mutationFn: approveProposal,
-    onMutate: (id) => setPendingIds((s) => new Set(s).add(id)),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['proposals'] }),
-  });
-  const reject = useMutation({
-    mutationFn: rejectProposal,
-    onMutate: (id) => setPendingIds((s) => new Set(s).add(id)),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['proposals'] }),
-  });
+  const projectsById = useMemo(
+    () => new Map((projects.data ?? []).map((p) => [p.id, p] as const)),
+    [projects.data],
+  );
 
   const sidebarItems = [
     { id: 'home', label: 'Home', icon: 'house' as const },
@@ -39,14 +37,12 @@ export function ProposalsRoute() {
       id: 'proposals',
       label: 'Proposals',
       icon: 'paper-airplane' as const,
-      badge: proposals.data?.filter((p) => p.status === 'pending' && !pendingIds.has(p.id)).length || null,
+      badge: proposals.data?.length || null,
     },
     { id: 'claude', label: 'Claude', icon: 'cassette-tape' as const },
   ];
 
-  const pending = (proposals.data ?? []).filter(
-    (p) => p.status === 'pending' && !pendingIds.has(p.id),
-  );
+  const pending = proposals.data ?? [];
 
   return (
     <Desk
@@ -65,22 +61,24 @@ export function ProposalsRoute() {
     >
       <NotebookPage
         header={
-          <div className="flex items-baseline gap-3">
-            <h2 className="font-display text-3xl">Proposals</h2>
-            <span className="font-mono text-sm text-ink-muted">{pending.length} pending</span>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <h2 className="text-xl font-semibold tracking-tight">Proposals</h2>
+            <span className="font-mono text-xs text-ink-muted">
+              {pending.length} pending
+            </span>
             {pending.length > 0 ? (
               <div className="ml-auto flex gap-2">
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => pending.forEach((p) => approve.mutate(p.id))}
+                  onClick={() => pending.forEach((p) => approve.mutate(p.proposal_id))}
                 >
                   approve all
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => pending.forEach((p) => reject.mutate(p.id))}
+                  onClick={() => pending.forEach((p) => reject.mutate(p.proposal_id))}
                 >
                   reject all
                 </Button>
@@ -97,19 +95,24 @@ export function ProposalsRoute() {
           <EmptyState
             icon="cloud"
             title="nothing pending"
-            body="try `claude propose ...` in the CLI to queue suggestions."
+            body="run `audio-mcp propose_batch ...` from Claude or the CLI to queue suggestions."
           />
         ) : null}
         {pending.length > 0 ? (
           <TornPagePile>
-            {pending.map((p) => (
-              <ProposalCard
-                key={p.id}
-                proposal={p}
-                onApprove={(id) => approve.mutate(id)}
-                onReject={(id) => reject.mutate(id)}
-              />
-            ))}
+            {pending.map((p) => {
+              const head = p.actions[0];
+              const project = head ? projectsById.get(head.args.project_id) : undefined;
+              return (
+                <ProposalCard
+                  key={p.proposal_id}
+                  proposal={p}
+                  {...(project ? { project } : {})}
+                  onApprove={(id) => approve.mutate(id)}
+                  onReject={(id) => reject.mutate(id)}
+                />
+              );
+            })}
           </TornPagePile>
         ) : null}
       </NotebookPage>

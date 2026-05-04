@@ -6,17 +6,15 @@ import { Desk } from '../components/surface/Desk';
 import { Sidebar } from '../components/surface/Sidebar';
 import { NotebookPage } from '../components/surface/NotebookPage';
 import { SongStrip } from '../components/data/SongStrip';
-import { MarginStickyNote } from '../components/data/MarginStickyNote';
 import { SearchBar, useSearchStore } from '../components/inputs/SearchBar';
 import { ProjectCorkboard } from '../components/corkboard';
 import { LoadingState } from '../components/feedback/LoadingState';
 import { ErrorState } from '../components/feedback/ErrorState';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { useKeyboard } from '../hooks/useKeyboard';
-import { useProjects, useProposals, useSuggestions } from '../app/queries';
+import { useProjects, useProposals } from '../app/queries';
 import { deriveNotebooks } from '../app/notebooks';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Project, Suggestion } from '../lib/types';
+import type { ProjectSummary } from '../lib/types';
 import { ClaudeJournal } from './claude-notebook';
 
 export function NotebookRoute() {
@@ -25,11 +23,10 @@ export function NotebookRoute() {
   const navigate = useNavigate();
   const projectsQ = useProjects();
   const proposals = useProposals();
-  const suggestions = useSuggestions();
   const query = useSearchStore((s) => s.query);
   const clear = useSearchStore((s) => s.clear);
 
-  const [openProject, setOpenProject] = useState<Project | null>(null);
+  const [openProjectId, setOpenProjectId] = useState<number | null>(null);
   const [corkOpen, setCorkOpen] = useState(false);
 
   const notebooks = useMemo(
@@ -48,11 +45,10 @@ export function NotebookRoute() {
       (p) =>
         p.name.toLowerCase().includes(lower) ||
         p.path.toLowerCase().includes(lower) ||
-        p.tags.some((t) => t.includes(lower)),
+        p.tags.some((t) => t.toLowerCase().includes(lower)),
     );
   }, [projectsQ.data, notebook, query, notebookId]);
 
-  // Esc cascade: close corkboard first; if closed, clear search
   useKeyboard({
     combo: 'esc',
     priority: 5,
@@ -87,7 +83,7 @@ export function NotebookRoute() {
               id: 'proposals',
               label: 'Proposals',
               icon: 'paper-airplane' as const,
-              badge: proposals.data?.filter((p) => p.status === 'pending').length || null,
+              badge: proposals.data?.length || null,
             },
             { id: 'claude', label: 'Claude', icon: 'cassette-tape' as const },
           ]}
@@ -100,18 +96,27 @@ export function NotebookRoute() {
       }
     >
       <NotebookPage
-        kind={notebookId === 'claude' ? 'kraft' : notebook?.kind ?? 'lined'}
+        kind="plain"
         header={
           <div className="flex items-baseline gap-3 flex-wrap">
-            <h2 className="font-display text-3xl">{notebookId === 'claude' ? 'Claude' : notebook?.title ?? notebookId}</h2>
-            <span className="font-mono text-sm text-ink-muted">
-              {notebookId === 'claude' ? '' : `${filtered.length} sketch${filtered.length === 1 ? '' : 'es'}`}
+            <h2 className="text-xl font-semibold tracking-tight">
+              {notebookId === 'claude' ? 'Claude' : notebook?.title ?? notebookId}
+            </h2>
+            <span className="font-mono text-xs text-ink-muted">
+              {notebookId === 'claude'
+                ? ''
+                : `${filtered.length} project${filtered.length === 1 ? '' : 's'}`}
             </span>
           </div>
         }
       >
         {notebookId === 'claude' ? (
-          <ClaudeJournal onOpenProject={(p) => { setOpenProject(p); setCorkOpen(true); }} />
+          <ClaudeJournal
+            onOpenProject={(p) => {
+              setOpenProjectId(p.id);
+              setCorkOpen(true);
+            }}
+          />
         ) : projectsQ.isLoading ? (
           <LoadingState />
         ) : projectsQ.isError ? (
@@ -119,60 +124,44 @@ export function NotebookRoute() {
         ) : filtered.length === 0 ? (
           <EmptyState
             title={query ? 'no matches' : 'empty notebook'}
-            body={query ? `nothing matches "${query}"` : 'this notebook has no sketches yet'}
+            body={query ? `nothing matches "${query}"` : 'this notebook has no projects yet'}
           />
         ) : (
           <VirtualStrips
             projects={filtered}
-            suggestions={suggestions.data ?? []}
-            onOpen={(project) => {
-              setOpenProject(project);
+            onOpen={(p) => {
+              setOpenProjectId(p.id);
               setCorkOpen(true);
             }}
           />
         )}
       </NotebookPage>
-      <ProjectCorkboard project={openProject} open={corkOpen} onOpenChange={setCorkOpen} />
+      <ProjectCorkboard projectId={openProjectId} open={corkOpen} onOpenChange={setCorkOpen} />
     </Desk>
   );
 }
 
 function VirtualStrips({
   projects,
-  suggestions,
   onOpen,
 }: {
-  projects: Project[];
-  suggestions: Suggestion[];
-  onOpen: (project: Project) => void;
+  projects: ProjectSummary[];
+  onOpen: (project: ProjectSummary) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const qc = useQueryClient();
-  const enqueueAsProposal = useMutation({
-    // Mock: re-approve the first matching proposal as a stand-in for "queue this suggestion"
-    mutationFn: async (_id: string) => Promise.resolve(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['proposals'] }),
-  });
 
   const rowVirtualizer = useVirtualizer({
     count: projects.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 64,
+    estimateSize: () => 56,
     overscan: 8,
   });
 
-  const sBy = useMemo(() => {
-    const m = new Map<number, Suggestion>();
-    for (const s of suggestions) m.set(s.project_id, s);
-    return m;
-  }, [suggestions]);
-
   return (
-    <div ref={parentRef} className="relative max-h-[70vh] overflow-y-auto pr-2">
+    <div ref={parentRef} className="relative max-h-[72vh] overflow-y-auto pr-1">
       <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
         {rowVirtualizer.getVirtualItems().map((vRow) => {
           const project = projects[vRow.index]!;
-          const sug = sBy.get(project.id);
           return (
             <div
               key={project.id}
@@ -183,20 +172,11 @@ function VirtualStrips({
                 left: 0,
                 width: '100%',
                 transform: `translateY(${vRow.start}px)`,
+                paddingTop: 4,
+                paddingBottom: 4,
               }}
             >
-              <div className="flex items-start gap-3">
-                <div className="flex-1 py-1">
-                  <SongStrip project={project} onOpen={() => onOpen(project)} />
-                </div>
-                {sug ? (
-                  <MarginStickyNote
-                    id={`sug-${project.id}`}
-                    text={sug.text}
-                    onOpenSuggestion={() => enqueueAsProposal.mutate(`sug-${project.id}`)}
-                  />
-                ) : null}
-              </div>
+              <SongStrip project={project} onOpen={() => onOpen(project)} />
             </div>
           );
         })}

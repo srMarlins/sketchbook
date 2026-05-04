@@ -5,13 +5,13 @@ import { NotebookSpine } from './NotebookSpine';
 import { Shelf } from './Shelf';
 
 describe('<Shelf /> + <NotebookSpine />', () => {
-  test('shelf has a labeled region and renders children', () => {
+  test('shelf renders title and children', () => {
     render(
-      <Shelf>
+      <Shelf title="library">
         <NotebookSpine id="2024" title="2024" count={42} />
       </Shelf>,
     );
-    expect(screen.getByRole('region', { name: 'Shelf' })).toBeInTheDocument();
+    expect(screen.getByText('library')).toBeInTheDocument();
     expect(screen.getByText('2024')).toBeInTheDocument();
   });
 
@@ -22,8 +22,8 @@ describe('<Shelf /> + <NotebookSpine />', () => {
     expect(fn).toHaveBeenCalledWith('claude');
   });
 
-  test('kind data attribute reflects prop', () => {
-    const { container } = render(<NotebookSpine id="x" title="Kraft" kind="kraft" />);
-    expect(container.querySelector('[data-kind="kraft"]')).not.toBeNull();
+  test('tinted kinds render', () => {
+    render(<NotebookSpine id="x" title="Tinted" kind="tinted-rose" />);
+    expect(screen.getByText('Tinted')).toBeInTheDocument();
   });
 });

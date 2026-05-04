@@ -1,29 +1,27 @@
-import type { Project } from '../../lib/types';
+import type { ProjectDetail } from '../../lib/types';
 
-/**
- * Samples are not on the mock fixture; render a placeholder for v0.1.
- * Backend wiring will replace this with a real sample list.
- */
-export function Samples({ project }: { project: Project }) {
-  const fake = [
-    { path: `${project.parent_dir}/Samples/kick.wav`, missing: false },
-    { path: `${project.parent_dir}/Samples/snare.wav`, missing: false },
-    { path: 'C:/Users/jtfow/Samples/missing-loop.wav', missing: true },
-  ];
+export function Samples({ project }: { project: ProjectDetail }) {
+  if (project.samples.length === 0) {
+    return <p className="text-sm text-ink-muted">No samples referenced.</p>;
+  }
   return (
     <table className="w-full font-mono text-sm">
       <thead className="text-ink-muted">
         <tr>
-          <th className="text-left">path</th>
-          <th className="text-left">status</th>
+          <th className="text-left py-1">path</th>
+          <th className="text-left py-1">status</th>
         </tr>
       </thead>
       <tbody>
-        {fake.map((s, i) => (
-          <tr key={i} className="border-t border-rule-line/30">
-            <td className="py-1 truncate max-w-[24rem]" title={s.path}>{s.path}</td>
-            <td className={s.missing ? 'text-accent-action' : 'text-pin-green'}>
-              {s.missing ? 'missing' : 'ok'}
+        {project.samples.map((s, i) => (
+          <tr key={i} className="border-t border-rule-line">
+            <td className="py-1 break-all" title={s.sample_path}>
+              {s.sample_path}
+            </td>
+            <td
+              className={s.is_missing ? 'text-accent-danger' : 'text-accent-positive'}
+            >
+              {s.is_missing ? 'missing' : 'ok'}
             </td>
           </tr>
         ))}

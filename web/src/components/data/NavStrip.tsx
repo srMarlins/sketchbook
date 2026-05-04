@@ -20,20 +20,26 @@ export const NavStrip = forwardRef<HTMLButtonElement, NavStripProps>(function Na
       type="button"
       aria-current={active ? 'page' : undefined}
       className={clsx(
-        'group relative flex w-full items-center gap-2 px-3 py-2 rounded-sm',
-        'font-display text-lg text-left transition-transform duration-fast ease-paper',
-        'bg-surface-strip text-ink-primary',
+        'group relative flex w-full items-center gap-2 px-3 py-1.5 rounded-input',
+        'text-sm font-medium text-left transition-colors duration-fast',
         active
-          ? 'translate-y-[1px] shadow-pin'
-          : 'shadow-lift hover:-translate-y-[1px]',
+          ? 'bg-surface-card text-ink-primary shadow-card'
+          : 'text-ink-secondary hover:bg-surface-card hover:text-ink-primary',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
         className,
       )}
       {...rest}
     >
-      {icon ? <Sprite name={icon} size={18} /> : null}
+      {icon ? (
+        <Sprite
+          name={icon}
+          size={16}
+          className={clsx('shrink-0', active ? 'text-accent' : 'text-ink-muted')}
+        />
+      ) : null}
       <span className="flex-1 truncate">{label}</span>
-      {badge != null && badge !== '' ? (
-        <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-accent-action text-surface-page">
+      {badge != null && badge !== '' && badge !== 0 ? (
+        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded-chip bg-accent text-ink-on-fill leading-none">
           {badge}
         </span>
       ) : null}
