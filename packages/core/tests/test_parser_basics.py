@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-
 from audio_core.parser.als import als_xml, parse_live_version, parse_tempo, parse_time_signature
 
 FIX = Path(__file__).parent / "fixtures"
