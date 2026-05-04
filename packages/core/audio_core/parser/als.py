@@ -220,7 +220,8 @@ def _path_from_fileref(file_ref: etree._Element) -> str | None:
     rel_attr = file_ref.get("RelativePath")
     if rel_attr:
         return rel_attr
-    # Older Live (10): <RelativePath><RelativePathElement Dir="X"/>...</RelativePath><Name Value="kick.wav"/>
+    # Older Live (10): <RelativePath><RelativePathElement Dir="X"/>...</RelativePath>
+    #                  <Name Value="kick.wav"/>
     rel = file_ref.find("RelativePath")
     if rel is not None:
         parts = [e.get("Dir", "") for e in rel.findall("RelativePathElement")]
