@@ -1,0 +1,10 @@
+[project]
+name = "asset-pipeline"
+version = "0.1.0"
+description = "One-shot asset processor for Sketchbook UI: alpha-keys Gemini fake-transparency images, removes Gemini watermark from rasters, exports WebP textures and PNG sprites."
+requires-python = ">=3.11"
+dependencies = [
+    "pillow>=10.4",
+    "numpy>=2.0",
+    "scipy>=1.13",
+]
