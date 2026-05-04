@@ -159,8 +159,25 @@ def dedup(
     conn = open_db(db_path())
     groups = find_duplicates(conn)
     if propose:
-        # Filled in next task; placeholder so the flag exists.
-        raise NotImplementedError
+        actions = build_archive_proposal(groups)
+        if not actions:
+            con.print("No actionable losers. Nothing to propose.")
+            raise typer.Exit(code=0)
+        from datetime import UTC, datetime
+        from uuid import uuid4
+        from audio_cli.config import proposals_dir
+        d = proposals_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        pid = f"{datetime.now(UTC).strftime('%Y-%m-%dT%H-%M-%S')}_{uuid4().hex[:8]}"
+        payload = {
+            "proposal_id": pid,
+            "actor": "cli",
+            "actions": actions,
+            "rationale": f"audio dedup: {len(groups)} group(s), {len(actions)} loser(s)",
+        }
+        (d / f"{pid}.json").write_text(_json.dumps(payload, indent=2), encoding="utf-8")
+        con.print(f"proposal {pid} written ({len(actions)} action(s))")
+        return
     if json_out:
         payload = [
             {

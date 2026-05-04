@@ -47,3 +47,21 @@ def test_dedup_json_output(tmp_path, monkeypatch):
     assert len(payload) == 1
     assert payload[0]["file_hash"] == "h"
     assert "keeper" in payload[0] and "losers" in payload[0]
+
+
+def test_dedup_propose_writes_proposal_file(tmp_path, monkeypatch):
+    import json as _json
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    conn = open_db(tmp_path / "data" / "catalog.db")
+    keeper = _seed_dup(conn, path="/k.als", file_hash="h", mtime=2000.0)
+    loser = _seed_dup(conn, path="/l.als", file_hash="h", mtime=1000.0)
+    result = CliRunner().invoke(app, ["dedup", "--propose"])
+    assert result.exit_code == 0
+    proposals = list((tmp_path / "data" / "proposals").glob("*.json"))
+    assert len(proposals) == 1
+    payload = _json.loads(proposals[0].read_text(encoding="utf-8"))
+    assert payload["actor"] == "cli"
+    pids = {a["args"]["project_id"] for a in payload["actions"]}
+    assert pids == {loser}
+    assert keeper not in pids
+    assert payload["proposal_id"] in result.stdout
