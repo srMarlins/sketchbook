@@ -19,10 +19,8 @@ import { Sidebar } from '../components/surface/Sidebar';
 import { NotebookPage } from '../components/surface/NotebookPage';
 import { NotebookSpine } from '../components/surface/NotebookSpine';
 import { Shelf } from '../components/surface/Shelf';
-import { HomeShelf } from '../components/surface/HomeShelf';
 import { CorkboardPanel } from '../components/surface/CorkboardPanel';
 import { TornPagePile } from '../components/surface/TornPagePile';
-import { ProjectCard } from '../components/data/ProjectCard';
 import projectsJson from '../mocks/projects.json';
 import { useState } from 'react';
 import type { ProjectSummary, Proposal, Shelf as ShelfType } from '../lib/types';
@@ -189,23 +187,6 @@ export const registry: DevEntry[] = [
     },
   },
   {
-    id: 'project-card',
-    group: 'data',
-    label: 'ProjectCard',
-    render: () => (
-      <div className="flex flex-wrap gap-3">
-        {sampleProjects.slice(0, 4).map((p) => (
-          <ProjectCard key={p.id} project={p} onOpen={() => undefined} onOpenInAbleton={() => undefined} />
-        ))}
-        <ProjectCard
-          project={{ ...sampleProjects[0]!, color_tag: null, effort_score: null }}
-          onOpen={() => undefined}
-          onOpenInAbleton={() => undefined}
-        />
-      </div>
-    ),
-  },
-  {
     id: 'nav-strip',
     group: 'data',
     label: 'NavStrip',
@@ -361,25 +342,6 @@ export const registry: DevEntry[] = [
         <NotebookSpine id="2026" title="2026" count={11} lastUpdated="2026-05-04" />
         <NotebookSpine id="claude" title="Claude" kind="tinted-rose" count={20} />
       </Shelf>
-    ),
-  },
-  {
-    id: 'home-shelf',
-    group: 'surface',
-    label: 'HomeShelf + ProjectCard',
-    render: () => (
-      <div className="space-y-8">
-        <HomeShelf
-          title="Currently working"
-          description="Recent edits and active sketches."
-          seeAllHref="/?order_by=mtime&order_dir=desc"
-        >
-          {sampleProjects.slice(0, 8).map((p) => (
-            <ProjectCard key={p.id} project={p} onOpen={() => undefined} onOpenInAbleton={() => undefined} />
-          ))}
-        </HomeShelf>
-        <HomeShelf title="Empty shelf" description="should show empty state" />
-      </div>
     ),
   },
   {
