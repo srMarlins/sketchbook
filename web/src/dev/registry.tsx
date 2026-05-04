@@ -2,7 +2,15 @@ import { Sprite } from '../components/primitives/Sprite';
 import { DOODLE_SPRITES, FIELD_SPRITES, type SpriteName } from '../components/primitives/sprite-names';
 import { Button, type ButtonVariant } from '../components/inputs/Button';
 import { FilterChip } from '../components/data/FilterChip';
+import { SongStrip } from '../components/data/SongStrip';
+import projectsJson from '../mocks/projects.json';
+import type { Project } from '../lib/types';
 import type { DevEntry } from './types';
+
+const sampleProjects = (projectsJson as Project[]).slice(0, 14).map((p, i) => ({
+  ...p,
+  color_tag: i + 1, // force one of each als color for the showcase
+}));
 
 export const registry: DevEntry[] = [
   {
@@ -69,6 +77,18 @@ export const registry: DevEntry[] = [
         <FilterChip label="key" value="Cmin" icon="key" onDismiss={() => undefined} />
         <FilterChip label="archived" icon="folder" onDismiss={() => undefined} />
         <FilterChip label="vox" icon="microphone" />
+      </div>
+    ),
+  },
+  {
+    id: 'song-strip',
+    group: 'data',
+    label: 'SongStrip',
+    render: () => (
+      <div className="space-y-3">
+        {sampleProjects.map((p) => (
+          <SongStrip key={p.id} project={p} onOpen={() => undefined} />
+        ))}
       </div>
     ),
   },
