@@ -116,3 +116,31 @@ def test_propose_batch_writes_proposal_file(tmp_path, monkeypatch):
             assert (tmp_path / "Projects" / "p Project" / "x.als").is_file()
 
     asyncio.run(go())
+
+
+def test_find_duplicates_tool_returns_groups(tmp_path, monkeypatch):
+    from audio_core.db.connection import open_db
+    from audio_core.db.projects import upsert_project
+    from audio_core.parser.model import ProjectMetadata
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    conn = open_db(tmp_path / "data" / "catalog.db")
+    keep = upsert_project(
+        conn, path="/k.als", name="k", parent_dir="/",
+        file_hash="abc", last_modified=2000.0, meta=ProjectMetadata(),
+    )
+    drop = upsert_project(
+        conn, path="/d.als", name="d", parent_dir="/",
+        file_hash="abc", last_modified=1000.0, meta=ProjectMetadata(),
+    )
+    server = build_server()
+
+    async def go():
+        async with Client(server) as c:
+            res = await c.call_tool("find_duplicates", {})
+            data = res.data
+            assert len(data) == 1
+            assert data[0]["file_hash"] == "abc"
+            assert data[0]["keeper"]["id"] == keep
+            assert [l["id"] for l in data[0]["losers"]] == [drop]
+
+    asyncio.run(go())

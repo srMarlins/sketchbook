@@ -9,6 +9,7 @@ from typing import Any
 from audio_core.config import db_path, proposals_dir
 from audio_core.db.connection import open_db
 from audio_core.db.projects import search_projects as _search_projects
+from audio_core.dedup import find_duplicates as _find_duplicates
 from fastmcp import FastMCP
 
 
@@ -106,7 +107,36 @@ def build_server() -> FastMCP:
         (d / f"{pid}.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return {"proposal_id": pid}
 
+    @mcp.tool
+    def find_duplicates(limit: int = 100) -> list[dict]:
+        """Find .als files in the catalog that are byte-identical (same blake3 hash).
+
+        Returns groups, each with a recommended keeper (newest non-archived mtime,
+        shortest-path tiebreak) and a list of losers. To clean them up, call
+        `propose_batch` with one `ArchiveProject` action per loser id.
+        """
+        conn = open_db(db_path())
+        groups = _find_duplicates(conn)[:limit]
+        return [
+            {
+                "file_hash": g.file_hash,
+                "keeper": _summary(g.keeper),
+                "losers": [_summary(loser) for loser in g.losers],
+            }
+            for g in groups
+        ]
+
     return mcp
+
+
+def _summary(row: dict) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "path": row["path"],
+        "last_modified": row["last_modified"],
+        "is_archived": bool(row["is_archived"]),
+    }
 
 
 def run() -> None:
