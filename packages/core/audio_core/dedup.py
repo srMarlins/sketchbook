@@ -45,3 +45,18 @@ def _keeper_key(row: dict) -> tuple:
         len(row["path"]),
         row["path"],
     )
+
+
+def build_archive_proposal(groups: list[DupGroup]) -> list[dict]:
+    """Convert dup groups into ArchiveProject proposal actions for each loser.
+    Groups whose keeper is already archived (i.e. all members archived) contribute
+    zero actions — there's nothing to clean up."""
+    out: list[dict] = []
+    for g in groups:
+        if g.keeper.get("is_archived"):
+            continue
+        for loser in g.losers:
+            if loser.get("is_archived"):
+                continue
+            out.append({"type": "ArchiveProject", "args": {"project_id": loser["id"]}})
+    return out

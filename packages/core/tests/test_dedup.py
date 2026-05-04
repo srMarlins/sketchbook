@@ -88,3 +88,23 @@ def test_null_file_hash_excluded(tmp_path):
     groups = find_duplicates(conn)
     assert len(groups) == 1
     assert groups[0].file_hash == "h"
+
+
+def test_build_archive_proposal_one_action_per_loser(tmp_path):
+    from audio_core.dedup import build_archive_proposal
+    conn = open_db(tmp_path / "c.db")
+    keeper = _seed(conn, path="/k/x.als", file_hash="h", mtime=2000.0)
+    l1 = _seed(conn, path="/a/x.als", file_hash="h", mtime=1000.0)
+    l2 = _seed(conn, path="/b/x.als", file_hash="h", mtime=900.0)
+    actions = build_archive_proposal(find_duplicates(conn))
+    assert {a["args"]["project_id"] for a in actions} == {l1, l2}
+    assert all(a["type"] == "ArchiveProject" for a in actions)
+    assert keeper not in [a["args"]["project_id"] for a in actions]
+
+
+def test_build_archive_proposal_skips_all_archived_groups(tmp_path):
+    from audio_core.dedup import build_archive_proposal
+    conn = open_db(tmp_path / "c.db")
+    _seed(conn, path="/a/x.als", file_hash="h", mtime=2000.0, archived=True)
+    _seed(conn, path="/b/x.als", file_hash="h", mtime=1000.0, archived=True)
+    assert build_archive_proposal(find_duplicates(conn)) == []
