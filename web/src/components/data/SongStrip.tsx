@@ -1,25 +1,9 @@
 import clsx from 'clsx';
-import { useMemo } from 'react';
 import { Sprite } from '../primitives/Sprite';
-import {
-  ALS_HEX,
-  inkHexForStrip,
-  TEXT_ON_ALS,
-} from '../../theme/contrast-table';
-import { seedFromString, mulberry32, seedPick, seedRange } from '../../lib/seed';
-import type { Project } from '../../lib/types';
-
-export type HoldMethod = 'washi-top' | 'washi-corners' | 'staple' | 'tape-strip';
-
-const HOLD_METHODS: readonly HoldMethod[] = [
-  'washi-top',
-  'washi-corners',
-  'staple',
-  'tape-strip',
-];
+import type { ProjectSummary } from '../../lib/types';
 
 export interface SongStripProps {
-  project: Project;
+  project: ProjectSummary;
   onOpen?: (projectId: number) => void;
 }
 
@@ -35,117 +19,95 @@ function fmtTimeSig(num: number | null, den: number | null): string {
   return `${num}/${den}`;
 }
 
+function fmtRelative(unixSec: number): string {
+  const ms = unixSec * 1000;
+  const days = Math.round((Date.now() - ms) / 86_400_000);
+  if (days < 1) return 'today';
+  if (days < 2) return 'yesterday';
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.round(days / 30)}mo ago`;
+  return `${Math.round(days / 365)}y ago`;
+}
+
+/**
+ * A dense, paper-stationery row for a project. Color tag shows as a small
+ * chip on the left edge, not as the whole strip background. Tags get small
+ * rounded chips on the right.
+ */
 export function SongStrip({ project, onOpen }: SongStripProps) {
-  const colorIdx = project.color_tag ?? 14;
-  const stripBg = ALS_HEX[colorIdx] ?? ALS_HEX[14]!;
-  const inkHex = inkHexForStrip(colorIdx);
-  const inkClass =
-    TEXT_ON_ALS[colorIdx] === 'light'
-      ? 'text-[var(--ink-on-strip-light)]'
-      : 'text-[var(--ink-on-strip-dark)]';
-
-  const idStr = String(project.id);
-  const { hold, rotation } = useMemo(() => {
-    const seed = seedFromString(`strip:${idStr}`);
-    const r = mulberry32(seed);
-    return {
-      hold: seedPick(HOLD_METHODS, seed),
-      // small per-strip rotation jitter (-1.2..1.2 deg)
-      rotation: (r() * 2.4 - 1.2).toFixed(2),
-    };
-  }, [idStr]);
-
-  const tilt = `rotate(${rotation}deg)`;
+  // backend color_tag is 0..13; map to als-1..als-14 var name
+  const colorVar = project.color_tag != null ? `var(--als-${project.color_tag + 1})` : 'transparent';
 
   return (
     <button
       type="button"
       onClick={() => onOpen?.(project.id)}
       className={clsx(
-        'group relative block w-full text-left rounded-sm transition-transform duration-fast ease-paper',
-        'hover:-translate-y-[2px] hover:shadow-lift focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-action',
-        inkClass,
+        'group relative w-full text-left',
+        'flex items-center gap-3 px-3 py-2',
+        'bg-surface-card hover:bg-surface-sunken',
+        'border border-rule-line rounded-card',
+        'transition-colors duration-fast',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
       )}
-      style={{
-        backgroundColor: stripBg,
-        color: inkHex,
-        boxShadow: 'var(--shadow-pin)',
-        transform: tilt,
-      }}
-      data-hold={hold}
-      data-color-idx={colorIdx}
+      data-color-tag={project.color_tag}
     >
-      <span className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
-        <span className="font-mono text-base font-semibold truncate min-w-0 flex-1">
+      <span
+        aria-hidden
+        className="shrink-0 w-1.5 h-8 rounded-full"
+        style={{ backgroundColor: colorVar, border: project.color_tag == null ? '1px dashed var(--rule-line)' : 'none' }}
+      />
+
+      <span className="min-w-0 flex-1 flex flex-col">
+        <span className="font-medium text-ink-primary truncate text-[15px] leading-tight">
           {project.name}
         </span>
-        <Field icon="bpm" label={project.tempo != null ? project.tempo.toFixed(1) : '—'} />
-        <Field icon="key" label={project.key ?? '—'} />
+        <span className="font-mono text-[11px] text-ink-muted truncate">
+          {project.parent_dir}
+        </span>
+      </span>
+
+      <span className="hidden md:flex items-center gap-3 font-mono text-[12px] text-ink-secondary tabular-nums">
+        <Field icon="bpm" label={project.tempo != null ? project.tempo.toFixed(0) : '—'} />
         <Field icon="time-sig" label={fmtTimeSig(project.time_sig_num, project.time_sig_den)} />
-        <Field icon="tracks" label={String(project.track_count)} />
+        <Field icon="tracks" label={project.track_count != null ? String(project.track_count) : '—'} />
         <Field icon="length" label={fmtSeconds(project.length_seconds)} />
       </span>
-      <HoldVisuals hold={hold} colorIdx={colorIdx} />
+
+      {project.tags.length > 0 ? (
+        <span className="hidden lg:flex items-center gap-1">
+          {project.tags.slice(0, 3).map((t) => (
+            <span
+              key={t}
+              className="px-1.5 py-0.5 text-[10px] font-mono rounded-chip bg-paper-tint-blue text-ink-secondary border border-rule-line"
+            >
+              {t}
+            </span>
+          ))}
+          {project.tags.length > 3 ? (
+            <span className="text-[10px] font-mono text-ink-muted">+{project.tags.length - 3}</span>
+          ) : null}
+        </span>
+      ) : null}
+
+      <span className="shrink-0 font-mono text-[11px] text-ink-muted whitespace-nowrap min-w-[64px] text-right">
+        {fmtRelative(project.last_modified)}
+      </span>
     </button>
   );
 }
 
-function Field({ icon, label }: { icon: 'bpm' | 'key' | 'time-sig' | 'tracks' | 'length'; label: string }) {
+function Field({
+  icon,
+  label,
+}: {
+  icon: 'bpm' | 'time-sig' | 'tracks' | 'length';
+  label: string;
+}) {
   return (
-    <span className="inline-flex items-center gap-1 font-mono text-sm whitespace-nowrap">
-      <Sprite name={icon} size={14} />
+    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+      <Sprite name={icon} size={12} className="text-ink-muted" />
       <span>{label}</span>
     </span>
-  );
-}
-
-function HoldVisuals({ hold, colorIdx }: { hold: HoldMethod; colorIdx: number }) {
-  const seed = seedFromString(`hold:${hold}:${colorIdx}`);
-  const r = mulberry32(seed);
-  const tilt1 = (r() * 8 - 4).toFixed(1);
-  const tilt2 = (r() * 8 - 4).toFixed(1);
-  const offset = seedRange(`pos:${hold}:${colorIdx}`, 6, 24).toFixed(1);
-
-  if (hold === 'washi-top') {
-    return (
-      <span
-        aria-hidden
-        className="absolute -top-1 left-1/2 h-3 w-12 bg-pin-yellow/70"
-        style={{ transform: `translateX(-50%) rotate(${tilt1}deg)` }}
-      />
-    );
-  }
-  if (hold === 'washi-corners') {
-    return (
-      <>
-        <span
-          aria-hidden
-          className="absolute -top-1 -left-1 h-3 w-8 bg-pin-blue/70"
-          style={{ transform: `rotate(${tilt1}deg)` }}
-        />
-        <span
-          aria-hidden
-          className="absolute -top-1 -right-1 h-3 w-8 bg-pin-blue/70"
-          style={{ transform: `rotate(${tilt2}deg)` }}
-        />
-      </>
-    );
-  }
-  if (hold === 'staple') {
-    return (
-      <span
-        aria-hidden
-        className="absolute top-1 h-2 w-3 border-2 border-ink-muted"
-        style={{ left: `${offset}px`, transform: `rotate(${tilt1}deg)` }}
-      />
-    );
-  }
-  // tape-strip
-  return (
-    <span
-      aria-hidden
-      className="absolute -top-0.5 right-3 h-2 w-10 bg-ink-muted/30"
-      style={{ transform: `rotate(${tilt1}deg)` }}
-    />
   );
 }

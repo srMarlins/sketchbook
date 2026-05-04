@@ -2,9 +2,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 import { SongStrip } from './SongStrip';
-import type { Project } from '../../lib/types';
+import type { ProjectSummary } from '../../lib/types';
 
-function fakeProject(overrides: Partial<Project> = {}): Project {
+function fakeProject(overrides: Partial<ProjectSummary> = {}): ProjectSummary {
   return {
     id: 42,
     path: '/x/foo.als',
@@ -13,7 +13,6 @@ function fakeProject(overrides: Partial<Project> = {}): Project {
     tempo: 120,
     time_sig_num: 4,
     time_sig_den: 4,
-    key: 'Cmaj',
     track_count: 12,
     audio_tracks: 8,
     midi_tracks: 3,
@@ -32,22 +31,17 @@ function fakeProject(overrides: Partial<Project> = {}): Project {
 }
 
 describe('<SongStrip />', () => {
-  test('renders all 14 als colors without crashing', () => {
-    for (let i = 1; i <= 14; i++) {
-      const { unmount } = render(<SongStrip project={fakeProject({ id: i, color_tag: i })} />);
+  test('renders all 14 als color tags without crashing', () => {
+    for (let i = 0; i < 14; i++) {
+      const { unmount } = render(<SongStrip project={fakeProject({ id: i + 1, color_tag: i })} />);
       expect(screen.getByText('lazy ridge')).toBeInTheDocument();
       unmount();
     }
   });
 
-  test('hold method is deterministic per project id', () => {
-    const project = fakeProject();
-    const a = render(<SongStrip project={project} />);
-    const holdA = a.container.querySelector('[data-hold]')?.getAttribute('data-hold');
-    a.unmount();
-    const b = render(<SongStrip project={project} />);
-    const holdB = b.container.querySelector('[data-hold]')?.getAttribute('data-hold');
-    expect(holdB).toBe(holdA);
+  test('null color tag still renders the row', () => {
+    render(<SongStrip project={fakeProject({ color_tag: null })} />);
+    expect(screen.getByText('lazy ridge')).toBeInTheDocument();
   });
 
   test('click fires onOpen with project id', async () => {
@@ -57,12 +51,16 @@ describe('<SongStrip />', () => {
     expect(fn).toHaveBeenCalledWith(99);
   });
 
-  test('renders BPM, key, tracks, length fields', () => {
-    render(<SongStrip project={fakeProject()} />);
-    expect(screen.getByText('120.0')).toBeInTheDocument();
-    expect(screen.getByText('Cmaj')).toBeInTheDocument();
-    expect(screen.getByText('4/4')).toBeInTheDocument();
-    expect(screen.getByText('12')).toBeInTheDocument();
-    expect(screen.getByText('4:05')).toBeInTheDocument();
+  test('tag chips render up to 3 with overflow indicator', () => {
+    render(
+      <SongStrip
+        project={fakeProject({ tags: ['vox', 'demos', 'beats', 'piano', 'rough'] })}
+      />,
+    );
+    expect(screen.getByText('vox')).toBeInTheDocument();
+    expect(screen.getByText('demos')).toBeInTheDocument();
+    expect(screen.getByText('beats')).toBeInTheDocument();
+    expect(screen.queryByText('piano')).not.toBeInTheDocument();
+    expect(screen.getByText('+2')).toBeInTheDocument();
   });
 });
