@@ -36,21 +36,25 @@
 }
 
 :root {
-  /* Ableton 14 — placeholder values, replaced in Task 0.4 with truthful palette */
-  --als-1: #ff6f6f;
-  --als-2: #ff9933;
-  --als-3: #ffcc33;
-  --als-4: #ffff66;
-  --als-5: #c2ff66;
-  --als-6: #66cc66;
-  --als-7: #66ccff;
-  --als-8: #6699ff;
-  --als-9: #9966ff;
-  --als-10: #cc66cc;
-  --als-11: #ff66cc;
-  --als-12: #cc9966;
-  --als-13: #999999;
-  --als-14: #d8d8d8;
+  /* Ableton-14 palette — first 14 entries from the Live track-color picker,
+     left-to-right, top row then second row. Truthful, theme-invariant.
+     SOURCE: derived from Ableton Live 11/12 default track color picker.
+     Verify against the live picker (or the parser's color_tag map in
+     packages/core) before declaring the palette frozen. */
+  --als-1: #ff94a6;  /* salmon */
+  --als-2: #ffa529;  /* orange */
+  --als-3: #cc9927;  /* mustard */
+  --als-4: #f7f47c;  /* pale yellow */
+  --als-5: #bbff26;  /* lime */
+  --als-6: #1aff2f;  /* green */
+  --als-7: #25ffa8;  /* teal */
+  --als-8: #5cffe8;  /* cyan */
+  --als-9: #8bc5ff;  /* light blue */
+  --als-10: #5480e4; /* blue */
+  --als-11: #92a7ff; /* lavender */
+  --als-12: #d86ce4; /* magenta */
+  --als-13: #e553a0; /* pink */
+  --als-14: #ffffff; /* paper-white */
 
   /* Light theme — surfaces */
   --surface-desk: #6b4a2b;
