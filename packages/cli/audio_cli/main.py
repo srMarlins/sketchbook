@@ -13,6 +13,7 @@ from audio_core.actions.set_tags import SetTags
 from audio_core.actions.undo import undo_batch
 from audio_core.db.connection import open_db
 from audio_core.db.projects import search_projects
+from audio_core.dedup import build_archive_proposal, find_duplicates
 from audio_core.journal.manifest import list_batches
 from audio_core.scanner.scan import scan_root
 from rich.console import Console
@@ -141,6 +142,55 @@ def show(project_id: int = typer.Argument(..., help="Project id from `audio sear
             con.print(f"  {s['sample_path']}")
         if len(samples) > 20:
             con.print(f"  [dim]... and {len(samples) - 20} more[/dim]")
+
+
+@app.command()
+def dedup(
+    json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+    propose: bool = typer.Option(False, "--propose", help="Write a proposal JSON for the losers."),
+) -> None:
+    """List byte-identical .als duplicate groups in the catalog.
+
+    --propose writes a proposal JSON (one ArchiveProject action per loser) to the
+    proposals dir; approve it via the web UI to actually archive the losers.
+    """
+    import json as _json
+
+    conn = open_db(db_path())
+    groups = find_duplicates(conn)
+    if propose:
+        # Filled in next task; placeholder so the flag exists.
+        raise NotImplementedError
+    if json_out:
+        payload = [
+            {
+                "file_hash": g.file_hash,
+                "keeper": _row_summary(g.keeper),
+                "losers": [_row_summary(loser) for loser in g.losers],
+            }
+            for g in groups
+        ]
+        print(_json.dumps(payload, indent=2))
+        return
+    if not groups:
+        con.print("No duplicates found.")
+        return
+    for g in groups:
+        n = 1 + len(g.losers)
+        con.print(f"\n[bold]hash[/bold]  {g.file_hash}  ({n} copies)")
+        con.print(f"  [green]KEEP[/green]  id={g.keeper['id']}  {g.keeper['path']}")
+        for loser in g.losers:
+            con.print(f"  [red]drop[/red]  id={loser['id']}  {loser['path']}")
+
+
+def _row_summary(row: dict) -> dict:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "path": row["path"],
+        "last_modified": row["last_modified"],
+        "is_archived": bool(row["is_archived"]),
+    }
 
 
 # ---------------------------------------------------------------------------
