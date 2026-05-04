@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import os
 import sqlite3
+import sys
+from pathlib import Path
 from typing import Annotated, Literal
 
-from audio_core.config import db_path
+from audio_core.config import db_path, projects_root
 from audio_core.db.connection import open_db
 from audio_core.db.projects import search_projects
+from audio_core.safety.paths import ensure_within
 from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
@@ -71,3 +75,30 @@ def project_detail(project_id: int) -> dict:
         )
     ]
     return proj
+
+
+@router.post("/{project_id}/open")
+def open_project(project_id: int) -> dict:
+    """Launch the .als in its registered handler (Ableton on Windows)."""
+    conn = open_db(db_path())
+    row = conn.execute("SELECT path FROM projects WHERE id=?", (project_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no project id={project_id}")
+    target = Path(row[0])
+    try:
+        ensure_within(target, projects_root())
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"file missing: {target}")
+    if sys.platform == "win32":
+        os.startfile(str(target))  # type: ignore[attr-defined]
+    elif sys.platform == "darwin":
+        import subprocess
+
+        subprocess.Popen(["open", str(target)])
+    else:
+        import subprocess
+
+        subprocess.Popen(["xdg-open", str(target)])
+    return {"opened": str(target)}

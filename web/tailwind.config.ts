@@ -88,8 +88,8 @@ export default {
       zIndex: {
         page: '0',
         strip: '10',
-        panel: '20',
-        overlay: '30',
+        overlay: '20',
+        panel: '30',
         toast: '40',
       },
     },

@@ -1,52 +1,93 @@
 import type { ProjectDetail } from '../../lib/types';
-import { Sprite } from '../primitives/Sprite';
 
 export function Overview({ project }: { project: ProjectDetail }) {
   return (
-    <div className="space-y-4">
-      <dl className="grid grid-cols-[8rem_1fr] gap-y-2 font-mono text-sm">
-        <Row label="path">{project.path}</Row>
-        <Row label="parent">{project.parent_dir}</Row>
-        <Row label="tempo">
-          <Sprite name="bpm" size={14} className="mr-1" />
-          {project.tempo?.toFixed(1) ?? '—'} BPM
-        </Row>
-        <Row label="time sig">
-          {project.time_sig_num != null ? `${project.time_sig_num}/${project.time_sig_den}` : '—'}
-        </Row>
-        <Row label="tracks">
-          {project.track_count ?? '—'}{' '}
-          {project.track_count != null
-            ? `(${project.audio_tracks ?? 0} audio · ${project.midi_tracks ?? 0} midi · ${project.return_tracks ?? 0} return)`
-            : ''}
-        </Row>
-        <Row label="length">{secs(project.length_seconds)}</Row>
-        <Row label="live version">{project.live_version ?? '—'}</Row>
-        <Row label="last modified">{date(project.last_modified)}</Row>
-        <Row label="last scanned">{date(project.last_scanned)}</Row>
-        <Row label="hash">{project.file_hash}</Row>
-        <Row label="archived">{project.is_archived ? 'yes' : 'no'}</Row>
-        <Row label="color">
-          {project.color_tag != null ? `als-${project.color_tag + 1}` : '—'}
-        </Row>
-        <Row label="tags">{project.tags.length === 0 ? '—' : project.tags.join(', ')}</Row>
+    <div className="space-y-5">
+      {/* Headline stats */}
+      <dl className="grid grid-cols-2 gap-2 text-[12px]">
+        <Stat label="tempo" value={project.tempo != null ? `${project.tempo.toFixed(1)} BPM` : '—'} />
+        <Stat
+          label="time sig"
+          value={
+            project.time_sig_num != null ? `${project.time_sig_num}/${project.time_sig_den}` : '—'
+          }
+        />
+        <Stat
+          label="tracks"
+          value={
+            project.track_count != null
+              ? `${project.track_count} (${project.audio_tracks ?? 0}a · ${project.midi_tracks ?? 0}m · ${project.return_tracks ?? 0}r)`
+              : '—'
+          }
+        />
+        <Stat label="length" value={secs(project.length_seconds)} />
+        <Stat
+          label="color"
+          value={project.color_tag != null ? `als-${project.color_tag + 1}` : '—'}
+        />
+        <Stat label="archived" value={project.is_archived ? 'yes' : 'no'} />
       </dl>
-      {project.notes ? (
+
+      {/* Tags chips */}
+      {project.tags.length > 0 ? (
         <section>
-          <h3 className="text-base font-semibold mb-1">Notes</h3>
-          <p className="text-sm">{project.notes}</p>
+          <h3 className="text-[10px] uppercase tracking-wider text-ink-faint mb-1.5">tags</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {project.tags.map((t) => (
+              <span
+                key={t}
+                className="px-2 py-0.5 text-[11px] font-mono rounded-chip bg-paper-tint-blue text-ink-secondary border border-rule-line"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Path block */}
+      <section className="space-y-1">
+        <h3 className="text-[10px] uppercase tracking-wider text-ink-faint">path</h3>
+        <p className="font-mono text-[12px] break-all text-ink-primary leading-snug">
+          {project.path}
+        </p>
+      </section>
+
+      {/* Metadata block */}
+      <section className="grid grid-cols-2 gap-x-4 gap-y-1.5 font-mono text-[11px]">
+        <Meta label="live version" value={project.live_version ?? '—'} />
+        <Meta label="last modified" value={date(project.last_modified)} />
+        <Meta label="last scanned" value={date(project.last_scanned)} />
+        <Meta label="hash" value={project.file_hash.slice(0, 16) + '…'} title={project.file_hash} />
+      </section>
+
+      {project.notes ? (
+        <section className="space-y-1">
+          <h3 className="text-[10px] uppercase tracking-wider text-ink-faint">notes</h3>
+          <p className="text-[13px] text-ink-secondary leading-relaxed">{project.notes}</p>
         </section>
       ) : null}
     </div>
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <>
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="break-words min-w-0">{children}</dd>
-    </>
+    <div className="flex flex-col gap-0.5 px-3 py-2 rounded-input bg-surface-sunken border border-rule-line">
+      <span className="text-[10px] uppercase tracking-wider text-ink-faint font-mono">{label}</span>
+      <span className="text-ink-primary font-medium">{value}</span>
+    </div>
+  );
+}
+
+function Meta({ label, value, title }: { label: string; value: string; title?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] uppercase tracking-wider text-ink-faint">{label}</span>
+      <span className="text-ink-secondary truncate" title={title ?? value}>
+        {value}
+      </span>
+    </div>
   );
 }
 

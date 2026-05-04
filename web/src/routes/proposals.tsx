@@ -21,7 +21,7 @@ import {
 export function ProposalsRoute() {
   const navigate = useNavigate();
   const proposals = useProposals();
-  const projects = useProjects();
+  const projects = useProjects({ limit: 1000 });
   const approve = useApproveProposal();
   const reject = useRejectProposal();
 
@@ -32,7 +32,6 @@ export function ProposalsRoute() {
 
   const sidebarItems = [
     { id: 'home', label: 'Home', icon: 'house' as const },
-    { id: 'projects', label: 'Projects', icon: 'folder' as const },
     {
       id: 'proposals',
       label: 'Proposals',

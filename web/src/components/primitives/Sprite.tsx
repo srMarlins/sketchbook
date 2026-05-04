@@ -11,21 +11,35 @@ export interface SpriteProps {
   className?: string;
 }
 
+/**
+ * Renders an icon as a CSS mask so the silhouette takes `currentColor`. This
+ * lets `text-*` utilities tint the icon, which raster `<img>` cannot do — the
+ * sketch PNGs are dark on transparent and become invisible on dark surfaces.
+ */
 export function Sprite({ name, size = 24, label, className }: SpriteProps) {
-  const img = (
-    <img
-      src={spritePath(name)}
-      width={size}
-      height={size}
-      alt=""
+  const url = `url(${JSON.stringify(spritePath(name))})`;
+  const span = (
+    <span
+      role={label ? 'img' : undefined}
       aria-hidden={label ? undefined : true}
-      draggable={false}
-      className={clsx('inline-block select-none', className)}
+      className={clsx('inline-block shrink-0 align-[-0.125em] bg-current', className)}
+      style={{
+        width: size,
+        height: size,
+        WebkitMaskImage: url,
+        maskImage: url,
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+      }}
     />
   );
 
   if (label) {
-    return <AccessibleIcon label={label}>{img}</AccessibleIcon>;
+    return <AccessibleIcon label={label}>{span}</AccessibleIcon>;
   }
-  return img;
+  return span;
 }

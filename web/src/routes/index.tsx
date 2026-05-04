@@ -18,7 +18,6 @@ export function HomeRoute() {
 
   const sidebarItems = [
     { id: 'home', label: 'Home', icon: 'house' as const },
-    { id: 'projects', label: 'Projects', icon: 'folder' as const },
     {
       id: 'proposals',
       label: 'Proposals',
