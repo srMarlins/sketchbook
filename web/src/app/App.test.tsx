@@ -27,8 +27,10 @@ describe('routing', () => {
     expect(await screen.findByText('home stub')).toBeInTheDocument();
   });
 
-  test('/_dev renders dev stub', async () => {
+  test('/_dev renders the component viewer', async () => {
     renderAt('/_dev');
-    expect(await screen.findByText('dev stub')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /sketchbook component viewer/i }),
+    ).toBeInTheDocument();
   });
 });
