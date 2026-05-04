@@ -2,7 +2,7 @@ import time
 
 from audio_core.db.connection import open_db
 from audio_core.db.projects import upsert_project
-from audio_core.dedup import find_duplicates
+from audio_core.dedup import build_archive_proposal, find_duplicates
 from audio_core.parser.model import ProjectMetadata
 
 
@@ -91,7 +91,6 @@ def test_null_file_hash_excluded(tmp_path):
 
 
 def test_build_archive_proposal_one_action_per_loser(tmp_path):
-    from audio_core.dedup import build_archive_proposal
     conn = open_db(tmp_path / "c.db")
     keeper = _seed(conn, path="/k/x.als", file_hash="h", mtime=2000.0)
     l1 = _seed(conn, path="/a/x.als", file_hash="h", mtime=1000.0)
@@ -103,7 +102,6 @@ def test_build_archive_proposal_one_action_per_loser(tmp_path):
 
 
 def test_build_archive_proposal_skips_all_archived_groups(tmp_path):
-    from audio_core.dedup import build_archive_proposal
     conn = open_db(tmp_path / "c.db")
     _seed(conn, path="/a/x.als", file_hash="h", mtime=2000.0, archived=True)
     _seed(conn, path="/b/x.als", file_hash="h", mtime=1000.0, archived=True)
