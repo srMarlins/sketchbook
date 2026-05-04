@@ -6,12 +6,21 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Outlet,
 } from '@tanstack/react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HomeRoute } from '../routes/index';
 import { DevRoute } from '../routes/_dev';
 
 function renderAt(path: string) {
-  const rootRoute = createRootRoute();
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const rootRoute = createRootRoute({
+    component: () => (
+      <QueryClientProvider client={queryClient}>
+        <Outlet />
+      </QueryClientProvider>
+    ),
+  });
   const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: HomeRoute });
   const devRoute = createRoute({ getParentRoute: () => rootRoute, path: '/_dev', component: DevRoute });
   const router = createRouter({
@@ -22,9 +31,9 @@ function renderAt(path: string) {
 }
 
 describe('routing', () => {
-  test('/ renders home stub', async () => {
+  test('/ renders the home shell with sidebar nav', async () => {
     renderAt('/');
-    expect(await screen.findByText('home stub')).toBeInTheDocument();
+    expect(await screen.findByRole('navigation', { name: /notebook sections/i })).toBeInTheDocument();
   });
 
   test('/_dev renders the component viewer', async () => {

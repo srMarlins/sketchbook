@@ -5,14 +5,19 @@ import {
   createRoute,
   createRouter,
 } from '@tanstack/react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HomeRoute } from '../routes/index';
 import { DevRoute } from '../routes/_dev';
+import { ProposalsRoute } from '../routes/proposals';
+import { NotebookRoute } from '../routes/notebook';
+
+const queryClient = new QueryClient();
 
 const rootRoute = createRootRoute({
   component: () => (
-    <div className="min-h-screen bg-surface-page text-ink-primary">
+    <QueryClientProvider client={queryClient}>
       <Outlet />
-    </div>
+    </QueryClientProvider>
   ),
 });
 
@@ -28,7 +33,19 @@ const devRoute = createRoute({
   component: DevRoute,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, devRoute]);
+const proposalsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/proposals',
+  component: ProposalsRoute,
+});
+
+const notebookRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/n/$notebookId',
+  component: NotebookRoute,
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, devRoute, proposalsRoute, notebookRoute]);
 
 export const router = createRouter({ routeTree });
 
