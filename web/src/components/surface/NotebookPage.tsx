@@ -1,55 +1,61 @@
 import clsx from 'clsx';
 import type { ReactNode } from 'react';
 
-export type NotebookKind = 'lined' | 'kraft' | 'manila';
+export type NotebookKind = 'plain' | 'ruled' | 'tinted';
 
 export interface NotebookPageProps {
   kind?: NotebookKind;
+  /** Optional pastel tint for `kind="tinted"`. */
+  tint?: 'blue' | 'rose' | 'sage' | 'cream';
   header?: ReactNode;
   children?: ReactNode;
   className?: string;
 }
 
-const KIND_CLS: Record<NotebookKind, string> = {
-  lined: 'bg-surface-page',
-  kraft: 'bg-surface-kraft',
-  manila: 'bg-[color-mix(in_srgb,var(--surface-page)_85%,#d8b975)]',
-};
+/**
+ * The main content surface — a paper card with a soft shadow. Optionally
+ * shows a faint blue ruling, or a pastel tint. No torn edges, no holes.
+ */
+export function NotebookPage({
+  kind = 'plain',
+  tint = 'cream',
+  header,
+  children,
+  className,
+}: NotebookPageProps) {
+  const tintCls =
+    kind === 'tinted'
+      ? {
+          blue: 'bg-paper-tint-blue',
+          rose: 'bg-paper-tint-rose',
+          sage: 'bg-paper-tint-sage',
+          cream: 'bg-paper-tint-cream',
+        }[tint]
+      : 'bg-surface-card';
 
-export function NotebookPage({ kind = 'lined', header, children, className }: NotebookPageProps) {
   return (
     <div
       className={clsx(
-        'relative shadow-page rounded-sm min-h-[80vh]',
-        KIND_CLS[kind],
+        'relative rounded-card shadow-card overflow-hidden',
+        tintCls,
         className,
       )}
-      style={{
-        backgroundImage:
-          kind === 'lined'
-            ? 'repeating-linear-gradient(transparent 0, transparent 31px, var(--rule-line) 31px, var(--rule-line) 32px), url("/textures/paper-grain.webp")'
-            : 'url("/textures/paper-grain.webp")',
-        backgroundSize: 'auto, auto',
-      }}
+      style={
+        kind === 'ruled'
+          ? {
+              backgroundImage:
+                'repeating-linear-gradient(to bottom, transparent 0 27px, var(--rule-line) 27px 28px)',
+              backgroundSize: '100% auto',
+            }
+          : undefined
+      }
     >
-      <span
-        aria-hidden
-        className="absolute inset-y-0 left-0 w-6"
-        style={{
-          background:
-            'repeating-linear-gradient(to bottom, transparent 0 14px, rgba(40,28,18,0.18) 14px 18px)',
-        }}
-      />
-      <span
-        aria-hidden
-        className="absolute inset-y-0 left-7 w-px bg-accent-action/40"
-      />
       {header ? (
-        <div className="sticky top-0 z-strip pl-12 pr-6 py-3 backdrop-blur-sm bg-[color-mix(in_srgb,var(--surface-page)_85%,transparent)]">
+        <div className="sticky top-0 z-10 px-6 py-3 bg-surface-card/90 backdrop-blur-sm border-b border-rule-line">
           {header}
         </div>
       ) : null}
-      <div className="pl-12 pr-6 py-4">{children}</div>
+      <div className="px-6 py-5">{children}</div>
     </div>
   );
 }

@@ -41,6 +41,22 @@ export default {
         'accent-warning': 'var(--accent-warning)',
         'accent-danger': 'var(--accent-danger)',
         ...alsColors,
+        // legacy aliases — to be removed once the components/* sweep finishes
+        'surface-strip': 'var(--surface-card)',
+        'surface-corkboard': 'var(--surface-card)',
+        'surface-kraft': 'var(--paper-tint-cream)',
+        'surface-panel': 'var(--surface-card)',
+        'surface-desk': 'var(--surface-page)',
+        'ink-on-strip-light': 'var(--ink-primary)',
+        'ink-on-strip-dark': 'var(--ink-primary)',
+        'accent-action': 'var(--accent)',
+        'accent-secondary': 'var(--accent-muted)',
+        'pin-green': 'var(--accent-positive)',
+        'pin-blue': 'var(--als-10)',
+        'pin-orange': 'var(--accent-warning)',
+        'pin-purple': 'var(--als-12)',
+        'pin-red': 'var(--accent-danger)',
+        'pin-yellow': 'var(--accent-warning)',
       },
       fontFamily: {
         display: 'var(--font-display)',
@@ -51,6 +67,9 @@ export default {
         card: 'var(--shadow-card)',
         lift: 'var(--shadow-lift)',
         deep: 'var(--shadow-deep)',
+        // legacy aliases
+        page: 'var(--shadow-card)',
+        pin: 'var(--shadow-card)',
       },
       borderRadius: {
         card: 'var(--radius-card)',

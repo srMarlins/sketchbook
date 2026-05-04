@@ -47,32 +47,34 @@ export function CorkboardPanel({
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
                 transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-                className="bg-surface-corkboard text-ink-primary shadow-page h-full flex"
+                className="bg-surface-card text-ink-primary shadow-deep h-full flex border-l border-rule-line"
               >
                 <Tabs.Root defaultValue={defaultTab ?? tabs[0]?.id ?? 'overview'} className="flex w-full">
                   <Tabs.List
-                    aria-label="Corkboard tabs"
-                    className="flex flex-col gap-2 py-4 px-2 border-r border-rule-line/30 bg-surface-kraft"
+                    aria-label="Detail tabs"
+                    className="flex flex-col gap-1 py-4 px-2 border-r border-rule-line bg-surface-sunken min-w-[8rem]"
                   >
                     {tabs.map((t) => (
                       <Tabs.Trigger
                         key={t.id}
                         value={t.id}
                         className={clsx(
-                          'font-display text-base px-2 py-1 rounded-sm text-left',
-                          'data-[state=active]:bg-surface-page data-[state=active]:translate-x-1',
-                          'transition-transform duration-fast ease-paper',
+                          'text-sm font-medium px-3 py-1.5 rounded-input text-left',
+                          'text-ink-secondary hover:text-ink-primary',
+                          'data-[state=active]:bg-surface-card data-[state=active]:text-ink-primary',
+                          'data-[state=active]:shadow-card',
+                          'transition-colors duration-fast',
                         )}
                       >
                         {t.label}
                       </Tabs.Trigger>
                     ))}
                   </Tabs.List>
-                  <div className="flex-1 overflow-y-auto p-4">
+                  <div className="flex-1 overflow-y-auto p-5">
                     <header className="mb-4 flex items-center justify-between">
-                      <Dialog.Title className="font-display text-2xl">{title}</Dialog.Title>
+                      <Dialog.Title className="text-xl font-semibold tracking-tight">{title}</Dialog.Title>
                       <Dialog.Close
-                        className="px-2 py-1 rounded text-sm border border-rule-line hover:bg-surface-page"
+                        className="px-2 py-1 rounded-input text-sm border border-rule-line text-ink-secondary hover:bg-surface-sunken"
                         aria-label="Close panel"
                       >
                         close

@@ -9,27 +9,28 @@ export interface DeskProps {
   className?: string;
 }
 
+/**
+ * Top-level page chrome: a 2-column grid (sidebar + main) on a paper surface.
+ * No wood, no textures — the page background gradient is set on body.
+ */
 export function Desk({ branding, search, sidebar, children, className }: DeskProps) {
   return (
     <div
       className={clsx(
-        'min-h-screen relative flex flex-col bg-surface-desk text-ink-primary z-desk',
+        'min-h-screen flex flex-col bg-surface-page text-ink-primary',
         className,
       )}
-      style={{
-        backgroundImage:
-          'linear-gradient(var(--tint-overlay), var(--tint-overlay)), url("/textures/wood-grain.webp")',
-        backgroundRepeat: 'repeat',
-        backgroundSize: 'auto',
-      }}
     >
-      <header className="flex items-center gap-4 px-6 py-3 z-strip">
-        <div>{branding}</div>
+      <header className="flex items-center gap-4 px-6 py-3 border-b border-rule-line">
+        <div className="shrink-0">{branding}</div>
         <div className="flex-1 max-w-xl">{search}</div>
       </header>
-      <div className="flex-1 grid gap-4 px-6 pb-8" style={{ gridTemplateColumns: '15rem 1fr' }}>
-        <aside className="z-strip pt-4">{sidebar}</aside>
-        <main className="z-page min-w-0">{children}</main>
+      <div
+        className="flex-1 grid gap-6 px-6 py-6 min-h-0"
+        style={{ gridTemplateColumns: '14rem minmax(0, 1fr)' }}
+      >
+        <aside className="min-w-0">{sidebar}</aside>
+        <main className="min-w-0">{children}</main>
       </div>
     </div>
   );
