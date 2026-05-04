@@ -31,3 +31,18 @@ class ProposalOut(BaseModel):
     actor: str
     actions: list[ProposedAction]
     rationale: str | None = None
+
+
+class Shelf(BaseModel):
+    """One horizontal row on the home page — a curated answer to
+    'why might I want to find a project right now?'."""
+
+    id: str
+    title: str
+    description: str
+    see_all_query: str
+    projects: list[dict[str, Any]]
+
+
+class HomeResponse(BaseModel):
+    shelves: list[Shelf]
