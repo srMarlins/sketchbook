@@ -106,3 +106,45 @@ def test_build_archive_proposal_skips_all_archived_groups(tmp_path):
     _seed(conn, path="/a/x.als", file_hash="h", mtime=2000.0, archived=True)
     _seed(conn, path="/b/x.als", file_hash="h", mtime=1000.0, archived=True)
     assert build_archive_proposal(find_duplicates(conn)) == []
+
+
+def test_round_trip_proposal_archives_losers(tmp_path):
+    """End-to-end at the core layer: build_archive_proposal -> instantiate
+    ArchiveProject -> run_batch. Losers should end up with is_archived=1."""
+    import shutil
+    from pathlib import Path
+
+    from audio_core.actions.archive import ArchiveProject
+    from audio_core.actions.runner import run_batch
+    from audio_core.scanner.scan import scan_one
+
+    fixtures = Path(__file__).parent / "fixtures"
+    root = tmp_path / "root"
+    (root / "Projects" / "keep Project").mkdir(parents=True)
+    (root / "Projects" / "drop Project").mkdir(parents=True)
+    shutil.copy(fixtures / "tiny.als", root / "Projects" / "keep Project" / "x.als")
+    shutil.copy(fixtures / "tiny.als", root / "Projects" / "drop Project" / "x.als")
+
+    conn = open_db(root / "data" / "catalog.db")
+    keep_id = scan_one(conn, root / "Projects" / "keep Project" / "x.als")
+    drop_id = scan_one(conn, root / "Projects" / "drop Project" / "x.als")
+    # Force keeper to win: bump its last_modified.
+    conn.execute(
+        "UPDATE projects SET last_modified=? WHERE id=?", (9_999_999_999.0, keep_id)
+    )
+    conn.commit()
+
+    actions_json = build_archive_proposal(find_duplicates(conn))
+    assert {a["args"]["project_id"] for a in actions_json} == {drop_id}
+
+    actions = [
+        ArchiveProject(project_id=a["args"]["project_id"], root=root / "Projects")
+        for a in actions_json
+    ]
+    run_batch(conn, actions, actor="test", journal_dir=root / "data" / "journal")
+
+    flag = lambda pid: conn.execute(
+        "SELECT is_archived FROM projects WHERE id=?", (pid,)
+    ).fetchone()[0]
+    assert flag(drop_id) == 1
+    assert flag(keep_id) == 0
