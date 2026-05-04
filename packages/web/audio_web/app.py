@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from audio_web.routes_projects import router as projects_router
+from audio_web.routes_proposals import router as proposals_router
 
 
 def create_app() -> FastAPI:
@@ -13,4 +14,5 @@ def create_app() -> FastAPI:
         return {"ok": True}
 
     app.include_router(projects_router)
+    app.include_router(proposals_router)
     return app
