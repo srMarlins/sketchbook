@@ -27,6 +27,8 @@ const fakeProject: ProjectSummary = {
   color_tag: 2,
   notes: null,
   tags: ['vox', 'rough'],
+  effort_score: null,
+  effort_breakdown: null,
 };
 
 describe('translateProposed', () => {

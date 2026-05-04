@@ -25,6 +25,8 @@ const fakeProject: ProjectSummary = {
   color_tag: 0,
   notes: null,
   tags: ['vox'],
+  effort_score: null,
+  effort_breakdown: null,
 };
 
 const renameProposal = (overrides: Partial<Proposal> = {}): Proposal => ({

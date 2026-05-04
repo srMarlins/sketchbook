@@ -1,12 +1,15 @@
 import projectsJson from './projects.json';
 import type {
+  HomeResponse,
   JournalBatch,
   ProjectDetail,
   ProjectSummary,
   Proposal,
   ProposalSubmission,
   ProposedAction,
+  Shelf,
 } from '../lib/types';
+import type { ListProjectsParams } from '../lib/api';
 
 const projectsState: ProjectSummary[] = (
   JSON.parse(JSON.stringify(projectsJson)) as ProjectSummary[]
@@ -14,6 +17,8 @@ const projectsState: ProjectSummary[] = (
   ...p,
   // Real backend uses Ableton palette 0..13; the legacy fixture used 1..14.
   color_tag: p.color_tag === null ? null : Math.max(0, Math.min(13, p.color_tag - 1)),
+  effort_score: ((p.id * 17) % 100),
+  effort_breakdown: null,
 }));
 
 function _detailFor(p: ProjectSummary): ProjectDetail {
@@ -80,9 +85,118 @@ function _seedJournal(): JournalBatch[] {
 const proposalsState: Proposal[] = _seedProposals();
 const journalState: JournalBatch[] = _seedJournal();
 
+function _orderProjects(rows: ProjectSummary[], params: ListProjectsParams): ProjectSummary[] {
+  const dir = params.order_dir === 'asc' ? 1 : -1;
+  const by = params.order_by;
+  if (!by) return rows;
+  const sorted = [...rows].sort((a, b) => {
+    let av: number | string;
+    let bv: number | string;
+    if (by === 'name') {
+      av = a.name;
+      bv = b.name;
+    } else if (by === 'effort') {
+      av = a.effort_score ?? -1;
+      bv = b.effort_score ?? -1;
+    } else {
+      av = a.last_modified;
+      bv = b.last_modified;
+    }
+    if (av < bv) return -1 * dir;
+    if (av > bv) return 1 * dir;
+    return 0;
+  });
+  return sorted;
+}
+
+function _filterProjects(rows: ProjectSummary[], params: ListProjectsParams): ProjectSummary[] {
+  return rows.filter((p) => {
+    if (params.query) {
+      const q = params.query.toLowerCase();
+      if (!p.name.toLowerCase().includes(q) && !p.parent_dir.toLowerCase().includes(q)) {
+        return false;
+      }
+    }
+    if (params.tempo_min !== undefined && (p.tempo == null || p.tempo < params.tempo_min)) return false;
+    if (params.tempo_max !== undefined && (p.tempo == null || p.tempo > params.tempo_max)) return false;
+    if (params.archived !== undefined && Boolean(p.is_archived) !== params.archived) return false;
+    if (params.min_effort !== undefined && (p.effort_score == null || p.effort_score < params.min_effort)) return false;
+    if (params.max_effort !== undefined && (p.effort_score == null || p.effort_score > params.max_effort)) return false;
+    return true;
+  });
+}
+
+const SIX_MONTHS = 60 * 60 * 24 * 30 * 6;
+const TWO_YEARS = 60 * 60 * 24 * 365 * 2;
+
+function _shelvesFor(rows: ProjectSummary[]): Shelf[] {
+  const now = Math.floor(Date.now() / 1000);
+  // currently-working: blue color tag (10) OR modified within 6 months
+  const currentlyWorking = rows.filter(
+    (p) => p.color_tag === 10 || (now - p.last_modified) < SIX_MONTHS,
+  );
+  // forgotten-gems: high effort (>=60) and old mtime (>= 2y)
+  const forgottenGems = rows.filter(
+    (p) => (p.effort_score ?? 0) >= 60 && (now - p.last_modified) >= TWO_YEARS,
+  );
+  // almost-done: orange/yellow color tags (palette indices 1,2,3 – warm)
+  const almostDone = rows.filter((p) => p.color_tag != null && [1, 2, 3].includes(p.color_tag));
+  // has-potential: purple color tag (12)
+  const hasPotential = rows.filter((p) => p.color_tag === 12);
+  // untriaged: no color tag
+  const untriaged = rows.filter((p) => p.color_tag == null);
+
+  return [
+    {
+      id: 'currently-working',
+      title: 'Currently working',
+      description: 'Recent edits and active sketches.',
+      see_all_query: 'order_by=mtime&order_dir=desc',
+      projects: currentlyWorking.slice(0, 12),
+    },
+    {
+      id: 'forgotten-gems',
+      title: 'Forgotten gems',
+      description: 'High-effort projects that have been quiet for a while.',
+      see_all_query: 'min_effort=60&order_by=mtime&order_dir=asc',
+      projects: forgottenGems.slice(0, 12),
+    },
+    {
+      id: 'almost-done',
+      title: 'Almost done',
+      description: 'Tagged warm — close to the finish line.',
+      see_all_query: 'order_by=mtime&order_dir=desc',
+      projects: almostDone.slice(0, 12),
+    },
+    {
+      id: 'has-potential',
+      title: 'Has potential',
+      description: 'Marked for revisit.',
+      see_all_query: 'order_by=mtime&order_dir=desc',
+      projects: hasPotential.slice(0, 12),
+    },
+    {
+      id: 'untriaged',
+      title: 'Untriaged',
+      description: 'No color tag yet — needs a glance.',
+      see_all_query: 'order_by=mtime&order_dir=desc',
+      projects: untriaged.slice(0, 12),
+    },
+  ];
+}
+
 export const mock = {
-  listProjects(): ProjectSummary[] {
-    return projectsState;
+  listProjects(params: ListProjectsParams = {}): ProjectSummary[] {
+    const filtered = _filterProjects(projectsState, params);
+    const ordered = _orderProjects(filtered, params);
+    if (params.limit !== undefined) return ordered.slice(0, params.limit);
+    return ordered;
+  },
+  getHome(): HomeResponse {
+    return { shelves: _shelvesFor(projectsState) };
+  },
+  openProject(_id: number): { ok: true } {
+    return { ok: true };
   },
   getProject(id: number): ProjectDetail | undefined {
     const p = projectsState.find((x) => x.id === id);

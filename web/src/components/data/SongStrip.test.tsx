@@ -26,6 +26,8 @@ function fakeProject(overrides: Partial<ProjectSummary> = {}): ProjectSummary {
     color_tag: 5,
     notes: null,
     tags: [],
+    effort_score: null,
+    effort_breakdown: null,
     ...overrides,
   };
 }

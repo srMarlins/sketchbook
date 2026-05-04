@@ -23,6 +23,8 @@ const baseProject: ProjectSummary = {
   color_tag: 1,
   notes: null,
   tags: [],
+  effort_score: null,
+  effort_breakdown: null,
 };
 
 describe('deriveNotebooks', () => {
