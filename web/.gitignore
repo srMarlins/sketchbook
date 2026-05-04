@@ -1,0 +1,21 @@
+node_modules
+dist
+dist-ssr
+dist-tsbuild-node
+*.local
+*.tsbuildinfo
+.vite
+coverage
+playwright-report
+test-results
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
