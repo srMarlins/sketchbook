@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from lxml import etree
@@ -46,6 +47,23 @@ def parse_time_signature(root: etree._Element) -> tuple[int | None, int | None]:
     denom_index = encoded // 99
     denominator = _DENOM_TABLE[denom_index] if 0 <= denom_index < len(_DENOM_TABLE) else None
     return numerator, denominator
+
+
+@dataclass(frozen=True)
+class TrackCounts:
+    audio: int
+    midi: int
+    return_: int
+    group: int
+    total: int
+
+
+def parse_tracks(root: etree._Element) -> TrackCounts:
+    audio = len(root.findall(".//Tracks/AudioTrack"))
+    midi = len(root.findall(".//Tracks/MidiTrack"))
+    ret = len(root.findall(".//Tracks/ReturnTrack"))
+    group = len(root.findall(".//Tracks/GroupTrack"))
+    return TrackCounts(audio, midi, ret, group, audio + midi + ret + group)
 
 
 def parse_live_version(root: etree._Element) -> str | None:
