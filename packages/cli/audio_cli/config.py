@@ -1,24 +1,5 @@
-from __future__ import annotations
+"""Re-export the shared workspace config from audio_core for CLI users."""
 
-import os
-from pathlib import Path
+from audio_core.config import db_path, journal_dir, projects_root, proposals_dir, workspace_root
 
-
-def workspace_root() -> Path:
-    return Path(os.environ.get("AUDIO_ROOT", "Z:/User/audio")).resolve()
-
-
-def projects_root() -> Path:
-    return workspace_root() / "Projects"
-
-
-def db_path() -> Path:
-    return workspace_root() / "data" / "catalog.db"
-
-
-def journal_dir() -> Path:
-    return workspace_root() / "data" / "journal"
-
-
-def proposals_dir() -> Path:
-    return workspace_root() / "data" / "proposals"
+__all__ = ["db_path", "journal_dir", "projects_root", "proposals_dir", "workspace_root"]
