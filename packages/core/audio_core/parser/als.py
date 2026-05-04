@@ -7,6 +7,8 @@ from pathlib import Path
 
 from lxml import etree
 
+from audio_core.parser.model import PluginRef
+
 # Live encodes the song-level time signature as a single int in <TimeSignature><Manual Value="N"/>.
 # Numerator = (value % 99) + 1, denominator index = value // 99 → table below.
 _DENOM_TABLE = [1, 2, 4, 8, 16, 32, 64]
@@ -76,3 +78,131 @@ def parse_live_version(root: etree._Element) -> str | None:
             return m.group(1)
         return creator
     return None
+
+
+# Tags of Ableton native devices we recognize. Detection is name-based; not exhaustive.
+NATIVE_DEVICE_TAGS = frozenset(
+    {
+        "Eq8",
+        "EqEight",
+        "Compressor2",
+        "Compressor",
+        "Limiter",
+        "Saturator",
+        "AutoFilter",
+        "Reverb",
+        "Delay",
+        "Echo",
+        "Operator",
+        "Wavetable",
+        "Simpler",
+        "Sampler",
+        "DrumGroupDevice",
+        "InstrumentRack",
+        "AudioEffectGroupDevice",
+        "MidiEffectGroupDevice",
+        "InstrumentGroupDevice",
+        "Utility",
+        "Gate",
+        "Glue",
+        "MultibandDynamics",
+        "Spectrum",
+        "Tuner",
+        "Phaser",
+        "Chorus",
+        "Flanger",
+        "AutoPan",
+        "BeatRepeat",
+        "Vocoder",
+        "FrequencyShifter",
+        "GrainDelay",
+        "DrumBuss",
+        "Pedal",
+        "Amp",
+        "Cabinet",
+        "Erosion",
+        "Overdrive",
+    }
+)
+
+_TRACK_TAGS = frozenset(
+    {"MidiTrack", "AudioTrack", "ReturnTrack", "GroupTrack", "MasterTrack", "MainTrack"}
+)
+
+
+def _track_name_for(node: etree._Element) -> str | None:
+    """Walk up to the nearest containing track and return its EffectiveName."""
+    cur = node.getparent()
+    while cur is not None:
+        if cur.tag in _TRACK_TAGS:
+            name_el = cur.find(".//Name/EffectiveName")
+            if name_el is not None:
+                return name_el.get("Value")
+            return None
+        cur = cur.getparent()
+    return None
+
+
+def parse_plugins(root: etree._Element) -> list[PluginRef]:
+    out: list[PluginRef] = []
+    # External plugins: every plugin instance lives in a <PluginDevice>; the info child
+    # tells us VST2 vs VST3 vs AU.
+    for dev in root.iter("PluginDevice"):
+        track_name = _track_name_for(dev)
+        vst3 = dev.find(".//Vst3PluginInfo")
+        if vst3 is not None:
+            n = vst3.find("Name")
+            out.append(
+                PluginRef(
+                    name=(n.get("Value") if n is not None and n.get("Value") else "Unknown VST3"),
+                    plugin_type="vst3",
+                    track_name=track_name,
+                )
+            )
+            continue
+        vst2 = dev.find(".//VstPluginInfo")
+        if vst2 is not None:
+            pn = vst2.find("PlugName")
+            out.append(
+                PluginRef(
+                    name=(pn.get("Value") if pn is not None and pn.get("Value") else "Unknown VST"),
+                    plugin_type="vst",
+                    track_name=track_name,
+                )
+            )
+            continue
+        au = dev.find(".//AuPluginInfo")
+        if au is not None:
+            n = au.find("Name") or au.find("Manufacturer")
+            out.append(
+                PluginRef(
+                    name=(n.get("Value") if n is not None and n.get("Value") else "Unknown AU"),
+                    plugin_type="au",
+                    track_name=track_name,
+                )
+            )
+            continue
+        # Older standalone <AuPluginDevice> shape:
+    for dev in root.iter("AuPluginDevice"):
+        if dev.find(".//AuPluginInfo") is not None:
+            continue  # already counted above via PluginDevice path
+        n = dev.find(".//Name") or dev.find(".//Manufacturer")
+        out.append(
+            PluginRef(
+                name=(n.get("Value") if n is not None and n.get("Value") else "Unknown AU"),
+                plugin_type="au",
+                track_name=_track_name_for(dev),
+            )
+        )
+    # Native Ableton devices: direct children of any <Devices> element whose tag is in our set.
+    for devices in root.iter("Devices"):
+        for child in devices:
+            if child.tag in NATIVE_DEVICE_TAGS:
+                out.append(
+                    PluginRef(
+                        name=child.tag,
+                        plugin_type="ableton-native",
+                        track_name=_track_name_for(child),
+                    )
+                )
+    return out
