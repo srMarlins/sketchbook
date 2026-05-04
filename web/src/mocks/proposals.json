@@ -1,0 +1,114 @@
+[
+  {
+    "id": "p-1",
+    "project_id": 7,
+    "verb": "tag",
+    "target": "Z:/User/audio/Projects/2025/pulsing_ember.als",
+    "diff": {
+      "before": "",
+      "after": "jazz"
+    },
+    "reason": "Last modified > 18 months and not opened.",
+    "source": "claude-cli",
+    "created_at": 1775227348,
+    "status": "pending"
+  },
+  {
+    "id": "p-2",
+    "project_id": 47,
+    "verb": "rename",
+    "target": "Z:/User/audio/Projects/2025/glossy_drift.als",
+    "diff": {
+      "before": "glossy drift",
+      "after": "glossy drift (rev)"
+    },
+    "reason": "Notes line out of date.",
+    "source": "claude-mcp",
+    "created_at": 1776158853,
+    "status": "pending"
+  },
+  {
+    "id": "p-3",
+    "project_id": 15,
+    "verb": "archive",
+    "target": "Z:/User/audio/Projects/2024/sharp_syrup.als",
+    "diff": {
+      "before": "active",
+      "after": "archived"
+    },
+    "reason": "Master track tempo doesn't match filename hint.",
+    "source": "claude-mcp",
+    "created_at": 1775584943,
+    "status": "pending"
+  },
+  {
+    "id": "p-4",
+    "project_id": 24,
+    "verb": "archive",
+    "target": "Z:/User/audio/Projects/2025/golden_meadow.als",
+    "diff": {
+      "before": "active",
+      "after": "archived"
+    },
+    "reason": "Last modified > 18 months and not opened.",
+    "source": "claude-cli",
+    "created_at": 1775319978,
+    "status": "pending"
+  },
+  {
+    "id": "p-5",
+    "project_id": 24,
+    "verb": "rename",
+    "target": "Z:/User/audio/Projects/2025/golden_meadow.als",
+    "diff": {
+      "before": "golden meadow",
+      "after": "golden meadow (rev)"
+    },
+    "reason": "Tags inferred from filename pattern.",
+    "source": "claude-cli",
+    "created_at": 1776866960,
+    "status": "pending"
+  },
+  {
+    "id": "p-6",
+    "project_id": 31,
+    "verb": "rename",
+    "target": "Z:/User/audio/Projects/2024/rusty_pulse.als",
+    "diff": {
+      "before": "rusty pulse",
+      "after": "rusty pulse (rev)"
+    },
+    "reason": "Notes line out of date.",
+    "source": "claude-cli",
+    "created_at": 1776109323,
+    "status": "pending"
+  },
+  {
+    "id": "p-7",
+    "project_id": 29,
+    "verb": "note",
+    "target": "Z:/User/audio/Projects/2025/pulsing_shadow.als",
+    "diff": {
+      "before": "",
+      "after": " — reference"
+    },
+    "reason": "Master track tempo doesn't match filename hint.",
+    "source": "claude-mcp",
+    "created_at": 1775416313,
+    "status": "pending"
+  },
+  {
+    "id": "p-8",
+    "project_id": 8,
+    "verb": "archive",
+    "target": "Z:/User/audio/Projects/2023/smoky_satellite.als",
+    "diff": {
+      "before": "active",
+      "after": "archived"
+    },
+    "reason": "Filename has trailing whitespace.",
+    "source": "claude-cli",
+    "created_at": 1775620034,
+    "status": "pending"
+  }
+]

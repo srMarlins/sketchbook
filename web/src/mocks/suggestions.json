@@ -1,0 +1,74 @@
+[
+  {
+    "project_id": 1,
+    "text": "No samples found — orphaned?",
+    "proposed_verb": "note",
+    "proposed_target": "Z:/User/audio/Projects/2024/rusty_drift.als"
+  },
+  {
+    "project_id": 2,
+    "text": "Mismatch between key tag and detected key.",
+    "proposed_verb": "note",
+    "proposed_target": "Z:/User/audio/Projects/2023/steady_ridge.als"
+  },
+  {
+    "project_id": 3,
+    "text": "Mismatch between key tag and detected key.",
+    "proposed_verb": "note",
+    "proposed_target": "Z:/User/audio/Projects/2023/steady_signal.als"
+  },
+  {
+    "project_id": 4,
+    "text": "Rename for clarity?",
+    "proposed_verb": "tag",
+    "proposed_target": "Z:/User/audio/Projects/2024/warm_meadow.als"
+  },
+  {
+    "project_id": 5,
+    "text": "Mismatch between key tag and detected key.",
+    "proposed_verb": "archive",
+    "proposed_target": "Z:/User/audio/Projects/2023/restless_river.als"
+  },
+  {
+    "project_id": 6,
+    "text": "No samples found — orphaned?",
+    "proposed_verb": "note",
+    "proposed_target": "Z:/User/audio/Projects/2023/sharp_ridge.als"
+  },
+  {
+    "project_id": 7,
+    "text": "Rename for clarity?",
+    "proposed_verb": "rename",
+    "proposed_target": "Z:/User/audio/Projects/2025/pulsing_ember.als"
+  },
+  {
+    "project_id": 8,
+    "text": "Tag as draft?",
+    "proposed_verb": "rename",
+    "proposed_target": "Z:/User/audio/Projects/2023/smoky_satellite.als"
+  },
+  {
+    "project_id": 9,
+    "text": "Looks finished — archive?",
+    "proposed_verb": "tag",
+    "proposed_target": "Z:/User/audio/Projects/2024/pulsing_signal.als"
+  },
+  {
+    "project_id": 10,
+    "text": "No samples found — orphaned?",
+    "proposed_verb": "archive",
+    "proposed_target": "Z:/User/audio/Projects/2025/smoky_river.als"
+  },
+  {
+    "project_id": 11,
+    "text": "Rename for clarity?",
+    "proposed_verb": "note",
+    "proposed_target": "Z:/User/audio/Projects/2026/sharp_arcade.als"
+  },
+  {
+    "project_id": 12,
+    "text": "Rename for clarity?",
+    "proposed_verb": "tag",
+    "proposed_target": "Z:/User/audio/Projects/2025/muted_marble.als"
+  }
+]
