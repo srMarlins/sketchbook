@@ -7,7 +7,7 @@ from pathlib import Path
 
 from lxml import etree
 
-from audio_core.parser.model import PluginRef
+from audio_core.parser.model import PluginRef, SampleRef
 
 # Live encodes the song-level time signature as a single int in <TimeSignature><Manual Value="N"/>.
 # Numerator = (value % 99) + 1, denominator index = value // 99 → table below.
@@ -205,4 +205,42 @@ def parse_plugins(root: etree._Element) -> list[PluginRef]:
                         track_name=_track_name_for(child),
                     )
                 )
+    return out
+
+
+def _path_from_fileref(file_ref: etree._Element) -> str | None:
+    # Newer Live: <FileRef Path="..."/> or <FileRef><Path Value="..."/></FileRef>;
+    # in practice both attribute and child element forms exist depending on Live version.
+    path_attr = file_ref.get("Path")
+    if path_attr:
+        return path_attr
+    path_child = file_ref.find("Path")
+    if path_child is not None and path_child.get("Value"):
+        return path_child.get("Value")
+    rel_attr = file_ref.get("RelativePath")
+    if rel_attr:
+        return rel_attr
+    # Older Live (10): <RelativePath><RelativePathElement Dir="X"/>...</RelativePath><Name Value="kick.wav"/>
+    rel = file_ref.find("RelativePath")
+    if rel is not None:
+        parts = [e.get("Dir", "") for e in rel.findall("RelativePathElement")]
+        name_el = file_ref.find("Name")
+        if name_el is not None and name_el.get("Value"):
+            parts.append(name_el.get("Value"))
+        joined = "/".join(p for p in parts if p)
+        if joined:
+            return joined
+    return None
+
+
+def parse_samples(root: etree._Element) -> list[SampleRef]:
+    out: list[SampleRef] = []
+    for ref in root.iter("SampleRef"):
+        # Use the *direct* FileRef child (the active location) — not nested OriginalFileRef.
+        file_ref = ref.find("FileRef")
+        if file_ref is None:
+            continue
+        path = _path_from_fileref(file_ref)
+        if path:
+            out.append(SampleRef(path=path))
     return out
