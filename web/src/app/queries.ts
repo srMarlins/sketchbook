@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveProposal,
+  getHome,
   getProject,
   listJournal,
   listProjects,
   listProposals,
+  openProject,
   rejectProposal,
   submitProposal,
   undoBatch,
@@ -17,6 +19,7 @@ export const projectsKey = (params: ListProjectsParams = {}) =>
 export const projectKey = (id: number) => ['project', id] as const;
 export const proposalsKey = () => ['proposals'] as const;
 export const journalKey = () => ['journal'] as const;
+export const homeKey = () => ['home'] as const;
 
 export const projectsQuery = (params: ListProjectsParams = {}) => ({
   queryKey: projectsKey(params),
@@ -42,6 +45,12 @@ export const journalQuery = () => ({
   staleTime: 15_000,
 });
 
+export const homeQuery = () => ({
+  queryKey: homeKey(),
+  queryFn: () => getHome(),
+  staleTime: 30_000,
+});
+
 export function useProjects(params: ListProjectsParams = {}) {
   return useQuery(projectsQuery(params));
 }
@@ -53,6 +62,17 @@ export function useProposals() {
 }
 export function useJournal() {
   return useQuery(journalQuery());
+}
+export function useHome() {
+  return useQuery(homeQuery());
+}
+
+// Opening a project shells out to Ableton; it's read-only from the catalog's
+// perspective, so no cache invalidation is needed.
+export function useOpenProject() {
+  return useMutation({
+    mutationFn: (projectId: number) => openProject(projectId),
+  });
 }
 
 // --- mutations ---------------------------------------------------------------

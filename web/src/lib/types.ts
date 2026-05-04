@@ -24,6 +24,24 @@ export interface ProjectSummary {
   color_tag: number | null;
   notes: string | null;
   tags: string[];
+  /** Derived 0..100 effort score, or null if not computed. */
+  effort_score: number | null;
+  /** Optional human-readable breakdown of how the effort score was derived. */
+  effort_breakdown: string | null;
+}
+
+// --- home / shelves ----------------------------------------------------------
+
+export interface Shelf {
+  id: string;
+  title: string;
+  description: string;
+  see_all_query: string;
+  projects: ProjectSummary[];
+}
+
+export interface HomeResponse {
+  shelves: Shelf[];
 }
 
 export interface PluginRow {

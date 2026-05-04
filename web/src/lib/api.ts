@@ -1,5 +1,6 @@
 import { mock } from '../mocks/handlers';
 import type {
+  HomeResponse,
   JournalBatch,
   ProjectDetail,
   ProjectSummary,
@@ -25,20 +26,38 @@ export interface ListProjectsParams {
   tempo_max?: number;
   archived?: boolean;
   limit?: number;
+  min_effort?: number;
+  max_effort?: number;
+  order_by?: 'mtime' | 'name' | 'effort';
+  order_dir?: 'asc' | 'desc';
 }
 
 export async function listProjects(
   params: ListProjectsParams = {},
 ): Promise<ProjectSummary[]> {
-  if (USE_MOCKS) return Promise.resolve(mock.listProjects());
+  if (USE_MOCKS) return Promise.resolve(mock.listProjects(params));
   const qs = new URLSearchParams();
   if (params.query) qs.set('query', params.query);
   if (params.tempo_min !== undefined) qs.set('tempo_min', String(params.tempo_min));
   if (params.tempo_max !== undefined) qs.set('tempo_max', String(params.tempo_max));
   if (params.archived !== undefined) qs.set('archived', String(params.archived));
   if (params.limit !== undefined) qs.set('limit', String(params.limit));
+  if (params.min_effort !== undefined) qs.set('min_effort', String(params.min_effort));
+  if (params.max_effort !== undefined) qs.set('max_effort', String(params.max_effort));
+  if (params.order_by !== undefined) qs.set('order_by', params.order_by);
+  if (params.order_dir !== undefined) qs.set('order_dir', params.order_dir);
   const tail = qs.toString() ? `?${qs}` : '';
   return http<ProjectSummary[]>(`/api/projects${tail}`);
+}
+
+export async function getHome(): Promise<HomeResponse> {
+  if (USE_MOCKS) return Promise.resolve(mock.getHome());
+  return http<HomeResponse>('/api/home');
+}
+
+export async function openProject(id: number): Promise<{ ok: true }> {
+  if (USE_MOCKS) return Promise.resolve(mock.openProject(id));
+  return http<{ ok: true }>(`/api/projects/${id}/open`, { method: 'POST' });
 }
 
 export async function getProject(id: number): Promise<ProjectDetail | undefined> {
