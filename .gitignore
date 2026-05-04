@@ -20,6 +20,9 @@ data/proposals/
 Thumbs.db
 .DS_Store
 
+# git worktrees (isolated workspaces for parallel development)
+.worktrees/
+
 # the actual library copy (keep paths only, never commit audio)
 Projects/
 
