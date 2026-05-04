@@ -1,6 +1,7 @@
 import { Sprite } from '../components/primitives/Sprite';
 import { DOODLE_SPRITES, FIELD_SPRITES, type SpriteName } from '../components/primitives/sprite-names';
 import { Button, type ButtonVariant } from '../components/inputs/Button';
+import { FilterChip } from '../components/data/FilterChip';
 import type { DevEntry } from './types';
 
 export const registry: DevEntry[] = [
@@ -55,6 +56,19 @@ export const registry: DevEntry[] = [
         <Button variant={c['variant'] as ButtonVariant} size="sm" disabled={c['disabled'] as boolean}>
           small
         </Button>
+      </div>
+    ),
+  },
+  {
+    id: 'filter-chip',
+    group: 'data',
+    label: 'FilterChip',
+    render: () => (
+      <div className="flex flex-wrap gap-2">
+        <FilterChip label="tempo" value="120 BPM" icon="bpm" onDismiss={() => undefined} />
+        <FilterChip label="key" value="Cmin" icon="key" onDismiss={() => undefined} />
+        <FilterChip label="archived" icon="folder" onDismiss={() => undefined} />
+        <FilterChip label="vox" icon="microphone" />
       </div>
     ),
   },
