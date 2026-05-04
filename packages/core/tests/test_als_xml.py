@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-
 from audio_core.parser.als import als_xml
 
 FIX = Path(__file__).parent / "fixtures"
