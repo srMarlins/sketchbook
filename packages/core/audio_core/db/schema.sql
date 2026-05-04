@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS projects (
   live_version    TEXT,
   last_modified   REAL    NOT NULL,
   last_scanned    REAL    NOT NULL,
-  file_hash       TEXT    NOT NULL,
+  file_hash       TEXT,
   is_archived     INTEGER NOT NULL DEFAULT 0,
   color_tag       INTEGER,
   notes           TEXT

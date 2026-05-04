@@ -12,7 +12,7 @@ def upsert_project(
     path: str,
     name: str,
     parent_dir: str,
-    file_hash: str,
+    file_hash: str | None,
     last_modified: float,
     meta: ProjectMetadata,
 ) -> int:
