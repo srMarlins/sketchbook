@@ -50,7 +50,8 @@ export function SongStrip({ project, onOpen }: SongStripProps) {
         'transition-colors duration-fast',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
       )}
-      data-color-tag={project.color_tag}
+      data-testid="song-strip"
+      data-color-tag={project.color_tag ?? ''}
     >
       <span
         aria-hidden

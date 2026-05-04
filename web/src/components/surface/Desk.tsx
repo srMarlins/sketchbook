@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import type { ReactNode } from 'react';
+import { ThemeToggle } from './ThemeToggle';
 
 export interface DeskProps {
   branding?: ReactNode;
@@ -24,6 +25,7 @@ export function Desk({ branding, search, sidebar, children, className }: DeskPro
       <header className="flex items-center gap-4 px-6 py-3 border-b border-rule-line">
         <div className="shrink-0">{branding}</div>
         <div className="flex-1 max-w-xl">{search}</div>
+        <ThemeToggle />
       </header>
       <div
         className="flex-1 grid gap-6 px-6 py-6 min-h-0"

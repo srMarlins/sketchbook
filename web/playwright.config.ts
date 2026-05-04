@@ -18,7 +18,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    // E2E uses the mock-mode dev server so tests don't depend on a running
+    // FastAPI process. The real-backend smoke is in scripts/smoke-real.ts.
+    command: 'npm run dev:mocks',
     port: 5173,
     reuseExistingServer: true,
     timeout: 60_000,
