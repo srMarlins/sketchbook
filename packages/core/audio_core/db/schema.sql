@@ -62,5 +62,5 @@ CREATE TABLE IF NOT EXISTS project_tags (
 
 CREATE VIRTUAL TABLE IF NOT EXISTS projects_fts USING fts5(
   name, parent_dir, plugin_names, sample_filenames, notes,
-  content='', tokenize='porter unicode61'
+  tokenize='porter unicode61'
 );
