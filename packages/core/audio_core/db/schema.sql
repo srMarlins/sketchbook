@@ -30,8 +30,6 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE INDEX IF NOT EXISTS idx_projects_parent_dir ON projects(parent_dir);
 CREATE INDEX IF NOT EXISTS idx_projects_last_modified ON projects(last_modified);
 CREATE INDEX IF NOT EXISTS idx_projects_tempo ON projects(tempo);
-CREATE INDEX IF NOT EXISTS idx_projects_effort_score ON projects(effort_score);
-CREATE INDEX IF NOT EXISTS idx_projects_color_tag ON projects(color_tag);
 
 CREATE TABLE IF NOT EXISTS project_plugins (
   id          INTEGER PRIMARY KEY,

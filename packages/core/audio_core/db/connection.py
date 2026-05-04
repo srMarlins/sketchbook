@@ -28,3 +28,5 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE projects ADD COLUMN effort_score INTEGER")
     if "effort_breakdown" not in cols:
         conn.execute("ALTER TABLE projects ADD COLUMN effort_breakdown TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_effort_score ON projects(effort_score)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_color_tag ON projects(color_tag)")
