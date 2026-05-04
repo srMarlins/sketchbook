@@ -30,7 +30,7 @@ def test_loaded_project_scores_high():
     assert "sample_count" in breakdown
     assert "file_size_kb" in breakdown
     assert "has_master_chain" in breakdown
-    assert breakdown["has_master_chain"] == 10.0
+    assert breakdown["has_master_chain"] == 6.0
 
 
 def test_score_clamped_to_100():
@@ -70,7 +70,7 @@ def test_master_chain_detected_via_track_name():
     s_no, b_no = compute_effort(meta_no_master, file_size_bytes=1024)
     s_yes, b_yes = compute_effort(meta_master, file_size_bytes=1024)
     assert b_no["has_master_chain"] == 0.0
-    assert b_yes["has_master_chain"] == 10.0
+    assert b_yes["has_master_chain"] == 6.0
     assert s_yes > s_no
 
 
@@ -81,17 +81,21 @@ def test_master_chain_detected_via_empty_track_name():
         plugins=[PluginRef(name="x", plugin_type="vst3", track_name=None)],
     )
     _, breakdown = compute_effort(meta, file_size_bytes=1024)
-    assert breakdown["has_master_chain"] == 10.0
+    assert breakdown["has_master_chain"] == 6.0
 
 
 def test_unique_plugins_separate_from_count():
+    """v2 weights apply a template baseline of 4 plugins / 3 unique. Use 12 dups
+    so plugin_count > baseline; unique stays below baseline so it contributes 0.
+    The signal we want here is 'duplicates inflate plugin_count but unique stays
+    flat' — both terms see baselines, so we test the relationship qualitatively."""
     meta = _meta(
         track_count=5,
-        plugins=[PluginRef(name="dup", plugin_type="vst3", track_name="t") for _ in range(10)],
+        plugins=[PluginRef(name="dup", plugin_type="vst3", track_name="t") for _ in range(12)],
     )
     _, breakdown = compute_effort(meta, file_size_bytes=1024)
-    # 10 plugin instances, 1 unique
+    # 12 plugin instances clears the baseline (4); 1 unique stays at the floor (≤3 baseline → 0)
     assert breakdown["plugin_count"] > 0
-    assert breakdown["unique_plugins"] > 0
-    # unique should be smaller than plugin_count contribution
+    assert breakdown["unique_plugins"] == 0
+    # The duplication signal — many instances, no diversity — yields plugin_count > unique_plugins.
     assert breakdown["unique_plugins"] < breakdown["plugin_count"]

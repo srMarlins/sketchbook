@@ -10,14 +10,32 @@ import math
 
 from audio_core.parser.model import ProjectMetadata
 
-# v1 weights — tunable. Keep in sync with the design doc.
+# v2 weights — tuned 2026-05-04 against the user's actual ~1,628-project library.
+# The v1 weights saturated too fast: 87% of old projects scored >=80, making
+# 'forgotten gem' meaningless. v2 subtracts a "template baseline" before log-
+# scaling so a project only scores for what was *added* beyond a stock template.
 _W_TRACK_COUNT = 18.0
-_W_PLUGIN_COUNT = 12.0
-_W_UNIQUE_PLUGINS = 10.0
-_W_SAMPLE_COUNT = 6.0
-_W_FILE_SIZE_KB = 8.0
-_W_MASTER_CHAIN = 10.0
+_W_PLUGIN_COUNT = 10.0
+_W_UNIQUE_PLUGINS = 8.0
+_W_SAMPLE_COUNT = 4.0
+_W_FILE_SIZE_KB = 4.0
+_W_MASTER_CHAIN = 6.0
+
+# Template baselines — counts up to and including these are treated as "free"
+# (a stock template costs nothing). Excess above the baseline is what the
+# log-scaled term sees.
+_BASE_TRACKS = 8
+_BASE_PLUGINS = 4
+_BASE_UNIQUE_PLUGINS = 3
+_BASE_SAMPLES = 0
+_BASE_FILE_SIZE_KB = 200.0  # ~200 KB covers an empty-ish .als
 # has_automation deferred — current parser does not extract automation envelopes.
+
+
+def _excess(value: float, baseline: float) -> float:
+    """Return max(0, value - baseline). Anything at or below the template
+    baseline contributes zero; we only score what was added on top."""
+    return max(0.0, value - baseline)
 
 
 def _has_master_chain(meta: ProjectMetadata) -> bool:
@@ -47,11 +65,12 @@ def compute_effort(
     file_size_kb = max(0.0, file_size_bytes / 1024.0)
 
     breakdown: dict[str, float] = {
-        "track_count": math.log10(track_count + 1) * _W_TRACK_COUNT,
-        "plugin_count": math.log10(plugin_count + 1) * _W_PLUGIN_COUNT,
-        "unique_plugins": math.log10(unique_plugins + 1) * _W_UNIQUE_PLUGINS,
-        "sample_count": math.log10(sample_count + 1) * _W_SAMPLE_COUNT,
-        "file_size_kb": math.log10(file_size_kb + 1) * _W_FILE_SIZE_KB,
+        "track_count": math.log10(_excess(track_count, _BASE_TRACKS) + 1) * _W_TRACK_COUNT,
+        "plugin_count": math.log10(_excess(plugin_count, _BASE_PLUGINS) + 1) * _W_PLUGIN_COUNT,
+        "unique_plugins": math.log10(_excess(unique_plugins, _BASE_UNIQUE_PLUGINS) + 1)
+        * _W_UNIQUE_PLUGINS,
+        "sample_count": math.log10(_excess(sample_count, _BASE_SAMPLES) + 1) * _W_SAMPLE_COUNT,
+        "file_size_kb": math.log10(_excess(file_size_kb, _BASE_FILE_SIZE_KB) + 1) * _W_FILE_SIZE_KB,
         "has_master_chain": _W_MASTER_CHAIN if _has_master_chain(meta) else 0.0,
     }
     raw = sum(breakdown.values())
