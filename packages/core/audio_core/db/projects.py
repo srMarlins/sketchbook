@@ -136,4 +136,21 @@ def search_projects(
     sql = base + ((" WHERE " + " AND ".join(where)) if where else "")
     sql += " ORDER BY p.last_modified DESC LIMIT ?"
     params.append(limit)
-    return [dict(r) for r in conn.execute(sql, params).fetchall()]
+    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    if not rows:
+        return rows
+    # Batch-fetch tags for all returned project ids in one query.
+    pids = [r["id"] for r in rows]
+    placeholders = ",".join("?" for _ in pids)
+    tag_rows = conn.execute(
+        f"SELECT pt.project_id, t.name FROM project_tags pt "
+        f"JOIN tags t ON t.id = pt.tag_id WHERE pt.project_id IN ({placeholders}) "
+        f"ORDER BY t.name",
+        pids,
+    ).fetchall()
+    tags_by_pid: dict[int, list[str]] = {pid: [] for pid in pids}
+    for tr in tag_rows:
+        tags_by_pid[tr["project_id"]].append(tr["name"])
+    for r in rows:
+        r["tags"] = tags_by_pid.get(r["id"], [])
+    return rows

@@ -43,6 +43,28 @@ def test_list_projects(tmp_path, monkeypatch):
     rows = res.json()
     assert len(rows) == 2
     assert {r["name"] for r in rows} == {"alpha_track", "bravo"}
+    # Tags are eagerly attached so the frontend doesn't N+1 to detail.
+    for r in rows:
+        assert "tags" in r and isinstance(r["tags"], list)
+
+
+def test_list_projects_tags_populated(tmp_path, monkeypatch):
+    """Projects with tags surface them in the list response."""
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    a, _ = _seed(tmp_path)
+    conn = open_db(tmp_path / "data" / "catalog.db")
+    conn.execute("INSERT INTO tags (name) VALUES ('vox'), ('demos')")
+    conn.execute(
+        "INSERT INTO project_tags (project_id, tag_id) "
+        "SELECT ?, id FROM tags WHERE name IN ('vox','demos')",
+        (a,),
+    )
+    conn.commit()
+    client = TestClient(create_app())
+    rows = client.get("/api/projects").json()
+    by_name = {r["name"]: r for r in rows}
+    assert sorted(by_name["alpha_track"]["tags"]) == ["demos", "vox"]
+    assert by_name["bravo"]["tags"] == []
 
 
 def test_list_projects_query_filter(tmp_path, monkeypatch):
