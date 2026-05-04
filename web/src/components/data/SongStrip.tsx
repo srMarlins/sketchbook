@@ -1,9 +1,13 @@
 import clsx from 'clsx';
+import { Sprite } from '../primitives/Sprite';
 import type { ProjectSummary } from '../../lib/types';
 
 export interface SongStripProps {
   project: ProjectSummary;
+  /** Click anywhere on the row → drill into the project. */
   onOpen?: (projectId: number) => void;
+  /** Click the small airplane icon → launch this .als in Ableton. */
+  onLaunch?: (projectId: number) => void;
 }
 
 function fmtSeconds(sec: number | null): string {
@@ -34,7 +38,7 @@ function fmtRelative(unixSec: number): string {
  * BPM/time/tracks/length line up across rows. No icon glyphs — at small sizes
  * the field PNGs aren't legible; the labels carry the meaning.
  */
-export function SongStrip({ project, onOpen }: SongStripProps) {
+export function SongStrip({ project, onOpen, onLaunch }: SongStripProps) {
   const hasColor = project.color_tag != null;
   const colorVar = hasColor ? `var(--als-${project.color_tag! + 1})` : 'var(--rule-line-strong)';
 
@@ -53,6 +57,39 @@ export function SongStrip({ project, onOpen }: SongStripProps) {
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
       )}
     >
+      {onLaunch ? (
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={`Open ${project.name} in Ableton`}
+          data-testid="song-strip-launch"
+          onClick={(e) => {
+            e.stopPropagation();
+            onLaunch(project.id);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              e.stopPropagation();
+              onLaunch(project.id);
+            }
+          }}
+          className={clsx(
+            'absolute right-2 top-1/2 -translate-y-1/2',
+            'inline-flex items-center justify-center w-6 h-6',
+            'rounded-chip border border-rule-line bg-surface-card',
+            'text-ink-secondary hover:text-ink-primary',
+            'opacity-0 pointer-events-none',
+            'group-hover:opacity-100 group-hover:pointer-events-auto',
+            'group-focus-within:opacity-100 group-focus-within:pointer-events-auto',
+            'focus-visible:opacity-100 focus-visible:pointer-events-auto',
+            'transition-opacity duration-fast',
+            'motion-reduce:transition-none',
+          )}
+        >
+          <Sprite name="paper-airplane" size={14} />
+        </span>
+      ) : null}
       <span className="flex items-center gap-4">
         <span
           aria-hidden
@@ -69,6 +106,11 @@ export function SongStrip({ project, onOpen }: SongStripProps) {
           <Stat label="meter" value={fmtTimeSig(project.time_sig_num, project.time_sig_den)} width="3rem" />
           <Stat label="tracks" value={project.track_count != null ? String(project.track_count) : '—'} width="3.25rem" />
           <Stat label="length" value={fmtSeconds(project.length_seconds)} width="3.5rem" />
+          <Stat
+            label="effort"
+            value={project.effort_score != null ? String(project.effort_score) : '—'}
+            width="2.5rem"
+          />
         </span>
 
         <span className="shrink-0 font-mono text-[11px] text-ink-muted whitespace-nowrap min-w-[68px] text-right">

@@ -4,6 +4,7 @@ import { Button, type ButtonVariant } from '../components/inputs/Button';
 import { TextInput } from '../components/inputs/TextInput';
 import { SearchBar } from '../components/inputs/SearchBar';
 import { FilterChip } from '../components/data/FilterChip';
+import { HighlightsStrip } from '../components/data/HighlightsStrip';
 import { SongStrip } from '../components/data/SongStrip';
 import { NavStrip } from '../components/data/NavStrip';
 import { MarginStickyNote } from '../components/data/MarginStickyNote';
@@ -24,7 +25,7 @@ import { TornPagePile } from '../components/surface/TornPagePile';
 import { ProjectCard } from '../components/data/ProjectCard';
 import projectsJson from '../mocks/projects.json';
 import { useState } from 'react';
-import type { ProjectSummary, Proposal } from '../lib/types';
+import type { ProjectSummary, Proposal, Shelf as ShelfType } from '../lib/types';
 import type { DevEntry } from './types';
 
 const sampleProjects = (projectsJson as unknown as ProjectSummary[]).slice(0, 14).map((p, i) => ({
@@ -155,10 +156,37 @@ export const registry: DevEntry[] = [
     render: () => (
       <div className="space-y-3">
         {sampleProjects.map((p) => (
-          <SongStrip key={p.id} project={p} onOpen={() => undefined} />
+          <SongStrip
+            key={p.id}
+            project={p}
+            onOpen={() => undefined}
+            onLaunch={() => undefined}
+          />
         ))}
       </div>
     ),
+  },
+  {
+    id: 'highlights-strip',
+    group: 'data',
+    label: 'HighlightsStrip',
+    render: () => {
+      const mk = (id: ShelfType['id'], n: number, title: string): ShelfType => ({
+        id,
+        title,
+        description: '',
+        see_all_query: '',
+        projects: sampleProjects.slice(0, n),
+      });
+      const shelves: ShelfType[] = [
+        mk('currently-working', 6, 'Currently working'),
+        mk('forgotten-gems', 3, 'Forgotten gems'),
+        mk('almost-done', 2, 'Almost done'),
+        mk('has-potential', 4, 'Has potential'),
+        mk('untriaged', 0, 'Untriaged'),
+      ];
+      return <HighlightsStrip shelves={shelves} onSelect={() => undefined} />;
+    },
   },
   {
     id: 'project-card',

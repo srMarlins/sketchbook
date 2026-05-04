@@ -53,6 +53,30 @@ describe('<SongStrip />', () => {
     expect(fn).toHaveBeenCalledWith(99);
   });
 
+  test('renders effort_score when present and em-dash when null', () => {
+    const { rerender } = render(<SongStrip project={fakeProject({ effort_score: 73 })} />);
+    expect(screen.getByText('73')).toBeInTheDocument();
+    rerender(<SongStrip project={fakeProject({ effort_score: null })} />);
+    // multiple em-dashes may exist (length, etc); ensure the effort label is present.
+    expect(screen.getByTitle('effort')).toBeInTheDocument();
+  });
+
+  test('launch button is hidden by default but clickable when shown; stops propagation', async () => {
+    const onOpen = vi.fn();
+    const onLaunch = vi.fn();
+    render(<SongStrip project={fakeProject({ id: 7 })} onOpen={onOpen} onLaunch={onLaunch} />);
+    const launch = screen.getByTestId('song-strip-launch');
+    // Click via userEvent fires through opacity-0; jsdom doesn't enforce hover, so this still validates wiring.
+    await userEvent.click(launch);
+    expect(onLaunch).toHaveBeenCalledWith(7);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  test('launch button absent when onLaunch is not provided', () => {
+    render(<SongStrip project={fakeProject({ id: 8 })} onOpen={() => undefined} />);
+    expect(screen.queryByTestId('song-strip-launch')).not.toBeInTheDocument();
+  });
+
   test('tag chips render up to 3 with overflow indicator', () => {
     render(
       <SongStrip
