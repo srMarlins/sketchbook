@@ -2,25 +2,17 @@ import { useNavigate } from '@tanstack/react-router';
 import { BrandingHeader } from '../components/surface/BrandingHeader';
 import { Desk } from '../components/surface/Desk';
 import { Sidebar } from '../components/surface/Sidebar';
-import { Shelf } from '../components/surface/Shelf';
-import { NotebookSpine } from '../components/surface/NotebookSpine';
+import { HomeShelf } from '../components/surface/HomeShelf';
+import { ProjectCard } from '../components/data/ProjectCard';
 import { SearchBar } from '../components/inputs/SearchBar';
 import { LoadingState } from '../components/feedback/LoadingState';
 import { ErrorState } from '../components/feedback/ErrorState';
 import { EmptyState } from '../components/feedback/EmptyState';
-import { useProjects, useProposals } from '../app/queries';
-import { deriveNotebooks, fmtDate } from '../app/notebooks';
-import type { ProjectSummary } from '../lib/types';
-import type { NotebookKind as SpineKind } from '../components/surface/NotebookSpine';
-
-const KIND_TO_SPINE: Record<string, SpineKind> = {
-  manila: 'tinted-cream',
-  kraft: 'tinted-rose',
-  lined: 'plain',
-};
+import { useHome, useProposals } from '../app/queries';
+import type { HomeResponse } from '../lib/types';
 
 export function HomeRoute() {
-  const projects = useProjects();
+  const home = useHome();
   const proposals = useProposals();
   const navigate = useNavigate();
 
@@ -52,39 +44,46 @@ export function HomeRoute() {
       }
     >
       <h1 className="sr-only">Audio catalog</h1>
-      {projects.isLoading ? <LoadingState label="loading projects…" /> : null}
-      {projects.isError ? (
-        <ErrorState body={String(projects.error)} onRetry={() => projects.refetch()} />
+      {home.isLoading ? <LoadingState label="loading shelves…" /> : null}
+      {home.isError ? (
+        <ErrorState body={String(home.error)} onRetry={() => home.refetch()} />
       ) : null}
-      {projects.data ? <NotebooksGrid projects={projects.data} /> : null}
+      {home.data ? <HomeShelves home={home.data} /> : null}
     </Desk>
   );
 }
 
-function NotebooksGrid({ projects }: { projects: ProjectSummary[] }) {
+function HomeShelves({ home }: { home: HomeResponse }) {
   const navigate = useNavigate();
-  const notebooks = deriveNotebooks(projects);
+  const totalProjects = home.shelves.reduce((acc, s) => acc + s.projects.length, 0);
 
-  if (notebooks.length === 0) {
+  if (totalProjects === 0) {
     return <EmptyState title="no projects" body="run `audio-cli scan` to populate the catalog" />;
   }
 
   return (
-    <Shelf title={`${projects.length} projects across ${notebooks.length} notebooks`}>
-      {notebooks.map((nb) => {
-        const lastUpdated = fmtDate(nb.lastUpdated);
+    <div className="space-y-8">
+      {home.shelves.map((shelf) => {
+        const seeAllProps = shelf.see_all_query
+          ? { seeAllHref: `/?${shelf.see_all_query}` }
+          : {};
         return (
-          <NotebookSpine
-            key={nb.id}
-            id={nb.id}
-            title={nb.title}
-            kind={KIND_TO_SPINE[nb.kind] ?? 'plain'}
-            count={nb.count}
-            {...(lastUpdated ? { lastUpdated } : {})}
-            onOpen={(id) => navigate({ to: '/n/$notebookId', params: { notebookId: id } })}
-          />
+        <HomeShelf
+          key={shelf.id}
+          title={shelf.title}
+          description={shelf.description}
+          {...seeAllProps}
+        >
+          {shelf.projects.map((p) => (
+            <ProjectCard
+              key={p.id}
+              project={p}
+              onOpen={(id) => void navigate({ to: '/n/$notebookId', params: { notebookId: String(id) } })}
+            />
+          ))}
+        </HomeShelf>
         );
       })}
-    </Shelf>
+    </div>
   );
 }
