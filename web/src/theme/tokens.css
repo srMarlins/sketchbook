@@ -3,14 +3,6 @@
 @tailwind utilities;
 
 @font-face {
-  font-family: 'Permanent Marker';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/permanent-marker-latin-400.woff2') format('woff2');
-}
-
-@font-face {
   font-family: 'Space Mono';
   font-style: normal;
   font-weight: 400;
@@ -36,11 +28,9 @@
 }
 
 :root {
-  /* Ableton-14 palette — first 14 entries from the Live track-color picker,
-     left-to-right, top row then second row. Truthful, theme-invariant.
-     SOURCE: derived from Ableton Live 11/12 default track color picker.
-     Verify against the live picker (or the parser's color_tag map in
-     packages/core) before declaring the palette frozen. */
+  /* Ableton-14 palette — first 14 entries from the Live track-color picker.
+     Truthful, theme-invariant. Verify against the live picker (or the
+     parser's color_tag map in packages/core) before editing. */
   --als-1: #ff94a6;  /* salmon */
   --als-2: #ffa529;  /* orange */
   --als-3: #cc9927;  /* mustard */
@@ -56,45 +46,52 @@
   --als-13: #e553a0; /* pink */
   --als-14: #ffffff; /* paper-white */
 
-  /* Light theme — surfaces */
-  --surface-desk: #6b4a2b;
-  --surface-page: #f5efdf;
-  --surface-strip-base: #ffffff;
-  --surface-corkboard: #c4a373;
-  --surface-panel: #f5efdf;
+  /* ---------- Light theme — warm pastel stationery -------------------- */
+
+  /* Surfaces */
+  --paper-base: #f8f1e3;    /* warm cream — page background */
+  --paper-raised: #fffaee;  /* card / strip surface, one step lighter */
+  --paper-sunken: #efe4cb;  /* notebook tab, sunken header */
+  --paper-tint-blue: #e7eef2;
+  --paper-tint-rose: #f5e4dd;
+  --paper-tint-sage: #e8eee0;
+  --paper-tint-cream: #f5ecd6;
+
+  --surface-page: var(--paper-base);
+  --surface-card: var(--paper-raised);
+  --surface-sunken: var(--paper-sunken);
   --surface-overlay: rgba(40, 28, 18, 0.45);
-  --surface-kraft: #c8a472;
 
   /* Ink */
-  --ink-primary: #2a2422;
-  --ink-secondary: #3a3430;
-  --ink-muted: #6b605a;
-  --ink-on-strip-light: #1a1614;
-  --ink-on-strip-dark: #f8f4ec;
+  --ink-primary: #2b2521;
+  --ink-secondary: #4a3f37;
+  --ink-muted: #7a6b5e;
+  --ink-faint: #b3a797;
+  --ink-on-fill: #f8f1e3;
 
-  /* Rules + shadows */
-  --rule-line: rgba(60, 50, 40, 0.16);
-  --shadow-page: 0 12px 40px rgba(40, 28, 18, 0.28);
-  --shadow-lift: 0 6px 14px rgba(40, 28, 18, 0.18);
-  --shadow-pin: inset 0 1px 0 rgba(0, 0, 0, 0.18);
-  --tint-overlay: transparent;
+  /* Rules + lines */
+  --rule-line: rgba(60, 50, 40, 0.14);
+  --rule-line-strong: rgba(60, 50, 40, 0.22);
+  --rule-margin: #c47a8b;   /* the red margin line on a notebook page */
+  --rule-blue: #b9c8d6;     /* baby-blue notebook ruling */
+
+  /* Shadows — soft, warm, never hard */
+  --shadow-card: 0 1px 2px rgba(60, 40, 20, 0.06), 0 6px 16px rgba(60, 40, 20, 0.07);
+  --shadow-lift: 0 4px 10px rgba(60, 40, 20, 0.10);
+  --shadow-deep: 0 10px 30px rgba(60, 40, 20, 0.18);
 
   /* Accents */
-  --accent-action: #d63a3a;
-  --accent-secondary: #9a9692;
-
-  /* Pins */
-  --pin-green: #4caf50;
-  --pin-blue: #3a7bd5;
-  --pin-orange: #f29128;
-  --pin-purple: #8a4fbf;
-  --pin-red: #d63a3a;
-  --pin-yellow: #f0c419;
+  --accent: #b54a3a;            /* terracotta — primary action */
+  --accent-soft: #e3a799;
+  --accent-muted: #8c6f64;
+  --accent-positive: #4f7a4a;   /* sage green */
+  --accent-warning: #c79030;    /* mustard */
+  --accent-danger: #b54a3a;
 
   /* Type */
-  --font-display: 'Permanent Marker', 'Gloria Hallelujah', cursive;
-  --font-mono: 'Space Mono', ui-monospace, monospace;
+  --font-display: 'Inter', system-ui, sans-serif;
   --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, monospace;
 
   /* Motion */
   --ease-paper: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -102,23 +99,68 @@
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 400ms;
+
+  /* Radii — stationery is gently rounded, never pill-shaped */
+  --radius-card: 6px;
+  --radius-input: 4px;
+  --radius-chip: 9999px;
 }
 
 [data-theme='dark'] {
-  --surface-page: #f5efdf;
-  --surface-desk: #3d2814;
-  --tint-overlay: rgba(40, 28, 18, 0.55);
-  --ink-primary: #2a2422;
-  --rule-line: rgba(60, 50, 40, 0.22);
-  /* Pins desaturate ~15% in dark — refined in Task 0.4 */
+  /* Surfaces — deep walnut paper */
+  --paper-base: #1d1a17;
+  --paper-raised: #26221e;
+  --paper-sunken: #161311;
+  --paper-tint-blue: #1f262e;
+  --paper-tint-rose: #2a1f1d;
+  --paper-tint-sage: #1d2520;
+  --paper-tint-cream: #2b2620;
+
+  --surface-page: var(--paper-base);
+  --surface-card: var(--paper-raised);
+  --surface-sunken: var(--paper-sunken);
+  --surface-overlay: rgba(8, 5, 3, 0.65);
+
+  /* Ink — warm parchment glow */
+  --ink-primary: #ece4d3;
+  --ink-secondary: #c9bfac;
+  --ink-muted: #8c8273;
+  --ink-faint: #51493e;
+  --ink-on-fill: #1d1a17;
+
+  --rule-line: rgba(220, 200, 170, 0.10);
+  --rule-line-strong: rgba(220, 200, 170, 0.18);
+  --rule-margin: #b8615f;
+  --rule-blue: #4a5a6a;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-lift: 0 4px 12px rgba(0, 0, 0, 0.55);
+  --shadow-deep: 0 12px 32px rgba(0, 0, 0, 0.65);
+
+  --accent: #d97757;
+  --accent-soft: #6b3b30;
+  --accent-muted: #a08a7c;
+  --accent-positive: #82a878;
+  --accent-warning: #e0b260;
+  --accent-danger: #d97757;
 }
 
-/* Rough-edge SVG mask for buttons (matches "torn paper" feel from §6). */
-.sketchbook-button {
-  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' preserveAspectRatio='none'><path d='M2 6 Q14 2 28 5 T58 4 Q72 7 88 4 T118 6 Q132 2 148 5 T182 4 Q196 5 198 12 L196 30 Q198 44 196 54 Q186 56 176 54 T146 56 Q132 52 118 56 T88 54 Q74 58 58 55 T28 56 Q14 53 4 55 Q2 44 4 30 Z' fill='black'/></svg>");
-          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' preserveAspectRatio='none'><path d='M2 6 Q14 2 28 5 T58 4 Q72 7 88 4 T118 6 Q132 2 148 5 T182 4 Q196 5 198 12 L196 30 Q198 44 196 54 Q186 56 176 54 T146 56 Q132 52 118 56 T88 54 Q74 58 58 55 T28 56 Q14 53 4 55 Q2 44 4 30 Z' fill='black'/></svg>");
-  -webkit-mask-size: 100% 100%;
-          mask-size: 100% 100%;
+/* Make every paper surface "look like paper" — a single subtle radial that
+   varies softly across the page, no actual textures or images required. */
+body {
+  background: var(--surface-page);
+  color: var(--ink-primary);
+  font-family: var(--font-sans);
+  background-image:
+    radial-gradient(1200px 800px at 30% 20%, rgba(255, 240, 200, 0.18), transparent 60%),
+    radial-gradient(900px 600px at 80% 90%, rgba(200, 170, 140, 0.10), transparent 70%);
+  background-attachment: fixed;
+}
+
+[data-theme='dark'] body {
+  background-image:
+    radial-gradient(1200px 800px at 30% 20%, rgba(80, 60, 40, 0.20), transparent 60%),
+    radial-gradient(900px 600px at 80% 90%, rgba(40, 30, 20, 0.40), transparent 70%);
 }
 
 @media (prefers-reduced-motion: reduce) {
