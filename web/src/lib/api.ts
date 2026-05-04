@@ -46,6 +46,11 @@ export async function getProject(id: number): Promise<ProjectDetail | undefined>
   return http<ProjectDetail>(`/api/projects/${id}`);
 }
 
+export async function openProject(id: number): Promise<{ opened: string }> {
+  if (USE_MOCKS) return Promise.resolve({ opened: `mock://${id}` });
+  return http<{ opened: string }>(`/api/projects/${id}/open`, { method: 'POST' });
+}
+
 export async function listProposals(): Promise<Proposal[]> {
   if (USE_MOCKS) return Promise.resolve(mock.listProposals());
   return http<Proposal[]>('/api/proposals');

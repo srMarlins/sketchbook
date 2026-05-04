@@ -60,7 +60,7 @@
   --surface-page: var(--paper-base);
   --surface-card: var(--paper-raised);
   --surface-sunken: var(--paper-sunken);
-  --surface-overlay: rgba(40, 28, 18, 0.45);
+  --surface-overlay: rgba(40, 28, 18, 0.25);
 
   /* Ink */
   --ink-primary: #2b2521;
@@ -107,29 +107,31 @@
 }
 
 [data-theme='dark'] {
-  /* Surfaces — deep walnut paper */
-  --paper-base: #1d1a17;
-  --paper-raised: #26221e;
-  --paper-sunken: #161311;
-  --paper-tint-blue: #1f262e;
-  --paper-tint-rose: #2a1f1d;
-  --paper-tint-sage: #1d2520;
-  --paper-tint-cream: #2b2620;
+  /* Surfaces — deep walnut paper. Raised must read clearly above base
+     even on a dimmed display; lifted higher than a strict math step. */
+  --paper-base: #1a1714;
+  --paper-raised: #383330;
+  --paper-sunken: #131110;
+  --paper-tint-blue: #36505f;
+  --paper-tint-rose: #5a3a35;
+  --paper-tint-sage: #3a4f37;
+  --paper-tint-cream: #564633;
 
   --surface-page: var(--paper-base);
   --surface-card: var(--paper-raised);
   --surface-sunken: var(--paper-sunken);
-  --surface-overlay: rgba(8, 5, 3, 0.65);
+  --surface-overlay: rgba(8, 5, 3, 0.35);
 
-  /* Ink — warm parchment glow */
-  --ink-primary: #ece4d3;
-  --ink-secondary: #c9bfac;
-  --ink-muted: #8c8273;
-  --ink-faint: #51493e;
+  /* Ink — warm parchment glow. Pumped contrast vs the prior pass so the
+     panel doesn't read as disabled when sat on a dim page. */
+  --ink-primary: #f5ecd8;
+  --ink-secondary: #d6c9af;
+  --ink-muted: #a39884;
+  --ink-faint: #5c5448;
   --ink-on-fill: #1d1a17;
 
-  --rule-line: rgba(220, 200, 170, 0.10);
-  --rule-line-strong: rgba(220, 200, 170, 0.18);
+  --rule-line: rgba(220, 200, 170, 0.14);
+  --rule-line-strong: rgba(220, 200, 170, 0.24);
   --rule-margin: #b8615f;
   --rule-blue: #4a5a6a;
 

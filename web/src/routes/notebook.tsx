@@ -21,7 +21,7 @@ export function NotebookRoute() {
   const params = useParams({ strict: false }) as { notebookId?: string };
   const notebookId = params.notebookId ?? '';
   const navigate = useNavigate();
-  const projectsQ = useProjects();
+  const projectsQ = useProjects({ limit: 1000 });
   const proposals = useProposals();
   const query = useSearchStore((s) => s.query);
   const clear = useSearchStore((s) => s.clear);
@@ -75,10 +75,9 @@ export function NotebookRoute() {
       search={<SearchBar />}
       sidebar={
         <Sidebar
-          activeId={notebookId === 'claude' ? 'claude' : 'projects'}
+          activeId={notebookId === 'claude' ? 'claude' : 'home'}
           items={[
             { id: 'home', label: 'Home', icon: 'house' as const },
-            { id: 'projects', label: 'Projects', icon: 'folder' as const },
             {
               id: 'proposals',
               label: 'Proposals',
@@ -153,7 +152,7 @@ function VirtualStrips({
   const rowVirtualizer = useVirtualizer({
     count: projects.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 56,
+    estimateSize: () => 68,
     overscan: 8,
   });
 

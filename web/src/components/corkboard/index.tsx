@@ -1,4 +1,4 @@
-import { useProject } from '../../app/queries';
+import { useProject, useOpenProject } from '../../app/queries';
 import { CorkboardPanel } from '../surface/CorkboardPanel';
 import { LoadingState } from '../feedback/LoadingState';
 import { ErrorState } from '../feedback/ErrorState';
@@ -21,7 +21,8 @@ export function ProjectCorkboard({
   onOpenChange,
   defaultTab,
 }: ProjectCorkboardProps) {
-  const detail = useProject(projectId ?? 0);
+  const detail = useProject(projectId);
+  const launch = useOpenProject();
 
   if (projectId == null) {
     return (
@@ -42,6 +43,20 @@ export function ProjectCorkboard({
       onOpenChange={onOpenChange}
       title={project?.name ?? 'loading…'}
       defaultTab={defaultTab ?? 'overview'}
+      headerActions={
+        project ? (
+          <button
+            type="button"
+            onClick={() => launch.mutate(projectId)}
+            disabled={launch.isPending}
+            className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-input text-sm border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 disabled:opacity-50 transition-colors"
+            title={launch.isError ? String(launch.error) : `Open ${project.name} in Ableton`}
+          >
+            <span aria-hidden>↗</span>
+            <span>open in ableton</span>
+          </button>
+        ) : null
+      }
       tabs={[
         {
           id: 'overview',

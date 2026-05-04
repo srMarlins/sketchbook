@@ -20,13 +20,12 @@ const KIND_TO_SPINE: Record<string, SpineKind> = {
 };
 
 export function HomeRoute() {
-  const projects = useProjects();
+  const projects = useProjects({ limit: 1000 });
   const proposals = useProposals();
   const navigate = useNavigate();
 
   const sidebarItems = [
     { id: 'home', label: 'Home', icon: 'house' as const },
-    { id: 'projects', label: 'Projects', icon: 'folder' as const },
     {
       id: 'proposals',
       label: 'Proposals',

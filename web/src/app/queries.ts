@@ -5,6 +5,7 @@ import {
   listJournal,
   listProjects,
   listProposals,
+  openProject,
   rejectProposal,
   submitProposal,
   undoBatch,
@@ -24,10 +25,11 @@ export const projectsQuery = (params: ListProjectsParams = {}) => ({
   staleTime: 60_000,
 });
 
-export const projectQuery = (id: number) => ({
-  queryKey: projectKey(id),
-  queryFn: () => getProject(id),
+export const projectQuery = (id: number | null) => ({
+  queryKey: projectKey(id ?? 0),
+  queryFn: () => getProject(id as number),
   staleTime: 60_000,
+  enabled: id != null,
 });
 
 export const proposalsQuery = () => ({
@@ -45,7 +47,7 @@ export const journalQuery = () => ({
 export function useProjects(params: ListProjectsParams = {}) {
   return useQuery(projectsQuery(params));
 }
-export function useProject(id: number) {
+export function useProject(id: number | null) {
   return useQuery(projectQuery(id));
 }
 export function useProposals() {
@@ -90,6 +92,12 @@ export function useRejectProposal() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: proposalsKey() });
     },
+  });
+}
+
+export function useOpenProject() {
+  return useMutation({
+    mutationFn: (id: number) => openProject(id),
   });
 }
 
