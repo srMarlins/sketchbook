@@ -83,11 +83,11 @@ def _shelf_forgotten_gems(conn: sqlite3.Connection, *, now: float) -> Shelf:
             """
             SELECT * FROM projects
             WHERE is_archived = 0
-              AND effort_score >= 60
+              AND effort_score >= 80
               AND last_modified < ?
               AND (color_tag IS NULL OR color_tag NOT IN (?, ?))
             ORDER BY effort_score DESC
-            LIMIT 20
+            LIMIT 40
             """,
             (cutoff, *excluded),
         )
@@ -97,7 +97,7 @@ def _shelf_forgotten_gems(conn: sqlite3.Connection, *, now: float) -> Shelf:
         title="Forgotten gems",
         description="High-effort projects you haven't touched in 6+ months.",
         see_all_query=urlencode(
-            {"min_effort": 60, "order_by": "effort", "order_dir": "desc"}
+            {"min_effort": 80, "order_by": "effort", "order_dir": "desc"}
         ),
         projects=rows,
     )

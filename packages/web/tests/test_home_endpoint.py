@@ -79,10 +79,10 @@ def test_forgotten_gems_high_effort_old_no_green_or_red(tmp_path, monkeypatch):
     monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
     conn = open_db(tmp_path / "data" / "catalog.db")
     now = time.time()
-    gem_a = _seed(conn, name="gem_a", mtime=now - 200 * DAY, effort=80)
-    gem_b = _seed(conn, name="gem_b", mtime=now - 365 * DAY, effort=70)
-    _seed(conn, name="recent_high_effort", mtime=now - 30 * DAY, effort=90)  # not old
-    _seed(conn, name="old_low_effort", mtime=now - 200 * DAY, effort=40)  # below floor
+    gem_a = _seed(conn, name="gem_a", mtime=now - 200 * DAY, effort=95)
+    gem_b = _seed(conn, name="gem_b", mtime=now - 365 * DAY, effort=85)
+    _seed(conn, name="recent_high_effort", mtime=now - 30 * DAY, effort=95)  # not old
+    _seed(conn, name="old_below_floor", mtime=now - 200 * DAY, effort=70)  # below 80 floor
     _seed(
         conn,
         name="old_high_effort_green",
