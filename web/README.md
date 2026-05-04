@@ -1,33 +1,44 @@
-# Sketchbook UI
+# Audio Catalog UI
 
-The web frontend for the audio catalog. A tactile lined-paper notebook on a wooden desk; colored construction-paper "song strips" pinned, taped, and stapled to the page; a corkboard for project detail; a torn-page pile for AI proposals.
+The web frontend for the audio catalog. A warm-pastel stationery surface,
+dense project rows with Ableton color tags as small color pills, and a
+right-side detail panel that fetches plugins/samples/journal on demand.
 
-Source-of-truth design spec: [`../docs/design-language.md`](../docs/design-language.md).
-Implementation plan: [`../docs/plans/2026-05-04-sketchbook-ui.md`](../docs/plans/2026-05-04-sketchbook-ui.md).
+Source-of-truth design notes: [`../docs/design-language.md`](../docs/design-language.md).
+Latest implementation plan: [`../docs/plans/2026-05-04-web-stationery.md`](../docs/plans/2026-05-04-web-stationery.md).
 
 ## Quick start
 
 ```pwsh
 cd web
 npm install
-npm run dev    # http://localhost:5173/
+
+# real backend (assumes uvicorn audio_web.app:create_app --factory on :7878)
+npm run dev
+
+# offline UI work, mocked fixtures
+npm run dev:mocks
 ```
+
+The dev server proxies `/api/*` to `http://127.0.0.1:7878`. Flip with
+`.env.development`.
 
 ## Routes
 
 | Path | Description |
 | --- | --- |
-| `/` | Home — wooden shelf with notebook spines (Inbox, per-year, per-tag, Archive, Claude). |
-| `/n/$notebookId` | A notebook page — virtualized list of `<SongStrip>` with margin sticky notes. |
-| `/proposals` | Torn-page pile of pending AI proposals; bulk approve/reject. |
-| `/n/claude` | Kraft-paper notebook of journal entries (Claude's activity log). |
-| `/_dev` | Component viewer — every component in light + dark + reduced-motion. |
+| `/` | Home — derived notebook grid (per-year + per-tag + Archive + Claude). |
+| `/n/$notebookId` | A notebook page — TanStack-virtualized list of `<SongStrip>`. |
+| `/proposals` | Translated proposal cards; bulk approve/reject. |
+| `/n/claude` | Journal feed — translated batches with per-batch undo. |
+| `/_dev` | Component viewer — every component in light + dark + reduced-motion. Lazy-loaded so it doesn't bloat the user bundle. |
 
 ## Scripts
 
 | Script | What it runs |
 | --- | --- |
-| `npm run dev` | Vite dev server on `http://localhost:5173/`. |
+| `npm run dev` | Vite dev server with FastAPI proxy. `VITE_USE_MOCKS=false` (default). |
+| `npm run dev:mocks` | Vite dev server in mock mode (`--mode development.mocks`). |
 | `npm run build` | Type-check + production build to `dist/`. |
 | `npm run preview` | Serve the production build. |
 | `npm test` | Vitest unit + RTL component tests. |
@@ -44,81 +55,82 @@ src/
   components/
     primitives/ Sprite (typed PNG-keyed icon)
     inputs/     Button, TextInput, SearchBar
-    data/       SongStrip, NavStrip, FilterChip, MarginStickyNote, ProposalCard
+    data/       SongStrip, NavStrip, FilterChip, ProposalCard, MarginStickyNote (dev-only)
     feedback/   Toast, EmptyState, LoadingState, ErrorState
-    surface/    Desk, Sidebar, BrandingHeader, NotebookPage, NotebookSpine,
-                Shelf, CorkboardPanel, TornPagePile
-    corkboard/  Tab content for the project corkboard (Overview/Tracks/Samples/Plugins/History)
+    surface/    Desk, Sidebar, BrandingHeader, ThemeToggle, NotebookPage,
+                NotebookSpine, Shelf, CorkboardPanel, TornPagePile
+    corkboard/  Tab content for the project detail panel (Overview/Tracks/Samples/Plugins/History)
   dev/          /_dev component viewer (DevShell, DevControls, registry)
   hooks/        useTheme, useKeyboard
-  lib/          api, types, seed (FNV-1a + mulberry32)
-  mocks/        Fixture JSON + in-memory mutation handlers
+  lib/          api, types, proposal-translate, seed (FNV-1a + mulberry32)
+  mocks/        projects.json + in-memory handlers (proposals/journal generated from projects)
   routes/       index, _dev, proposals, notebook, claude-notebook
-  theme/        tokens.css (CSS custom properties), contrast-table.ts (WCAG AA)
+  theme/        tokens.css (CSS custom properties), contrast-table.ts (WCAG AA helpers)
 ```
 
 ### Theming
 
-- All colors live as CSS custom properties on `:root`/`[data-theme="dark"]`. Tailwind is configured (in `tailwind.config.ts`) so utility classes like `bg-surface-page` resolve to `var(--surface-page)`.
-- Theme is a single `data-theme` attribute on `<html>` driven by [`useTheme`](./src/hooks/useTheme.ts). Hydrates from `localStorage`, falls back to `prefers-color-scheme`.
-- The Ableton-14 strip palette and the per-strip ink contrast table live in [`theme/contrast-table.ts`](./src/theme/contrast-table.ts). All 14 pairings are pre-verified against WCAG-AA 4.5:1 by [`contrast-table.test.ts`](./src/theme/contrast-table.test.ts).
+- All colors live as CSS custom properties on `:root`/`[data-theme="dark"]`. Tailwind utility classes like `bg-surface-page` resolve to `var(--surface-page)`.
+- Theme is a `data-theme` attribute on `<html>` driven by [`useTheme`](./src/hooks/useTheme.ts). Hydrates from `localStorage`, falls back to `prefers-color-scheme`.
+- The header chrome includes a `<ThemeToggle />` icon button; the dev viewer also has light/dark/compare/reduced-motion toggles.
+- The Ableton-14 strip palette is exposed as `--als-1`..`--als-14`. SongStrip maps backend `color_tag` (0..13) to `als-1..als-14`.
 
 ### Data flow (mock vs. live)
 
-[`lib/api.ts`](./src/lib/api.ts) is the single API client. When `VITE_USE_MOCKS=true` (the default during dev — see `.env.development`), every call returns from [`src/mocks/handlers.ts`](./src/mocks/handlers.ts), which serves the fixture JSON in `src/mocks/`.
+[`lib/api.ts`](./src/lib/api.ts) is the single API client. When `VITE_USE_MOCKS=true` (set in `.env.development.mocks` for `npm run dev:mocks`), every call returns from [`src/mocks/handlers.ts`](./src/mocks/handlers.ts), which serves projects from `projects.json` and generates Proposal/JournalBatch fixtures inline.
 
-When the FastAPI backend lands, flip `VITE_USE_MOCKS=false` and provide a base URL — the same calls switch to `fetch()` against `/api/...`.
+The default dev mode (`.env.development`) sets `VITE_USE_MOCKS=false` and the Vite proxy forwards `/api/*` to `http://127.0.0.1:7878` — start the FastAPI app there with:
 
-Server state caching is TanStack Query; queries are declared once in [`app/queries.ts`](./src/app/queries.ts).
+```pwsh
+uv run uvicorn audio_web.app:create_app --factory --host 127.0.0.1 --port 7878
+```
 
-### Determinism
+Server state caching is TanStack Query; queries + mutations are declared in [`app/queries.ts`](./src/app/queries.ts) (`useProjects`, `useProject`, `useProposals`, `useJournal`, plus `useApproveProposal`/`useRejectProposal`/`useUndoBatch`/`useSubmitProposal`).
 
-Visual jitter (per-strip rotation, hold-method choice, sticky-note color, proposal-card tilt) is seeded by content id via FNV-1a + mulberry32 in [`lib/seed.ts`](./src/lib/seed.ts), so layouts are stable across re-renders and runs.
+### Proposal/journal translation
+
+Backend ProposedAction is a discriminated union by `type` (`RenameProject`, `MoveProject`, `ArchiveProject`, `SetColorTag`, `SetTags`). The UI never reads the per-type args directly — it goes through [`lib/proposal-translate.ts`](./src/lib/proposal-translate.ts), which produces a uniform `{verb, label, before, after}` shape. Adding a new action type = adding one branch in `proposal-translate.ts` and TS narrowing surfaces every UI site that needs an update.
 
 ## Component viewer (`/_dev`)
 
-Every component is registered in [`src/dev/registry.tsx`](./src/dev/registry.tsx). The viewer offers light/dark/compare and a reduced-motion toggle. To add a component:
-
-```ts
-import { MyThing } from '../components/data/MyThing';
-
-registry.push({
-  id: 'my-thing',
-  group: 'data',
-  label: 'MyThing',
-  controls: { /* optional knobs */ },
-  render: () => <MyThing ... />,
-});
-```
-
-Axe-core runs automatically in dev mode and logs violations to the console.
+Every component is registered in [`src/dev/registry.tsx`](./src/dev/registry.tsx). The viewer offers light/dark/compare and a reduced-motion toggle. The route is lazy-loaded (a separate ~9 KB gzip chunk) so it doesn't bloat the main bundle.
 
 ## Assets
 
-Images, fonts, and textures are committed (no remote pipeline at runtime). Sources documented in `tools/asset-pipeline/README.md`.
+Images and fonts are committed (no remote pipeline at runtime).
 
 | Path | What it holds |
 | --- | --- |
-| `public/fonts/` | Self-hosted Permanent Marker, Space Mono, Inter Variable. License: `LICENSE.md` in that folder. |
-| `public/textures/` | Paper-grain and wood-grain WebP rasters consumed by `Desk` / `NotebookPage` / `Shelf`. |
+| `public/fonts/` | Self-hosted Inter Variable + Space Mono. License: `LICENSE.md` in that folder. |
 | `public/raw/icons/doodles/` | Hand-drawn doodle PNGs referenced by `<Sprite name="..." />`. |
-| `public/raw/icons/field/` | Field-icon sprites (BPM, key, length, time-sig, tracks). |
-| `public/brand/sketchbook.png` | The brand wordmark — single image, never theme-swapped. |
+| `public/raw/icons/field/` | Field-icon sprites (BPM, length, time-sig, tracks). |
 
-## Performance budgets (DoD)
+The page background is a CSS radial gradient on `body` — no texture rasters.
 
-| Budget | Cap | Current |
-| --- | --- | --- |
-| Cold-load JS (gz) | ≤ 300 KB | ~171 KB |
-| Self-hosted fonts | ≤ 180 KB | 111 KB |
-| Sprites + textures (cold) | ≤ 320 KB | wood-grain 110 KB + paper-grain 3 KB + brand 427 KB ⚠ |
-| Total cold load | ≤ 900 KB | ~760 KB |
+## Performance
 
-⚠ Brand image (`public/brand/sketchbook.png`, 427 KB) is the largest single cold-load asset. Consider compressing or replacing with the inline-SVG version envisaged in `docs/design-language.md` §4.
+| Metric | Current |
+| --- | --- |
+| Main bundle (gz) | ~165 KB |
+| Lazy `_dev` chunk (gz) | ~9 KB |
+| CSS (gz) | ~5 KB |
+| Self-hosted fonts | ~111 KB |
 
 ## Accessibility
 
 - Every interactive component has a Vitest behavior test asserting click handlers, keyboard, and aria attributes.
-- Strip-on-text contrast is verified at build time against WCAG AA.
 - The reduced-motion media query is honored globally via [`tokens.css`](./src/theme/tokens.css). Verified by `e2e/reduced-motion.spec.ts`.
 - The component viewer is axe-clean in light + dark (`e2e/axe.spec.ts`).
+
+## Smoke against the real backend
+
+`tools/smoke_real_backend.py` (in the repo root) drives every endpoint
+the UI consumes against the actual SQLite catalog via FastAPI's
+`TestClient`:
+
+```pwsh
+uv run python ../tools/smoke_real_backend.py
+```
+
+It hits projects/proposals/journal, exercises a propose -> approve ->
+undo loop with a `SetTags` action, and asserts the row reverts.
