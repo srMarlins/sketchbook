@@ -14,14 +14,16 @@ from audio_core.scanner.walker import walk_projects
 def scan_one(conn: sqlite3.Connection, als_path: str | Path) -> int:
     p = Path(als_path).resolve()  # canonicalize so relative + absolute paths dedupe
     meta = parse_als(p)
+    stat = p.stat()
     return upsert_project(
         conn,
         path=str(p),
         name=p.stem,
         parent_dir=str(p.parent),
         file_hash=hash_file(p),
-        last_modified=p.stat().st_mtime,
+        last_modified=stat.st_mtime,
         meta=meta,
+        file_size_bytes=stat.st_size,
     )
 
 

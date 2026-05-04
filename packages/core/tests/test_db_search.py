@@ -72,3 +72,49 @@ def test_search_archived_none_returns_both(tmp_path):
     _seed(conn, path="/x/b.als", name="b", tempo=120.0, archived=True)
     rows = search_projects(conn, archived=None)
     assert {r["name"] for r in rows} == {"a", "b"}
+
+
+def _set_effort(conn, pid: int, score: int) -> None:
+    conn.execute("UPDATE projects SET effort_score=? WHERE id=?", (score, pid))
+    conn.commit()
+
+
+def test_search_min_effort(tmp_path):
+    conn = open_db(tmp_path / "t.db")
+    a = _seed(conn, path="/x/a.als", name="a", tempo=120.0)
+    b = _seed(conn, path="/x/b.als", name="b", tempo=120.0)
+    _set_effort(conn, a, 80)
+    _set_effort(conn, b, 20)
+    rows = search_projects(conn, min_effort=50)
+    assert {r["name"] for r in rows} == {"a"}
+
+
+def test_search_max_effort(tmp_path):
+    conn = open_db(tmp_path / "t.db")
+    a = _seed(conn, path="/x/a.als", name="a", tempo=120.0)
+    b = _seed(conn, path="/x/b.als", name="b", tempo=120.0)
+    _set_effort(conn, a, 80)
+    _set_effort(conn, b, 20)
+    rows = search_projects(conn, max_effort=30)
+    assert {r["name"] for r in rows} == {"b"}
+
+
+def test_search_order_by_effort_desc(tmp_path):
+    conn = open_db(tmp_path / "t.db")
+    a = _seed(conn, path="/x/a.als", name="a", tempo=120.0)
+    b = _seed(conn, path="/x/b.als", name="b", tempo=120.0)
+    c = _seed(conn, path="/x/c.als", name="c", tempo=120.0)
+    _set_effort(conn, a, 50)
+    _set_effort(conn, b, 90)
+    _set_effort(conn, c, 10)
+    rows = search_projects(conn, order_by="effort", order_dir="desc")
+    assert [r["name"] for r in rows] == ["b", "a", "c"]
+
+
+def test_search_order_by_name_asc(tmp_path):
+    conn = open_db(tmp_path / "t.db")
+    _seed(conn, path="/x/c.als", name="c", tempo=120.0)
+    _seed(conn, path="/x/a.als", name="a", tempo=120.0)
+    _seed(conn, path="/x/b.als", name="b", tempo=120.0)
+    rows = search_projects(conn, order_by="name", order_dir="asc")
+    assert [r["name"] for r in rows] == ["a", "b", "c"]

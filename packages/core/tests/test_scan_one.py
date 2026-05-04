@@ -24,6 +24,22 @@ def test_scan_one_persists_metadata(tmp_path):
     assert row["file_hash"]
 
 
+def test_scan_one_writes_effort_score(tmp_path):
+    src = FIX / "tiny.als"
+    dst_dir = tmp_path / "tiny Project"
+    dst_dir.mkdir()
+    dst = dst_dir / "tiny.als"
+    shutil.copy(src, dst)
+    conn = open_db(tmp_path / "c.db")
+    pid = scan_one(conn, dst)
+    row = conn.execute(
+        "SELECT effort_score, effort_breakdown FROM projects WHERE id=?", (pid,)
+    ).fetchone()
+    assert row[0] is not None
+    assert 0 <= row[0] <= 100
+    assert row[1] is not None and row[1].startswith("{")
+
+
 def test_scan_one_links_plugins_and_samples(tmp_path):
     src = FIX / "old_lofi.als"
     dst_dir = tmp_path / "lofi Project"

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
+from typing import Literal
 
 from audio_core.parser.model import ProjectMetadata
+from audio_core.scoring import compute_effort
 
 
 def upsert_project(
@@ -15,14 +18,17 @@ def upsert_project(
     file_hash: str | None,
     last_modified: float,
     meta: ProjectMetadata,
+    file_size_bytes: int = 0,
 ) -> int:
     now = time.time()
+    score, breakdown = compute_effort(meta, file_size_bytes=file_size_bytes)
+    breakdown_json = json.dumps(breakdown, sort_keys=True)
     cur = conn.execute(
         """
         INSERT INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den,
             track_count, audio_tracks, midi_tracks, return_tracks, length_seconds, live_version,
-            last_modified, last_scanned, file_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            last_modified, last_scanned, file_hash, effort_score, effort_breakdown)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(path) DO UPDATE SET
             name=excluded.name, parent_dir=excluded.parent_dir,
             tempo=excluded.tempo, time_sig_num=excluded.time_sig_num,
@@ -30,7 +36,8 @@ def upsert_project(
             audio_tracks=excluded.audio_tracks, midi_tracks=excluded.midi_tracks,
             return_tracks=excluded.return_tracks, length_seconds=excluded.length_seconds,
             live_version=excluded.live_version, last_modified=excluded.last_modified,
-            last_scanned=excluded.last_scanned, file_hash=excluded.file_hash
+            last_scanned=excluded.last_scanned, file_hash=excluded.file_hash,
+            effort_score=excluded.effort_score, effort_breakdown=excluded.effort_breakdown
         RETURNING id
         """,
         (
@@ -49,6 +56,8 @@ def upsert_project(
             last_modified,
             now,
             file_hash,
+            score,
+            breakdown_json,
         ),
     )
     pid = cur.fetchone()[0]
@@ -106,6 +115,13 @@ def _safe_fts_query(query: str) -> str:
     return " ".join('"' + t.replace('"', '""') + '"' for t in tokens)
 
 
+_ORDER_COLS = {
+    "mtime": "p.last_modified",
+    "name": "p.name",
+    "effort": "p.effort_score",
+}
+
+
 def search_projects(
     conn: sqlite3.Connection,
     *,
@@ -113,6 +129,10 @@ def search_projects(
     tempo_min: float | None = None,
     tempo_max: float | None = None,
     archived: bool | None = False,
+    min_effort: int | None = None,
+    max_effort: int | None = None,
+    order_by: Literal["mtime", "name", "effort"] = "mtime",
+    order_dir: Literal["asc", "desc"] = "desc",
     limit: int = 200,
 ) -> list[dict]:
     conn.row_factory = sqlite3.Row
@@ -133,7 +153,15 @@ def search_projects(
     if archived is not None:
         where.append("p.is_archived = ?")
         params.append(1 if archived else 0)
+    if min_effort is not None:
+        where.append("p.effort_score >= ?")
+        params.append(min_effort)
+    if max_effort is not None:
+        where.append("p.effort_score <= ?")
+        params.append(max_effort)
     sql = base + ((" WHERE " + " AND ".join(where)) if where else "")
-    sql += " ORDER BY p.last_modified DESC LIMIT ?"
+    col = _ORDER_COLS.get(order_by, _ORDER_COLS["mtime"])
+    direction = "ASC" if order_dir.lower() == "asc" else "DESC"
+    sql += f" ORDER BY {col} {direction} LIMIT ?"
     params.append(limit)
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
