@@ -20,6 +20,10 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.flake8-bugbear]
+# Typer's idiomatic API uses typer.Argument()/typer.Option() as default values.
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
+
 [tool.pytest.ini_options]
 testpaths = ["packages/core/tests", "packages/cli/tests", "packages/web/tests", "packages/mcp/tests"]
 asyncio_mode = "auto"

@@ -20,6 +20,8 @@ _PARSER = etree.XMLParser(huge_tree=True, recover=False)
 
 
 def als_xml(path: str | Path) -> etree._Element:
+    """Parse a .als file into a full lxml DOM. Memory-heavy on large projects;
+    prefer parse_als() (which streams) for the production catalog scan."""
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(p)
@@ -42,7 +44,10 @@ def parse_time_signature(root: etree._Element) -> tuple[int | None, int | None]:
     raw = el.get("Value")
     if raw is None:
         return None, None
-    encoded = int(raw)
+    return _decode_ts(int(raw))
+
+
+def _decode_ts(encoded: int) -> tuple[int | None, int | None]:
     if encoded < 0:
         return None, None
     numerator = (encoded % 99) + 1
@@ -131,7 +136,8 @@ _TRACK_TAGS = frozenset(
 
 
 def _track_name_for(node: etree._Element) -> str | None:
-    """Walk up to the nearest containing track and return its EffectiveName."""
+    """Walk up to the nearest containing track and return its EffectiveName.
+    Used by the DOM-based parse_plugins helper; the streaming parse_als has its own logic."""
     cur = node.getparent()
     while cur is not None:
         if cur.tag in _TRACK_TAGS:
@@ -145,8 +151,6 @@ def _track_name_for(node: etree._Element) -> str | None:
 
 def parse_plugins(root: etree._Element) -> list[PluginRef]:
     out: list[PluginRef] = []
-    # External plugins: every plugin instance lives in a <PluginDevice>; the info child
-    # tells us VST2 vs VST3 vs AU.
     for dev in root.iter("PluginDevice"):
         track_name = _track_name_for(dev)
         vst3 = dev.find(".//Vst3PluginInfo")
@@ -182,10 +186,9 @@ def parse_plugins(root: etree._Element) -> list[PluginRef]:
                 )
             )
             continue
-        # Older standalone <AuPluginDevice> shape:
     for dev in root.iter("AuPluginDevice"):
         if dev.find(".//AuPluginInfo") is not None:
-            continue  # already counted above via PluginDevice path
+            continue
         n = dev.find(".//Name") or dev.find(".//Manufacturer")
         out.append(
             PluginRef(
@@ -194,7 +197,6 @@ def parse_plugins(root: etree._Element) -> list[PluginRef]:
                 track_name=_track_name_for(dev),
             )
         )
-    # Native Ableton devices: direct children of any <Devices> element whose tag is in our set.
     for devices in root.iter("Devices"):
         for child in devices:
             if child.tag in NATIVE_DEVICE_TAGS:
@@ -234,24 +236,6 @@ def _path_from_fileref(file_ref: etree._Element) -> str | None:
     return None
 
 
-def parse_als(path: str | Path) -> ProjectMetadata:
-    root = als_xml(path)
-    n, d = parse_time_signature(root)
-    counts = parse_tracks(root)
-    return ProjectMetadata(
-        tempo=parse_tempo(root),
-        time_sig_numerator=n,
-        time_sig_denominator=d,
-        track_count=counts.total,
-        audio_track_count=counts.audio,
-        midi_track_count=counts.midi,
-        return_track_count=counts.return_,
-        live_version=parse_live_version(root),
-        plugins=parse_plugins(root),
-        samples=parse_samples(root),
-    )
-
-
 def parse_samples(root: etree._Element) -> list[SampleRef]:
     out: list[SampleRef] = []
     for ref in root.iter("SampleRef"):
@@ -263,3 +247,229 @@ def parse_samples(root: etree._Element) -> list[SampleRef]:
         if path:
             out.append(SampleRef(path=path))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Streaming parser — single iterparse pass, memory-bounded regardless of file size.
+# ---------------------------------------------------------------------------
+
+# Tags whose end events we react to. Filtering at iterparse() level is the cheapest way
+# to avoid the per-element Python overhead on multi-million-element trees.
+_INTERESTING_END_TAGS = frozenset(
+    {
+        "Ableton",
+        "Manual",
+        "EffectiveName",
+        "PluginDevice",
+        "AuPluginDevice",
+        "SampleRef",
+        *_TRACK_TAGS,
+        *NATIVE_DEVICE_TAGS,
+    }
+)
+
+
+def _free_subtree(elem: etree._Element) -> None:
+    """Clear an element's subtree and drop any already-processed preceding siblings.
+    Crucial for memory: the gap between the previous interesting element and this one
+    (e.g. a giant <Clips> or <AutomationEnvelope>) is what blows up RAM otherwise."""
+    elem.clear()
+    parent = elem.getparent()
+    if parent is None:
+        return
+    # Drop earlier siblings — their end events have already fired (document order).
+    while elem.getprevious() is not None:
+        del parent[0]
+
+
+def parse_als(path: str | Path) -> ProjectMetadata:
+    """Stream-parse a .als file into ProjectMetadata in one pass.
+
+    Memory-bounded regardless of file size: clears each major subtree (PluginDevice,
+    SampleRef, native devices, finished tracks, automation/clip noise between them)
+    as soon as we have what we need from it.
+    """
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(p)
+
+    tempo: float | None = None
+    ts_value: int | None = None
+    live_version: str | None = None
+    audio = midi = ret_ = group = 0
+    plugins: list[PluginRef] = []
+    samples: list[SampleRef] = []
+
+    # Stack of [tag, name] for currently-open track ancestors (innermost on top).
+    track_stack: list[list] = []
+
+    def _current_track_name() -> str | None:
+        return track_stack[-1][1] if track_stack else None
+
+    with gzip.open(p, "rb") as fh:
+        ctx = etree.iterparse(
+            fh,
+            events=("start", "end"),
+            huge_tree=True,
+        )
+        for event, elem in ctx:
+            tag = elem.tag
+
+            if event == "start":
+                if tag == "Ableton" and live_version is None:
+                    creator = elem.get("Creator")
+                    if creator:
+                        m = _CREATOR_RE.search(creator)
+                        live_version = m.group(1) if m else creator
+                elif tag in _TRACK_TAGS:
+                    track_stack.append([tag, None])
+                    if tag == "AudioTrack":
+                        audio += 1
+                    elif tag == "MidiTrack":
+                        midi += 1
+                    elif tag == "ReturnTrack":
+                        ret_ += 1
+                    elif tag == "GroupTrack":
+                        group += 1
+                continue
+
+            # event == "end"
+            if tag not in _INTERESTING_END_TAGS:
+                continue
+
+            if tag == "Manual":
+                parent = elem.getparent()
+                if parent is not None:
+                    if parent.tag == "Tempo" and tempo is None:
+                        v = elem.get("Value")
+                        if v:
+                            tempo = float(v)
+                    elif parent.tag == "TimeSignature" and ts_value is None:
+                        v = elem.get("Value")
+                        if v:
+                            ts_value = int(v)
+
+            elif tag == "EffectiveName":
+                # Track names sit at <Track>/Name/EffectiveName. Inner racks/devices also
+                # have EffectiveName, so guard on grandparent being a track.
+                parent = elem.getparent()
+                if parent is not None and parent.tag == "Name":
+                    grand = parent.getparent()
+                    if grand is not None and grand.tag in _TRACK_TAGS and track_stack:
+                        # Only set on the innermost open track, and only the first time.
+                        for entry in reversed(track_stack):
+                            if entry[0] == grand.tag and entry[1] is None:
+                                entry[1] = elem.get("Value")
+                                break
+
+            elif tag == "PluginDevice":
+                tname = _current_track_name()
+                vst3 = elem.find(".//Vst3PluginInfo")
+                if vst3 is not None:
+                    n = vst3.find("Name")
+                    plugins.append(
+                        PluginRef(
+                            name=(
+                                n.get("Value")
+                                if n is not None and n.get("Value")
+                                else "Unknown VST3"
+                            ),
+                            plugin_type="vst3",
+                            track_name=tname,
+                        )
+                    )
+                else:
+                    vst2 = elem.find(".//VstPluginInfo")
+                    if vst2 is not None:
+                        pn = vst2.find("PlugName")
+                        plugins.append(
+                            PluginRef(
+                                name=(
+                                    pn.get("Value")
+                                    if pn is not None and pn.get("Value")
+                                    else "Unknown VST"
+                                ),
+                                plugin_type="vst",
+                                track_name=tname,
+                            )
+                        )
+                    else:
+                        au = elem.find(".//AuPluginInfo")
+                        if au is not None:
+                            n = au.find("Name") or au.find("Manufacturer")
+                            plugins.append(
+                                PluginRef(
+                                    name=(
+                                        n.get("Value")
+                                        if n is not None and n.get("Value")
+                                        else "Unknown AU"
+                                    ),
+                                    plugin_type="au",
+                                    track_name=tname,
+                                )
+                            )
+                _free_subtree(elem)
+
+            elif tag == "AuPluginDevice":
+                # Skip if already counted via an enclosing PluginDevice.
+                anc = elem.getparent()
+                inside_plugin_device = False
+                while anc is not None:
+                    if anc.tag == "PluginDevice":
+                        inside_plugin_device = True
+                        break
+                    anc = anc.getparent()
+                if not inside_plugin_device:
+                    n = elem.find(".//Name") or elem.find(".//Manufacturer")
+                    plugins.append(
+                        PluginRef(
+                            name=(
+                                n.get("Value") if n is not None and n.get("Value") else "Unknown AU"
+                            ),
+                            plugin_type="au",
+                            track_name=_current_track_name(),
+                        )
+                    )
+                _free_subtree(elem)
+
+            elif tag in NATIVE_DEVICE_TAGS:
+                parent = elem.getparent()
+                if parent is not None and parent.tag == "Devices":
+                    plugins.append(
+                        PluginRef(
+                            name=tag,
+                            plugin_type="ableton-native",
+                            track_name=_current_track_name(),
+                        )
+                    )
+                _free_subtree(elem)
+
+            elif tag == "SampleRef":
+                file_ref = elem.find("FileRef")
+                if file_ref is not None:
+                    sp = _path_from_fileref(file_ref)
+                    if sp:
+                        samples.append(SampleRef(path=sp))
+                _free_subtree(elem)
+
+            elif tag in _TRACK_TAGS:
+                # Pop the matching open-track entry (innermost first).
+                for i in range(len(track_stack) - 1, -1, -1):
+                    if track_stack[i][0] == tag:
+                        track_stack.pop(i)
+                        break
+                _free_subtree(elem)
+
+    n, d = (None, None) if ts_value is None else _decode_ts(ts_value)
+    return ProjectMetadata(
+        tempo=tempo,
+        time_sig_numerator=n,
+        time_sig_denominator=d,
+        track_count=audio + midi + ret_ + group,
+        audio_track_count=audio,
+        midi_track_count=midi,
+        return_track_count=ret_,
+        live_version=live_version,
+        plugins=plugins,
+        samples=samples,
+    )

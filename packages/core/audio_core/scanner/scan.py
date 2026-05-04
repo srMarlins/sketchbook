@@ -12,7 +12,7 @@ from audio_core.scanner.walker import walk_projects
 
 
 def scan_one(conn: sqlite3.Connection, als_path: str | Path) -> int:
-    p = Path(als_path)
+    p = Path(als_path).resolve()  # canonicalize so relative + absolute paths dedupe
     meta = parse_als(p)
     return upsert_project(
         conn,
@@ -40,6 +40,7 @@ def scan_root(
     stats = ScanStats()
     for als in walk_projects(root):
         try:
+            als = als.resolve()  # match scan_one's canonicalization for hash-skip lookup
             existing = conn.execute(
                 "SELECT file_hash FROM projects WHERE path = ?", (str(als),)
             ).fetchone()
