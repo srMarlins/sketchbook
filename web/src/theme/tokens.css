@@ -113,6 +113,14 @@
   /* Pins desaturate ~15% in dark — refined in Task 0.4 */
 }
 
+/* Rough-edge SVG mask for buttons (matches "torn paper" feel from §6). */
+.sketchbook-button {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' preserveAspectRatio='none'><path d='M2 6 Q14 2 28 5 T58 4 Q72 7 88 4 T118 6 Q132 2 148 5 T182 4 Q196 5 198 12 L196 30 Q198 44 196 54 Q186 56 176 54 T146 56 Q132 52 118 56 T88 54 Q74 58 58 55 T28 56 Q14 53 4 55 Q2 44 4 30 Z' fill='black'/></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' preserveAspectRatio='none'><path d='M2 6 Q14 2 28 5 T58 4 Q72 7 88 4 T118 6 Q132 2 148 5 T182 4 Q196 5 198 12 L196 30 Q198 44 196 54 Q186 56 176 54 T146 56 Q132 52 118 56 T88 54 Q74 58 58 55 T28 56 Q14 53 4 55 Q2 44 4 30 Z' fill='black'/></svg>");
+  -webkit-mask-size: 100% 100%;
+          mask-size: 100% 100%;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
