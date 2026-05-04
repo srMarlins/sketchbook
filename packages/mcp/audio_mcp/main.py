@@ -4,7 +4,7 @@ import json
 import sqlite3
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from audio_core.config import db_path, proposals_dir
 from audio_core.db.connection import open_db
@@ -17,9 +17,72 @@ def build_server() -> FastMCP:
     mcp = FastMCP(
         "audio",
         instructions=(
-            "Audio: an Ableton Live project catalog. Use `search` and `get_project` to explore "
-            "the user's library; use `propose_batch` to suggest renames/moves/tags/colors/archives "
-            "for the user to approve. You CANNOT execute writes directly — only propose them."
+            "Audio: an Ableton Live project catalog. Use `search`, `get_project`, and "
+            "`find_duplicates` to explore the user's library; use `propose_batch` to suggest "
+            "renames/moves/tags/colors/archives for the user to approve. You CANNOT execute "
+            "writes directly — only propose them.\n"
+            "\n"
+            "## Library organization\n"
+            "\n"
+            "Three orthogonal axes (canonical source: `docs/library-conventions.md`):\n"
+            "\n"
+            "1. **Year folder** — `Projects/<YYYY>/<project-name>/`. Year = year created, "
+            "locked once set. Use `MoveProject` only for the initial backfill or to fix wrong "
+            "years; do not move a project across years just because it was recently edited.\n"
+            "2. **Color tag** (`SetColorTag`) — lifecycle state, visible in Ableton itself:\n"
+            "   - green = done\n"
+            "   - yellow = needs mix/master\n"
+            "   - orange = almost done\n"
+            "   - blue = in progress (actively working)\n"
+            "   - purple = has potential — revisit\n"
+            "   - red = dead (archive candidate)\n"
+            "   - gray / no color = untriaged\n"
+            "3. **Free-form tags** (`SetTags`) — content/type/intent, lowercase-hyphenated:\n"
+            "   - Type (pick one): full-track, sketch, melody-loop, drum-loop, bass-loop, "
+            "vocal-chop, remix, collab\n"
+            "   - Genre (zero or more): house, techno, ambient, lofi, hip-hop, dnb, trap, "
+            "pop, experimental\n"
+            "   - Faceted (zero or more, key:value): key:Cm, bpm:140, client:x\n"
+            "   Do not duplicate fields the catalog already extracts (tempo, plugins, "
+            "samples).\n"
+            "\n"
+            "## Triage workflow\n"
+            "\n"
+            "When asked to triage, sort, or organize projects:\n"
+            "\n"
+            "1. Filter with `search` (typically `archived=false`, often by year or untriaged).\n"
+            "2. For each candidate, call `get_project` to read plugins, samples, track count, "
+            "last-modified.\n"
+            "3. Infer a likely color (state) and content tags from that evidence — e.g. a "
+            "project with one drum-rack track and no melody instruments is likely "
+            "`drum-loop`; many tracks + a master chain suggests `full-track` near `green`.\n"
+            "4. Submit a single `propose_batch` with `SetColorTag` and `SetTags` actions and a "
+            "rationale that summarizes how you decided.\n"
+            "5. The user approves in the web UI; never assume changes are live.\n"
+            "\n"
+            "## Effort score (derived, 0-100)\n"
+            "\n"
+            "Every project has an `effort_score` (INTEGER 0-100) computed at scan time from "
+            "track count, plugin count, unique plugins, sample count, .als file size, and the "
+            "presence of a master-chain. It is **derived**, never user-set, and may shift "
+            "across versions when weights are tuned. Bands (descriptive only):\n"
+            "  - 0-25 sketch / single idea\n"
+            "  - 25-50 meaningful work, partial arrangement\n"
+            "  - 50-75 substantial investment\n"
+            "  - 75-100 serious project: full arrangement, deep sound design or mixing\n"
+            "\n"
+            "When the user asks for 'old projects with potential', 'forgotten gems', "
+            "'buried gold', or anything implying high past investment that has since gone "
+            "untouched, prefer `search` with `order_by='effort'`, `order_dir='desc'`, plus a "
+            "year filter or last-modified cutoff (e.g. `min_effort=60` and a recent_only=False "
+            "intent — combine with the user's date framing in your rationale). The home page "
+            "exposes a 'Forgotten Gems' shelf using exactly this filter (effort_score >= 60 "
+            "AND last-modified > 180 days), so when the user mentions 'gems', 'buried', or "
+            "'forgotten', match that framing.\n"
+            "\n"
+            "When batch-tagging or triaging, sort untriaged projects by `order_by='effort'` "
+            "desc — wrong-tagging a high-effort project costs more than wrong-tagging a "
+            "sketch, so triage the loaded ones first.\n"
         ),
     )
 
@@ -29,12 +92,19 @@ def build_server() -> FastMCP:
         tempo_min: float | None = None,
         tempo_max: float | None = None,
         archived: bool | None = False,
+        min_effort: int | None = None,
+        max_effort: int | None = None,
+        order_by: Literal["mtime", "name", "effort"] = "mtime",
+        order_dir: Literal["asc", "desc"] = "desc",
         limit: int = 50,
     ) -> list[dict]:
         """Search the project catalog by FTS query (name/plugin/sample) and/or tempo range.
 
         Returns a list of project rows with id, name, path, tempo, time signature, track counts,
-        live_version, last_modified, and archived flag.
+        live_version, last_modified, archived flag, and effort_score (0-100, derived).
+
+        Effort filters and `order_by="effort"` power forgotten-gem queries: e.g. high-effort
+        projects untouched in 6+ months. Use min_effort=60 + a date filter for that pattern.
         """
         conn = open_db(db_path())
         return _search_projects(
@@ -43,6 +113,10 @@ def build_server() -> FastMCP:
             tempo_min=tempo_min,
             tempo_max=tempo_max,
             archived=archived,
+            min_effort=min_effort,
+            max_effort=max_effort,
+            order_by=order_by,
+            order_dir=order_dir,
             limit=limit,
         )
 

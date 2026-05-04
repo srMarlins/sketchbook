@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import Annotated
+from typing import Annotated, Literal
 
 from audio_core.config import db_path
 from audio_core.db.connection import open_db
@@ -17,6 +17,10 @@ def list_projects(
     tempo_min: Annotated[float | None, Query()] = None,
     tempo_max: Annotated[float | None, Query()] = None,
     archived: Annotated[bool | None, Query()] = False,
+    min_effort: Annotated[int | None, Query(ge=0, le=100)] = None,
+    max_effort: Annotated[int | None, Query(ge=0, le=100)] = None,
+    order_by: Annotated[Literal["mtime", "name", "effort"], Query()] = "mtime",
+    order_dir: Annotated[Literal["asc", "desc"], Query()] = "desc",
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
 ) -> list[dict]:
     conn = open_db(db_path())
@@ -26,6 +30,10 @@ def list_projects(
         tempo_min=tempo_min,
         tempo_max=tempo_max,
         archived=archived,
+        min_effort=min_effort,
+        max_effort=max_effort,
+        order_by=order_by,
+        order_dir=order_dir,
         limit=limit,
     )
 

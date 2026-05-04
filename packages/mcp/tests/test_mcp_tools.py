@@ -118,6 +118,32 @@ def test_propose_batch_writes_proposal_file(tmp_path, monkeypatch):
     asyncio.run(go())
 
 
+def test_search_tool_supports_effort_params(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    pid = _seed(tmp_path)
+    # Force a known effort score
+    conn = open_db(tmp_path / "data" / "catalog.db")
+    conn.execute("UPDATE projects SET effort_score=75 WHERE id=?", (pid,))
+    conn.commit()
+    server = build_server()
+
+    async def go():
+        async with Client(server) as c:
+            res = await c.call_tool(
+                "search",
+                {"min_effort": 50, "order_by": "effort", "order_dir": "desc"},
+            )
+            data = res.data
+            assert isinstance(data, list)
+            assert len(data) == 1
+            assert data[0]["effort_score"] == 75
+            # below floor
+            res2 = await c.call_tool("search", {"min_effort": 90})
+            assert res2.data == []
+
+    asyncio.run(go())
+
+
 def test_find_duplicates_tool_returns_groups(tmp_path, monkeypatch):
     from audio_core.db.connection import open_db
     from audio_core.db.projects import upsert_project

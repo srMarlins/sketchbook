@@ -83,3 +83,47 @@ def test_project_detail_404(tmp_path, monkeypatch):
     client = TestClient(create_app())
     res = client.get("/api/projects/9999")
     assert res.status_code == 404
+
+
+def test_list_projects_includes_effort_score(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    client = TestClient(create_app())
+    res = client.get("/api/projects")
+    assert res.status_code == 200
+    rows = res.json()
+    for r in rows:
+        assert "effort_score" in r
+
+
+def test_list_projects_min_max_effort(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    a, b = _seed(tmp_path)
+    # Force scores
+    from audio_core.config import db_path
+    from audio_core.db.connection import open_db
+
+    conn = open_db(db_path())
+    conn.execute("UPDATE projects SET effort_score=80 WHERE id=?", (a,))
+    conn.execute("UPDATE projects SET effort_score=10 WHERE id=?", (b,))
+    conn.commit()
+    client = TestClient(create_app())
+    res = client.get("/api/projects", params={"min_effort": 50})
+    assert {r["name"] for r in res.json()} == {"alpha_track"}
+    res = client.get("/api/projects", params={"max_effort": 30})
+    assert {r["name"] for r in res.json()} == {"bravo"}
+
+
+def test_list_projects_order_by_effort(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    a, b = _seed(tmp_path)
+    from audio_core.config import db_path
+    from audio_core.db.connection import open_db
+
+    conn = open_db(db_path())
+    conn.execute("UPDATE projects SET effort_score=10 WHERE id=?", (a,))
+    conn.execute("UPDATE projects SET effort_score=90 WHERE id=?", (b,))
+    conn.commit()
+    client = TestClient(create_app())
+    res = client.get("/api/projects", params={"order_by": "effort", "order_dir": "desc"})
+    assert [r["name"] for r in res.json()] == ["bravo", "alpha_track"]

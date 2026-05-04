@@ -290,6 +290,53 @@ def undo(
     con.print(f"undone batch {batch_id}")
 
 
+@app.command("score-backfill")
+def score_backfill() -> None:
+    """Recompute effort_score and effort_breakdown for every project in the DB.
+
+    Pure-DB pass — does not re-parse .als files. Reads existing track_count,
+    plugin/sample rows, and the on-disk file size. Useful after weight tuning
+    or for older catalogs missing the column.
+    """
+    import json as _json
+    from pathlib import Path
+    from audio_core.parser.model import PluginRef, ProjectMetadata, SampleRef
+    from audio_core.scoring import compute_effort
+
+    conn = open_db(db_path())
+    conn.row_factory = sqlite3.Row
+    rows = list(conn.execute("SELECT id, path, track_count FROM projects"))
+    updated = 0
+    for r in rows:
+        pid = r["id"]
+        plugins = [
+            PluginRef(name=pr["plugin_name"], plugin_type=pr["plugin_type"], track_name=pr["track_name"])
+            for pr in conn.execute(
+                "SELECT plugin_name, plugin_type, track_name FROM project_plugins WHERE project_id=?",
+                (pid,),
+            )
+        ]
+        samples = [
+            SampleRef(path=s["sample_path"])
+            for s in conn.execute(
+                "SELECT sample_path FROM project_samples WHERE project_id=?", (pid,)
+            )
+        ]
+        meta = ProjectMetadata(track_count=r["track_count"] or 0, plugins=plugins, samples=samples)
+        try:
+            size = _Path(r["path"]).stat().st_size
+        except OSError:
+            size = 0
+        score, breakdown = compute_effort(meta, file_size_bytes=size)
+        conn.execute(
+            "UPDATE projects SET effort_score=?, effort_breakdown=? WHERE id=?",
+            (score, _json.dumps(breakdown, sort_keys=True), pid),
+        )
+        updated += 1
+    conn.commit()
+    con.print(f"recomputed effort_score for {updated} project(s)")
+
+
 @app.command()
 def journal(
     limit: int = typer.Option(20, "--limit", help="Max rows."),
