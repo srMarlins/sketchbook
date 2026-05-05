@@ -2,6 +2,7 @@ package com.sketchbook.featuresettings
 
 import app.cash.turbine.test
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.ExternalKind
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.Settings
@@ -50,6 +51,10 @@ class SettingsStateHolderTest {
             lastSelfContained = uuid to value
             val updated = if (value) flow.value.selfContainedProjects + uuid else flow.value.selfContainedProjects - uuid
             flow.value = flow.value.copy(selfContainedProjects = updated)
+            return Result.success(Unit)
+        }
+        override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> {
+            flow.value = flow.value.copy(cacheSettings = settings)
             return Result.success(Unit)
         }
     }

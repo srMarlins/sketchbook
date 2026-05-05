@@ -4,6 +4,7 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.repo.MaterializationProgress
 import com.sketchbook.repo.SnapshotRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -48,6 +49,7 @@ class TimelineStateHolder(
     private val selectedUuid = MutableStateFlow<ProjectUuid?>(null)
     private val showAll = MutableStateFlow(false)
     private val pendingRewind = MutableStateFlow<SnapshotRev?>(null)
+    private val rewindProgress = MutableStateFlow<MaterializationProgress?>(null)
 
     private val _effects = MutableSharedFlow<Effect>(
         replay = 0,
@@ -64,13 +66,15 @@ class TimelineStateHolder(
         historyFlow,
         showAll,
         pendingRewind,
-    ) { history, all, pending ->
+        rewindProgress,
+    ) { history, all, pending, progress ->
         State(
             uuid = selectedUuid.value,
             history = history,
             showAll = all,
             pendingRewind = pending,
             loading = selectedUuid.value != null && history.isEmpty(),
+            rewindProgress = progress,
         )
     }.stateIn(scope, SharingStarted.Eagerly, State())
 
@@ -91,12 +95,21 @@ class TimelineStateHolder(
         val uuid = selectedUuid.value ?: return
         scope.launch {
             _effects.tryEmit(Effect.RewindStarted(rev))
-            val result = snapshots.materializeAt(uuid, rev)
-            pendingRewind.update { null }
-            if (result.isSuccess) {
-                _effects.tryEmit(Effect.RewindCompleted(rev))
-            } else {
-                _effects.tryEmit(Effect.RewindFailed(rev, result.exceptionOrNull()?.message ?: "rewind failed"))
+            snapshots.materializeAtWithProgress(uuid, rev).collect { progress ->
+                rewindProgress.update { progress }
+                when (progress) {
+                    is MaterializationProgress.Done -> {
+                        _effects.tryEmit(Effect.RewindCompleted(rev))
+                        pendingRewind.update { null }
+                        rewindProgress.update { null }
+                    }
+                    is MaterializationProgress.Failed -> {
+                        _effects.tryEmit(Effect.RewindFailed(rev, progress.reason))
+                        pendingRewind.update { null }
+                        rewindProgress.update { null }
+                    }
+                    else -> Unit
+                }
             }
         }
     }
@@ -117,6 +130,7 @@ class TimelineStateHolder(
         val showAll: Boolean = false,
         val loading: Boolean = false,
         val pendingRewind: SnapshotRev? = null,
+        val rewindProgress: MaterializationProgress? = null,
     )
 
     data class DayGroup(val date: LocalDate, val snapshots: List<Snapshot>)

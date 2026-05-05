@@ -1,6 +1,7 @@
 package com.sketchbook.desktop.repo
 
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
@@ -8,7 +9,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 
-class InMemorySettingsRepository(initial: Settings = Settings(emptyList(), false, emptySet())) : SettingsRepository {
+class InMemorySettingsRepository(
+    initial: Settings = Settings(
+        libraryRoots = emptyList(),
+        cloudConfigured = false,
+        selfContainedProjects = emptySet(),
+    ),
+) : SettingsRepository {
     private val state = MutableStateFlow(initial)
 
     override fun observe(): Flow<Settings> = state
@@ -36,6 +43,11 @@ class InMemorySettingsRepository(initial: Settings = Settings(emptyList(), false
             val updated = if (value) s.selfContainedProjects + uuid else s.selfContainedProjects - uuid
             s.copy(selfContainedProjects = updated)
         }
+        return Result.success(Unit)
+    }
+
+    override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> {
+        state.update { it.copy(cacheSettings = settings) }
         return Result.success(Unit)
     }
 }

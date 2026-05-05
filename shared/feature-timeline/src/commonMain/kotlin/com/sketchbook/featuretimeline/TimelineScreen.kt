@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.repo.MaterializationProgress
 import com.sketchbook.uishared.components.Badge
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
@@ -74,6 +75,7 @@ fun TimelineScreen(
         state.pendingRewind?.let { rev ->
             ConfirmRewindDialog(
                 rev = rev,
+                progress = state.rewindProgress,
                 onCancel = { holder.dispatch(TimelineStateHolder.Intent.CancelRewind) },
                 onConfirm = { holder.dispatch(TimelineStateHolder.Intent.ConfirmRewind(rev)) },
             )
@@ -136,17 +138,44 @@ private fun SnapshotRow(
 }
 
 @Composable
-private fun ConfirmRewindDialog(rev: SnapshotRev, onCancel: () -> Unit, onConfirm: () -> Unit) {
+private fun ConfirmRewindDialog(
+    rev: SnapshotRev,
+    progress: MaterializationProgress?,
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+) {
     Surface(color = AppTheme.colors.surfacePanel, padding = PaddingValues(AppTheme.spacing.lg)) {
         Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)) {
             Text("Rewind to rev ${rev.value}?", style = AppTheme.typography.title)
             Text("This rewrites the working tree. Unsaved local changes turn into a branch.")
+            progress?.let { ProgressLine(it) }
+            val inFlight = progress != null && progress !is MaterializationProgress.Done && progress !is MaterializationProgress.Failed
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
                 Button(onClick = onCancel, variant = ButtonVariant.Ghost) { Text("Cancel") }
-                Button(onClick = onConfirm, variant = ButtonVariant.Primary) { Text("Rewind") }
+                Button(onClick = onConfirm, variant = ButtonVariant.Primary) {
+                    Text(if (inFlight) "Rewinding…" else "Rewind")
+                }
             }
         }
     }
+}
+
+@Composable
+private fun ProgressLine(progress: MaterializationProgress) {
+    val text = when (progress) {
+        is MaterializationProgress.Started -> "Starting…"
+        is MaterializationProgress.Downloading -> {
+            val pct = if (progress.bytesTotal > 0) {
+                ((progress.bytesDone * 100) / progress.bytesTotal).coerceIn(0L, 100L)
+            } else 0L
+            "Downloading blobs · $pct% (${progress.blobsRemaining} remaining)"
+        }
+        is MaterializationProgress.WritingFiles ->
+            "Writing files · ${progress.filesDone}/${progress.filesTotal}"
+        is MaterializationProgress.Done -> "Done."
+        is MaterializationProgress.Failed -> "Failed: ${progress.reason}"
+    }
+    Text(text, style = AppTheme.typography.caption)
 }
 
 private fun humanBytes(b: Long): String = when {

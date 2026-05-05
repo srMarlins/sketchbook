@@ -25,4 +25,45 @@ interface SnapshotRepository {
      * sync engine (PR-9); this is the entry point repositories expose to the UI.
      */
     suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit>
+
+    /**
+     * Streaming variant of [materializeAt] for the rewind/restore UI: emits per-stage progress
+     * so the user sees what's happening when blobs aren't cached. Default impl wraps
+     * [materializeAt] with synthetic Start/Done events; real impls (sync engine in PR-9) emit
+     * granular per-blob progress.
+     */
+    fun materializeAtWithProgress(uuid: ProjectUuid, rev: SnapshotRev): Flow<MaterializationProgress> =
+        kotlinx.coroutines.flow.flow {
+            emit(MaterializationProgress.Started(uuid, rev))
+            val r = materializeAt(uuid, rev)
+            if (r.isSuccess) emit(MaterializationProgress.Done(uuid, rev))
+            else emit(MaterializationProgress.Failed(uuid, rev, r.exceptionOrNull()?.message ?: "materialize failed"))
+        }
+}
+
+sealed interface MaterializationProgress {
+    val uuid: ProjectUuid
+    val rev: SnapshotRev
+
+    data class Started(override val uuid: ProjectUuid, override val rev: SnapshotRev) : MaterializationProgress
+
+    /** A blob is being downloaded from cloud. */
+    data class Downloading(
+        override val uuid: ProjectUuid,
+        override val rev: SnapshotRev,
+        val bytesDone: Long,
+        val bytesTotal: Long,
+        val blobsRemaining: Int,
+    ) : MaterializationProgress
+
+    /** Local file laydown — hardlinks/copies into the working tree. */
+    data class WritingFiles(
+        override val uuid: ProjectUuid,
+        override val rev: SnapshotRev,
+        val filesDone: Int,
+        val filesTotal: Int,
+    ) : MaterializationProgress
+
+    data class Done(override val uuid: ProjectUuid, override val rev: SnapshotRev) : MaterializationProgress
+    data class Failed(override val uuid: ProjectUuid, override val rev: SnapshotRev, val reason: String) : MaterializationProgress
 }

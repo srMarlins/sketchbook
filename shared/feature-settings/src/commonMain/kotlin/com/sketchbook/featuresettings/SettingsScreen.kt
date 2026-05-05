@@ -14,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.uishared.components.Badge
 import com.sketchbook.uishared.components.Button
@@ -79,6 +80,28 @@ fun SettingsScreen(
             }
         }
 
+        Section("Local blob cache") {
+            val cache = state.cacheSettings
+            Text(
+                "Cache size: ${humanGiB(cache.maxSizeBytes)} · LRU ${if (cache.lruEnabled) "on" else "off"}",
+                style = AppTheme.typography.body,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
+                Button(
+                    onClick = { holder.dispatch(SettingsStateHolder.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, +1))) },
+                    variant = ButtonVariant.Secondary,
+                ) { Text("Increase") }
+                Button(
+                    onClick = { holder.dispatch(SettingsStateHolder.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, -1))) },
+                    variant = ButtonVariant.Secondary,
+                ) { Text("Decrease") }
+                Button(
+                    onClick = { holder.dispatch(SettingsStateHolder.Intent.SetCacheLru(!cache.lruEnabled)) },
+                    variant = ButtonVariant.Ghost,
+                ) { Text(if (cache.lruEnabled) "Disable LRU" else "Enable LRU") }
+            }
+        }
+
         Section("Self-contained projects") {
             if (state.selfContainedProjects.isEmpty()) {
                 Text("No projects flagged self-contained.", style = AppTheme.typography.body)
@@ -90,6 +113,17 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+private fun humanGiB(bytes: Long): String {
+    val gb = bytes.toDouble() / (1024.0 * 1024 * 1024)
+    return if (gb >= 1.0) "${"%.1f".format(gb)} GiB" else "${bytes / (1024 * 1024)} MiB"
+}
+
+private fun scaleSize(current: Long, direction: Int): BlobCacheSettings {
+    val gib = (current / (1024L * 1024 * 1024)).coerceAtLeast(1)
+    val newGib = (gib + direction * 5L).coerceIn(1L, 500L)
+    return BlobCacheSettings(maxSizeBytes = newGib * 1024L * 1024 * 1024, lruEnabled = true)
 }
 
 @Composable

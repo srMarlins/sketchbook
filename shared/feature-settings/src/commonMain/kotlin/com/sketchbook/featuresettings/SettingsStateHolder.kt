@@ -1,6 +1,7 @@
 package com.sketchbook.featuresettings
 
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
@@ -40,6 +41,7 @@ class SettingsStateHolder(
                 libraryRoots = settings.libraryRoots,
                 cloudConfigured = settings.cloudConfigured,
                 selfContainedProjects = settings.selfContainedProjects,
+                cacheSettings = settings.cacheSettings,
                 loading = false,
             )
         }
@@ -59,6 +61,13 @@ class SettingsStateHolder(
             is Intent.ToggleSelfContained -> launchWithEffect(intent.uuid.value) {
                 repository.setSelfContained(intent.uuid, intent.value)
             }
+            is Intent.SetCacheSize -> launchWithEffect("cache-size") {
+                repository.setCacheSettings(intent.settings)
+            }
+            is Intent.SetCacheLru -> launchWithEffect("cache-lru") {
+                val current = state.value.cacheSettings
+                repository.setCacheSettings(current.copy(lruEnabled = intent.enabled))
+            }
         }
     }
 
@@ -74,6 +83,7 @@ class SettingsStateHolder(
         val libraryRoots: List<LibraryRoot> = emptyList(),
         val cloudConfigured: Boolean = false,
         val selfContainedProjects: Set<ProjectUuid> = emptySet(),
+        val cacheSettings: BlobCacheSettings = BlobCacheSettings.Default,
         val loading: Boolean = false,
     )
 
@@ -82,6 +92,8 @@ class SettingsStateHolder(
         data class RemoveRoot(val root: LibraryRoot) : Intent
         data class SetCloudCredential(val serviceAccountJson: String?) : Intent
         data class ToggleSelfContained(val uuid: ProjectUuid, val value: Boolean) : Intent
+        data class SetCacheSize(val settings: BlobCacheSettings) : Intent
+        data class SetCacheLru(val enabled: Boolean) : Intent
     }
 
     sealed interface Effect {
