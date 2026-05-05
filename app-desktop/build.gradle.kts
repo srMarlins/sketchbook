@@ -7,6 +7,12 @@ plugins {
     alias(libs.plugins.conveyor)
 }
 
+// Conveyor (and Compose Desktop's nativeDistributions) require a real
+// project version. CI passes -Pversion=<tag without leading v> from the
+// release workflow; local builds fall through to a dev placeholder.
+version = (project.findProperty("version")?.toString()?.takeIf { it != "unspecified" })
+    ?: "0.0.0-dev"
+
 kotlin {
     jvm()
     jvmToolchain(17)
@@ -38,7 +44,10 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi)
             packageName = "Sketchbook"
-            packageVersion = "0.1.0"
+            // Mac/Windows installer embed-version. Must be a SemVer-like
+            // string with no pre-release suffix on Mac. Fall back to a
+            // numeric placeholder for dev builds.
+            packageVersion = (project.version.toString().takeIf { it.matches(Regex("\\d+\\.\\d+\\.\\d+")) }) ?: "0.0.0"
         }
     }
 }
