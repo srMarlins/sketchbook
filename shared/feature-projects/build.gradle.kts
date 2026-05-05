@@ -4,17 +4,21 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
-// Depends on `core` only (per design doc §2.2). No data flow.
 kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(project(":shared:core"))
+            implementation(project(":shared:repository"))
+            implementation(project(":shared:ui-shared"))
+            implementation(libs.kotlinx.coroutines.core)
             implementation(compose.runtime)
             implementation(compose.foundation)
-            implementation(compose.ui)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.kotlinx.datetime)
+            implementation(libs.turbine)
         }
     }
 }
