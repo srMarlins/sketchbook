@@ -80,8 +80,10 @@ audio/
                                           errors. Pure Kotlin, no platform deps.
     parser-als/                           StAX streaming parser, free-subtree pattern
     catalog/                              SQLDelight schema + DAO; scanner; FTS5 queries
-    cloud/                                CloudBackend interface + DirectB2Backend impl;
-                                          SigV4 signer in commonMain (~150 lines)
+    cloud/                                CloudBackend interface + DirectGcsBackend impl (v1).
+                                          GCS service-account JWT auth in commonMain.
+                                          v1.2 may add DirectR2Backend if Cloudflare Worker
+                                          coordinator alignment becomes the dominant concern.
     sync-io/                              file watcher (Flow over WatchService),
                                           BLAKE3 hashing, snapshot pipeline,
                                           materialization (hardlink + copy fallback),
@@ -257,11 +259,14 @@ Each `Screen` corresponds to a `feature-*` module. The root composable matches o
 - `kind ∈ {auto, named, branch}`. `auto` = every save (A1). `named` = coalesced timeline (A2). `branch` = conflict auto-forks.
 - `owner_user_id` is forward-compat for v1.2 multi-user. v1 uses `"default"`.
 - `self_contained` per-project flag controls dedup behavior (see §3.3).
+- File entries can take two shapes:
+  - **Synced (default):** `{"hash": "b3:...", "size": N, "mtime": "..."}` — blob lives in cloud, content-addressed.
+  - **External-ref:** `{"external_ref": {"alias": "splice", "rel_path": "Drum One/Kick 03.wav"}, "size": N}` — blob is *expected local* on each machine; never uploaded; resolved at materialization time via the per-machine alias map (see §3.5).
 
-### 3.2 Cloud layout (B2 or R2 bucket; per-tenant prefix from day one)
+### 3.2 Cloud layout (GCS bucket in v1; per-tenant prefix from day one)
 
 ```
-bucket/
+gs://sketchbook-<env>/
   <user_id>/blobs/<hash[0:2]>/<hash>                  immutable, content-addressed
   <user_id>/blobs-private/<project_uuid>/<hash>       self-contained projects (no global dedup)
   <user_id>/manifests/<project_uuid>/<rev:08d>-<timestamp>-<host>.json
@@ -271,6 +276,33 @@ bucket/
 ```
 
 v1 hardcodes `user_id="default"`. v1.2 multi-user adds more `user_id` prefixes. No schema change required.
+
+**Provider choice:** v1 ships against **Google Cloud Storage** because the user has a $100/year Dev Program credit covering the entire v1 timeline (~$24/year actual cost at this scale). Storage class: **Standard** (multi-region not required for solo use). The CloudBackend interface is provider-agnostic — at v1.2 (multi-user, ~Jan 2027 = credit expiry) we re-evaluate against Cloudflare R2 if Worker-coordinator alignment becomes the dominant concern. Migration is `rclone copy gcs:bucket r2:bucket` plus a backend impl swap.
+
+### 3.5 Library roots (multi-root sync model)
+
+Sketchbook tracks **multiple typed library roots**. Not every root is synced; some are "expected local."
+
+```kotlin
+sealed interface LibraryRoot {
+    val path: ProjectPath
+    data class Projects(...) : LibraryRoot                  // sync: yes (project folders)
+    data class UserSamples(...) : LibraryRoot               // sync: yes (the user's own sample collection)
+    data class External(                                    // sync: no (resolved via alias)
+        override val path: ProjectPath,
+        val kind: ExternalKind,                             // SPLICE, FACTORY, OTHER
+        val canonicalAlias: String                          // e.g. "splice", "ableton-core"
+    ) : LibraryRoot
+}
+```
+
+Roots are configured per-machine in `feature-settings`. Each `External` root contributes a `(alias, path)` mapping to the host's alias map. The same `canonicalAlias` is used on every machine but maps to a different absolute path per host (Splice on Mac vs Splice on Windows).
+
+**Manifest representation:** when scanning a project, samples referenced from a synced root are stored as content-addressed `hash` entries; samples referenced from an `External` root are stored as `external_ref{alias, rel_path}` entries — never uploaded.
+
+**Materialization:** for `external_ref` files, we resolve `<alias>` to the local path on this host. If the alias isn't configured (e.g., Splice not installed on this machine, or factory pack from a different Live version), the project surfaces a `NeedsAttention` finding with the unresolved reference — same primitive as the existing `find_missing_samples` work.
+
+**Why this matters:** Splice subscribers and factory-pack users have hundreds of GB of samples that are *already* replicated on each machine via vendor mechanisms (Splice client, Live install). Syncing them again would waste bandwidth, storage, and potentially trip subscription/DRM weirdness. The alias model captures the user's mental model directly: "this sample is from Splice, you'll have it on the other machine because Splice client put it there."
 
 ### 3.3 Local on-disk layout
 
@@ -417,7 +449,7 @@ When `sync_state.self_contained=true`, skip dedup HEAD-check and PUT every blob 
 
 ### 5.2 Acquisition
 
-Conditional PUT (B2 has `If-None-Match`; R2 supports both `If-Match` and `If-None-Match`). Sequence:
+Conditional PUT (GCS supports `x-goog-if-generation-match` for compare-and-swap; R2/B2 use `If-Match`/`If-None-Match`). Sequence:
 1. GET current lock + etag.
 2. If absent OR `expires_at < now`: PUT with `If-None-Match: *` (or `If-Match: <etag>`). On 412, retry from step 1.
 3. If present and not expired: held by someone else.
@@ -470,7 +502,9 @@ Out of scope. Manifest-level diff is what we expose ("these files differ"). User
 - **MVI library?** → No library. Plain Kotlin `StateFlow` state-holders + sealed-class intents.
 - **Navigation library?** → No library. In-house sealed-class `NavStack` + `MutableStateFlow<List<Screen>>`.
 - **Screenshot tests?** → No. Manual local-run visual verification.
-- **AWS SDK for B2/R2?** → No (`aws-crt-kotlin` is JVM-only). Hand-rolled SigV4 in commonMain.
+- **Cloud provider for v1?** → Google Cloud Storage. Driven by the user's $100/year Dev Program credit covering the v1 timeline. CloudBackend interface keeps the choice swappable; v1.2 re-evaluates at credit expiry (~Jan 2027) against Cloudflare R2.
+- **GCS auth?** → Native service-account JWT auth (RS256), not S3-compatible HMAC. Idiomatic for GCS, well-documented. AWS SigV4 not used in v1.
+- **AWS SDK for cloud?** → No SDK. Ktor CIO + native auth implementation in commonMain. `aws-crt-kotlin` is JVM-only and irrelevant since we're not on AWS.
 - **Multipart upload threshold?** → 100 MB. Single PUT below; multipart above.
 - **MCP server topology?** → Separate JVM process spawned by Claude Desktop config; reads catalog.db.
 
