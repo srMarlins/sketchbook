@@ -2,6 +2,7 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.conveyor)
@@ -24,6 +25,10 @@ kotlin {
             implementation(project(":shared:feature-settings"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.serialization.json)
+            // nav3-ui transitively pulls navigation3-runtime; explicit runtime dep is omitted
+            // because the JetBrains fork only publishes navigation3-runtime via the ui artifact.
+            implementation(libs.nav3.ui)
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.ui)

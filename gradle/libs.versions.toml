@@ -7,6 +7,7 @@ jvm-toolchain = "17"
 # UI
 compose = "1.11.0-rc01"
 material3-adaptive = "1.2.0"
+nav3 = "1.0.0-alpha06"
 
 # DI
 metro = "1.0.0"
@@ -72,6 +73,8 @@ blake3 = { module = "io.github.rctcwyvrn:blake3", version.ref = "blake3" }
 
 # UI
 material3-adaptive = { module = "org.jetbrains.compose.material3.adaptive:adaptive", version.ref = "material3-adaptive" }
+nav3-runtime = { module = "org.jetbrains.androidx.navigation3:navigation3-runtime", version.ref = "nav3" }
+nav3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "nav3" }
 
 # Test
 kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
