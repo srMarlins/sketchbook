@@ -1,0 +1,9 @@
+{
+  "queries": [
+    { "name": "empty_query", "query": "", "limit": 100 },
+    { "name": "common_word", "query": "kick", "limit": 50 },
+    { "name": "case_mixed", "query": "Pad", "limit": 25 },
+    { "name": "non_ascii", "query": "café", "limit": 25 },
+    { "name": "two_terms", "query": "ambient drone", "limit": 25 }
+  ]
+}
