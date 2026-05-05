@@ -7,10 +7,12 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":shared:core"))
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.io.core)
         }
         jvmMain.dependencies {
             implementation(libs.directory.watcher)
+            implementation(libs.blake3)
         }
         commonTest.dependencies {
             implementation(libs.turbine)
