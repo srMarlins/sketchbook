@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { BrandingHeader } from '../components/surface/BrandingHeader';
+import { IndexerStatus } from '../app/IndexerStatus';
 import { Desk } from '../components/surface/Desk';
 import { Sidebar } from '../components/surface/Sidebar';
 import { Shelf } from '../components/surface/Shelf';
@@ -70,7 +71,12 @@ export function HomeRoute() {
 
   return (
     <Desk
-      branding={<BrandingHeader />}
+      branding={
+        <div className="flex items-center gap-3">
+          <BrandingHeader />
+          <IndexerStatus />
+        </div>
+      }
       search={<SearchBar />}
       sidebar={
         <Sidebar
