@@ -32,6 +32,7 @@ include(
     ":shared:sync",
     ":shared:mcp-server",
     ":shared:ui-shared",
+    ":shared:feature-projects",
     ":app-desktop",
     ":app-mcp",
 )
