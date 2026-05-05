@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from audio_web.routes_events import router as events_router
 from audio_web.routes_home import router as home_router
 from audio_web.routes_journal import router as journal_router
 from audio_web.routes_open import router as open_router
@@ -21,4 +22,5 @@ def create_app() -> FastAPI:
     app.include_router(open_router)
     app.include_router(proposals_router)
     app.include_router(journal_router)
+    app.include_router(events_router)
     return app
