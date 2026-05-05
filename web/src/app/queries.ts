@@ -14,6 +14,10 @@ import {
   type ListProjectsParams,
 } from '../lib/api';
 import type { ProposalSubmission } from '../lib/types';
+import {
+  findingsKey,
+  type FindingsSummary,
+} from '../hooks/useIndexerCachePatcher';
 
 export const projectsKey = (params: ListProjectsParams = {}) =>
   ['projects', params] as const;
@@ -76,6 +80,21 @@ export function useJournal() {
 }
 export function useHome() {
   return useQuery(homeQuery());
+}
+
+// Read-only view of the findings summary that `useIndexerCachePatcher`
+// writes via `setQueryData`. We pass a `queryFn` that always rejects and
+// keep `enabled: false` so TanStack never fetches; the entry is populated
+// purely by the SSE bridge. `useQuery` still re-renders consumers when
+// `setQueryData` updates the cache, which is what we want.
+export function useFindings(): FindingsSummary | undefined {
+  return useQuery<FindingsSummary>({
+    queryKey: findingsKey,
+    queryFn: () =>
+      Promise.reject(new Error('findings only set by indexer events')),
+    enabled: false,
+    staleTime: Infinity,
+  }).data;
 }
 
 // --- mutations ---------------------------------------------------------------
