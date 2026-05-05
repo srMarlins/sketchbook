@@ -75,12 +75,17 @@ jobs:
             cp -r output/* gs://sketchbook-releases/
 
       # Generate human changelog from commits since the previous tag.
+      # First-tag case (no PREV) only takes commits *since the project's
+      # release pipeline existed* (PR-25 / commit 2336c6c) so we don't dump
+      # the entire git history as v0.0.1 notes.
       - name: Build changelog
         id: changelog
+        env:
+          FIRST_RELEASE_BASE: 2336c6cd9f                  # PR-25, "feat(release): Conveyor packaging + auto-update pipeline"
         run: |
           PREV=$(git tag --sort=-v:refname | grep -v "^${GITHUB_REF_NAME}$" | head -n 1 || true)
           if [ -z "$PREV" ]; then
-            git log --pretty='- %s (%h)' > NOTES.md
+            git log "${FIRST_RELEASE_BASE}..${GITHUB_REF_NAME}" --pretty='- %s (%h)' > NOTES.md
           else
             git log "$PREV..${GITHUB_REF_NAME}" --pretty='- %s (%h)' > NOTES.md
           fi
@@ -88,12 +93,12 @@ jobs:
             echo ""
             echo "## Download"
             echo ""
-            echo "Auto-update is enabled — installed Sketchbook clients will receive this version on next launch."
+            echo "Already running Sketchbook? Auto-update will pick this up on next launch — no action needed."
             echo ""
-            echo "Fresh installs:"
-            echo "- macOS (Apple Silicon): https://storage.googleapis.com/sketchbook-releases/Sketchbook-${GITHUB_REF_NAME#v}-macos-aarch64.dmg"
-            echo "- macOS (Intel): https://storage.googleapis.com/sketchbook-releases/Sketchbook-${GITHUB_REF_NAME#v}-macos-amd64.dmg"
-            echo "- Windows (x64): https://storage.googleapis.com/sketchbook-releases/Sketchbook-${GITHUB_REF_NAME#v}-windows-amd64.msi"
+            echo "Fresh installs: <https://storage.googleapis.com/sketchbook-releases/download.html>"
+            echo ""
+            echo "(The download page auto-detects your OS and serves the right installer:"
+            echo "Apple Silicon / Intel Mac \`.zip\`, Windows \`.exe\` launcher + signed MSIX.)"
           } >> NOTES.md
 
       # Create the GitHub Release with notes only (no binaries — those live on
