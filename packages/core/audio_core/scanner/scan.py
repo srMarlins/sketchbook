@@ -15,6 +15,7 @@ def scan_one(conn: sqlite3.Connection, als_path: str | Path) -> int:
     p = Path(als_path).resolve()  # canonicalize so relative + absolute paths dedupe
     meta = parse_als(p)
     stat = p.stat()
+    has_pi = 1 if (p.parent / "Ableton Project Info").is_dir() else 0
     return upsert_project(
         conn,
         path=str(p),
@@ -24,6 +25,8 @@ def scan_one(conn: sqlite3.Connection, als_path: str | Path) -> int:
         last_modified=stat.st_mtime,
         meta=meta,
         file_size_bytes=stat.st_size,
+        mac_paths_count=meta.mac_paths_count,
+        has_project_info=has_pi,
     )
 
 
