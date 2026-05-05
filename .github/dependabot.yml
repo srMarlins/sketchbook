@@ -1,0 +1,62 @@
+version: 2
+
+# Dependabot keeps dependencies fresh and surfaces vulnerable transitive deps
+# as PRs. Free on private repos.
+#
+# Scopes covered:
+#   - Gradle (Kotlin / Compose Multiplatform deps via libs.versions.toml)
+#   - GitHub Actions (workflow action versions)
+#   - Python (legacy parity tree under packages/, retired in PR-24)
+#
+# Cadence: weekly on Mondays. Avoids weekend PR pileups; aligns with a
+# typical "review on Monday morning" rhythm.
+
+updates:
+  - package-ecosystem: "gradle"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "deps"
+      - "kotlin"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      kotlin-ecosystem:
+        patterns:
+          - "org.jetbrains.kotlin*"
+          - "org.jetbrains.kotlinx:*"
+          - "org.jetbrains.compose*"
+      ktor:
+        patterns:
+          - "io.ktor:*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "deps"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "deps"
+      - "python"
+      - "parity-only"
+    commit-message:
+      prefix: "chore(deps-py)"
+    # Keep noise low — Python tree is being retired in PR-24.
+    open-pull-requests-limit: 2
