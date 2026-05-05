@@ -23,13 +23,36 @@ interface SettingsRepository {
     suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit>
 
     suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit>
+
+    suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit>
 }
 
 data class Settings(
     val libraryRoots: List<LibraryRoot>,
     val cloudConfigured: Boolean,
     val selfContainedProjects: Set<ProjectUuid>,
+    val cacheSettings: BlobCacheSettings = BlobCacheSettings.Default,
 )
+
+/**
+ * Local blob cache policy. The sync engine consults this on every download to decide whether to
+ * GC older entries; the UI surfaces it as a settings section so power users can size their disk
+ * footprint.
+ */
+data class BlobCacheSettings(
+    /** Hard upper bound for cache size in bytes. Past this, LRU eviction kicks in. */
+    val maxSizeBytes: Long,
+    /** When false, never evict — useful for offline-first workflows. */
+    val lruEnabled: Boolean,
+) {
+    companion object {
+        /** 20 GiB default; large enough for most libraries, small enough not to surprise. */
+        val Default: BlobCacheSettings = BlobCacheSettings(
+            maxSizeBytes = 20L * 1024 * 1024 * 1024,
+            lruEnabled = true,
+        )
+    }
+}
 
 sealed interface LibraryRoot {
     val path: String
