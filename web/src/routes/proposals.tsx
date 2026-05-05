@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { BrandingHeader } from '../components/surface/BrandingHeader';
 import { Desk } from '../components/surface/Desk';
 import { Sidebar } from '../components/surface/Sidebar';
@@ -24,6 +24,10 @@ export function ProposalsRoute() {
   const projects = useProjects({ limit: 1000 });
   const approve = useApproveProposal();
   const reject = useRejectProposal();
+  // Per-card busy tracking. We track ids that have an in-flight mutation so
+  // double-clicks (and any remaining concurrent triggers) are no-ops.
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState(false);
 
   const projectsById = useMemo(
     () => new Map((projects.data ?? []).map((p) => [p.id, p] as const)),
@@ -42,6 +46,67 @@ export function ProposalsRoute() {
   ];
 
   const pending = proposals.data ?? [];
+
+  const markBusy = (id: string, busy: boolean) => {
+    setBusyIds((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const approveOne = async (id: string) => {
+    if (busyIds.has(id)) return;
+    markBusy(id, true);
+    try {
+      await approve.mutateAsync(id);
+    } catch {
+      // Error surfaces via React Query; nothing to do here. Failed approves
+      // leave the proposal in place server-side, so the user can retry.
+    } finally {
+      markBusy(id, false);
+    }
+  };
+
+  const rejectOne = async (id: string) => {
+    if (busyIds.has(id)) return;
+    markBusy(id, true);
+    try {
+      await reject.mutateAsync(id);
+    } catch {
+      /* same */
+    } finally {
+      markBusy(id, false);
+    }
+  };
+
+  const approveAll = async () => {
+    if (bulkRunning) return;
+    setBulkRunning(true);
+    try {
+      // Sequential, not Promise.all — server has a per-proposal lock but the
+      // whole-batch transaction model is simpler to reason about serially,
+      // and bulk-approving 50 proposals at once is not a UX win.
+      for (const p of pending) {
+        await approveOne(p.proposal_id);
+      }
+    } finally {
+      setBulkRunning(false);
+    }
+  };
+
+  const rejectAll = async () => {
+    if (bulkRunning) return;
+    setBulkRunning(true);
+    try {
+      for (const p of pending) {
+        await rejectOne(p.proposal_id);
+      }
+    } finally {
+      setBulkRunning(false);
+    }
+  };
 
   return (
     <Desk
@@ -67,18 +132,10 @@ export function ProposalsRoute() {
             </span>
             {pending.length > 0 ? (
               <div className="ml-auto flex gap-2">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => pending.forEach((p) => approve.mutate(p.proposal_id))}
-                >
-                  approve all
+                <Button variant="primary" size="sm" disabled={bulkRunning} onClick={approveAll}>
+                  {bulkRunning ? 'approving…' : 'approve all'}
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => pending.forEach((p) => reject.mutate(p.proposal_id))}
-                >
+                <Button variant="ghost" size="sm" disabled={bulkRunning} onClick={rejectAll}>
                   reject all
                 </Button>
               </div>
@@ -107,8 +164,9 @@ export function ProposalsRoute() {
                   key={p.proposal_id}
                   proposal={p}
                   {...(project ? { project } : {})}
-                  onApprove={(id) => approve.mutate(id)}
-                  onReject={(id) => reject.mutate(id)}
+                  busy={busyIds.has(p.proposal_id)}
+                  onApprove={(id) => void approveOne(id)}
+                  onReject={(id) => void rejectOne(id)}
                 />
               );
             })}

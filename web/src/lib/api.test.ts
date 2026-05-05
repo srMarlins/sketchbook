@@ -9,16 +9,25 @@ beforeAll(async () => {
 });
 
 describe('api (mock mode)', () => {
-  test('listProjects returns 50 fixture rows', async () => {
-    const rows = await api.listProjects();
-    expect(rows).toHaveLength(50);
-    expect(rows[0]).toHaveProperty('name');
-    expect(rows[0]).toHaveProperty('color_tag');
+  test('listProjects returns one paginated page', async () => {
+    const page = await api.listProjects({ limit: 50 });
+    expect(page.items).toHaveLength(50);
+    expect(page.items[0]).toHaveProperty('name');
+    expect(page.items[0]).toHaveProperty('color_tag');
+    expect(page).toHaveProperty('next_cursor');
+  });
+
+  test('listAllProjects walks the cursor and returns the full list', async () => {
+    const all = await api.listAllProjects({ limit: 20 });
+    // Mock seeds 50 projects; walking pages of 20 should produce 50 total.
+    expect(all).toHaveLength(50);
+    const ids = new Set(all.map((p) => p.id));
+    expect(ids.size).toBe(50); // no duplicates across pages
   });
 
   test('getProject returns ProjectDetail with plugins/samples arrays', async () => {
-    const rows = await api.listProjects();
-    const id = rows[0]!.id;
+    const all = await api.listAllProjects();
+    const id = all[0]!.id;
     const detail = await api.getProject(id);
     expect(detail).toBeDefined();
     expect(detail!.plugins).toBeInstanceOf(Array);

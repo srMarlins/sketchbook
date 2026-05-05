@@ -1,9 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   approveProposal,
   getCategory,
+  getCategoryPage,
   getHome,
   getProject,
+  listAllProjects,
   listJournal,
   listProjects,
   listProposals,
@@ -12,6 +19,7 @@ import {
   submitProposal,
   undoBatch,
   type ListProjectsParams,
+  type ProjectsPage,
 } from '../lib/api';
 import type { ProposalSubmission } from '../lib/types';
 
@@ -24,8 +32,12 @@ export const journalKey = () => ['journal'] as const;
 export const homeKey = () => ['home'] as const;
 
 export const projectsQuery = (params: ListProjectsParams = {}) => ({
+  // Auto-walks all pages via cursor. Callers expect a flat ProjectSummary[]
+  // and don't think about pagination — the cursor API exists at the network
+  // boundary, but the query layer aggregates so existing consumers (notebook
+  // virtualization, proposal lookups) keep working unchanged.
   queryKey: projectsKey(params),
-  queryFn: () => listProjects(params),
+  queryFn: () => listAllProjects(params),
   staleTime: 60_000,
 });
 
@@ -56,6 +68,35 @@ export const homeQuery = () => ({
 
 export function useProjects(params: ListProjectsParams = {}) {
   return useQuery(projectsQuery(params));
+}
+
+/**
+ * Cursor-paginated infinite-query hook. Use this when you want to render
+ * pages progressively (e.g. an infinite-scroll view) instead of waiting for
+ * the full library. For everyday "give me all projects" callers, prefer
+ * `useProjects` which auto-walks pages and returns a flat array.
+ */
+export function useProjectsInfinite(params: ListProjectsParams = {}) {
+  return useInfiniteQuery({
+    queryKey: ['projects-infinite', params] as const,
+    queryFn: ({ pageParam }) => listProjects({ ...params, cursor: pageParam }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage: ProjectsPage) => lastPage.next_cursor,
+    staleTime: 60_000,
+  });
+}
+
+/** Cursor-paginated infinite-query hook for one home category. */
+export function useCategoryInfinite(id: string | null | undefined) {
+  return useInfiniteQuery({
+    queryKey: ['category-infinite', id ?? ''] as const,
+    queryFn: ({ pageParam }) =>
+      getCategoryPage(id ?? '', { cursor: pageParam, limit: 200 }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage: ProjectsPage) => lastPage.next_cursor,
+    staleTime: 60_000,
+    enabled: !!id,
+  });
 }
 export function useProject(id: number | null) {
   return useQuery(projectQuery(id));

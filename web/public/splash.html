@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>audio — starting…</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: #f7f1e7;
+        color: #443a30;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #2a221b;
+          color: #e9dcc8;
+        }
+      }
+      .wrap {
+        height: 100%;
+        display: grid;
+        place-items: center;
+        gap: 1rem;
+      }
+      .card {
+        text-align: center;
+        max-width: 28rem;
+        padding: 2rem;
+      }
+      h1 {
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin: 0 0 0.5rem;
+        font-size: 1.5rem;
+      }
+      p {
+        margin: 0.25rem 0;
+        opacity: 0.75;
+        font-size: 0.875rem;
+      }
+      .stage {
+        margin-top: 1.5rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.75rem;
+        opacity: 0.6;
+      }
+      .err {
+        margin-top: 1rem;
+        color: #b04035;
+        font-family: ui-monospace, monospace;
+        font-size: 0.75rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 12rem;
+        overflow: auto;
+        text-align: left;
+      }
+      .spinner {
+        width: 1rem;
+        height: 1rem;
+        border-radius: 50%;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        animation: spin 0.8s linear infinite;
+        display: inline-block;
+        vertical-align: -0.125rem;
+        margin-right: 0.5rem;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>audio</h1>
+        <p><span class="spinner"></span><span id="msg">starting backend…</span></p>
+        <p class="stage" id="stage"></p>
+        <pre class="err" id="err" hidden></pre>
+      </div>
+    </div>
+    <script type="module">
+      // Tauri 2 events arrive via @tauri-apps/api/event. We import dynamically
+      // so this same file works when opened in a plain browser for dev.
+      const tauri = window.__TAURI__;
+      if (tauri && tauri.event) {
+        const { listen } = tauri.event;
+        listen("sidecar-progress", (e) => {
+          const { stage, detail } = e.payload;
+          document.getElementById("stage").textContent = stage + ": " + detail;
+        });
+        listen("sidecar-boot-failed", (e) => {
+          document.getElementById("msg").textContent = "backend failed to start";
+          const err = document.getElementById("err");
+          err.hidden = false;
+          err.textContent = e.payload.detail;
+        });
+      }
+    </script>
+  </body>
+</html>

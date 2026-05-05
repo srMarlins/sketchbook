@@ -215,11 +215,20 @@ function _shelvesFor(rows: ProjectSummary[]): Shelf[] {
 }
 
 export const mock = {
-  listProjects(params: ListProjectsParams = {}): ProjectSummary[] {
+  listProjects(params: ListProjectsParams = {}): {
+    items: ProjectSummary[];
+    next_cursor: string | null;
+  } {
     const filtered = _filterProjects(projectsState, params);
     const ordered = _orderProjects(filtered, params);
-    if (params.limit !== undefined) return ordered.slice(0, params.limit);
-    return ordered;
+    // Mock cursor: index-based offset. Real backend uses keyset, but the
+    // mock just needs round-trippable next_cursor → offset semantics.
+    const offset = params.cursor ? parseInt(params.cursor, 10) || 0 : 0;
+    const limit = params.limit ?? ordered.length;
+    const slice = ordered.slice(offset, offset + limit);
+    const nextOffset = offset + slice.length;
+    const next_cursor = nextOffset < ordered.length ? String(nextOffset) : null;
+    return { items: slice, next_cursor };
   },
   getHome(): HomeResponse {
     return { shelves: _shelvesFor(projectsState) };

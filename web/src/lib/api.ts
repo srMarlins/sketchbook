@@ -20,6 +20,12 @@ async function http<T>(url: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Cursor-paginated response shape for project lists. */
+export interface ProjectsPage {
+  items: ProjectSummary[];
+  next_cursor: string | null;
+}
+
 export interface ListProjectsParams {
   query?: string;
   tempo_min?: number;
@@ -32,11 +38,12 @@ export interface ListProjectsParams {
   broken?: boolean;
   order_by?: 'mtime' | 'name' | 'effort';
   order_dir?: 'asc' | 'desc';
+  /** Opaque pagination cursor from a previous page's `next_cursor`. */
+  cursor?: string | null;
 }
 
-export async function listProjects(
-  params: ListProjectsParams = {},
-): Promise<ProjectSummary[]> {
+/** Fetch ONE cursor-paginated page. Forward `next_cursor` to get the next. */
+export async function listProjects(params: ListProjectsParams = {}): Promise<ProjectsPage> {
   if (USE_MOCKS) return Promise.resolve(mock.listProjects(params));
   const qs = new URLSearchParams();
   if (params.query) qs.set('query', params.query);
@@ -49,8 +56,30 @@ export async function listProjects(
   if (params.broken !== undefined) qs.set('broken', String(params.broken));
   if (params.order_by !== undefined) qs.set('order_by', params.order_by);
   if (params.order_dir !== undefined) qs.set('order_dir', params.order_dir);
+  if (params.cursor) qs.set('cursor', params.cursor);
   const tail = qs.toString() ? `?${qs}` : '';
-  return http<ProjectSummary[]>(`/api/projects${tail}`);
+  return http<ProjectsPage>(`/api/projects${tail}`);
+}
+
+/**
+ * Walk every page of `/api/projects` for a given filter and return the flat
+ * aggregated list. Defaults to `limit=500` per page (server cap is 1000) so
+ * a 1,628-project library completes in 4 round-trips. Bounded to 200 pages
+ * total to avoid an unintended infinite walk if the backend ever bugs.
+ */
+export async function listAllProjects(
+  params: ListProjectsParams = {},
+): Promise<ProjectSummary[]> {
+  const pageLimit = params.limit ?? 500;
+  const out: ProjectSummary[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < 200; i++) {
+    const page = await listProjects({ ...params, limit: pageLimit, cursor });
+    out.push(...page.items);
+    if (!page.next_cursor) return out;
+    cursor = page.next_cursor;
+  }
+  return out;
 }
 
 export async function getHome(): Promise<HomeResponse> {
@@ -68,9 +97,34 @@ export async function getProject(id: number): Promise<ProjectDetail | undefined>
   return http<ProjectDetail>(`/api/projects/${id}`);
 }
 
+/** ONE cursor-paginated category page. */
+export async function getCategoryPage(
+  id: string,
+  params: { limit?: number; cursor?: string | null } = {},
+): Promise<ProjectsPage> {
+  if (USE_MOCKS) {
+    const items = mock.getCategory?.(id) ?? [];
+    return Promise.resolve({ items, next_cursor: null });
+  }
+  const qs = new URLSearchParams();
+  if (params.limit !== undefined) qs.set('limit', String(params.limit));
+  if (params.cursor) qs.set('cursor', params.cursor);
+  const tail = qs.toString() ? `?${qs}` : '';
+  return http<ProjectsPage>(`/api/categories/${encodeURIComponent(id)}${tail}`);
+}
+
+/** Walk every page of a category and return the flat list. */
 export async function getCategory(id: string): Promise<ProjectSummary[]> {
-  if (USE_MOCKS) return Promise.resolve(mock.getCategory?.(id) ?? []);
-  return http<ProjectSummary[]>(`/api/categories/${encodeURIComponent(id)}`);
+  const pageLimit = 200;
+  const out: ProjectSummary[] = [];
+  let cursor: string | null = null;
+  for (let i = 0; i < 200; i++) {
+    const page = await getCategoryPage(id, { limit: pageLimit, cursor });
+    out.push(...page.items);
+    if (!page.next_cursor) return out;
+    cursor = page.next_cursor;
+  }
+  return out;
 }
 
 export async function listProposals(): Promise<Proposal[]> {

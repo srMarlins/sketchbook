@@ -9,6 +9,8 @@ export interface ProposalCardProps {
   project?: ProjectSummary;
   onApprove?: (proposalId: string) => void;
   onReject?: (proposalId: string) => void;
+  /** Disable both action buttons (e.g. while a mutation is in flight). */
+  busy?: boolean;
 }
 
 const VERB_TINT: Record<string, string> = {
@@ -19,7 +21,7 @@ const VERB_TINT: Record<string, string> = {
   tag: 'bg-paper-tint-sage',
 };
 
-export function ProposalCard({ proposal, project, onApprove, onReject }: ProposalCardProps) {
+export function ProposalCard({ proposal, project, onApprove, onReject, busy = false }: ProposalCardProps) {
   const head = translateProposalHead(proposal, project);
 
   return (
@@ -65,10 +67,20 @@ export function ProposalCard({ proposal, project, onApprove, onReject }: Proposa
       ) : null}
 
       <footer className="flex items-center gap-2 px-4 py-2 border-t border-rule-line bg-surface-sunken/40 rounded-b-card">
-        <Button variant="primary" size="sm" onClick={() => onApprove?.(proposal.proposal_id)}>
-          approve
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={busy}
+          onClick={() => onApprove?.(proposal.proposal_id)}
+        >
+          {busy ? 'approving…' : 'approve'}
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => onReject?.(proposal.proposal_id)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => onReject?.(proposal.proposal_id)}
+        >
           reject
         </Button>
         <span className="ml-auto text-[10px] font-mono text-ink-muted truncate">
