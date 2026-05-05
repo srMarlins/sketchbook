@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 
 vi.stubEnv('VITE_USE_MOCKS', 'true');
 
@@ -6,6 +6,10 @@ let api: typeof import('./api');
 
 beforeAll(async () => {
   api = await import('./api');
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('api (mock mode)', () => {

@@ -184,7 +184,18 @@ function chipContent(chip: ChipKind): {
   }
 }
 
-export function IndexerStatus() {
+export interface IndexerStatusProps {
+  /**
+   * Optional callback fired when the user clicks the findings badge. When
+   * provided, the badge becomes a button so the home view can wire it to
+   * the "needs attention" filter; when omitted, it stays a static span so
+   * IndexerStatus remains usable outside HomeRoute (and existing tests
+   * that read `findings` as a span keep passing).
+   */
+  onFindingsClick?: () => void;
+}
+
+export function IndexerStatus({ onFindingsClick }: IndexerStatusProps = {}) {
   const [state, dispatch] = useReducer(reducer, INITIAL);
   const onEvent = useCallback((ev: IndexerEvent) => dispatch(ev), []);
   useIndexerEvents(onEvent);
@@ -192,6 +203,16 @@ export function IndexerStatus() {
   const chip = deriveChip(state);
   const { body, title } = chipContent(chip);
   const findingsCount = findings ? findings.macpath + findings.duplicates : 0;
+  const findingsTitle = findings
+    ? `${findings.macpath} mac-path · ${findings.duplicates} duplicates`
+    : undefined;
+  const findingsClass = clsx(
+    'inline-flex items-center gap-1 px-2 py-0.5 rounded-chip',
+    'border border-rule-line bg-surface-card text-ink-secondary',
+    'font-mono text-[11px] tracking-wide whitespace-nowrap',
+    onFindingsClick &&
+      'cursor-pointer hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-action/40',
+  );
 
   return (
     <div className="flex items-center gap-2">
@@ -207,22 +228,27 @@ export function IndexerStatus() {
         {body}
       </span>
       {findingsCount > 0 ? (
-        <span
-          data-testid="indexer-findings-badge"
-          title={
-            findings
-              ? `${findings.macpath} mac-path · ${findings.duplicates} duplicates`
-              : undefined
-          }
-          className={clsx(
-            'inline-flex items-center gap-1 px-2 py-0.5 rounded-chip',
-            'border border-rule-line bg-surface-card text-ink-secondary',
-            'font-mono text-[11px] tracking-wide whitespace-nowrap',
-          )}
-        >
-          <span className="text-ink-primary tabular-nums">{findingsCount}</span>
-          <span>findings</span>
-        </span>
+        onFindingsClick ? (
+          <button
+            type="button"
+            data-testid="indexer-findings-badge"
+            {...(findingsTitle ? { title: findingsTitle } : {})}
+            onClick={onFindingsClick}
+            className={findingsClass}
+          >
+            <span className="text-ink-primary tabular-nums">{findingsCount}</span>
+            <span>findings</span>
+          </button>
+        ) : (
+          <span
+            data-testid="indexer-findings-badge"
+            {...(findingsTitle ? { title: findingsTitle } : {})}
+            className={findingsClass}
+          >
+            <span className="text-ink-primary tabular-nums">{findingsCount}</span>
+            <span>findings</span>
+          </span>
+        )
       ) : null}
     </div>
   );

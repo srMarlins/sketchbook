@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import clsx from 'clsx';
 import { useNavigate } from '@tanstack/react-router';
 import { BrandingHeader } from '../components/surface/BrandingHeader';
 import { IndexerStatus } from '../app/IndexerStatus';
@@ -49,13 +50,15 @@ function spineFor(
 }
 
 export function HomeRoute() {
-  const projects = useProjects();
+  const [needsAttention, setNeedsAttention] = useState(false);
+  const projects = useProjects(needsAttention ? { needs_attention: true } : {});
   const proposals = useProposals();
   const home = useHome();
   const openMut = useOpenProject();
   const navigate = useNavigate();
   const [openProjectId, setOpenProjectId] = useState<number | null>(null);
   const [corkOpen, setCorkOpen] = useState(false);
+  const enableNeedsAttention = useCallback(() => setNeedsAttention(true), []);
 
   const sidebarItems = [
     { id: 'home', label: 'Home', icon: 'house' as const },
@@ -74,10 +77,18 @@ export function HomeRoute() {
       branding={
         <div className="flex items-center gap-3">
           <BrandingHeader />
-          <IndexerStatus />
+          <IndexerStatus onFindingsClick={enableNeedsAttention} />
         </div>
       }
-      search={<SearchBar />}
+      search={
+        <div className="flex items-center gap-2">
+          <SearchBar />
+          <NeedsAttentionChip
+            active={needsAttention}
+            onToggle={() => setNeedsAttention((v) => !v)}
+          />
+        </div>
+      }
       sidebar={
         <Sidebar
           activeId="home"
@@ -133,6 +144,56 @@ export function HomeRoute() {
       ) : null}
       <ProjectCorkboard projectId={openProjectId} open={corkOpen} onOpenChange={setCorkOpen} />
     </Desk>
+  );
+}
+
+/**
+ * Small toggle chip for the "needs attention" filter.
+ *
+ * Lives in the search slot next to the SearchBar so it sits with the rest
+ * of the filter machinery rather than introducing a new shelf or banner —
+ * memory says: layer onto existing UI.
+ *
+ * Visual language matches the IndexerStatus chip in the branding slot
+ * (rounded, rule-line border, surface-card fill). When active the chip
+ * picks up the warning accent so it reads as "filter is on".
+ */
+function NeedsAttentionChip({
+  active,
+  onToggle,
+}: {
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-testid="needs-attention-chip"
+      aria-pressed={active}
+      onClick={onToggle}
+      title={
+        active
+          ? 'Showing only projects flagged as needing attention. Click to clear.'
+          : 'Filter to projects with mac-path / missing-info / missing-file flags.'
+      }
+      className={clsx(
+        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-chip whitespace-nowrap',
+        'border font-mono text-[11px] tracking-wide',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-action/40',
+        active
+          ? 'border-accent-warning bg-accent-warning/10 text-ink-primary'
+          : 'border-rule-line bg-surface-card text-ink-secondary hover:text-ink-primary',
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={clsx(
+          'inline-block h-1.5 w-1.5 rounded-full',
+          active ? 'bg-accent-warning' : 'bg-rule-line',
+        )}
+      />
+      <span>Needs attention</span>
+    </button>
   );
 }
 

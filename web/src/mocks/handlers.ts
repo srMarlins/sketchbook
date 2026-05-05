@@ -140,6 +140,14 @@ function _filterProjects(rows: ProjectSummary[], params: ListProjectsParams): Pr
       if (params.broken && !isBroken) return false;
       if (!params.broken && isBroken) return false;
     }
+    if (params.needs_attention !== undefined) {
+      // Mocks only carry parse_status / missing_sample_count today; treat
+      // those signals as a stand-in for the macpath/info/missing flags so
+      // dev-shell screenshots stay populated when the chip is toggled.
+      const flagged = p.parse_status === 'failed' || (p.missing_sample_count ?? 0) > 0;
+      if (params.needs_attention && !flagged) return false;
+      if (!params.needs_attention && flagged) return false;
+    }
     return true;
   });
 }
