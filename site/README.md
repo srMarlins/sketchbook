@@ -10,9 +10,12 @@ The Sketchbook landing page (`index.html`). Single static file, no build step.
 
 ## Where it ships
 
-The release workflow uploads this file to `gs://sketchbook-releases/index.html` after Conveyor's `output/*` upload, so it becomes the bucket's default page (configured via the bucket's `MainPageSuffix`).
+GitHub Pages, deployed from `main` by `.github/workflows/pages.yml`. Live at:
+<https://srmarlins.github.io/sketchbook/>
 
-Conveyor's own `download.html` is preserved at the same path; the landing page links to it as a fallback for the OS picker.
+Binaries continue to live in `gs://sketchbook-releases/` for Conveyor's anonymous auto-update fetch. The landing page links into the bucket for downloads. Conveyor's own `download.html` is preserved at the bucket too as the OS-detect fallback.
+
+Why not the bucket itself? GCS only honors `MainPageSuffix` when the bucket is fronted by a custom domain (CNAME to `c.storage.googleapis.com`); raw `storage.googleapis.com/<bucket>/` URLs always serve an XML listing.
 
 ## Iteration
 
