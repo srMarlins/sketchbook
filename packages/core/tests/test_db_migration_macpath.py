@@ -17,6 +17,13 @@ def test_migration_is_idempotent(tmp_path):
     assert "mac_paths_count" in cols and "has_project_info" in cols
 
 
+def test_file_size_bytes_column_present(tmp_path):
+    from audio_core.db.connection import open_db
+    conn = open_db(tmp_path / "c.db")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(projects)").fetchall()}
+    assert "file_size_bytes" in cols
+
+
 def test_existing_rows_get_null_defaults(tmp_path):
     db = tmp_path / "c.db"
     conn = open_db(db)

@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS projects (
   parse_status    TEXT,
   parse_error     TEXT,
   mac_paths_count INTEGER,
-  has_project_info INTEGER
+  has_project_info INTEGER,
+  file_size_bytes INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_parent_dir ON projects(parent_dir);
