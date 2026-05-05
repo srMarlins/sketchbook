@@ -1,4 +1,4 @@
-# Audio: cross-device sync + versioning + Kotlin/Compose Multiplatform rewrite — design
+# Sketchbook (audio): cross-device sync + versioning + Kotlin/Compose Multiplatform rewrite — design
 
 **Date:** 2026-05-05
 **Owner:** srmarlins@gmail.com
