@@ -31,8 +31,8 @@ def upsert_project(
         INSERT INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den,
             track_count, audio_tracks, midi_tracks, return_tracks, length_seconds, live_version,
             last_modified, last_scanned, file_hash, effort_score, effort_breakdown,
-            parse_status, parse_error, mac_paths_count, has_project_info)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok', NULL, ?, ?)
+            parse_status, parse_error, mac_paths_count, has_project_info, file_size_bytes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok', NULL, ?, ?, ?)
         ON CONFLICT(path) DO UPDATE SET
             name=excluded.name, parent_dir=excluded.parent_dir,
             tempo=excluded.tempo, time_sig_num=excluded.time_sig_num,
@@ -44,7 +44,8 @@ def upsert_project(
             effort_score=excluded.effort_score, effort_breakdown=excluded.effort_breakdown,
             parse_status='ok', parse_error=NULL,
             mac_paths_count=excluded.mac_paths_count,
-            has_project_info=excluded.has_project_info
+            has_project_info=excluded.has_project_info,
+            file_size_bytes=excluded.file_size_bytes
         RETURNING id
         """,
         (
@@ -67,6 +68,7 @@ def upsert_project(
             breakdown_json,
             mac_paths_count,
             has_project_info,
+            file_size_bytes,
         ),
     )
     pid = cur.fetchone()[0]

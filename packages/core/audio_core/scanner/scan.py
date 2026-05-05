@@ -47,10 +47,26 @@ def scan_root(
         try:
             als = als.resolve()  # match scan_one's canonicalization for hash-skip lookup
             existing = conn.execute(
-                "SELECT file_hash FROM projects WHERE path = ?", (str(als),)
+                "SELECT file_hash, last_modified, file_size_bytes FROM projects WHERE path = ?",
+                (str(als),),
             ).fetchone()
+            st = als.stat()
+            if (
+                existing
+                and existing[1] == st.st_mtime
+                and (existing[2] or 0) == st.st_size
+            ):
+                stats.skipped += 1
+                if on_progress:
+                    on_progress(als, "skipped")
+                continue
             current_hash = hash_file(als)
             if existing and existing[0] == current_hash:
+                conn.execute(
+                    "UPDATE projects SET last_modified=?, file_size_bytes=? WHERE path=?",
+                    (st.st_mtime, st.st_size, str(als)),
+                )
+                conn.commit()
                 stats.skipped += 1
                 if on_progress:
                     on_progress(als, "skipped")
