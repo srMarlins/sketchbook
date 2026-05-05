@@ -1,6 +1,5 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import clsx from 'clsx';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { BrandingHeader } from '../components/surface/BrandingHeader';
 import { Desk } from '../components/surface/Desk';
@@ -170,43 +169,16 @@ export function NotebookRoute() {
   );
 }
 
-interface FlatRow {
-  kind: 'header' | 'variant' | 'standalone';
-  group: ProjectGroup;
-  project?: ProjectSummary;
-  /** For multi-variant rows: position within the group, used to round corners
-   * + add bottom border on the last variant. Undefined for headers and standalone. */
-  variantPos?: 'first' | 'middle' | 'last';
-  /** Stable key. */
-  key: string;
-}
+type Row =
+  | { kind: 'group'; group: ProjectGroup; key: string }
+  | { kind: 'standalone'; project: ProjectSummary; key: string };
 
-function flattenGroups(groups: ProjectGroup[]): FlatRow[] {
-  const rows: FlatRow[] = [];
-  for (const g of groups) {
-    if (g.variant_count > 1) {
-      rows.push({ kind: 'header', group: g, key: `h:${g.id}` });
-      g.variants.forEach((v, i) => {
-        const isFirst = i === 0;
-        const isLast = i === g.variants.length - 1;
-        rows.push({
-          kind: 'variant',
-          group: g,
-          project: v,
-          variantPos: isFirst ? 'first' : isLast ? 'last' : 'middle',
-          key: `v:${v.id}`,
-        });
-      });
-    } else {
-      rows.push({
-        kind: 'standalone',
-        group: g,
-        project: g.representative,
-        key: `s:${g.representative.id}`,
-      });
-    }
-  }
-  return rows;
+function buildRows(groups: ProjectGroup[]): Row[] {
+  return groups.map((g) =>
+    g.variant_count > 1
+      ? { kind: 'group', group: g, key: `g:${g.id}` }
+      : { kind: 'standalone', project: g.representative, key: `s:${g.representative.id}` },
+  );
 }
 
 function GroupedStrips({
@@ -219,25 +191,24 @@ function GroupedStrips({
   onLaunch: (projectId: number) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const rows = useMemo(() => flattenGroups(groups), [groups]);
+  const rows = useMemo(() => buildRows(groups), [groups]);
 
+  // Each row is a whole group (or a standalone). Heights vary widely (a
+  // group with 8 variants is much taller than a standalone), so we let the
+  // virtualizer measure rendered DOM nodes instead of guessing — this is
+  // what fixes the "spacing isn't even" drift from a fixed estimate.
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: (index) => {
       const r = rows[index];
-      if (!r) return 84;
-      // Header has bigger top breathing room so groups visibly start a section.
-      if (r.kind === 'header') return 46;
-      // Standalone rows get extra padding top + bottom to clearly stand apart
-      // from neighboring group containers / other standalones.
-      if (r.kind === 'standalone') return 92;
-      // Variants are densely stacked inside a group container; last gets a
-      // closing pad-bottom that bumps its size.
-      if (r.variantPos === 'last') return 70;
-      return 64;
+      if (!r) return 96;
+      if (r.kind === 'standalone') return 96;
+      // Group: header (~44) + N variants (~64 each) + closing border. Add
+      // 18px gap above + 18 below.
+      return 44 + r.group.variant_count * 64 + 36;
     },
-    overscan: 8,
+    overscan: 4,
   });
 
   return (
@@ -250,76 +221,68 @@ function GroupedStrips({
               key={row.key}
               data-index={vRow.index}
               data-row-kind={row.kind}
-              data-variant-pos={row.variantPos ?? ''}
+              ref={rowVirtualizer.measureElement}
               style={{
                 position: 'absolute',
                 top: 0,
                 left: 0,
                 width: '100%',
                 transform: `translateY(${vRow.start}px)`,
-                paddingTop:
-                  row.kind === 'header'
-                    ? 18
-                    : row.kind === 'standalone'
-                      ? 18
-                      : 0,
-                paddingBottom:
-                  row.kind === 'standalone'
-                    ? 8
-                    : row.kind === 'variant' && row.variantPos === 'last'
-                      ? 8
-                      : 0,
+                paddingTop: 9,
+                paddingBottom: 9,
               }}
             >
-              {row.kind === 'header' ? (
-                // Multi-variant group header: full-opacity paper-tint
-                // background with a small drop shadow so the group container
-                // visibly "lifts" off the page. Folder icon + prominent title.
-                <div className="flex items-center gap-2 px-3 py-2 bg-paper-tint-cream border border-rule-line-strong border-b-0 rounded-t-card shadow-card">
-                  <Sprite name="folder" size={14} className="text-accent shrink-0" />
-                  <span className="font-display text-[14px] font-semibold text-ink-primary truncate">
-                    {row.group.title}
-                  </span>
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-ink-muted shrink-0">
-                    · {row.group.variant_count} variants
-                  </span>
-                </div>
-              ) : row.kind === 'variant' ? (
-                // Variant row inside a multi-variant group: shares the
-                // tinted container with siblings, accent rule on the left,
-                // closes with a bottom border + rounded corner on the last.
-                <div
-                  className={clsx(
-                    'px-3 py-1 bg-paper-tint-cream border-x border-rule-line-strong relative',
-                    row.variantPos === 'last' && 'border-b rounded-b-card pb-2 shadow-card',
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className="absolute left-0 top-0 bottom-0 w-0.5 bg-accent-soft"
-                  />
-                  <SongStrip
-                    project={row.project!}
-                    onOpen={() => onOpen(row.project!)}
-                    onLaunch={onLaunch}
-                  />
-                </div>
-              ) : (
-                // Single-variant project — explicitly "outside any group."
-                // Wrap in a subtle 1px ring so the standalone reads as a
-                // self-contained card, even when the SongStrip's own border
-                // is too quiet against neighboring tinted group containers.
-                <div className="ring-1 ring-rule-line-strong/40 rounded-card">
-                  <SongStrip
-                    project={row.project!}
-                    onOpen={() => onOpen(row.project!)}
-                    onLaunch={onLaunch}
-                  />
-                </div>
+              {row.kind === 'group' ? <GroupBlock group={row.group} onOpen={onOpen} onLaunch={onLaunch} /> : (
+                <SongStrip
+                  project={row.project}
+                  onOpen={() => onOpen(row.project)}
+                  onLaunch={onLaunch}
+                />
               )}
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One multi-variant project rendered as a single bordered block:
+ * tinted bg, header row with folder icon + title + variant count,
+ * variants stacked with a left accent rule. Single border around the
+ * whole block — no per-variant border stacking, no seam artifacts.
+ */
+function GroupBlock({
+  group,
+  onOpen,
+  onLaunch,
+}: {
+  group: ProjectGroup;
+  onOpen: (project: ProjectSummary) => void;
+  onLaunch: (projectId: number) => void;
+}) {
+  return (
+    <div className="bg-paper-tint-cream border border-rule-line-strong rounded-card shadow-card overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-rule-line-strong/60">
+        <Sprite name="folder" size={14} className="text-accent shrink-0" />
+        <span className="font-display text-[14px] font-semibold text-ink-primary truncate">
+          {group.title}
+        </span>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-ink-muted shrink-0">
+          · {group.variant_count} variants
+        </span>
+      </div>
+      <div className="relative pl-2 pr-2 py-2 space-y-1">
+        <span aria-hidden className="absolute left-0 top-2 bottom-2 w-0.5 bg-accent-soft" />
+        {group.variants.map((v) => (
+          <SongStrip
+            key={v.id}
+            project={v}
+            onOpen={() => onOpen(v)}
+            onLaunch={onLaunch}
+          />
+        ))}
       </div>
     </div>
   );
