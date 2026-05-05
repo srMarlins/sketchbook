@@ -34,6 +34,7 @@ include(
     ":shared:ui-shared",
     ":shared:feature-projects",
     ":shared:feature-project-detail",
+    ":shared:feature-timeline",
     ":app-desktop",
     ":app-mcp",
 )
