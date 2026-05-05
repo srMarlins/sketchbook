@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { useEffect, useRef, useState } from 'react';
 import { Sprite } from '../primitives/Sprite';
 import type { ProjectSummary } from '../../lib/types';
 
@@ -57,39 +58,6 @@ export function SongStrip({ project, onOpen, onLaunch }: SongStripProps) {
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
       )}
     >
-      {onLaunch ? (
-        <span
-          role="button"
-          tabIndex={0}
-          aria-label={`Open ${project.name} in Ableton`}
-          data-testid="song-strip-launch"
-          onClick={(e) => {
-            e.stopPropagation();
-            onLaunch(project.id);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              e.stopPropagation();
-              onLaunch(project.id);
-            }
-          }}
-          className={clsx(
-            'absolute right-2 top-1/2 -translate-y-1/2',
-            'inline-flex items-center justify-center w-6 h-6',
-            'rounded-chip border border-rule-line bg-surface-card',
-            'text-ink-secondary hover:text-ink-primary',
-            'opacity-0 pointer-events-none',
-            'group-hover:opacity-100 group-hover:pointer-events-auto',
-            'group-focus-within:opacity-100 group-focus-within:pointer-events-auto',
-            'focus-visible:opacity-100 focus-visible:pointer-events-auto',
-            'transition-opacity duration-fast',
-            'motion-reduce:transition-none',
-          )}
-        >
-          <Sprite name="paper-airplane" size={14} />
-        </span>
-      ) : null}
       <span className="flex items-center gap-4">
         <span
           aria-hidden
@@ -116,6 +84,10 @@ export function SongStrip({ project, onOpen, onLaunch }: SongStripProps) {
         <span className="shrink-0 font-mono text-[11px] text-ink-muted whitespace-nowrap min-w-[68px] text-right">
           {fmtRelative(project.last_modified)}
         </span>
+
+        {onLaunch ? (
+          <LaunchButton projectId={project.id} projectName={project.name} onLaunch={onLaunch} />
+        ) : null}
       </span>
 
       <span className="flex items-center gap-3 pl-[22px] min-w-0">
@@ -140,6 +112,77 @@ export function SongStrip({ project, onOpen, onLaunch }: SongStripProps) {
           </span>
         ) : null}
       </span>
+    </button>
+  );
+}
+
+/**
+ * Always-visible launch chip. At rest: muted, paper-tint background, small
+ * "open ↗" label. On hover: brightens. On press: scale-down. After click:
+ * brief checkmark flash + chip color change for ~1.2s, then reverts. The
+ * label and icon together make the affordance unambiguous at a glance.
+ */
+function LaunchButton({
+  projectId,
+  projectName,
+  onLaunch,
+}: {
+  projectId: number;
+  projectName: string;
+  onLaunch: (id: number) => void;
+}) {
+  const [launched, setLaunched] = useState(false);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current != null) window.clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleClick = (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation();
+    if ('preventDefault' in e) e.preventDefault();
+    onLaunch(projectId);
+    setLaunched(true);
+    if (timerRef.current != null) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => setLaunched(false), 1200);
+  };
+
+  return (
+    <button
+      type="button"
+      aria-label={launched ? `Launched ${projectName}` : `Open ${projectName} in Ableton`}
+      data-testid="song-strip-launch"
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') handleClick(e);
+      }}
+      className={clsx(
+        'shrink-0 inline-flex items-center gap-1 px-2 py-1',
+        'rounded-chip border font-mono text-[10px] uppercase tracking-wide',
+        'transition-all duration-fast ease-paper',
+        'active:scale-90 motion-reduce:active:scale-100',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+        launched
+          ? 'border-accent-soft bg-accent/15 text-accent'
+          : clsx(
+              'border-rule-line bg-paper-tint-cream/70',
+              'text-ink-muted hover:text-ink-primary hover:bg-surface-sunken hover:border-rule-line-strong',
+              'opacity-70 group-hover:opacity-100 group-focus-within:opacity-100',
+            ),
+      )}
+    >
+      <Sprite
+        name={launched ? 'checkmark' : 'paper-airplane'}
+        size={12}
+        className={clsx(
+          'transition-transform duration-fast',
+          launched ? 'scale-110' : 'group-hover:translate-x-0.5 group-hover:-translate-y-0.5',
+          'motion-reduce:transition-none',
+        )}
+      />
+      <span>{launched ? 'opened' : 'open'}</span>
     </button>
   );
 }
