@@ -7,6 +7,7 @@ You are the primary implementer on this repo. The Python tree is the parity refe
 1. `docs/plans/2026-05-05-sync-versioning-design.md` — the architecture. If a PR contradicts the design doc, raise the contradiction; do not silently diverge.
 2. `docs/plans/2026-05-05-kotlin-rewrite-impl-plan.md` — the PR-by-PR roadmap. Each PR has Goal / Files / Tasks / Acceptance / Test plan. Follow the tasks in order.
 3. `CONTRIBUTING.md` — branch naming, commits, PR workflow.
+4. `docs/runbooks/release.md` — release/auto-update flow (only relevant when touching release tooling, but read before changing `conveyor.conf`, `tools/release.ps1`, or `.github/workflows/release.yml`).
 
 ## Module boundaries (strict, acyclic)
 
@@ -113,6 +114,17 @@ Sketchbook v1 authenticates to Google Cloud Storage with a **service-account JSO
 - Test fixtures may generate ephemeral RSA keypairs in-memory (e.g., `KeyPairGenerator.getInstance("RSA")` inside a test). PEM string LITERALS in source code (`-----BEGIN PRIVATE KEY-----`) are fine; embedded actual key material is not.
 - If you ever see a `private_key`, `private_key_id`, or base64 blob >60 chars in a diff, stop and verify before pushing. Gitleaks will block, but never test the alarm.
 - Rotate the SA key annually or on suspected compromise: `pwsh -File tools/rotate-gcp-key.ps1 -DeleteOldKeyId <ID>`.
+
+## Releases & auto-update
+
+Releases ship via Conveyor + GitHub Actions. Routine flow: `git tag v1.2.3 && git push origin v1.2.3` — `.github/workflows/release.yml` handles build, sign, upload to `gs://sketchbook-releases`, and a GitHub Release with changelog. Full runbook: `docs/runbooks/release.md`. Local fallback: `tools/release.ps1 -Tag v1.2.3`.
+
+- **Two buckets, two SAs.** Data lives in `gs://sketchbook-jtf-2026` (`sketchbook-app` SA, in `%APPDATA%\sketchbook\gcp-sa.json`). Releases live in `gs://sketchbook-releases` (`sketchbook-release-uploader` SA, only ever in CI via the `SKETCHBOOK_RELEASES_SA` GH Secret). Never cross the streams. Release-uploader SA must NOT appear in app code; app SA must NOT appear in release code.
+- **Conveyor signing key (`CONVEYOR_SIGNING_KEY`)** is the crypto root of every auto-update ever shipped. Treat it like a master password — never echo, never log, never write to disk inside the repo. Lost key = manual reinstall on every client.
+- **Don't change `app.site.base-url` in `conveyor.conf`** without planning a "trampoline" release. Once an installer is built with a base URL, that's where it polls forever.
+- **GitHub Releases hold notes only**, never binary assets. Anonymous auto-update fetch lives on the public bucket; this is intentional because the source repo is private.
+- **SemVer.** `vX.Y.Z` for stable, `vX.Y.Z-rc1` / `-beta1` for prereleases (workflow auto-marks them prerelease).
+- **Bad release recovery** is forward-only. Cut the next version. Never delete a published release — auto-update is monotonic and clients only move forward.
 
 ## When to stop and ask
 

@@ -462,6 +462,25 @@ Background coroutine, runs every 5 min. Promotes one `auto` snapshot per project
 
 When `sync_state.self_contained=true`, skip dedup HEAD-check and PUT every blob fresh under `<user_id>/blobs-private/<uuid>/<hash>`. Storage cost is full-copy-per-snapshot. Toggle is per-project, persists in DB.
 
+### 4.7 Distribution & auto-update
+
+Sketchbook ships as Mac (`.dmg`) and Windows (`.msi`) installers built by **Conveyor** (Hydraulic). Installed clients poll a static "update site" on launch and apply signed delta updates automatically — no manual reinstall on each release.
+
+**Why Conveyor over alternatives:** jpackage produces installers but no auto-update. Sparkle (Mac) + WinSparkle would mean two separate update mechanisms with hand-rolled metadata. Conveyor is a single tool, signs both platforms with one key, and produces a static update site (just files in a bucket — no server). Free for open-source-style use; the personal-use path needs no signing identity to start.
+
+**Distribution shape (private-repo workaround):** the source repo (`srMarlins/sketchbook`) is private. GitHub Releases on private repos require auth to download release assets, which would break anonymous auto-update. Solution:
+- Binaries live on a **separate public GCS bucket**: `gs://sketchbook-releases` (public-read, isolated from the private data bucket `gs://sketchbook-jtf-2026`).
+- GitHub Releases hold **changelog notes only**, with links to the bucket URLs.
+- Conveyor's `site.base-url = https://storage.googleapis.com/sketchbook-releases` is baked into every installer; clients fetch `metadata.json` and delta blobs from there.
+
+**Separation of duties:** the release-uploader service account (`sketchbook-release-uploader`) is distinct from the app SA (`sketchbook-app`). Bucket-scoped `roles/storage.objectAdmin` on the releases bucket only — the app SA cannot push fake releases, and a compromise of the release pipeline cannot reach project bytes.
+
+**Signing:** Conveyor generates a keypair at one-time bootstrap; the private `signing.json` is the cryptographic root of trust for every update ever shipped from this codebase. Stored in GitHub Secrets as `CONVEYOR_SIGNING_KEY` and backed up offline. Loss of the key means existing clients cannot auto-update — recovery requires manual reinstall with a new key. No remediation shortcut exists; this is treated like a master password.
+
+**CI flow:** push a `v*` tag → `.github/workflows/release.yml` builds the Compose Desktop bundle, runs `conveyor make site`, uploads `output/*` to `gs://sketchbook-releases/` with `Cache-Control: max-age=300`, and creates a GitHub Release with auto-generated changelog. Local fallback at `tools/release.ps1` for laptop-only releases. Full bootstrap and routine flow in `docs/runbooks/release.md`.
+
+**Versioning:** SemVer. Pre-release suffix (`v1.0.0-rc1`) marks the GitHub Release as prerelease. Auto-update is monotonic: a bad release is recovered by cutting the next version, never by deleting the bad one.
+
 ## 5. Conflict handling
 
 ### 5.1 Lease lock format (`<user_id>/locks/<project_uuid>.lock`)
@@ -537,6 +556,7 @@ Out of scope. Manifest-level diff is what we expose ("these files differ"). User
 - **AWS SDK for cloud?** → No SDK. Ktor CIO + native auth implementation in commonMain. `aws-crt-kotlin` is JVM-only and irrelevant since we're not on AWS.
 - **Multipart upload threshold?** → 100 MB. Single PUT below; multipart above.
 - **MCP server topology?** → Separate JVM process spawned by Claude Desktop config; reads catalog.db.
+- **Auto-update + packaging?** → Conveyor for cross-platform installers + signed delta updates. Private repo, so binaries go to public `gs://sketchbook-releases` (separate bucket, separate uploader SA from the data bucket); GitHub Releases hold changelog notes only.
 
 ## 8. Validation criteria for the implementation plan
 
