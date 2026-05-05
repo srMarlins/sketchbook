@@ -24,7 +24,14 @@ import kotlinx.coroutines.SupervisorJob
  * Composition root for the Compose Desktop shell. Metro generates the synthetic graph impl at
  * compile time — every accessor below is materialized via FIR; no reflection at runtime.
  *
- * In-memory stub repositories until the SQLDelight-backed bindings replace them.
+ * **Scoping.** Bindings the app needs to share state across screens — repositories backed by
+ * `MutableStateFlow`, the application-lifetime [CoroutineScope] — are `@SingleIn(AppScope::class)`.
+ * Without that, each accessor would hand back a fresh instance, so two state-holders observing
+ * the "same" repository would actually see independent flows. That's the load-bearing reason
+ * everything below is scoped — it isn't ceremony.
+ *
+ * If a future binding is genuinely stateless (a pure mapper, a per-call factory) it should be
+ * left unscoped so callers don't pin live references unnecessarily.
  */
 @DependencyGraph(scope = AppScope::class)
 interface DesktopAppGraph {
@@ -37,10 +44,15 @@ interface DesktopAppGraph {
     val settingsRepository: SettingsRepository
     val lockRepository: LockRepository
 
-    @Provides
-    @SingleIn(AppScope::class)
+    // ---- App lifetime: shared mutable state ---------------------------------------------------
+
+    @Provides @SingleIn(AppScope::class)
     fun provideAppScope(): CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // The in-memory repos hold their state in `MutableStateFlow`s, so two consumers observing
+    // the same repository must see the same instance. Drop @SingleIn and the project list +
+    // project detail would observe independent flows.
 
     @Provides @SingleIn(AppScope::class)
     fun provideProjectRepository(): ProjectRepository = InMemoryProjectRepository()
