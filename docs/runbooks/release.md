@@ -14,22 +14,22 @@ anonymous access).
 
 Done exactly once per fresh setup of this distribution pipeline.
 
-### 1. Create the public releases bucket + uploader service account
+### 1. Create the public releases bucket + uploader SA + Workload Identity Federation
 
 ```powershell
 pwsh -File tools/setup-releases-bucket.ps1
 ```
 
-Creates `gs://sketchbook-releases` with public-read access, a
-`sketchbook-release-uploader` service account scoped to that bucket only
-(separate from the app SA — different blast radius), and prints a JSON key
-to paste into GitHub Secrets.
+This single script does everything:
 
-Push it to Secrets:
+- Creates `gs://sketchbook-releases` with public-read access (separate bucket, separate IAM from the data bucket — different blast radius).
+- Creates the `sketchbook-release-uploader` service account, scoped to that bucket only.
+- Creates a Workload Identity Pool (`github`) + OIDC provider (`github-provider`) restricted to repos owned by `srMarlins`.
+- Binds the WIF principal for `srMarlins/sketchbook` to impersonate the SA.
 
-```powershell
-gh secret set SKETCHBOOK_RELEASES_SA --body (Get-Content "$env:APPDATA\sketchbook\release-uploader-sa.json" -Raw)
-```
+**No long-lived JSON key is created** — the org policy `iam.disableServiceAccountKeyCreation` forbids it, and WIF is the better practice anyway. GitHub Actions mints a short-lived OIDC token, GCP exchanges it for a 1-hour access token bound to the SA. Nothing to leak; nothing to rotate.
+
+The provider resource path and SA email are baked into `.github/workflows/release.yml`; no GitHub Secret is needed for GCS auth.
 
 ### 2. Install Conveyor locally
 
