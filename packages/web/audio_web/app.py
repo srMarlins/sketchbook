@@ -24,6 +24,7 @@ from audio_web.routes_home import router as home_router
 from audio_web.routes_journal import router as journal_router
 from audio_web.routes_projects import router as projects_router
 from audio_web.routes_proposals import router as proposals_router
+from audio_web.routes_repair import router as repair_router
 
 LOGGER_NAME = "audio_web"
 
@@ -125,6 +126,7 @@ def create_app() -> FastAPI:
     app.include_router(home_router)
     app.include_router(projects_router)
     app.include_router(proposals_router)
+    app.include_router(repair_router)
     app.include_router(journal_router)
     app.include_router(events_router)
 
