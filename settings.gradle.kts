@@ -10,6 +10,13 @@ pluginManagement {
     }
 }
 
+plugins {
+    // Auto-provisions the JDK that matches `jvmToolchain(...)` if it isn't installed locally
+    // (e.g. CI machines without JDK 21 pre-installed). Gradle downloads from the Foojay API,
+    // verifies, and pins it in `~/.gradle/jdks/`.
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {

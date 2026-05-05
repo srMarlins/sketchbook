@@ -23,8 +23,12 @@ Copy-Item Z:\User\audio\catalog.db Z:\User\audio\catalog.parity.db
 
 ### Running
 
+`packages/` was deleted with the v1 cutover; `audio_core` lives on the
+`python-final` git tag. `uv` pulls it directly:
+
 ```pwsh
-uv run --project packages/cli python tools/parity/parity_runner.py `
+uv run --with "git+https://github.com/srMarlins/sketchbook@python-final#subdirectory=packages/core" `
+       python tools\parity\parity_runner.py `
   --catalog Z:\User\audio\catalog.parity.db `
   --queries tools\parity\fixtures\queries.json `
   --kotlin-mcp "app-mcp\build\install\app-mcp\bin\app-mcp.bat"

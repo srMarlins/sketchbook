@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.metro)
     alias(libs.plugins.conveyor)
 }
 
@@ -16,7 +17,7 @@ version = (project.findProperty("version")?.toString()?.takeIf { it != "unspecif
 
 kotlin {
     jvm()
-    jvmToolchain(17)
+    jvmToolchain(21)
 
     sourceSets {
         jvmMain.dependencies {
@@ -32,6 +33,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.metro.runtime)
             // nav3-ui transitively pulls navigation3-runtime; explicit runtime dep is omitted
             // because the JetBrains fork only publishes navigation3-runtime via the ui artifact.
             implementation(libs.nav3.ui)

@@ -16,7 +16,7 @@ import com.sketchbook.uishared.theme.AppTheme
  * rather than spawning new windows.
  */
 fun main() = application {
-    val graph = remember { DesktopAppGraph() }
+    val graph = remember { buildDesktopAppGraph() }
     val backStack = rememberNavBackStack(NavSavedStateConfig, Screen.Projects)
     val windowState = rememberWindowState(size = DpSize(1280.dp, 820.dp))
 

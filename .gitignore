@@ -62,3 +62,12 @@ local.properties
 **/service-account*.json
 .gcp/
 
+# Kotlin compiler caches (in-process compiler writes here)
+.kotlin/
+
+# Retired frontends — leftover build/cache dirs from the pre-cutover Tauri/web tree.
+# The source was deleted in PR-24; these are untracked artifacts that the local
+# user can blow away at their leisure.
+src-tauri/
+web/
+

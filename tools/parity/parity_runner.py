@@ -13,12 +13,14 @@ This is a scaffold: PR-23 only wires up `search_projects`. `get_project` and
 `list_recent` follow the same pattern; add them once `search_projects` is
 green on a real catalog.
 
-Usage:
+Usage (uv pulls audio_core from the `python-final` git tag — `packages/` was
+deleted once Kotlin reached parity):
 
-    uv run --project packages/cli python tools/parity/parity_runner.py \
+    uv run --with "git+https://github.com/srMarlins/sketchbook@python-final#subdirectory=packages/core" \
+           python tools/parity/parity_runner.py \
         --catalog Z:/User/audio/catalog.db \
         --queries tools/parity/fixtures/queries.json \
-        --kotlin-mcp ./gradlew :app-mcp:run
+        --kotlin-mcp "./gradlew :app-mcp:run"
 """
 
 from __future__ import annotations
