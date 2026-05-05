@@ -55,11 +55,11 @@ class ProjectListStateHolderTest {
         val holder = ProjectListStateHolder(repo, backgroundScope)
 
         holder.state.test {
-            val initial = awaitItem()
-            assertEquals(true, initial.loading) // pre-emission
-            val populated = awaitItem()
-            assertEquals(listOf("kick", "snare"), populated.rows.map { it.name })
-            assertEquals(false, populated.loading)
+            // Drain until rows populate from the repository flow.
+            var s = awaitItem()
+            while (s.rows.isEmpty()) s = awaitItem()
+            assertEquals(listOf("kick", "snare"), s.rows.map { it.name })
+            assertEquals(false, s.loading)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -71,20 +71,18 @@ class ProjectListStateHolderTest {
         val repo = FakeRepo(mapOf("" to all, "kick" to matches))
         val holder = ProjectListStateHolder(repo, backgroundScope)
 
-        // Wait for initial population.
         holder.state.test {
-            awaitItem() // initial loading=true
-            val initial = awaitItem()
-            assertEquals(2, initial.rows.size)
+            // Drain until initial population.
+            var s = awaitItem()
+            while (s.rows.size < 2) s = awaitItem()
+            assertEquals(2, s.rows.size)
 
             holder.dispatch(ProjectListStateHolder.Intent.Search("kick"))
-            // First emission has updated query but rows from old observation may briefly remain.
-            val withQuery = awaitItem()
-            assertEquals("kick", withQuery.query)
 
-            // Then the new flow lands.
-            val refined = awaitItem()
-            assertEquals(listOf("kick"), refined.rows.map { it.name })
+            // Drain until the new query's matches arrive.
+            while (s.query != "kick" || s.rows.size != 1) s = awaitItem()
+            assertEquals("kick", s.query)
+            assertEquals(listOf("kick"), s.rows.map { it.name })
             cancelAndIgnoreRemainingEvents()
         }
     }

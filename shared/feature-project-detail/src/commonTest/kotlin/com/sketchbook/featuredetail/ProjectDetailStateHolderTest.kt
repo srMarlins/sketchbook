@@ -80,7 +80,7 @@ class ProjectDetailStateHolderTest {
             // Drain emissions until both row and history populated.
             var saw = awaitItem()
             while (saw.row == null || saw.history.isEmpty()) saw = awaitItem()
-            assertEquals("kick", saw.row!!.name)
+            assertEquals("kick", saw.row?.name)
             assertEquals(2, saw.history.size)
             cancelAndIgnoreRemainingEvents()
         }
@@ -93,7 +93,11 @@ class ProjectDetailStateHolderTest {
         val holder = ProjectDetailStateHolder(projects, snaps, backgroundScope, projectUuidLookup = { uuid })
         holder.load(ProjectId(7))
         holder.dispatch(ProjectDetailStateHolder.Intent.SelectTab(ProjectDetailStateHolder.Tab.History))
-        assertEquals(ProjectDetailStateHolder.Tab.History, holder.state.value.tab)
+        holder.state.test {
+            // Drain until combine forwards the new tab selection.
+            while (awaitItem().tab != ProjectDetailStateHolder.Tab.History) { /* keep draining */ }
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 
     @Test

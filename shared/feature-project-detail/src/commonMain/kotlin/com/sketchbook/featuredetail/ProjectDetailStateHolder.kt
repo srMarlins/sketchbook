@@ -7,53 +7,69 @@ import com.sketchbook.core.Snapshot
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.SnapshotRepository
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 
 /**
- * Single-project pane. Combines the row from [ProjectRepository] with snapshot history from
- * [SnapshotRepository]. Tracks/samples/plugins tabs surface project metadata once the catalog
- * exposes it via the repository seam (PR-18); for now those tabs render an "extracted at index
- * time" stub.
+ * Single-project pane. The selected project id and tab live in `MutableStateFlow`s; the
+ * displayed `State` is a pure `combine(rowFlow, historyFlow, tabSelection)`. When `load(id)`
+ * swaps the id, `flatMapLatest` cancels the previous row + history subscriptions and
+ * re-subscribes to the new ones — no manual `Job` tracking.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ProjectDetailStateHolder(
     private val projects: ProjectRepository,
     private val snapshots: SnapshotRepository,
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
     private val projectUuidLookup: suspend (ProjectId) -> ProjectUuid? = { null },
 ) {
 
-    private val _state = MutableStateFlow(State())
-    val state: StateFlow<State> = _state.asStateFlow()
+    private val selectedId = MutableStateFlow<ProjectId?>(null)
+    private val tabSelection = MutableStateFlow(Tab.Overview)
 
-    private val _effects = MutableSharedFlow<Effect>(replay = 0, extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    private val _effects = MutableSharedFlow<Effect>(
+        replay = 0,
+        extraBufferCapacity = 8,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
+    private val rowFlow: Flow<ProjectRow?> = selectedId.flatMapLatest { id ->
+        if (id == null) flowOf(null) else projects.observeProject(id)
+    }
+
+    private val historyFlow: Flow<List<Snapshot>> = selectedId.flatMapLatest { id ->
+        if (id == null) flowOf(emptyList()) else flow {
+            val uuid = projectUuidLookup(id)
+            if (uuid == null) emit(emptyList()) else emitAll(snapshots.observeHistory(uuid))
+        }
+    }
+
+    val state: StateFlow<State> = combine(rowFlow, historyFlow, tabSelection) { row, history, tab ->
+        State(row = row, history = history, tab = tab, loading = row == null && selectedId.value != null)
+    }.stateIn(scope, SharingStarted.Eagerly, State())
+
     fun load(id: ProjectId) {
-        _state.value = State(loading = true)
-        scope.launch {
-            projects.observeProject(id).collectLatest { row ->
-                _state.value = _state.value.copy(row = row, loading = false)
-            }
-        }
-        scope.launch {
-            val uuid = projectUuidLookup(id) ?: return@launch
-            snapshots.observeHistory(uuid).collectLatest { history ->
-                _state.value = _state.value.copy(history = history)
-            }
-        }
+        selectedId.update { id }
     }
 
     fun dispatch(intent: Intent) {
         when (intent) {
-            is Intent.SelectTab -> _state.value = _state.value.copy(tab = intent.tab)
+            is Intent.SelectTab -> tabSelection.update { intent.tab }
             is Intent.OpenInLive -> {
                 val path = state.value.row?.path?.value ?: return
                 _effects.tryEmit(Effect.LaunchLive(path))
