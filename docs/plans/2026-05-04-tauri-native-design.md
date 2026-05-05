@@ -1,6 +1,6 @@
 # Native app (Tauri + Python sidecar) — design
 
-**Status:** proposal, awaiting approval before any implementation work.
+**Status:** SUPERSEDED 2026-05-05 by `2026-05-05-sync-versioning-design.md`. The desktop shell is now Kotlin + Compose Multiplatform; the entire Python+React+Tauri stack is being rewritten. This file is preserved for historical context only — do not implement against it.
 **Date:** 2026-05-04.
 **Scope:** v1 — turn the existing localhost web app into a single-binary
 desktop app for macOS, Windows, and Linux. No new features.
