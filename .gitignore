@@ -35,3 +35,15 @@ packages/core/tests/fixtures/
 # stray JS toolchain output if a tool runs from the repo root instead of web/
 node_modules/
 .vite/
+
+# scratch debug scripts (one-off investigation tools, never committed).
+# `[!_]` after the leading underscore is critical — without it the pattern
+# also matches `__init__.py`, silently dropping package init files from
+# wheels (hatchling builds from VCS-tracked files only).
+_[!_]*.py
+
+# Playwright MCP browser cache
+.playwright-mcp/
+
+# project data: logs are reproducible at runtime
+data/logs/
