@@ -1,6 +1,6 @@
 package com.sketchbook.core
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * A project at rest: the row catalog/UI hands around. No history, no manifest detail —

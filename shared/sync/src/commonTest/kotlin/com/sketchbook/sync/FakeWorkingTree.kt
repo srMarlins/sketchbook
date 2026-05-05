@@ -1,7 +1,7 @@
 package com.sketchbook.sync
 
 import com.sketchbook.core.BlobHash
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.io.Buffer
 import kotlinx.io.RawSource
 import kotlinx.io.write

@@ -4,7 +4,7 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

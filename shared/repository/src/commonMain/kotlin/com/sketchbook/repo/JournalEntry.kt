@@ -1,7 +1,7 @@
 package com.sketchbook.repo
 
 import com.sketchbook.core.ProjectId
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
 /**

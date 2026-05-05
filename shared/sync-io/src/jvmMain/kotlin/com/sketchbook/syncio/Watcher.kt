@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
+import kotlin.time.Instant
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration
@@ -52,7 +53,7 @@ class Watcher(
                             val now = clock.now().toEpochMilliseconds()
                             if (now - lastSeen >= debounce.inWholeMilliseconds) {
                                 if (pending.remove(target, lastSeen)) {
-                                    trySend(SaveEvent.Saved(target, kotlinx.datetime.Instant.fromEpochMilliseconds(now)))
+                                    trySend(SaveEvent.Saved(target, Instant.fromEpochMilliseconds(now)))
                                 }
                             }
                         }
