@@ -91,26 +91,26 @@ def test_forgotten_gems_high_effort_old_no_green_or_red(tmp_path, monkeypatch):
     gem_a = _seed(conn, name="gem_a", mtime=now - 200 * DAY, effort=95)
     gem_b = _seed(conn, name="gem_b", mtime=now - 365 * DAY, effort=85)
     _seed(conn, name="recent_high_effort", mtime=now - 30 * DAY, effort=95)  # not old
-    _seed(conn, name="old_below_floor", mtime=now - 200 * DAY, effort=70)  # below 80 floor
+    _seed(conn, name="old_below_floor", mtime=now - 200 * DAY, effort=50)  # below 65 floor
     _seed(
         conn,
         name="old_high_effort_green",
         mtime=now - 200 * DAY,
-        effort=80,
+        effort=70,
         color=COLOR_NAMES["green"],
     )  # excluded by color
     _seed(
         conn,
         name="old_high_effort_red",
         mtime=now - 200 * DAY,
-        effort=80,
+        effort=70,
         color=COLOR_NAMES["red"],
     )
     _seed(
         conn,
         name="archived",
         mtime=now - 200 * DAY,
-        effort=80,
+        effort=70,
         archived=True,
     )
     res = TestClient(create_app()).get("/api/home")

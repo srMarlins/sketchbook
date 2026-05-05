@@ -91,7 +91,7 @@ def _shelf_forgotten_gems(conn: sqlite3.Connection, *, now: float) -> Shelf:
               SELECT *
               FROM projects
               WHERE is_archived = 0
-                AND effort_score >= 80
+                AND effort_score >= 65
                 AND last_modified < ?
                 AND (color_tag IS NULL OR color_tag NOT IN (?, ?))
             ),
@@ -124,7 +124,7 @@ def _shelf_forgotten_gems(conn: sqlite3.Connection, *, now: float) -> Shelf:
         title="Forgotten gems",
         description="High-effort projects you haven't touched in 6+ months.",
         see_all_query=urlencode(
-            {"min_effort": 80, "order_by": "effort", "order_dir": "desc"}
+            {"min_effort": 65, "order_by": "effort", "order_dir": "desc"}
         ),
         projects=rows,
     )
@@ -214,7 +214,7 @@ def _shelf_gems_sample(conn: sqlite3.Connection, *, now: float) -> Shelf:
               SELECT *
               FROM projects
               WHERE is_archived = 0
-                AND effort_score >= 80
+                AND effort_score >= 65
                 AND last_modified < ?
                 AND (color_tag IS NULL OR color_tag NOT IN (?, ?))
             ),
@@ -247,7 +247,7 @@ def _shelf_gems_sample(conn: sqlite3.Connection, *, now: float) -> Shelf:
         title="Forgotten gems — random pick",
         description="A fresh rotation each refresh.",
         see_all_query=urlencode(
-            {"min_effort": 80, "order_by": "effort", "order_dir": "desc"}
+            {"min_effort": 65, "order_by": "effort", "order_dir": "desc"}
         ),
         projects=rows,
     )
