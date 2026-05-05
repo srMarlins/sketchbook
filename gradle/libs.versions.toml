@@ -2,7 +2,7 @@
 # Toolchain
 kotlin = "2.3.21"
 gradle = "9.0.0"
-jvm-toolchain = "17"
+jvm-toolchain = "21"
 
 # UI
 compose = "1.11.0-rc01"
