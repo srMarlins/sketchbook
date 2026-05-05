@@ -69,10 +69,20 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Upload site to gs://sketchbook-releases
+      - name: Upload Conveyor output to gs://sketchbook-releases
         run: |
           gsutil -m -h "Cache-Control:public, max-age=300" \
             cp -r output/* gs://sketchbook-releases/
+
+      # Custom landing page (site/index.html). Uploaded AFTER the Conveyor
+      # output so it deliberately shadows any same-named file. Conveyor still
+      # ships its own download.html alongside; we keep that as the OS-detect
+      # fallback the landing page links to. The bucket's MainPageSuffix is
+      # set to index.html (one-time, via tools/setup-releases-bucket.ps1).
+      - name: Upload custom landing page
+        run: |
+          gsutil -h "Cache-Control:public, max-age=300" \
+            cp site/index.html gs://sketchbook-releases/index.html
 
       # Generate human changelog from commits since the previous tag.
       # First-tag case (no PREV) only takes commits *since the project's
