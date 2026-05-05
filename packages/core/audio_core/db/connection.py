@@ -32,6 +32,10 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE projects ADD COLUMN parse_status TEXT")
     if "parse_error" not in cols:
         conn.execute("ALTER TABLE projects ADD COLUMN parse_error TEXT")
+    if "mac_paths_count" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN mac_paths_count INTEGER")
+    if "has_project_info" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN has_project_info INTEGER")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_effort_score ON projects(effort_score)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_color_tag ON projects(color_tag)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parse_status ON projects(parse_status)")

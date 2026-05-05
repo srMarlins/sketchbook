@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS projects (
   effort_score    INTEGER,
   effort_breakdown TEXT,
   parse_status    TEXT,
-  parse_error     TEXT
+  parse_error     TEXT,
+  mac_paths_count INTEGER,
+  has_project_info INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_parent_dir ON projects(parent_dir);
