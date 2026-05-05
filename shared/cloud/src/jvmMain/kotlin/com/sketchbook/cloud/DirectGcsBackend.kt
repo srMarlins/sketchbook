@@ -55,24 +55,26 @@ class DirectGcsBackend(
     private val json: Json = ManifestJson,
 ) : CloudBackend {
 
-    override suspend fun headBlob(hash: BlobHash): Boolean {
-        val response = http.head(objectUrl(blobPath(hash))) { authHeader() }
+    override suspend fun headBlob(hash: BlobHash, scope: BlobScope): Boolean {
+        val path = blobPath(hash, scope)
+        val response = http.head(objectUrl(path)) { authHeader() }
         return when (response.status) {
             HttpStatusCode.OK -> true
             HttpStatusCode.NotFound -> false
-            else -> throw remoteFailure(response, "HEAD ${blobPath(hash)}")
+            else -> throw remoteFailure(response, "HEAD $path")
         }
     }
 
-    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long) {
+    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) {
         val bytes = source.buffered().readAllBytes()
         require(bytes.size.toLong() == size) {
             "size mismatch: declared=$size, actual=${bytes.size}"
         }
+        val path = blobPath(hash, scope)
         val response = http.post(uploadUrl()) {
             authHeader()
             parameter("uploadType", "media")
-            parameter("name", blobPath(hash))
+            parameter("name", path)
             // x-goog-if-generation-match: 0 → "must not exist". Idempotent: an existing
             // identical blob returns 412 which we treat as success (content-addressed).
             headers { append("x-goog-if-generation-match", "0") }
@@ -82,16 +84,17 @@ class DirectGcsBackend(
         when (response.status) {
             HttpStatusCode.OK -> Unit
             HttpStatusCode.PreconditionFailed -> Unit // already present
-            else -> throw remoteFailure(response, "PUT ${blobPath(hash)}")
+            else -> throw remoteFailure(response, "PUT $path")
         }
     }
 
-    override suspend fun getBlob(hash: BlobHash): RawSource {
-        val response = http.get(objectUrl(blobPath(hash))) {
+    override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource {
+        val path = blobPath(hash, scope)
+        val response = http.get(objectUrl(path)) {
             authHeader()
             parameter("alt", "media")
         }
-        if (!response.status.isSuccess) throw remoteFailure(response, "GET ${blobPath(hash)}")
+        if (!response.status.isSuccess) throw remoteFailure(response, "GET $path")
         return ByteArrayRawSource(response.bodyAsBytes())
     }
 
@@ -257,8 +260,13 @@ class DirectGcsBackend(
     private fun listUrl(): String =
         "https://storage.googleapis.com/storage/v1/b/$bucket/o"
 
-    private fun blobPath(hash: BlobHash): String =
-        "${userId.value}/blobs/${hash.hex.substring(0, 2)}/${hash.value}"
+    private fun blobPath(hash: BlobHash, scope: BlobScope): String {
+        val shard = hash.hex.substring(0, 2)
+        return when (scope) {
+            BlobScope.Shared -> "${userId.value}/blobs/$shard/${hash.value}"
+            is BlobScope.Private -> "${userId.value}/blobs-private/${scope.uuid.value}/$shard/${hash.value}"
+        }
+    }
 
     private fun manifestPath(uuid: ProjectUuid, rev: Long, timestamp: String, host: String): String =
         "${userId.value}/manifests/${uuid.value}/${rev.toString().padStart(8, '0')}-${timestamp.replace(':', '-')}-$host.json"

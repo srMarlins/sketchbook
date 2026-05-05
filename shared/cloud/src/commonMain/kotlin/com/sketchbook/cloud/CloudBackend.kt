@@ -13,17 +13,23 @@ import kotlinx.io.RawSource
  */
 interface CloudBackend {
 
-    /** True iff a blob with [hash] exists in the bucket. */
-    suspend fun headBlob(hash: BlobHash): Boolean
+    /** True iff a blob with [hash] exists in the bucket within [scope]. */
+    suspend fun headBlob(hash: BlobHash, scope: BlobScope = BlobScope.Shared): Boolean
 
     /**
-     * Upload a blob at the content-addressed path. No-op (returns successfully) if it already
-     * exists — content-addressed uploads are idempotent.
+     * Upload a blob at the content-addressed path within [scope]. No-op (returns successfully)
+     * if it already exists at that scope — uploads are idempotent within a scope but a blob
+     * present in [BlobScope.Shared] does NOT count as present in a [BlobScope.Private] pool.
      */
-    suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long)
+    suspend fun putBlob(
+        hash: BlobHash,
+        source: RawSource,
+        size: Long,
+        scope: BlobScope = BlobScope.Shared,
+    )
 
     /** Download a blob. Caller closes the returned [RawSource]. */
-    suspend fun getBlob(hash: BlobHash): RawSource
+    suspend fun getBlob(hash: BlobHash, scope: BlobScope = BlobScope.Shared): RawSource
 
     /** Read a single manifest by `(uuid, rev)`. */
     suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest

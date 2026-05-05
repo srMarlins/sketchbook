@@ -1,5 +1,6 @@
 package com.sketchbook.sync
 
+import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
 import com.sketchbook.cloud.LeaseAcquireResult
@@ -22,25 +23,29 @@ import kotlinx.io.readByteArray
  */
 class FakeCloudBackend : CloudBackend {
 
-    private val blobs = mutableMapOf<BlobHash, ByteArray>()
+    private val blobs = mutableMapOf<BlobKey, ByteArray>()
     private val manifests = mutableMapOf<ProjectUuid, MutableList<StoredManifest>>()
     private val locks = mutableMapOf<ProjectUuid, StoredLock>()
     private var generationCounter: Long = 1
 
     private data class StoredManifest(val ref: ManifestRef, val manifest: Manifest)
     private data class StoredLock(val lock: LeaseLock, val generation: Generation)
+    private data class BlobKey(val scope: BlobScope, val hash: BlobHash)
 
     fun nextGeneration(): Generation = Generation((generationCounter++).toString())
 
-    override suspend fun headBlob(hash: BlobHash): Boolean = blobs.containsKey(hash)
+    override suspend fun headBlob(hash: BlobHash, scope: BlobScope): Boolean =
+        blobs.containsKey(BlobKey(scope, hash))
 
-    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long) {
-        if (blobs.containsKey(hash)) return
+    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) {
+        val key = BlobKey(scope, hash)
+        if (blobs.containsKey(key)) return
         val bytes = source.buffered().readByteArray()
-        blobs[hash] = bytes
+        blobs[key] = bytes
     }
 
-    override suspend fun getBlob(hash: BlobHash): RawSource = error("not used in these tests")
+    override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource =
+        error("not used in these tests")
 
     override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest {
         val list = manifests[uuid] ?: throw SketchbookError.NotFound("no manifests for $uuid")
@@ -117,6 +122,9 @@ class FakeCloudBackend : CloudBackend {
     }
 
     fun blobsCount(): Int = blobs.size
+    fun sharedBlobsCount(): Int = blobs.keys.count { it.scope == BlobScope.Shared }
+    fun privateBlobsCount(uuid: ProjectUuid): Int =
+        blobs.keys.count { (it.scope as? BlobScope.Private)?.uuid == uuid }
     fun manifestsFor(uuid: ProjectUuid): List<Manifest> = manifests[uuid]?.map { it.manifest } ?: emptyList()
     fun forceLock(uuid: ProjectUuid, lock: LeaseLock): Generation {
         val gen = nextGeneration()
