@@ -224,6 +224,15 @@ SELECT sample_path FROM project_samples WHERE project_id = :project_id;
 -- driven via raw `driver.execute*` in `CatalogFts.kt`. The virtual table itself lives here so
 -- migrations stay in one place.
 
+-- migration walk: lightweight (id, path, parent_dir) tuple for the first-run pass.
+selectAllProjectsForMigration:
+SELECT id, path, parent_dir FROM projects;
+
+-- migration walk: replaces the identity row (used when sidecar wins a UUID conflict).
+upsertProjectIdentity:
+INSERT OR REPLACE INTO project_identity (project_id, uuid, created_at)
+VALUES (:project_id, :uuid, :created_at);
+
 -- sync identity
 insertProjectIdentityIfAbsent:
 INSERT OR IGNORE INTO project_identity (project_id, uuid, created_at)
