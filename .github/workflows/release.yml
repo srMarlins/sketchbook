@@ -102,12 +102,13 @@ jobs:
             echo ""
             echo "Fresh installs: <https://srmarlins.github.io/sketchbook/>"
             echo ""
-            echo "(The landing page detects your OS and links the right installer:"
-            echo "Apple Silicon / Intel Mac \`.zip\`, Windows \`.exe\` launcher + signed MSIX.)"
+            echo "Old versions: assets attached below. Auto-update is forward-only — installing an older version won't downgrade an existing install."
           } >> NOTES.md
 
-      # Create the GitHub Release with notes only (no binaries — those live on
-      # the bucket so the auto-updater can fetch anonymously).
+      # Create the GitHub Release. Notes from the changelog above; installable
+      # binaries attached as assets so users can grab a specific old version
+      # from /releases. Auto-update still uses the bucket — these are an
+      # archive, not the live update channel.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -116,3 +117,9 @@ jobs:
           body_path: NOTES.md
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            output/sketchbook-*-mac-aarch64.zip
+            output/sketchbook-*-mac-amd64.zip
+            output/sketchbook-*-windows-amd64.zip
+            output/sketchbook-*.x64.msix
+            output/sketchbook.exe
