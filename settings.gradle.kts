@@ -33,6 +33,7 @@ include(
     ":shared:mcp-server",
     ":shared:ui-shared",
     ":app-desktop",
+    ":app-mcp",
 )
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
