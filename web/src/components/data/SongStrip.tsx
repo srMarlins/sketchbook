@@ -42,6 +42,7 @@ function fmtRelative(unixSec: number): string {
 export function SongStrip({ project, onOpen, onLaunch }: SongStripProps) {
   const hasColor = project.color_tag != null;
   const colorVar = hasColor ? `var(--als-${project.color_tag! + 1})` : 'var(--rule-line-strong)';
+  const brokenReason = _brokenReason(project);
 
   return (
     <button
@@ -65,8 +66,19 @@ export function SongStrip({ project, onOpen, onLaunch }: SongStripProps) {
           style={{ backgroundColor: colorVar }}
         />
 
-        <span className="flex-1 min-w-0 font-medium text-ink-primary truncate text-[15px] leading-tight">
-          {project.name}
+        <span className="flex-1 min-w-0 flex items-center gap-1.5 font-medium text-ink-primary text-[15px] leading-tight">
+          <span className="truncate">{project.name}</span>
+          {brokenReason ? (
+            <span
+              data-testid="song-strip-broken"
+              role="img"
+              aria-label={brokenReason}
+              title={brokenReason}
+              className="shrink-0 text-[11px] leading-none text-accent-warning"
+            >
+              {'⚠'}
+            </span>
+          ) : null}
         </span>
 
         <span className="hidden md:flex items-center gap-5 font-mono text-[12px] text-ink-secondary tabular-nums">
@@ -185,6 +197,21 @@ function LaunchButton({
       <span>{launched ? 'opened' : 'open'}</span>
     </button>
   );
+}
+
+/**
+ * Tooltip text for a broken project, or null if it's healthy. Detection-only:
+ * we never claim to fix anything, just describe what's wrong.
+ */
+function _brokenReason(project: ProjectSummary): string | null {
+  if (project.parse_status === 'failed') {
+    return "won't open (parse failed)";
+  }
+  const missing = project.missing_sample_count ?? 0;
+  if (missing > 0) {
+    return missing === 1 ? '1 missing sample' : `${missing} missing samples`;
+  }
+  return null;
 }
 
 function Stat({ label, value, width }: { label: string; value: string; width: string }) {

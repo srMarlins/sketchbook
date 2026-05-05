@@ -28,6 +28,9 @@ function fakeProject(overrides: Partial<ProjectSummary> = {}): ProjectSummary {
     tags: [],
     effort_score: null,
     effort_breakdown: null,
+    missing_sample_count: 0,
+    parse_status: 'ok',
+    parse_error: null,
     ...overrides,
   };
 }
@@ -75,6 +78,25 @@ describe('<SongStrip />', () => {
   test('launch button absent when onLaunch is not provided', () => {
     render(<SongStrip project={fakeProject({ id: 8 })} onOpen={() => undefined} />);
     expect(screen.queryByTestId('song-strip-launch')).not.toBeInTheDocument();
+  });
+
+  test('shows broken-warning glyph when parse failed', () => {
+    render(<SongStrip project={fakeProject({ parse_status: 'failed' })} />);
+    const warn = screen.getByTestId('song-strip-broken');
+    expect(warn).toBeInTheDocument();
+    expect(warn.getAttribute('title')).toContain("won't open");
+  });
+
+  test('shows broken-warning glyph when samples are missing', () => {
+    render(<SongStrip project={fakeProject({ missing_sample_count: 4 })} />);
+    const warn = screen.getByTestId('song-strip-broken');
+    expect(warn).toBeInTheDocument();
+    expect(warn.getAttribute('title')).toContain('4 missing samples');
+  });
+
+  test('no broken-warning glyph when project is healthy', () => {
+    render(<SongStrip project={fakeProject()} />);
+    expect(screen.queryByTestId('song-strip-broken')).not.toBeInTheDocument();
   });
 
   test('tag chips render up to 3 with overflow indicator', () => {

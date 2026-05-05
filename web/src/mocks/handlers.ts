@@ -13,13 +13,26 @@ import type { ListProjectsParams } from '../lib/api';
 
 const projectsState: ProjectSummary[] = (
   JSON.parse(JSON.stringify(projectsJson)) as ProjectSummary[]
-).map((p) => ({
-  ...p,
-  // Real backend uses Ableton palette 0..13; the legacy fixture used 1..14.
-  color_tag: p.color_tag === null ? null : Math.max(0, Math.min(13, p.color_tag - 1)),
-  effort_score: ((p.id * 17) % 100),
-  effort_breakdown: null,
-}));
+).map((p) => {
+  // Seed a small mix of "broken" states so the UI surfacing has data to render
+  // in mocks mode. id=2 → missing samples; id=3 → parse failed; everyone else
+  // is healthy. Stable per-id so screenshots and tests are deterministic.
+  const missingSampleCount = p.id === 2 ? 3 : 0;
+  const parseStatus: 'ok' | 'failed' = p.id === 3 ? 'failed' : 'ok';
+  const parseError = parseStatus === 'failed'
+    ? 'GzipError: not a valid Ableton project file'
+    : null;
+  return {
+    ...p,
+    // Real backend uses Ableton palette 0..13; the legacy fixture used 1..14.
+    color_tag: p.color_tag === null ? null : Math.max(0, Math.min(13, p.color_tag - 1)),
+    effort_score: ((p.id * 17) % 100),
+    effort_breakdown: null,
+    missing_sample_count: missingSampleCount,
+    parse_status: parseStatus,
+    parse_error: parseError,
+  };
+});
 
 function _detailFor(p: ProjectSummary): ProjectDetail {
   const tagSeed = p.id;
@@ -122,6 +135,11 @@ function _filterProjects(rows: ProjectSummary[], params: ListProjectsParams): Pr
     if (params.archived !== undefined && Boolean(p.is_archived) !== params.archived) return false;
     if (params.min_effort !== undefined && (p.effort_score == null || p.effort_score < params.min_effort)) return false;
     if (params.max_effort !== undefined && (p.effort_score == null || p.effort_score > params.max_effort)) return false;
+    if (params.broken !== undefined) {
+      const isBroken = p.parse_status === 'failed' || (p.missing_sample_count ?? 0) > 0;
+      if (params.broken && !isBroken) return false;
+      if (!params.broken && isBroken) return false;
+    }
     return true;
   });
 }
@@ -145,6 +163,10 @@ function _shelvesFor(rows: ProjectSummary[]): Shelf[] {
   const hasPotential = rows.filter((p) => p.color_tag === 12);
   // untriaged: no color tag
   const untriaged = rows.filter((p) => p.color_tag == null);
+  // broken: parse failed OR has missing samples
+  const broken = rows.filter(
+    (p) => p.parse_status === 'failed' || (p.missing_sample_count ?? 0) > 0,
+  );
 
   return [
     {
@@ -181,6 +203,13 @@ function _shelvesFor(rows: ProjectSummary[]): Shelf[] {
       description: 'No color tag yet — needs a glance.',
       see_all_query: 'order_by=mtime&order_dir=desc',
       projects: untriaged.slice(0, 12),
+    },
+    {
+      id: 'broken',
+      title: 'Broken',
+      description: 'Failed to parse or referencing missing samples.',
+      see_all_query: 'broken=true&order_by=mtime&order_dir=desc',
+      projects: broken.slice(0, 20),
     },
   ];
 }

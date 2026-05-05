@@ -28,6 +28,12 @@ export interface ProjectSummary {
   effort_score: number | null;
   /** Optional human-readable breakdown of how the effort score was derived. */
   effort_breakdown: string | null;
+  /** Count of samples on this project whose paths don't exist on disk. */
+  missing_sample_count: number | null;
+  /** 'ok' if the .als parsed cleanly, 'failed' if scan threw, null for legacy rows. */
+  parse_status: 'ok' | 'failed' | null;
+  /** Exception message captured when parse_status='failed', else null. */
+  parse_error: string | null;
 }
 
 // --- home / shelves ----------------------------------------------------------

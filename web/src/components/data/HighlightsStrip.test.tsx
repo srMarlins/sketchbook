@@ -28,6 +28,9 @@ function fakeProject(id: number): ProjectSummary {
     tags: [],
     effort_score: null,
     effort_breakdown: null,
+    missing_sample_count: 0,
+    parse_status: 'ok',
+    parse_error: null,
   };
 }
 
@@ -47,18 +50,20 @@ const fullShelves: Shelf[] = [
   shelf('almost-done', 3, 'Almost done'),
   shelf('has-potential', 1, 'Has potential'),
   shelf('untriaged', 0, 'Untriaged'),
+  shelf('broken', 4, 'Broken'),
 ];
 
 describe('<HighlightsStrip />', () => {
-  test('renders 5 chips in fixed order', () => {
+  test('renders 6 chips in fixed order', () => {
     render(<HighlightsStrip shelves={fullShelves} onSelect={() => {}} />);
     const chips = screen.getAllByRole('button');
-    expect(chips).toHaveLength(5);
+    expect(chips).toHaveLength(6);
     expect(chips[0]).toHaveAttribute('data-testid', 'highlight-chip-currently-working');
     expect(chips[1]).toHaveAttribute('data-testid', 'highlight-chip-forgotten-gems');
     expect(chips[2]).toHaveAttribute('data-testid', 'highlight-chip-almost-done');
     expect(chips[3]).toHaveAttribute('data-testid', 'highlight-chip-has-potential');
     expect(chips[4]).toHaveAttribute('data-testid', 'highlight-chip-untriaged');
+    expect(chips[5]).toHaveAttribute('data-testid', 'highlight-chip-broken');
   });
 
   test('counts match shelf project lengths', () => {
@@ -68,6 +73,7 @@ describe('<HighlightsStrip />', () => {
     expect(screen.getByTestId('highlight-chip-almost-done').textContent).toMatch(/· 3/);
     expect(screen.getByTestId('highlight-chip-has-potential').textContent).toMatch(/· 1/);
     expect(screen.getByTestId('highlight-chip-untriaged').textContent).toMatch(/· 0/);
+    expect(screen.getByTestId('highlight-chip-broken').textContent).toMatch(/· 4/);
   });
 
   test('zero-count chip is dim (data-empty + opacity class) but still rendered', () => {

@@ -25,6 +25,9 @@ const baseProject: ProjectSummary = {
   tags: [],
   effort_score: null,
   effort_breakdown: null,
+  missing_sample_count: 0,
+  parse_status: 'ok',
+  parse_error: null,
 };
 
 describe('deriveNotebooks', () => {

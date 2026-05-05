@@ -6,7 +6,8 @@ export type HighlightShelfId =
   | 'forgotten-gems'
   | 'almost-done'
   | 'has-potential'
-  | 'untriaged';
+  | 'untriaged'
+  | 'broken';
 
 export interface HighlightsStripProps {
   shelves: Shelf[];
@@ -54,6 +55,12 @@ const CATEGORIES: CategoryDef[] = [
     fallbackTitle: 'Untriaged',
     dot: null,
     tint: 'bg-paper-tint-cream',
+  },
+  {
+    id: 'broken',
+    fallbackTitle: 'Broken',
+    dot: 'var(--als-1)', // red — small breadcrumb, not a flashing alarm
+    tint: 'bg-paper-tint-rose',
   },
 ];
 

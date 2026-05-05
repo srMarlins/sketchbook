@@ -28,6 +28,8 @@ export interface ListProjectsParams {
   limit?: number;
   min_effort?: number;
   max_effort?: number;
+  /** Restrict to (true) or exclude (false) projects flagged as broken. */
+  broken?: boolean;
   order_by?: 'mtime' | 'name' | 'effort';
   order_dir?: 'asc' | 'desc';
 }
@@ -44,6 +46,7 @@ export async function listProjects(
   if (params.limit !== undefined) qs.set('limit', String(params.limit));
   if (params.min_effort !== undefined) qs.set('min_effort', String(params.min_effort));
   if (params.max_effort !== undefined) qs.set('max_effort', String(params.max_effort));
+  if (params.broken !== undefined) qs.set('broken', String(params.broken));
   if (params.order_by !== undefined) qs.set('order_by', params.order_by);
   if (params.order_dir !== undefined) qs.set('order_dir', params.order_dir);
   const tail = qs.toString() ? `?${qs}` : '';

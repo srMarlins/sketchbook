@@ -31,6 +31,9 @@ const sampleProjects = (projectsJson as unknown as ProjectSummary[]).slice(0, 14
   color_tag: i, // 0..13
   effort_score: ((p.id * 17) % 100),
   effort_breakdown: null as string | null,
+  missing_sample_count: 0,
+  parse_status: 'ok' as const,
+  parse_error: null as string | null,
 }));
 
 const sampleProposal: Proposal = {
