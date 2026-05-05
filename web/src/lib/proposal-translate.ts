@@ -11,7 +11,7 @@ import type {
   Proposal,
 } from './types';
 
-export type Verb = 'rename' | 'move' | 'archive' | 'color' | 'tag';
+export type Verb = 'rename' | 'move' | 'archive' | 'color' | 'tag' | 'repair' | 'relink';
 
 export interface TranslatedAction {
   verb: Verb;
@@ -29,6 +29,8 @@ const VERB_BY_TYPE: Record<ProposedAction['type'], Verb> = {
   ArchiveProject: 'archive',
   SetColorTag: 'color',
   SetTags: 'tag',
+  RepairMacPaths: 'repair',
+  RelinkMissingSamples: 'relink',
 };
 
 /** Translate a single proposed action against a known project (for before-state). */
@@ -82,6 +84,24 @@ export function translateProposed(
         before: project?.tags.join(', ') || '—',
         after: action.args.tags.join(', ') || '—',
       };
+    case 'RepairMacPaths':
+      return {
+        verb,
+        project_id,
+        label: project?.name ?? `#${project_id}`,
+        before: 'mac-imported',
+        after: 'repaired',
+      };
+    case 'RelinkMissingSamples': {
+      const n = action.args.relinks.length;
+      return {
+        verb,
+        project_id,
+        label: `${n} relink${n === 1 ? '' : 's'}`,
+        before: 'missing',
+        after: 'linked',
+      };
+    }
   }
 }
 

@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 import {
   approveProposal,
+  fetchRepairFindings,
   getCategory,
   getCategoryPage,
   getHome,
@@ -34,6 +35,7 @@ export const categoryKey = (id: string) => ['category', id] as const;
 export const proposalsKey = () => ['proposals'] as const;
 export const journalKey = () => ['journal'] as const;
 export const homeKey = () => ['home'] as const;
+export const repairFindingsKey = () => ['repair', 'findings'] as const;
 
 export const projectsQuery = (params: ListProjectsParams = {}) => ({
   // Auto-walks all pages via cursor. Callers expect a flat ProjectSummary[]
@@ -154,6 +156,14 @@ export function useFindings(): FindingsSummary | undefined {
 // Approve/reject/submit/undo all touch the proposals + journal + projects
 // surfaces, so we invalidate broadly. The batch_id returned from approve is
 // useful for surfacing toast confirmations at the call site.
+
+export function useRepairFindings() {
+  return useQuery({
+    queryKey: repairFindingsKey(),
+    queryFn: () => fetchRepairFindings(),
+    staleTime: 60_000,
+  });
+}
 
 export function useSubmitProposal() {
   const qc = useQueryClient();

@@ -1,8 +1,63 @@
+import { useNavigate } from '@tanstack/react-router';
 import type { ProjectDetail } from '../../lib/types';
+import { useRepairFindings, useSubmitProposal } from '../../app/queries';
+import { RepairPanel } from '../data/RepairPanel';
 
 export function Overview({ project }: { project: ProjectDetail }) {
+  const findings = useRepairFindings();
+  const submit = useSubmitProposal();
+  const navigate = useNavigate();
+  const macImport = findings.data?.macImports.find((m) => m.projectId === project.id) ?? null;
+  const missingSamples =
+    findings.data?.missingSamples.filter((m) => m.projectId === project.id) ?? [];
+
+  const handlePropose = (sel: { macImport: boolean; relinks: Record<string, string> }) => {
+    const actions: Array<{ type: string; args: Record<string, unknown> }> = [];
+    if (sel.macImport) {
+      actions.push({ type: 'RepairMacPaths', args: { project_id: project.id } });
+    }
+    const relinkEntries = Object.entries(sel.relinks);
+    if (relinkEntries.length) {
+      actions.push({
+        type: 'RelinkMissingSamples',
+        args: {
+          project_id: project.id,
+          relinks: relinkEntries.map(([oldPath, newPath]) => ({ old: oldPath, new: newPath })),
+        },
+      });
+    }
+    if (!actions.length) return;
+    submit.mutate(
+      // The proposal API surface accepts arbitrary action shapes here; ProposedAction's
+      // discriminated union is the strict view used by listProposals/getProposal.
+      { actor: 'user', actions: actions as never, rationale: 'inline repair' },
+      {
+        onSuccess: ({ proposal_id }) => {
+          navigate({ to: '/proposals', search: { id: proposal_id } as never });
+        },
+      },
+    );
+  };
+
   return (
     <div className="space-y-5">
+      <RepairPanel
+        macImport={
+          macImport
+            ? {
+                projectId: macImport.projectId,
+                macPathsCount: macImport.macPathsCount,
+                projectInfoMissing: macImport.projectInfoMissing,
+              }
+            : null
+        }
+        missingSamples={missingSamples.map((m) => ({
+          missingPath: m.missingPath,
+          autoMatch: m.autoMatch,
+          candidates: m.candidates,
+        }))}
+        onPropose={handlePropose}
+      />
       {/* Headline stats */}
       <dl className="grid grid-cols-2 gap-2 text-[12px]">
         <Stat label="tempo" value={project.tempo != null ? `${project.tempo.toFixed(1)} BPM` : '—'} />
