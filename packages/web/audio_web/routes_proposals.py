@@ -14,6 +14,7 @@ _log = logging.getLogger("audio_web")
 from audio_core.actions.archive import ArchiveProject
 from audio_core.actions.move import MoveProject
 from audio_core.actions.rename import RenameProject
+from audio_core.actions.relink_missing_samples import Relink, RelinkMissingSamples
 from audio_core.actions.repair_mac_paths import RepairMacPaths
 from audio_core.actions.runner import run_batch
 from audio_core.actions.set_color_tag import SetColorTag
@@ -98,6 +99,12 @@ def _materialize(action_type: str, args: dict[str, Any]):
         return ArchiveProject(project_id=int(args["project_id"]), root=root)
     if action_type == "RepairMacPaths":
         return RepairMacPaths(project_id=int(args["project_id"]), root=root)
+    if action_type == "RelinkMissingSamples":
+        return RelinkMissingSamples(
+            project_id=int(args["project_id"]),
+            relinks=[Relink(old=r["old"], new=r["new"]) for r in args["relinks"]],
+            root=root,
+        )
     if action_type == "SetColorTag":
         return SetColorTag(project_id=int(args["project_id"]), color=args.get("color"))
     if action_type == "SetTags":

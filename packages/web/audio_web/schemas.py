@@ -28,6 +28,7 @@ ActionType = Literal[
     "SetTags",
     "ArchiveProject",
     "RepairMacPaths",
+    "RelinkMissingSamples",
 ]
 
 

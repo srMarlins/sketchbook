@@ -42,6 +42,16 @@ class RepairMacPathsArgs(BaseModel):
     project_id: int
 
 
+class RelinkSpec(BaseModel):
+    old: str = Field(min_length=1)
+    new: str = Field(min_length=1)
+
+
+class RelinkMissingSamplesArgs(BaseModel):
+    project_id: int
+    relinks: list[RelinkSpec] = Field(min_length=1)
+
+
 ARG_SCHEMAS: dict[str, type[BaseModel]] = {
     "RenameProject": RenameArgs,
     "MoveProject": MoveArgs,
@@ -49,6 +59,7 @@ ARG_SCHEMAS: dict[str, type[BaseModel]] = {
     "SetColorTag": SetColorArgs,
     "SetTags": SetTagsArgs,
     "RepairMacPaths": RepairMacPathsArgs,
+    "RelinkMissingSamples": RelinkMissingSamplesArgs,
 }
 
 
