@@ -34,29 +34,20 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Conveyor CLI from Hydraulic. Pinned to a known-good version; bump
-      # together with the local-install version in docs/runbooks/release.md.
-      - name: Install Conveyor
-        run: |
-          curl -fsSL https://downloads.hydraulic.dev/conveyor/conveyor-22.0-linux-amd64.tar.gz | tar -xz
-          echo "$PWD/conveyor-22.0/bin" >> "$GITHUB_PATH"
-
-      # Restore the signing key from secret. CONVEYOR_SIGNING_KEY is the JSON
-      # content of `conveyor.signing.json` (one-time generated; see runbook).
-      - name: Restore Conveyor signing key
-        env:
-          CONVEYOR_SIGNING_KEY: ${{ secrets.CONVEYOR_SIGNING_KEY }}
-        run: |
-          mkdir -p "$HOME/.conveyor"
-          printf '%s' "$CONVEYOR_SIGNING_KEY" > "$HOME/.conveyor/signing.json"
-
       # Build the Compose Desktop bundle that Conveyor packages.
       - name: Gradle build
         run: ./gradlew --no-daemon :app-desktop:build
 
       # Build the cross-platform site (Mac dmg, Windows msi, update metadata).
+      # Uses Hydraulic's official action: handles install + caching + license
+      # acceptance + signing-key restore. Bump the @v tag in lockstep with the
+      # Windows-install version pin in docs/runbooks/release.md.
       - name: Conveyor make site
-        run: conveyor make site
+        uses: hydraulic-software/conveyor/actions/build@v22.0
+        with:
+          signing_key: ${{ secrets.CONVEYOR_SIGNING_KEY }}
+          agree_to_license: 1
+          command: make site
 
       # Auth to GCS via Workload Identity Federation (no long-lived JSON key).
       # GitHub mints an OIDC token; GCP exchanges it for a short-lived access
