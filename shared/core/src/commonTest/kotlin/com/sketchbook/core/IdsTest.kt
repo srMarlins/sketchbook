@@ -63,9 +63,17 @@ class SnapshotRevTest {
 
 class ProjectIdTest {
     @Test
+    fun rejectsNonPositive() {
+        assertFailsWith<IllegalArgumentException> { ProjectId(0) }
+        assertFailsWith<IllegalArgumentException> { ProjectId(-1) }
+    }
+}
+
+class ProjectUuidTest {
+    @Test
     fun rejectsBlank() {
-        assertFailsWith<IllegalArgumentException> { ProjectId("") }
-        assertFailsWith<IllegalArgumentException> { ProjectId("   ") }
+        assertFailsWith<IllegalArgumentException> { ProjectUuid("") }
+        assertFailsWith<IllegalArgumentException> { ProjectUuid("   ") }
     }
 }
 
