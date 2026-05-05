@@ -173,24 +173,48 @@ def _shelf_recent_activity(conn: sqlite3.Connection) -> Shelf:
 
 def _shelf_gems_sample(conn: sqlite3.Connection, *, now: float) -> Shelf:
     """Random sample of high-effort old projects — same filter as forgotten-gems
-    but ORDER BY RANDOM() so each refresh surfaces a different rotation. We
-    over-fetch (30) so UI grouping still leaves ~8-12 distinct projects."""
+    but randomized at the *parent_dir* level (one representative row per chosen
+    group). Sampling rows directly would weight projects by variant count
+    (a folder with 5 .als files would be 5x more likely to surface), so we
+    pick distinct parent_dirs first, then return the highest-effort variant
+    in each chosen folder."""
     cutoff = now - 180 * _DAY
     excluded = (COLOR_NAMES["green"], COLOR_NAMES["red"])
     rows = _rows_to_dicts(
         conn.execute(
             """
-            SELECT * FROM projects
-            WHERE is_archived = 0
-              AND effort_score >= 80
-              AND last_modified < ?
-              AND (color_tag IS NULL OR color_tag NOT IN (?, ?))
-            ORDER BY RANDOM()
-            LIMIT 30
+            WITH qualifying AS (
+              SELECT *
+              FROM projects
+              WHERE is_archived = 0
+                AND effort_score >= 80
+                AND last_modified < ?
+                AND (color_tag IS NULL OR color_tag NOT IN (?, ?))
+            ),
+            chosen_dirs AS (
+              SELECT parent_dir
+              FROM qualifying
+              GROUP BY parent_dir
+              ORDER BY RANDOM()
+              LIMIT 12
+            ),
+            ranked AS (
+              SELECT q.*,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY q.parent_dir
+                       ORDER BY q.effort_score DESC, q.last_modified DESC
+                     ) AS rn
+              FROM qualifying q
+              JOIN chosen_dirs c ON c.parent_dir = q.parent_dir
+            )
+            SELECT * FROM ranked WHERE rn = 1
             """,
             (cutoff, *excluded),
         )
     )
+    # Strip the helper rn column so the API shape stays a plain ProjectSummary.
+    for r in rows:
+        r.pop("rn", None)
     return Shelf(
         id="gems-sample",
         title="Forgotten gems — random pick",
