@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from audio_core.db.projects import upsert_project
+from audio_core.db.projects import upsert_failed_parse, upsert_project
 from audio_core.parser import parse_als
 from audio_core.scanner.hashing import hash_file
 from audio_core.scanner.walker import walk_projects
@@ -56,7 +56,32 @@ def scan_root(
             stats.scanned += 1
             if on_progress:
                 on_progress(als, "scanned")
-        except Exception:
+        except Exception as exc:
+            # Persist a stub row so a corrupt/un-parseable project still
+            # appears in the catalog (flagged broken) instead of vanishing.
+            try:
+                stat = als.stat()
+                last_modified = stat.st_mtime
+            except OSError:
+                last_modified = 0.0
+            try:
+                fh = hash_file(als)
+            except Exception:
+                fh = None
+            try:
+                upsert_failed_parse(
+                    conn,
+                    path=str(als),
+                    name=als.stem,
+                    parent_dir=str(als.parent),
+                    file_hash=fh,
+                    last_modified=last_modified,
+                    error=f"{type(exc).__name__}: {exc}"[:1024],
+                )
+            except Exception:
+                # If even the stub insert fails, swallow — the failure count
+                # below still reflects the underlying parse error.
+                pass
             stats.failed += 1
             if on_progress:
                 on_progress(als, "failed")

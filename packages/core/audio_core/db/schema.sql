@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS projects (
   color_tag       INTEGER,
   notes           TEXT,
   effort_score    INTEGER,
-  effort_breakdown TEXT
+  effort_breakdown TEXT,
+  parse_status    TEXT,
+  parse_error     TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_parent_dir ON projects(parent_dir);

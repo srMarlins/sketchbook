@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from pathlib import Path
 from typing import Literal
 
 from audio_core.parser.model import ProjectMetadata
@@ -27,8 +28,9 @@ def upsert_project(
         """
         INSERT INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den,
             track_count, audio_tracks, midi_tracks, return_tracks, length_seconds, live_version,
-            last_modified, last_scanned, file_hash, effort_score, effort_breakdown)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            last_modified, last_scanned, file_hash, effort_score, effort_breakdown,
+            parse_status, parse_error)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok', NULL)
         ON CONFLICT(path) DO UPDATE SET
             name=excluded.name, parent_dir=excluded.parent_dir,
             tempo=excluded.tempo, time_sig_num=excluded.time_sig_num,
@@ -37,7 +39,8 @@ def upsert_project(
             return_tracks=excluded.return_tracks, length_seconds=excluded.length_seconds,
             live_version=excluded.live_version, last_modified=excluded.last_modified,
             last_scanned=excluded.last_scanned, file_hash=excluded.file_hash,
-            effort_score=excluded.effort_score, effort_breakdown=excluded.effort_breakdown
+            effort_score=excluded.effort_score, effort_breakdown=excluded.effort_breakdown,
+            parse_status='ok', parse_error=NULL
         RETURNING id
         """,
         (
@@ -69,9 +72,78 @@ def upsert_project(
         [(pid, p.name, p.plugin_type, p.track_name) for p in meta.plugins],
     )
     conn.executemany(
-        "INSERT INTO project_samples (project_id, sample_path) VALUES (?, ?)",
-        [(pid, s.path) for s in meta.samples],
+        "INSERT INTO project_samples (project_id, sample_path, is_missing) VALUES (?, ?, ?)",
+        [
+            (pid, s.path, 0 if _sample_exists(s.path, parent_dir) else 1)
+            for s in meta.samples
+        ],
     )
+    _refresh_fts(conn, pid)
+    conn.commit()
+    return pid
+
+
+def _sample_exists(sample_path: str, parent_dir: str) -> bool:
+    """Test whether a parsed sample path actually exists on disk.
+
+    Sample paths inside .als files come in two flavors: absolute (Live's
+    'Collected and Saved' or external samples) or relative to the project
+    folder (older Live versions, or samples in the project's own Samples
+    subdir). For relative paths, resolve against the .als parent directory
+    before checking.
+    """
+    try:
+        p = Path(sample_path)
+        if not p.is_absolute():
+            p = Path(parent_dir) / p
+        return p.exists()
+    except (OSError, ValueError):
+        # Malformed path (e.g. invalid Windows characters) → treat as missing.
+        return False
+
+
+def upsert_failed_parse(
+    conn: sqlite3.Connection,
+    *,
+    path: str,
+    name: str,
+    parent_dir: str,
+    file_hash: str | None,
+    last_modified: float,
+    error: str,
+) -> int:
+    """Persist a stub row for a .als that could not be parsed.
+
+    The catalog should still know the project exists (so the user can see it
+    flagged broken in the UI) — it just has no metadata. All extracted columns
+    are NULL/0; parse_status='failed' and parse_error captures the exception.
+
+    If the same path later parses successfully, upsert_project will overwrite
+    parse_status back to 'ok' and clear parse_error.
+    """
+    now = time.time()
+    cur = conn.execute(
+        """
+        INSERT INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den,
+            track_count, audio_tracks, midi_tracks, return_tracks, length_seconds, live_version,
+            last_modified, last_scanned, file_hash, effort_score, effort_breakdown,
+            parse_status, parse_error)
+        VALUES (?, ?, ?, NULL, NULL, NULL, 0, 0, 0, 0, NULL, NULL, ?, ?, ?, NULL, NULL,
+                'failed', ?)
+        ON CONFLICT(path) DO UPDATE SET
+            name=excluded.name, parent_dir=excluded.parent_dir,
+            last_modified=excluded.last_modified, last_scanned=excluded.last_scanned,
+            file_hash=excluded.file_hash,
+            parse_status='failed', parse_error=excluded.parse_error
+        RETURNING id
+        """,
+        (path, name, parent_dir, last_modified, now, file_hash, error),
+    )
+    pid = cur.fetchone()[0]
+    # Failed parses contribute no plugins/samples; clear any prior rows so a
+    # project that previously parsed and now fails doesn't keep stale data.
+    conn.execute("DELETE FROM project_plugins WHERE project_id=?", (pid,))
+    conn.execute("DELETE FROM project_samples WHERE project_id=?", (pid,))
     _refresh_fts(conn, pid)
     conn.commit()
     return pid
@@ -131,6 +203,7 @@ def search_projects(
     archived: bool | None = False,
     min_effort: int | None = None,
     max_effort: int | None = None,
+    broken: bool | None = None,
     order_by: Literal["mtime", "name", "effort"] = "mtime",
     order_dir: Literal["asc", "desc"] = "desc",
     limit: int = 200,
@@ -138,12 +211,20 @@ def search_projects(
     conn.row_factory = sqlite3.Row
     where: list[str] = []
     params: list = []
+    # missing_sample_count is computed inline so callers don't need a second
+    # query to render "broken" indicators in the UI.
+    select_cols = (
+        "p.*, ("
+        "SELECT COUNT(*) FROM project_samples ps "
+        "WHERE ps.project_id = p.id AND ps.is_missing = 1"
+        ") AS missing_sample_count"
+    )
     if query and query.strip():
-        base = "SELECT p.* FROM projects p JOIN projects_fts f ON f.rowid = p.id"
+        base = f"SELECT {select_cols} FROM projects p JOIN projects_fts f ON f.rowid = p.id"
         where.append("projects_fts MATCH ?")
         params.append(_safe_fts_query(query))
     else:
-        base = "SELECT p.* FROM projects p"
+        base = f"SELECT {select_cols} FROM projects p"
     if tempo_min is not None:
         where.append("p.tempo >= ?")
         params.append(tempo_min)
@@ -159,6 +240,19 @@ def search_projects(
     if max_effort is not None:
         where.append("p.effort_score <= ?")
         params.append(max_effort)
+    if broken is not None:
+        # "Broken" = parse failed OR at least one missing sample. Subquery is
+        # repeated rather than joined to the SELECT alias because SQLite can't
+        # reference a SELECT-list alias inside WHERE.
+        broken_predicate = (
+            "(p.parse_status = 'failed' OR EXISTS ("
+            "SELECT 1 FROM project_samples ps "
+            "WHERE ps.project_id = p.id AND ps.is_missing = 1))"
+        )
+        if broken:
+            where.append(broken_predicate)
+        else:
+            where.append(f"NOT {broken_predicate}")
     sql = base + ((" WHERE " + " AND ".join(where)) if where else "")
     col = _ORDER_COLS.get(order_by, _ORDER_COLS["mtime"])
     direction = "ASC" if order_dir.lower() == "asc" else "DESC"

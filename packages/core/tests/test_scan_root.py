@@ -63,3 +63,27 @@ def test_scan_root_records_failed_files(tmp_path):
     stats = scan_root(conn, tmp_path)
     assert stats.failed == 1
     assert stats.scanned == 0
+
+
+def test_scan_root_persists_failed_parse_as_stub(tmp_path):
+    """A corrupt .als should appear in the catalog flagged as failed —
+    not silently disappear."""
+    d = tmp_path / "mixed Project"
+    d.mkdir()
+    shutil.copy(FIX / "tiny.als", d / "ok.als")
+    bad = d / "broken.als"
+    bad.write_bytes(b"not a real gzip stream")
+    conn = open_db(tmp_path / "c.db")
+    stats = scan_root(conn, tmp_path)
+    assert stats.scanned == 1
+    assert stats.failed == 1
+
+    rows = conn.execute(
+        "SELECT name, parse_status, parse_error FROM projects ORDER BY name"
+    ).fetchall()
+    assert len(rows) == 2
+    by_name = {r[0]: r for r in rows}
+    assert by_name["broken"][1] == "failed"
+    assert by_name["broken"][2] is not None and by_name["broken"][2] != ""
+    assert by_name["ok"][1] == "ok"
+    assert by_name["ok"][2] is None
