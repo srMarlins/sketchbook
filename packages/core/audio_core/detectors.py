@@ -4,6 +4,7 @@ import sqlite3
 
 from audio_core.dedup import find_duplicates
 from audio_core.macpath import find_mac_imports
+from audio_core.relink import find_missing_samples
 
 __all__ = ["find_mac_imports", "find_duplicates", "findings_summary"]
 
@@ -14,4 +15,5 @@ def findings_summary(conn: sqlite3.Connection) -> dict[str, int]:
     return {
         "macpath": len(find_mac_imports(conn)),
         "duplicates": len(find_duplicates(conn)),
+        "missing_samples": len(find_missing_samples(conn)),
     }

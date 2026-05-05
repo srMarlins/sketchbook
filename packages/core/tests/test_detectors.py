@@ -18,7 +18,7 @@ def _seed_proj(tmp_path, fixture_name: str, name: str, with_info: bool = False):
 
 def test_findings_summary_clean_db_returns_zeros(tmp_path):
     conn = open_db(tmp_path / "c.db")
-    assert findings_summary(conn) == {"macpath": 0, "duplicates": 0}
+    assert findings_summary(conn) == {"macpath": 0, "duplicates": 0, "missing_samples": 0}
 
 
 def test_findings_summary_counts_mac_imports(tmp_path):
