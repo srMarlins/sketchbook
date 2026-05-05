@@ -1,5 +1,6 @@
 plugins {
     id("kmp-test")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
@@ -8,6 +9,7 @@ kotlin {
             implementation(project(":shared:core"))
             implementation(project(":shared:repository"))
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
         }
     }
