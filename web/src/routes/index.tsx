@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import clsx from 'clsx';
 import { useNavigate } from '@tanstack/react-router';
 import { BrandingHeader } from '../components/surface/BrandingHeader';
+import { FirstLaunch } from '../app/FirstLaunch';
 import { IndexerStatus } from '../app/IndexerStatus';
 import { Desk } from '../components/surface/Desk';
 import { Sidebar } from '../components/surface/Sidebar';
@@ -143,6 +144,7 @@ export function HomeRoute() {
         </div>
       ) : null}
       <ProjectCorkboard projectId={openProjectId} open={corkOpen} onOpenChange={setCorkOpen} />
+      <FirstLaunch />
     </Desk>
   );
 }

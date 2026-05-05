@@ -61,6 +61,18 @@ export const homeQuery = () => ({
 export function useProjects(params: ListProjectsParams = {}) {
   return useQuery(projectsQuery(params));
 }
+
+/**
+ * Lightweight count helper for the first-launch splash. Reads the existing
+ * `projects` cache (populated by `useProjects()` and invalidated on every
+ * `scan_row` event by `useIndexerCachePatcher`). The server caps results at
+ * 200 by default, so this saturates at 200 for very large catalogs — fine
+ * for the splash's "30+ rows" auto-dismiss threshold.
+ */
+export function useProjectsCount(): number {
+  const { data } = useProjects();
+  return data?.length ?? 0;
+}
 export function useProject(id: number | null) {
   return useQuery(projectQuery(id));
 }
