@@ -63,10 +63,22 @@ CREATE TABLE IF NOT EXISTS project_samples (
   project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   sample_path  TEXT NOT NULL,
   sample_hash  TEXT,
-  is_missing   INTEGER NOT NULL DEFAULT 0
+  is_missing   INTEGER NOT NULL DEFAULT 0,
+  size_bytes   INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_ps_project ON project_samples(project_id);
 CREATE INDEX IF NOT EXISTS idx_ps_hash ON project_samples(sample_hash);
+
+CREATE TABLE IF NOT EXISTS samples (
+  id           INTEGER PRIMARY KEY,
+  path         TEXT NOT NULL UNIQUE,
+  filename     TEXT NOT NULL,
+  size_bytes   INTEGER NOT NULL,
+  mtime        REAL NOT NULL,
+  parent_dir   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_samples_filename_size ON samples(filename, size_bytes);
+CREATE INDEX IF NOT EXISTS idx_samples_parent ON samples(parent_dir);
 
 CREATE TABLE IF NOT EXISTS tags (
   id   INTEGER PRIMARY KEY,

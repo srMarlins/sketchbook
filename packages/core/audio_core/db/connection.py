@@ -74,3 +74,18 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         "id INTEGER PRIMARY KEY CHECK (id = 1), "
         "job_kind TEXT, job_path TEXT, total INTEGER, done INTEGER, started_at REAL, pid INTEGER)"
     )
+    conn.executescript(
+        "CREATE TABLE IF NOT EXISTS samples ("
+        "id INTEGER PRIMARY KEY,"
+        "path TEXT NOT NULL UNIQUE,"
+        "filename TEXT NOT NULL,"
+        "size_bytes INTEGER NOT NULL,"
+        "mtime REAL NOT NULL,"
+        "parent_dir TEXT NOT NULL"
+        ");"
+        "CREATE INDEX IF NOT EXISTS idx_samples_filename_size ON samples(filename, size_bytes);"
+        "CREATE INDEX IF NOT EXISTS idx_samples_parent ON samples(parent_dir);"
+    )
+    ps_cols = {r[1] for r in conn.execute("PRAGMA table_info(project_samples)").fetchall()}
+    if ps_cols and "size_bytes" not in ps_cols:
+        conn.execute("ALTER TABLE project_samples ADD COLUMN size_bytes INTEGER")
