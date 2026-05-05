@@ -53,11 +53,11 @@ async def test_scan_started_event_within_one_second(tmp_path, monkeypatch):
     captured: dict = {}
     real_boot = driver.boot
 
-    def spy_boot(*, db_path, root, bus, queue):
+    def spy_boot(*, db_path, root, bus, queue, sample_roots=None):
         # Subscribe BEFORE the real boot enqueues the FullScan, so the
         # worker thread can't publish scan_started before we are listening.
         captured["event_queue"] = bus.subscribe()
-        real_boot(db_path=db_path, root=root, bus=bus, queue=queue)
+        real_boot(db_path=db_path, root=root, bus=bus, queue=queue, sample_roots=sample_roots)
 
     monkeypatch.setattr("audio_web.app.driver.boot", spy_boot)
 

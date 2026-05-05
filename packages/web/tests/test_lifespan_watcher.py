@@ -43,12 +43,12 @@ async def test_lifespan_publishes_watcher_status_on_start(tmp_path, monkeypatch)
     captured: dict = {}
     real_boot = driver.boot
 
-    def spy_boot(*, db_path, root, bus, queue):
+    def spy_boot(*, db_path, root, bus, queue, sample_roots=None):
         # Subscribe BEFORE the lifespan calls watcher.start(), which is what
         # publishes the 'watching' / 'polling' event. boot() runs first, so
         # subscribing inside the spy guarantees we see the watcher event.
         captured["event_queue"] = bus.subscribe()
-        real_boot(db_path=db_path, root=root, bus=bus, queue=queue)
+        real_boot(db_path=db_path, root=root, bus=bus, queue=queue, sample_roots=sample_roots)
 
     monkeypatch.setattr("audio_web.app.driver.boot", spy_boot)
 
@@ -79,11 +79,11 @@ async def test_lifespan_publishes_watcher_status_off_on_exit(tmp_path, monkeypat
     captured: dict = {"events": []}
     real_boot = driver.boot
 
-    def spy_boot(*, db_path, root, bus, queue):
+    def spy_boot(*, db_path, root, bus, queue, sample_roots=None):
         q = bus.subscribe()
         captured["event_queue"] = q
         captured["bus"] = bus
-        real_boot(db_path=db_path, root=root, bus=bus, queue=queue)
+        real_boot(db_path=db_path, root=root, bus=bus, queue=queue, sample_roots=sample_roots)
 
     monkeypatch.setattr("audio_web.app.driver.boot", spy_boot)
 

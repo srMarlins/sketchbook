@@ -27,9 +27,9 @@ async def test_scan_row_project_id_matches_rest(tmp_path, monkeypatch):
     captured: dict = {}
     real_boot = driver.boot
 
-    def spy_boot(*, db_path, root, bus, queue):
+    def spy_boot(*, db_path, root, bus, queue, sample_roots=None):
         captured["event_queue"] = bus.subscribe()
-        real_boot(db_path=db_path, root=root, bus=bus, queue=queue)
+        real_boot(db_path=db_path, root=root, bus=bus, queue=queue, sample_roots=sample_roots)
 
     monkeypatch.setattr("audio_web.app.driver.boot", spy_boot)
 
