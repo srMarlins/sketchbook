@@ -216,9 +216,14 @@ interface RepairFindingsDTO {
   missing_samples: MissingSampleFindingDTO[];
 }
 
-export async function fetchRepairFindings(): Promise<RepairFindings> {
+export async function fetchRepairFindings(
+  params: { projectId?: number } = {},
+): Promise<RepairFindings> {
   if (USE_MOCKS) return { macImports: [], missingSamples: [] };
-  const j = await http<RepairFindingsDTO>('/api/repair/findings');
+  const qs = new URLSearchParams();
+  if (params.projectId !== undefined) qs.set('project_id', String(params.projectId));
+  const tail = qs.toString() ? `?${qs}` : '';
+  const j = await http<RepairFindingsDTO>(`/api/repair/findings${tail}`);
   return {
     macImports: j.mac_imports.map((m) => ({
       projectId: m.project_id,

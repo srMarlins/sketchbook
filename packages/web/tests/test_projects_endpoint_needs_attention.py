@@ -50,7 +50,7 @@ def test_list_projects_needs_attention_true(tmp_path, monkeypatch):
     client = TestClient(create_app())
     res = client.get("/api/projects", params={"needs_attention": "true"})
     assert res.status_code == 200
-    assert {r["name"] for r in res.json()} == {"mac", "info", "miss"}
+    assert {r["name"] for r in res.json()["items"]} == {"mac", "info", "miss"}
 
 
 def test_list_projects_needs_attention_false_returns_clean(tmp_path, monkeypatch):
@@ -59,7 +59,7 @@ def test_list_projects_needs_attention_false_returns_clean(tmp_path, monkeypatch
     client = TestClient(create_app())
     res = client.get("/api/projects", params={"needs_attention": "false"})
     assert res.status_code == 200
-    assert {r["name"] for r in res.json()} == {"clean"}
+    assert {r["name"] for r in res.json()["items"]} == {"clean"}
 
 
 def test_list_projects_needs_attention_omitted_returns_all(tmp_path, monkeypatch):
@@ -68,4 +68,4 @@ def test_list_projects_needs_attention_omitted_returns_all(tmp_path, monkeypatch
     client = TestClient(create_app())
     res = client.get("/api/projects")
     assert res.status_code == 200
-    assert {r["name"] for r in res.json()} == {"mac", "info", "miss", "clean"}
+    assert {r["name"] for r in res.json()["items"]} == {"mac", "info", "miss", "clean"}

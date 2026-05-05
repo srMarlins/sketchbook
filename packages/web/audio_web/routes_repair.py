@@ -9,9 +9,14 @@ router = APIRouter(prefix="/api/repair", tags=["repair"])
 
 
 @router.get("/findings")
-def findings() -> dict:
+def findings(project_id: int | None = None, limit: int = 1000) -> dict:
+    """Findings payload. When `project_id` is given, scoped to that project.
+    Otherwise returns up to `limit` missing-sample rows (default 1000); the
+    full library can have 100k+ broken sample references and a single payload
+    that large freezes the UI."""
     conn = open_db(db_path())
-    f = get_repair_findings(conn)
+    f = get_repair_findings(conn, project_id=project_id)
+    truncated_missing = f.missing_samples[:limit]
     return {
         "mac_imports": [
             {
@@ -44,6 +49,8 @@ def findings() -> dict:
                     for c in m.candidates
                 ],
             }
-            for m in f.missing_samples
+            for m in truncated_missing
         ],
+        "missing_samples_total": len(f.missing_samples),
+        "missing_samples_truncated": len(f.missing_samples) > limit,
     }

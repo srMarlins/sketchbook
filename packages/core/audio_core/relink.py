@@ -29,22 +29,33 @@ def _basename(path: str) -> str:
     return path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
 
 
-def find_missing_samples(conn: sqlite3.Connection) -> list[MissingSampleFinding]:
+def find_missing_samples(
+    conn: sqlite3.Connection,
+    *,
+    project_id: int | None = None,
+) -> list[MissingSampleFinding]:
     """One finding per (project, missing sample). Auto-match is set when the
     `samples` index has exactly one row whose filename matches the missing
     basename. Archived projects are excluded.
+
+    Pass `project_id` to scope to a single project — the bulk variant on a
+    catalog with 100k+ missing samples otherwise returns a payload too large
+    for the UI to render.
     """
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        """
-        SELECT ps.project_id, ps.sample_path, p.path AS project_path, p.name AS project_name
-        FROM project_samples ps
-        JOIN projects p ON p.id = ps.project_id
-        WHERE ps.is_missing = 1
-          AND COALESCE(p.is_archived, 0) = 0
-        ORDER BY ps.project_id, ps.sample_path
-        """
-    ).fetchall()
+    sql = (
+        "SELECT ps.project_id, ps.sample_path, p.path AS project_path, p.name AS project_name "
+        "FROM project_samples ps "
+        "JOIN projects p ON p.id = ps.project_id "
+        "WHERE ps.is_missing = 1 "
+        "  AND COALESCE(p.is_archived, 0) = 0"
+    )
+    params: list = []
+    if project_id is not None:
+        sql += " AND ps.project_id = ?"
+        params.append(project_id)
+    sql += " ORDER BY ps.project_id, ps.sample_path"
+    rows = conn.execute(sql, params).fetchall()
     findings: list[MissingSampleFinding] = []
     for r in rows:
         fname = _basename(r["sample_path"])

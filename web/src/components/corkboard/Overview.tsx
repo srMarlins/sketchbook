@@ -4,12 +4,11 @@ import { useRepairFindings, useSubmitProposal } from '../../app/queries';
 import { RepairPanel } from '../data/RepairPanel';
 
 export function Overview({ project }: { project: ProjectDetail }) {
-  const findings = useRepairFindings();
+  const findings = useRepairFindings(project.id);
   const submit = useSubmitProposal();
   const navigate = useNavigate();
-  const macImport = findings.data?.macImports.find((m) => m.projectId === project.id) ?? null;
-  const missingSamples =
-    findings.data?.missingSamples.filter((m) => m.projectId === project.id) ?? [];
+  const macImport = findings.data?.macImports[0] ?? null;
+  const missingSamples = findings.data?.missingSamples ?? [];
 
   const handlePropose = (sel: { macImport: boolean; relinks: Record<string, string> }) => {
     const actions: Array<{ type: string; args: Record<string, unknown> }> = [];

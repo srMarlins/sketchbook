@@ -35,7 +35,8 @@ export const categoryKey = (id: string) => ['category', id] as const;
 export const proposalsKey = () => ['proposals'] as const;
 export const journalKey = () => ['journal'] as const;
 export const homeKey = () => ['home'] as const;
-export const repairFindingsKey = () => ['repair', 'findings'] as const;
+export const repairFindingsKey = (projectId?: number) =>
+  ['repair', 'findings', projectId ?? 'all'] as const;
 
 export const projectsQuery = (params: ListProjectsParams = {}) => ({
   // Auto-walks all pages via cursor. Callers expect a flat ProjectSummary[]
@@ -157,10 +158,11 @@ export function useFindings(): FindingsSummary | undefined {
 // surfaces, so we invalidate broadly. The batch_id returned from approve is
 // useful for surfacing toast confirmations at the call site.
 
-export function useRepairFindings() {
+export function useRepairFindings(projectId?: number) {
   return useQuery({
-    queryKey: repairFindingsKey(),
-    queryFn: () => fetchRepairFindings(),
+    queryKey: repairFindingsKey(projectId),
+    queryFn: () =>
+      fetchRepairFindings(projectId !== undefined ? { projectId } : {}),
     staleTime: 60_000,
   });
 }

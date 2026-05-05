@@ -18,7 +18,8 @@ vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
   return {
     ...actual,
-    listProjects: vi.fn(async () => []),
+    listProjects: vi.fn(async () => ({ items: [], next_cursor: null })),
+    listAllProjects: vi.fn(async () => []),
     getHome: vi.fn(async () => ({ shelves: [] })),
     listProposals: vi.fn(async () => []),
   };
@@ -51,6 +52,7 @@ function renderHome() {
 
 beforeEach(() => {
   (api.listProjects as ReturnType<typeof vi.fn>).mockClear();
+  (api.listAllProjects as ReturnType<typeof vi.fn>).mockClear();
   (api.getHome as ReturnType<typeof vi.fn>).mockClear();
 });
 
@@ -62,7 +64,7 @@ describe('home: needs-attention filter chip', () => {
   test('initial render does not pass needs_attention to listProjects', async () => {
     renderHome();
     await screen.findByTestId('needs-attention-chip');
-    const calls = (api.listProjects as ReturnType<typeof vi.fn>).mock.calls;
+    const calls = (api.listAllProjects as ReturnType<typeof vi.fn>).mock.calls;
     expect(calls.length).toBeGreaterThan(0);
     for (const c of calls) {
       const params = (c[0] as { needs_attention?: boolean } | undefined) ?? {};
@@ -75,7 +77,7 @@ describe('home: needs-attention filter chip', () => {
     const chip = await screen.findByTestId('needs-attention-chip');
     fireEvent.click(chip);
     // After the toggle, the latest listProjects call must include the flag.
-    const mock = api.listProjects as ReturnType<typeof vi.fn>;
+    const mock = api.listAllProjects as ReturnType<typeof vi.fn>;
     const last = mock.mock.calls[mock.mock.calls.length - 1]!;
     const params = (last[0] as { needs_attention?: boolean }) ?? {};
     expect(params.needs_attention).toBe(true);
@@ -94,7 +96,7 @@ describe('home: needs-attention filter chip', () => {
     // toggle-off click is served from TanStack's cache without a refetch.
     // Cache identity is what we care about — the home grid is now reading
     // from the unfiltered query key again, even if no new HTTP call fires.
-    const mock = api.listProjects as ReturnType<typeof vi.fn>;
+    const mock = api.listAllProjects as ReturnType<typeof vi.fn>;
     const seenUnfiltered = mock.mock.calls.some((c) => {
       const p = (c[0] as { needs_attention?: boolean } | undefined) ?? {};
       return p.needs_attention === undefined;
