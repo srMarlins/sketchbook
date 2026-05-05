@@ -74,15 +74,10 @@ jobs:
           gsutil -m -h "Cache-Control:public, max-age=300" \
             cp -r output/* gs://sketchbook-releases/
 
-      # Custom landing page (site/index.html). Uploaded AFTER the Conveyor
-      # output so it deliberately shadows any same-named file. Conveyor still
-      # ships its own download.html alongside; we keep that as the OS-detect
-      # fallback the landing page links to. The bucket's MainPageSuffix is
-      # set to index.html (one-time, via tools/setup-releases-bucket.ps1).
-      - name: Upload custom landing page
-        run: |
-          gsutil -h "Cache-Control:public, max-age=300" \
-            cp site/index.html gs://sketchbook-releases/index.html
+      # The custom landing page lives on GitHub Pages (.github/workflows/pages.yml)
+      # rather than the bucket. GCS only honors MainPageSuffix on buckets fronted
+      # by a custom domain — for raw `storage.googleapis.com/<bucket>/` URLs it
+      # always returns the XML listing. Pages serves a clean URL for free.
 
       # Generate human changelog from commits since the previous tag.
       # First-tag case (no PREV) only takes commits *since the project's
@@ -105,9 +100,9 @@ jobs:
             echo ""
             echo "Already running Sketchbook? Auto-update will pick this up on next launch — no action needed."
             echo ""
-            echo "Fresh installs: <https://storage.googleapis.com/sketchbook-releases/download.html>"
+            echo "Fresh installs: <https://srmarlins.github.io/sketchbook/>"
             echo ""
-            echo "(The download page auto-detects your OS and serves the right installer:"
+            echo "(The landing page detects your OS and links the right installer:"
             echo "Apple Silicon / Intel Mac \`.zip\`, Windows \`.exe\` launcher + signed MSIX.)"
           } >> NOTES.md
 

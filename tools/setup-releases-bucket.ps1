@@ -62,10 +62,12 @@ Step 4 "Set short cache header default for the auto-update manifest"
 # (No bucket-level default cache header on GCS — handled at upload time.)
 Write-Host "Cache headers handled per-object at upload time in release.yml."
 
-Step 4b "Configure bucket as a static website (index.html as main page)"
-# Lets visitors hit https://storage.googleapis.com/sketchbook-releases/ directly
-# and get the landing page (site/index.html), instead of an XML bucket listing.
-gcloud storage buckets update "gs://$Bucket" --web-main-page-suffix=index.html | Out-Host
+# Note: we deliberately don't set --web-main-page-suffix on this bucket.
+# GCS only honors that when the bucket is fronted by a custom domain (CNAME
+# to c.storage.googleapis.com). For the raw storage.googleapis.com/<bucket>/
+# URL, GCS always returns an XML listing. The landing page lives on GitHub
+# Pages (.github/workflows/pages.yml) — the bucket only serves binaries +
+# Conveyor update metadata.
 
 Step 5 "Create release-uploader service account '$ServiceAccount'"
 $saEmail = "$ServiceAccount@$Project.iam.gserviceaccount.com"
