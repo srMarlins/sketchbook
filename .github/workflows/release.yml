@@ -1,0 +1,105 @@
+name: release
+
+# Triggered by pushing a `v*` tag. Builds Mac + Windows installers via
+# Conveyor, uploads the static "update site" to the public GCS releases
+# bucket, and creates a GitHub Release with a changelog (no binary assets;
+# binaries live on the bucket so auto-update can fetch them anonymously).
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write   # to create the GitHub Release + upload notes
+
+jobs:
+  build:
+    name: build + sign + upload site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # for changelog generation
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Conveyor CLI from Hydraulic's tap. Pinned to a known-good version.
+      - name: Install Conveyor
+        run: |
+          curl -fsSL https://downloads.hydraulic.dev/conveyor/conveyor-18-linux-amd64.tar.gz | tar -xz
+          echo "$PWD/conveyor-18/bin" >> "$GITHUB_PATH"
+
+      # Restore the signing key from secret. CONVEYOR_SIGNING_KEY is the JSON
+      # content of `conveyor.signing.json` (one-time generated; see runbook).
+      - name: Restore Conveyor signing key
+        env:
+          CONVEYOR_SIGNING_KEY: ${{ secrets.CONVEYOR_SIGNING_KEY }}
+        run: |
+          mkdir -p "$HOME/.conveyor"
+          printf '%s' "$CONVEYOR_SIGNING_KEY" > "$HOME/.conveyor/signing.json"
+
+      # Build the Compose Desktop bundle that Conveyor packages.
+      - name: Gradle build
+        run: ./gradlew --no-daemon :app-desktop:build
+
+      # Build the cross-platform site (Mac dmg, Windows msi, update metadata).
+      - name: Conveyor make site
+        run: conveyor make site
+
+      # Auth to GCS using the SA key stored in secrets. SKETCHBOOK_RELEASES_SA
+      # is the JSON content of a service-account key with
+      # roles/storage.objectAdmin scoped to gs://sketchbook-releases.
+      - id: gcp-auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.SKETCHBOOK_RELEASES_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Upload site to gs://sketchbook-releases
+        run: |
+          gsutil -m -h "Cache-Control:public, max-age=300" \
+            cp -r output/* gs://sketchbook-releases/
+
+      # Generate human changelog from commits since the previous tag.
+      - name: Build changelog
+        id: changelog
+        run: |
+          PREV=$(git tag --sort=-v:refname | grep -v "^${GITHUB_REF_NAME}$" | head -n 1 || true)
+          if [ -z "$PREV" ]; then
+            git log --pretty='- %s (%h)' > NOTES.md
+          else
+            git log "$PREV..${GITHUB_REF_NAME}" --pretty='- %s (%h)' > NOTES.md
+          fi
+          {
+            echo ""
+            echo "## Download"
+            echo ""
+            echo "Auto-update is enabled — installed Sketchbook clients will receive this version on next launch."
+            echo ""
+            echo "Fresh installs:"
+            echo "- macOS (Apple Silicon): https://storage.googleapis.com/sketchbook-releases/Sketchbook-${GITHUB_REF_NAME#v}-macos-aarch64.dmg"
+            echo "- macOS (Intel): https://storage.googleapis.com/sketchbook-releases/Sketchbook-${GITHUB_REF_NAME#v}-macos-amd64.dmg"
+            echo "- Windows (x64): https://storage.googleapis.com/sketchbook-releases/Sketchbook-${GITHUB_REF_NAME#v}-windows-amd64.msi"
+          } >> NOTES.md
+
+      # Create the GitHub Release with notes only (no binaries — those live on
+      # the bucket so the auto-updater can fetch anonymously).
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Sketchbook ${{ github.ref_name }}
+          body_path: NOTES.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
