@@ -1,10 +1,11 @@
 # Registering `audio-mcp` with Claude Code
 
-The `audio-mcp` server exposes three tools for AI-driven catalog work:
+The `audio-mcp` server exposes these tools for AI-driven catalog work:
 
 - `search(query, tempo_min, tempo_max, archived, limit)` — FTS over names/plugins/sample filenames + tempo range filter.
 - `get_project(project_id)` — full project detail: metadata, plugins, samples, tags.
 - `find_duplicates(limit)` — list byte-identical .als groups with a recommended keeper per group; pair with `propose_batch` to archive losers.
+- `find_mac_imports(limit)` — list projects that look Mac-saved-on-Windows (Mac-prefix paths inside the .als and/or no `Ableton Project Info/` folder); pair with `propose_batch` + one `RepairMacPaths` action per `project_id` to fix.
 - `propose_batch(actions, rationale)` — submit a proposed batch of write actions for the user to approve in the web UI or CLI. **Does not execute.**
 
 The server reads `data/catalog.db` and writes proposals to `data/proposals/` under `AUDIO_ROOT` (default `Z:/User/audio`).
