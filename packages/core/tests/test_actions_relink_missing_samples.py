@@ -68,7 +68,8 @@ def test_relink_rewrites_path_and_clears_missing(tmp_path):
 def test_relink_idempotent(tmp_path):
     base, root, conn, pid, als, cand = _seed_relink_project(tmp_path)
     missing_path = conn.execute(
-        "SELECT sample_path FROM project_samples WHERE project_id=? AND is_missing=1 LIMIT 1",
+        "SELECT sample_path FROM project_samples "
+        "WHERE project_id=? AND is_missing=1 AND sample_path LIKE '%relink_test_kick.wav'",
         (pid,),
     ).fetchone()[0]
     args = dict(project_id=pid, relinks=[Relink(old=missing_path, new=str(cand))], root=root)
@@ -101,6 +102,39 @@ def test_relink_refuses_when_live_open(tmp_path, monkeypatch):
     )
     with pytest.raises(RuntimeError):
         a.validate(conn)
+
+
+def test_undo_restores_als_from_backup(tmp_path):
+    from audio_core.actions.undo import undo_batch
+
+    base, root, conn, pid, als, cand = _seed_relink_project(tmp_path)
+    pre = als.read_bytes()
+    missing_path = conn.execute(
+        "SELECT sample_path FROM project_samples "
+        "WHERE project_id=? AND is_missing=1 AND sample_path LIKE '%relink_test_kick.wav'",
+        (pid,),
+    ).fetchone()[0]
+
+    bid = run_batch(
+        conn,
+        [
+            RelinkMissingSamples(
+                project_id=pid,
+                relinks=[Relink(old=missing_path, new=str(cand))],
+                root=root,
+            )
+        ],
+        actor="test",
+        journal_dir=base / "data" / "journal",
+    )
+    assert als.read_bytes() != pre
+    undo_batch(conn, base / "data" / "journal", bid)
+    assert als.read_bytes() == pre
+    miss = conn.execute(
+        "SELECT is_missing FROM project_samples WHERE project_id=? AND sample_path=?",
+        (pid, missing_path),
+    ).fetchone()
+    assert miss is not None and miss[0] == 1
 
 
 def test_relink_refuses_missing_candidate(tmp_path):

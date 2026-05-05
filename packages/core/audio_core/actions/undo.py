@@ -107,6 +107,9 @@ def undo_batch(
         elif t == "RepairMacPaths":
             _undo_repair_mac_paths(entry, conn)
             any_reversed = True
+        elif t == "RelinkMissingSamples":
+            _undo_relink_missing_samples(entry, conn)
+            any_reversed = True
         else:
             raise NotImplementedError(f"undo not implemented for action type {t!r}")
     conn.commit()
@@ -131,6 +134,23 @@ def _undo_repair_mac_paths(entry: dict, conn: sqlite3.Connection) -> None:
     if not bak.exists():
         raise FileNotFoundError(
             f"cannot undo RepairMacPaths: backup missing at {bak}"
+        )
+    shutil.copy2(bak, als)
+    scan_one(conn, als)
+
+
+def _undo_relink_missing_samples(entry: dict, conn: sqlite3.Connection) -> None:
+    """Restore the .als from its .als.bak and re-scan so project_samples
+    revert to the pre-relink (missing) state."""
+    if entry.get("noop"):
+        return
+    from audio_core.scanner.scan import scan_one
+
+    als = Path(entry["path"])
+    bak = Path(entry["backup"])
+    if not bak.exists():
+        raise FileNotFoundError(
+            f"cannot undo RelinkMissingSamples: backup missing at {bak}"
         )
     shutil.copy2(bak, als)
     scan_one(conn, als)
