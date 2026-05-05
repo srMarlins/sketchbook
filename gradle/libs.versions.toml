@@ -12,7 +12,7 @@ material3-adaptive = "1.1.2"
 metro = "1.0.0"
 
 # Persistence
-sqldelight = "2.1.0"
+sqldelight = "2.3.2"
 
 # Networking
 ktor = "3.4.3"
