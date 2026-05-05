@@ -13,12 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.ui.NavDisplay
 import com.sketchbook.featuredetail.ProjectDetailScreen
 import com.sketchbook.featuredetail.ProjectDetailStateHolder
 import com.sketchbook.featureneedsattention.NeedsAttentionScreen
@@ -37,18 +38,14 @@ import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
 
 /**
- * Root composable: a sidebar of top-level destinations + a body that renders the screen at the
- * top of the [RootStateHolder] stack. Feature `StateHolder`s are remembered against the graph's
- * application scope so navigating away and back keeps their `stateIn` caches warm.
+ * Root composable: a sidebar of top-level destinations + a `NavDisplay` body.
  *
- * `ProjectDetail` and `Timeline` need a routed argument (`ProjectId` / `ProjectUuid`); we pass
- * those to `holder.load(...)` whenever the stack-top screen changes.
+ * Compose Navigation 3 owns the back stack. We pass it in from [Main] so the app menu can
+ * reset/push too. Per-screen `StateHolder`s are remembered against the graph's app scope so
+ * navigating away and back keeps `stateIn` caches warm.
  */
 @Composable
-fun RootContent(graph: DesktopAppGraph, root: RootStateHolder) {
-    val stack by root.stack.collectAsState()
-    val current = stack.last()
-
+fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     val projectListHolder = remember {
         ProjectListStateHolder(graph.projectRepository, graph.appScope)
     }
@@ -76,16 +73,15 @@ fun RootContent(graph: DesktopAppGraph, root: RootStateHolder) {
     LaunchedEffect(projectListHolder) {
         projectListHolder.effects.collect { effect ->
             when (effect) {
-                is ProjectListStateHolder.Effect.Navigate -> root.push(Screen.ProjectDetail(effect.id))
+                is ProjectListStateHolder.Effect.Navigate ->
+                    backStack.add(Screen.ProjectDetail(effect.id))
             }
         }
     }
     LaunchedEffect(projectDetailHolder) {
         projectDetailHolder.effects.collect { effect ->
             when (effect) {
-                is ProjectDetailStateHolder.Effect.LaunchLive -> {
-                    Os.openInLive(effect.projectPath)
-                }
+                is ProjectDetailStateHolder.Effect.LaunchLive -> Os.openInLive(effect.projectPath)
                 ProjectDetailStateHolder.Effect.LockTaken,
                 is ProjectDetailStateHolder.Effect.LockTakeFailed,
                 -> Unit
@@ -93,46 +89,61 @@ fun RootContent(graph: DesktopAppGraph, root: RootStateHolder) {
         }
     }
 
-    LaunchedEffect(current) {
-        when (current) {
-            is Screen.ProjectDetail -> projectDetailHolder.load(current.id)
-            is Screen.Timeline -> timelineHolder.load(current.uuid)
-            else -> Unit
-        }
-    }
-
     Row(modifier = Modifier.fillMaxSize().background(AppTheme.colors.surfacePage)) {
-        Sidebar(current = current, onSelect = { root.reset(it) })
+        Sidebar(
+            current = backStack.lastOrNull() ?: Screen.Projects,
+            onSelect = { target ->
+                backStack.clear()
+                backStack.add(target)
+            },
+        )
         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            when (current) {
-                Screen.Projects -> ProjectListScreen(projectListHolder)
-                is Screen.ProjectDetail -> ProjectDetailScreen(projectDetailHolder)
-                is Screen.Timeline -> TimelineScreen(timelineHolder)
-                Screen.Proposals -> ProposalsScreen(proposalsHolder)
-                Screen.NeedsAttention -> NeedsAttentionScreen(needsAttentionHolder)
-                Screen.Settings -> SettingsScreen(
-                    holder = settingsHolder,
-                    onAddRootClicked = {
-                        Os.pickDirectory(title = "Add library root")?.let { path ->
-                            settingsHolder.dispatch(
-                                SettingsStateHolder.Intent.AddRoot(LibraryRoot.Projects(path)),
+            NavDisplay(
+                backStack = backStack,
+                onBack = { backStack.removeLastOrNull() },
+                entryProvider = { key ->
+                    NavEntry(key) { current ->
+                        when (current) {
+                            Screen.Projects -> ProjectListScreen(projectListHolder)
+                            is Screen.ProjectDetail -> {
+                                LaunchedEffect(current.id) { projectDetailHolder.load(current.id) }
+                                ProjectDetailScreen(projectDetailHolder)
+                            }
+                            is Screen.Timeline -> {
+                                LaunchedEffect(current.uuid) { timelineHolder.load(current.uuid) }
+                                TimelineScreen(timelineHolder)
+                            }
+                            Screen.Proposals -> ProposalsScreen(proposalsHolder)
+                            Screen.NeedsAttention -> NeedsAttentionScreen(needsAttentionHolder)
+                            Screen.Settings -> SettingsScreen(
+                                holder = settingsHolder,
+                                onAddRootClicked = {
+                                    Os.pickDirectory(title = "Add library root")?.let { path ->
+                                        settingsHolder.dispatch(
+                                            SettingsStateHolder.Intent.AddRoot(LibraryRoot.Projects(path)),
+                                        )
+                                    }
+                                },
+                                onUploadCredentialClicked = {
+                                    Os.pickFile(title = "Service account JSON")?.let { path ->
+                                        val json = runCatching { java.io.File(path).readText() }.getOrNull()
+                                        settingsHolder.dispatch(
+                                            SettingsStateHolder.Intent.SetCloudCredential(json),
+                                        )
+                                    }
+                                },
                             )
+                            else -> Unit // unknown NavKey types are ignored
                         }
-                    },
-                    onUploadCredentialClicked = {
-                        Os.pickFile(title = "Service account JSON")?.let { path ->
-                            val json = runCatching { java.io.File(path).readText() }.getOrNull()
-                            settingsHolder.dispatch(SettingsStateHolder.Intent.SetCloudCredential(json))
-                        }
-                    },
-                )
-            }
+                    }
+                },
+            )
         }
     }
 }
 
 @Composable
-private fun Sidebar(current: Screen, onSelect: (Screen) -> Unit) {
+private fun Sidebar(current: NavKey, onSelect: (Screen) -> Unit) {
     Column(
         modifier = Modifier
             .width(220.dp)
@@ -149,7 +160,7 @@ private fun Sidebar(current: Screen, onSelect: (Screen) -> Unit) {
     }
 }
 
-private fun isActive(current: Screen, target: Screen): Boolean = when (target) {
+private fun isActive(current: NavKey, target: Screen): Boolean = when (target) {
     Screen.Projects -> current is Screen.Projects || current is Screen.ProjectDetail || current is Screen.Timeline
     else -> current == target
 }
