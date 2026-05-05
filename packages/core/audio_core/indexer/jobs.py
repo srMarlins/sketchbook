@@ -93,3 +93,52 @@ class FullScan:
             })
         finally:
             conn.close()
+
+
+@dataclass
+class BackfillColumn:
+    """Run a single BackfillSpec against the catalog: select rows whose target
+    columns are NULL, call spec.fill_one per row, emit progress on the bus."""
+
+    db_path: Path
+    spec_name: str
+    bus: EventBus
+
+    def __call__(self) -> None:
+        from audio_core.backfill import BACKFILL_SPECS
+
+        spec = next(s for s in BACKFILL_SPECS if s.name == self.spec_name)
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = list(conn.execute(spec.null_check_sql))
+            self.bus.publish({"kind": "backfill_started", "name": spec.name, "total": len(rows)})
+            done = failed = 0
+            for r in rows:
+                try:
+                    spec.fill_one(conn, dict(r))
+                except Exception as exc:
+                    failed += 1
+                    self.bus.publish({
+                        "kind": "backfill_row_failed",
+                        "name": spec.name,
+                        "path": r["path"],
+                        "error": f"{type(exc).__name__}: {exc}",
+                    })
+                done += 1
+                if done % 25 == 0 or done == len(rows):
+                    self.bus.publish({
+                        "kind": "backfill_progress",
+                        "name": spec.name,
+                        "done": done,
+                        "total": len(rows),
+                    })
+            conn.commit()
+            self.bus.publish({
+                "kind": "backfill_finished",
+                "name": spec.name,
+                "done": done,
+                "failed": failed,
+            })
+        finally:
+            conn.close()
