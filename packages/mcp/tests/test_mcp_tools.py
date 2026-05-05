@@ -144,6 +144,27 @@ def test_search_tool_supports_effort_params(tmp_path, monkeypatch):
     asyncio.run(go())
 
 
+def test_find_mac_imports_tool_returns_findings(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    conn = open_db(tmp_path / "data" / "catalog.db")
+    proj = tmp_path / "p Project"
+    proj.mkdir()
+    shutil.copy(FIX / "mac_imported_tiny.als", proj / "x.als")
+    pid = scan_one(conn, proj / "x.als")
+
+    server = build_server()
+
+    async def go():
+        async with Client(server) as c:
+            res = await c.call_tool("find_mac_imports", {})
+            data = res.data
+            assert len(data) == 1
+            assert data[0]["project_id"] == pid
+            assert data[0]["mac_paths_count"] == 3
+
+    asyncio.run(go())
+
+
 def test_find_duplicates_tool_returns_groups(tmp_path, monkeypatch):
     from audio_core.db.connection import open_db
     from audio_core.db.projects import upsert_project

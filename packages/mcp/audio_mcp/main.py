@@ -10,6 +10,7 @@ from audio_core.config import db_path, proposals_dir
 from audio_core.db.connection import open_db
 from audio_core.db.projects import search_projects as _search_projects
 from audio_core.dedup import find_duplicates as _find_duplicates
+from audio_core.macpath import find_mac_imports as _find_mac_imports
 from fastmcp import FastMCP
 
 
@@ -201,6 +202,25 @@ def build_server() -> FastMCP:
         }
         (d / f"{pid}.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return {"proposal_id": pid}
+
+    @mcp.tool
+    def find_mac_imports(limit: int = 200) -> list[dict]:
+        """Projects that look Mac-saved-on-Windows: at least one Mac-style absolute
+        path inside the .als, OR no `Ableton Project Info/` folder. Pair with
+        `propose_batch` and one `RepairMacPaths` action per project_id to fix.
+        """
+        conn = open_db(db_path())
+        findings = _find_mac_imports(conn)[:limit]
+        return [
+            {
+                "project_id": f.project_id,
+                "path": f.path,
+                "name": f.name,
+                "mac_paths_count": f.mac_paths_count,
+                "project_info_missing": f.project_info_missing,
+            }
+            for f in findings
+        ]
 
     @mcp.tool
     def find_duplicates(limit: int = 100) -> list[dict]:
