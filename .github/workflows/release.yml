@@ -34,11 +34,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Conveyor CLI from Hydraulic's tap. Pinned to a known-good version.
+      # Conveyor CLI from Hydraulic. Pinned to a known-good version; bump
+      # together with the local-install version in docs/runbooks/release.md.
       - name: Install Conveyor
         run: |
-          curl -fsSL https://downloads.hydraulic.dev/conveyor/conveyor-18-linux-amd64.tar.gz | tar -xz
-          echo "$PWD/conveyor-18/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://downloads.hydraulic.dev/conveyor/conveyor-22.0-linux-amd64.tar.gz | tar -xz
+          echo "$PWD/conveyor-22.0/bin" >> "$GITHUB_PATH"
 
       # Restore the signing key from secret. CONVEYOR_SIGNING_KEY is the JSON
       # content of `conveyor.signing.json` (one-time generated; see runbook).

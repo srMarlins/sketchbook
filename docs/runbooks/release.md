@@ -45,11 +45,14 @@ Windows one-liner (PowerShell, not admin):
 ```powershell
 $dest = "$env:LOCALAPPDATA\Conveyor"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
-Invoke-WebRequest -Uri "https://downloads.hydraulic.dev/conveyor/conveyor-18-windows-amd64.zip" -OutFile "$env:TEMP\conveyor.zip"
+Invoke-WebRequest -Uri "https://downloads.hydraulic.dev/conveyor/conveyor-22.0-windows-amd64.zip" -OutFile "$env:TEMP\conveyor.zip"
 Expand-Archive -Force "$env:TEMP\conveyor.zip" -DestinationPath $dest
-[Environment]::SetEnvironmentVariable("PATH", "$env:PATH;$dest\conveyor-18\bin", "User")
-$env:PATH = "$env:PATH;$dest\conveyor-18\bin"
+$bin = (Get-ChildItem $dest -Directory | Where-Object { $_.Name -like "conveyor-*" } | Select-Object -First 1).FullName + "\bin"
+[Environment]::SetEnvironmentVariable("PATH", "$env:PATH;$bin", "User")
+$env:PATH = "$env:PATH;$bin"
 ```
+
+(Bump the `22.0` pin in lockstep with the version pinned in `.github/workflows/release.yml` so local + CI use the same Conveyor.)
 
 Verify: `conveyor --version` prints something. (No Hydraulic Scoop bucket exists; do not search for one.)
 
