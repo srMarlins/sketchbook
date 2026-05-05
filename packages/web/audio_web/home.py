@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlencode
 
@@ -309,16 +310,184 @@ def _shelf_untriaged(conn: sqlite3.Connection) -> Shelf:
     )
 
 
-def category_full(conn: sqlite3.Connection, shelf_id: str, *, now: float) -> list[dict]:
-    """Return ALL qualifying projects for a given shelf (no cap, ungrouped, raw rows).
-    Powers the category detail view at /api/categories/{shelf_id}, which the
-    frontend uses for /n/cat-<shelf_id> notebook pages.
+def category_full(
+    conn: sqlite3.Connection,
+    shelf_id: str,
+    *,
+    now: float,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> dict:
+    """Cursor-paginated category list.
 
-    Filter logic mirrors the corresponding `_shelf_*` function above — keep
-    the WHERE clauses in sync. We deliberately do NOT apply the parent_dir
-    grouping here: callers want every variant so they can group client-side
-    and show variant headers ("3 variants") in the notebook UI.
+    Returns `{"items": [...], "next_cursor": str | None}`. Pass `cursor=None`
+    for the first page, then forward `next_cursor` from each response. With
+    `limit=None` (the default) the function still returns up to a hard
+    server-side cap so the JSON payload stays bounded — clients that need
+    every row should iterate cursors.
+
+    Filter logic mirrors the corresponding `_shelf_*` function on the home
+    page — keep the WHERE clauses in sync. We deliberately do NOT apply the
+    parent_dir grouping here: callers want every variant so they can group
+    client-side and show variant headers ("3 variants") in the notebook UI.
     """
+    spec = _shelf_query_spec(shelf_id, now=now)
+    page_limit = _DEFAULT_CATEGORY_LIMIT if limit is None else limit
+    return _run_category_page(conn, spec, limit=page_limit, cursor=cursor)
+
+
+# Hard server-side cap when caller passes no limit: keeps the JSON payload
+# from blowing up if a category accidentally swells. Clients that legitimately
+# need every row should iterate cursors.
+_DEFAULT_CATEGORY_LIMIT = 500
+
+
+@dataclass
+class _ShelfSpec:
+    """SQL building blocks for one home shelf, in cursor-friendly form.
+
+    `select` — SELECT clause + FROM (no WHERE/ORDER BY).
+    `where` — predicate WITHOUT the leading WHERE (joined with AND if cursor
+              adds another clause).
+    `params` — params for `where`.
+    `order_col` — SQL expression used for both ORDER BY and cursor compare.
+                  Must be selectable on the row alias `p.` so we can compute
+                  it client-side too. For `broken` this is the missing-sample
+                  subquery aliased as `missing_sample_count`.
+    `order_dir` — "DESC" or "ASC".
+    `cursor_field` — name of the field on returned rows holding the order
+                     value (used by `_project_sort_value` to build cursors).
+    """
+
+    select: str
+    where: str
+    params: tuple
+    order_col: str
+    order_dir: str
+    cursor_field: str
+
+
+def _shelf_query_spec(shelf_id: str, *, now: float) -> _ShelfSpec:
+    base_select = (
+        "SELECT p.*, ("
+        "SELECT COUNT(*) FROM project_samples ps "
+        "WHERE ps.project_id = p.id AND ps.is_missing = 1"
+        ") AS missing_sample_count FROM projects p"
+    )
+    if shelf_id == "currently-working":
+        cutoff = now - 14 * _DAY
+        return _ShelfSpec(
+            select=base_select,
+            where="p.is_archived = 0 AND (p.color_tag = ? OR p.last_modified >= ?)",
+            params=(COLOR_NAMES["blue"], cutoff),
+            order_col="p.last_modified",
+            order_dir="DESC",
+            cursor_field="last_modified",
+        )
+    if shelf_id == "forgotten-gems":
+        cutoff = now - 180 * _DAY
+        excluded = (COLOR_NAMES["green"], COLOR_NAMES["red"])
+        return _ShelfSpec(
+            select=base_select,
+            where=(
+                "p.is_archived = 0 AND p.effort_score >= 65 AND p.last_modified < ? "
+                "AND (p.color_tag IS NULL OR p.color_tag NOT IN (?, ?))"
+            ),
+            params=(cutoff, *excluded),
+            order_col="COALESCE(p.effort_score, -1)",
+            order_dir="DESC",
+            cursor_field="effort_score",
+        )
+    if shelf_id == "almost-done":
+        return _ShelfSpec(
+            select=base_select,
+            where="p.is_archived = 0 AND p.color_tag IN (?, ?)",
+            params=(COLOR_NAMES["orange"], COLOR_NAMES["yellow"]),
+            order_col="COALESCE(p.effort_score, -1)",
+            order_dir="DESC",
+            cursor_field="effort_score",
+        )
+    if shelf_id == "has-potential":
+        return _ShelfSpec(
+            select=base_select,
+            where="p.is_archived = 0 AND p.color_tag = ?",
+            params=(COLOR_NAMES["purple"],),
+            order_col="p.last_modified",
+            order_dir="DESC",
+            cursor_field="last_modified",
+        )
+    if shelf_id == "untriaged":
+        return _ShelfSpec(
+            select=base_select,
+            where="p.is_archived = 0 AND p.color_tag IS NULL",
+            params=(),
+            order_col="COALESCE(p.effort_score, -1)",
+            order_dir="DESC",
+            cursor_field="effort_score",
+        )
+    if shelf_id == "broken":
+        return _ShelfSpec(
+            select=base_select,
+            where=(
+                "p.is_archived = 0 AND ("
+                "p.parse_status = 'failed' OR EXISTS ("
+                "SELECT 1 FROM project_samples ps "
+                "WHERE ps.project_id = p.id AND ps.is_missing = 1))"
+            ),
+            params=(),
+            order_col=(
+                "(SELECT COUNT(*) FROM project_samples ps "
+                "WHERE ps.project_id = p.id AND ps.is_missing = 1)"
+            ),
+            order_dir="DESC",
+            cursor_field="missing_sample_count",
+        )
+    raise KeyError(shelf_id)
+
+
+def _run_category_page(
+    conn: sqlite3.Connection,
+    spec: _ShelfSpec,
+    *,
+    limit: int,
+    cursor: str | None,
+) -> dict:
+    from audio_core.db.projects import (
+        InvalidCursor,
+        _decode_cursor,
+        _encode_cursor,
+    )
+
+    conn.row_factory = sqlite3.Row
+    where_parts: list[str] = [spec.where] if spec.where else []
+    params: list = list(spec.params)
+    cmp_op = "<" if spec.order_dir == "DESC" else ">"
+    if cursor:
+        try:
+            cursor_value, cursor_id = _decode_cursor(cursor)
+        except InvalidCursor:
+            raise
+        where_parts.append(f"({spec.order_col}, p.id) {cmp_op} (?, ?)")
+        params.extend([cursor_value, cursor_id])
+    sql = spec.select
+    if where_parts:
+        sql += " WHERE " + " AND ".join(where_parts)
+    sql += f" ORDER BY {spec.order_col} {spec.order_dir}, p.id {spec.order_dir} LIMIT ?"
+    params.append(limit + 1)
+    rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    next_cursor: str | None = None
+    if has_more and items:
+        last = items[-1]
+        v = last.get(spec.cursor_field)
+        if spec.cursor_field == "effort_score" and v is None:
+            v = -1
+        next_cursor = _encode_cursor(v, last["id"])
+    return {"items": items, "next_cursor": next_cursor}
+
+
+def _category_rows(conn: sqlite3.Connection, shelf_id: str, *, now: float) -> list[dict]:
     conn.row_factory = sqlite3.Row
     if shelf_id == "currently-working":
         cutoff = now - 14 * _DAY

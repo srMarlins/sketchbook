@@ -6,11 +6,12 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from audio_core.config import db_path, proposals_dir
+from audio_core.config import db_path, projects_root, proposals_dir
 from audio_core.db.connection import open_db
 from audio_core.db.projects import search_projects as _search_projects
 from audio_core.dedup import find_duplicates as _find_duplicates
 from audio_core.macpath import find_mac_imports as _find_mac_imports
+from audio_core.proposals import InvalidProposal, validate_proposed_actions
 from fastmcp import FastMCP
 
 
@@ -190,7 +191,13 @@ def build_server() -> FastMCP:
         - SetTags:       {project_id, tags}
 
         Returns {proposal_id} so the user can approve via the web UI or CLI.
+        Raises a ValueError-typed error visible to the AI if any action is
+        malformed or its target path is outside the allowlist.
         """
+        try:
+            validate_proposed_actions(actions, projects_root=projects_root())
+        except InvalidProposal as e:
+            raise ValueError(f"invalid proposal: {e}") from e
         d = proposals_dir()
         d.mkdir(parents=True, exist_ok=True)
         pid = f"{datetime.now(UTC).strftime('%Y-%m-%dT%H-%M-%S')}_{uuid.uuid4().hex[:8]}"

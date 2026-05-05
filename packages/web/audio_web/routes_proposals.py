@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
+import sqlite3
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+_log = logging.getLogger("audio_web")
 
 from audio_core.actions.archive import ArchiveProject
 from audio_core.actions.move import MoveProject
@@ -17,7 +22,12 @@ from audio_core.config import db_path, journal_dir, projects_root, proposals_dir
 from audio_core.db.connection import open_db
 from fastapi import APIRouter, HTTPException
 
-from audio_web.schemas import ProposalIn, ProposalOut
+from audio_web.schemas import (
+    InvalidProposal,
+    ProposalIn,
+    ProposalOut,
+    validate_proposed_actions,
+)
 
 router = APIRouter(prefix="/api/proposals", tags=["proposals"])
 
@@ -32,12 +42,17 @@ def _proposal_path(proposal_id: str) -> Path:
 
 @router.post("", status_code=201)
 def submit_proposal(body: ProposalIn) -> dict:
+    actions_dump = [a.model_dump() for a in body.actions]
+    try:
+        validate_proposed_actions(actions_dump, projects_root=projects_root())
+    except InvalidProposal as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     proposals_dir().mkdir(parents=True, exist_ok=True)
     pid = _new_proposal_id()
     payload = {
         "proposal_id": pid,
         "actor": body.actor,
-        "actions": [a.model_dump() for a in body.actions],
+        "actions": actions_dump,
         "rationale": body.rationale,
     }
     _proposal_path(pid).write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -92,20 +107,71 @@ def _materialize(action_type: str, args: dict[str, Any]):
 
 @router.post("/{proposal_id}/approve")
 def approve_proposal(proposal_id: str) -> dict:
-    """Approve and execute a proposal. Returns the journal batch_id."""
+    """Approve and execute a proposal. Returns the journal batch_id.
+
+    Concurrency: the proposal file is atomically renamed to a `.processing`
+    suffix before run_batch fires. A second concurrent approve call will see
+    the original path missing and 404. After success, the .processing file is
+    deleted; on failure (validation, FS error, etc.) it is renamed back so
+    the user can retry.
+    """
     p = _proposal_path(proposal_id)
+    processing = p.with_suffix(p.suffix + ".processing")
     if not p.exists():
         raise HTTPException(status_code=404, detail=f"no proposal id={proposal_id}")
-    proposal = json.loads(p.read_text(encoding="utf-8"))
-    actor = proposal.get("actor") or "claude"
-    actions = [_materialize(a["type"], a["args"]) for a in proposal["actions"]]
-    conn = open_db(db_path())
     try:
-        bid = run_batch(conn, actions, actor=actor, journal_dir=journal_dir())
-    except (PermissionError, FileExistsError, LookupError, ValueError, RuntimeError) as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    # Archive the proposal alongside the executed batch.
-    p.unlink()
+        os.replace(p, processing)
+    except FileNotFoundError as e:
+        # Lost the race to another approve call.
+        raise HTTPException(status_code=409, detail=f"proposal {proposal_id} is being processed") from e
+    try:
+        proposal = json.loads(processing.read_text(encoding="utf-8"))
+        actor = proposal.get("actor") or "claude"
+        intent = proposal["actions"]
+        try:
+            validate_proposed_actions(intent, projects_root=projects_root())
+        except InvalidProposal as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        actions = [_materialize(a["type"], a["args"]) for a in intent]
+        conn = open_db(db_path())
+        try:
+            bid = run_batch(
+                conn, actions, actor=actor, journal_dir=journal_dir(), intent=intent
+            )
+        except (
+            PermissionError,
+            FileExistsError,
+            FileNotFoundError,
+            LookupError,
+            ValueError,
+            RuntimeError,
+            OSError,
+            sqlite3.Error,
+            KeyError,
+        ) as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        # Restore the proposal so the user can fix and retry.
+        try:
+            os.replace(processing, p)
+        except OSError:
+            pass
+        raise
+    except BaseException:
+        try:
+            os.replace(processing, p)
+        except OSError:
+            pass
+        raise
+    # Success — delete the processing file
+    try:
+        processing.unlink()
+    except OSError:
+        pass
+    _log.info(
+        "approve proposal_id=%s actor=%s batch_id=%s n_actions=%d",
+        proposal_id, actor, bid, len(actions),
+    )
     return {"batch_id": bid}
 
 

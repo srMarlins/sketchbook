@@ -4,7 +4,22 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from audio_core.proposals import (
+    InvalidProposal,
+    validate_proposed_actions,
+)
 from pydantic import BaseModel
+
+__all__ = [
+    "ActionType",
+    "HomeResponse",
+    "InvalidProposal",
+    "ProposalIn",
+    "ProposalOut",
+    "ProposedAction",
+    "Shelf",
+    "validate_proposed_actions",
+]
 
 ActionType = Literal[
     "RenameProject",

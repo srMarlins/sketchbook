@@ -1,13 +1,14 @@
 import shutil
 from pathlib import Path
 
+import pytest
 from audio_core.actions.archive import ArchiveProject
 from audio_core.actions.move import MoveProject
 from audio_core.actions.rename import RenameProject
 from audio_core.actions.runner import run_batch
 from audio_core.actions.set_color_tag import SetColorTag
 from audio_core.actions.set_tags import SetTags
-from audio_core.actions.undo import undo_batch
+from audio_core.actions.undo import UndoError, undo_batch
 from audio_core.db.connection import open_db
 from audio_core.scanner.scan import scan_one
 
@@ -113,3 +114,68 @@ def test_undo_batch_reverses_actions_in_reverse_order(tmp_path):
     undo_batch(conn, journal, bid)
     assert (tmp_path / "alpha Project" / "x.als").is_file()
     assert conn.execute("SELECT color_tag FROM projects WHERE id=?", (pid,)).fetchone()[0] is None
+
+
+def test_double_undo_refuses(tmp_path):
+    """Calling undo twice on the same batch must refuse the second call."""
+    conn, pid, als = _seed(tmp_path, "alpha Project")
+    journal = tmp_path / "journal"
+    bid = run_batch(
+        conn,
+        [RenameProject(project_id=pid, new_dir_name="bravo Project", root=tmp_path)],
+        actor="user",
+        journal_dir=journal,
+    )
+    undo_batch(conn, journal, bid)
+    with pytest.raises(UndoError, match="already been undone"):
+        undo_batch(conn, journal, bid)
+
+
+def test_undo_of_undo_entry_refuses(tmp_path):
+    """The journal entry written by an undo can't itself be undone."""
+    conn, pid, als = _seed(tmp_path, "alpha Project")
+    journal = tmp_path / "journal"
+    bid = run_batch(
+        conn,
+        [SetColorTag(project_id=pid, color=2)],
+        actor="user",
+        journal_dir=journal,
+    )
+    undo_bid = undo_batch(conn, journal, bid)
+    assert undo_bid is not None
+    with pytest.raises(UndoError, match="undo entry"):
+        undo_batch(conn, journal, undo_bid)
+
+
+def test_undo_when_state_already_restored_is_safe(tmp_path):
+    """If the user manually moved the dir back before undo, undo treats it as
+    already-undone for that action (it does not crash, does not double-move)."""
+    conn, pid, als = _seed(tmp_path, "alpha Project")
+    journal = tmp_path / "journal"
+    bid = run_batch(
+        conn,
+        [RenameProject(project_id=pid, new_dir_name="bravo Project", root=tmp_path)],
+        actor="user",
+        journal_dir=journal,
+    )
+    # Simulate user manually restoring the dir before clicking undo
+    shutil.move(str(tmp_path / "bravo Project"), str(tmp_path / "alpha Project"))
+    undo_batch(conn, journal, bid)
+    assert (tmp_path / "alpha Project" / "x.als").is_file()
+
+
+def test_undo_refuses_when_both_source_and_dest_present(tmp_path):
+    """If a stranger directory has appeared at the original location, undo
+    refuses rather than merging or overwriting."""
+    conn, pid, als = _seed(tmp_path, "alpha Project")
+    journal = tmp_path / "journal"
+    bid = run_batch(
+        conn,
+        [RenameProject(project_id=pid, new_dir_name="bravo Project", root=tmp_path)],
+        actor="user",
+        journal_dir=journal,
+    )
+    # Recreate the original folder so undo would have to merge
+    (tmp_path / "alpha Project").mkdir()
+    with pytest.raises(UndoError, match="both source"):
+        undo_batch(conn, journal, bid)

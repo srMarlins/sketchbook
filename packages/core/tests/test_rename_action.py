@@ -45,10 +45,29 @@ def test_rename_updates_db_path(tmp_path):
 
 
 def test_rename_rejects_target_outside_root(tmp_path):
+    """new_dir_name with path separators is rejected by the filename validator
+    (which fires before the path-allowlist check). Either error is acceptable
+    — both prevent the malicious rename."""
     conn, pid, als = _seed(tmp_path, "tiny.als", "p Project", "x.als")
     action = RenameProject(project_id=pid, new_dir_name="../escape", root=tmp_path)
-    with pytest.raises(PermissionError):
+    with pytest.raises((PermissionError, ValueError)):
         action.validate(conn)
+
+
+def test_rename_rejects_illegal_windows_chars(tmp_path):
+    """Names with Windows-illegal characters must be rejected up front so we
+    never call shutil.move with a name Windows will silently mangle."""
+    conn, pid, als = _seed(tmp_path, "tiny.als", "p Project", "x.als")
+    for bad in ("a:b", "a/b", "a\\b", "a*b", "a?b", 'a"b', "a<b", "a>b", "a|b", "x.", "x ", "CON"):
+        action = RenameProject(project_id=pid, new_dir_name=bad, root=tmp_path)
+        with pytest.raises(ValueError):
+            action.validate(conn)
+
+
+def test_rename_rejects_empty_name(tmp_path):
+    conn, pid, als = _seed(tmp_path, "tiny.als", "p Project", "x.als")
+    with pytest.raises(ValueError):
+        RenameProject(project_id=pid, new_dir_name="", root=tmp_path).validate(conn)
 
 
 def test_rename_rejects_existing_target(tmp_path):

@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 
 from audio_core.config import db_path, projects_root
 from audio_core.db.connection import open_db
-from audio_core.db.projects import search_projects
+from audio_core.db.projects import InvalidCursor, search_projects_page
 from audio_core.safety.paths import ensure_within
 from fastapi import APIRouter, HTTPException, Query
 
@@ -26,22 +26,34 @@ def list_projects(
     broken: Annotated[bool | None, Query()] = None,
     order_by: Annotated[Literal["mtime", "name", "effort"], Query()] = "mtime",
     order_dir: Annotated[Literal["asc", "desc"], Query()] = "desc",
+    # Per-page cap. Hard ceiling at 1000 — the cursor lets clients walk past
+    # this. 200 is a reasonable default page (~50KB JSON).
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
-) -> list[dict]:
+    cursor: Annotated[str | None, Query()] = None,
+) -> dict:
+    """Cursor-paginated project list. Returns:
+        {"items": [...], "next_cursor": str | None}
+    Forward `next_cursor` as the next page's `cursor` query param. When
+    `next_cursor` is null the iteration is exhausted.
+    """
     conn = open_db(db_path())
-    return search_projects(
-        conn,
-        query=query,
-        tempo_min=tempo_min,
-        tempo_max=tempo_max,
-        archived=archived,
-        min_effort=min_effort,
-        max_effort=max_effort,
-        broken=broken,
-        order_by=order_by,
-        order_dir=order_dir,
-        limit=limit,
-    )
+    try:
+        return search_projects_page(
+            conn,
+            query=query,
+            tempo_min=tempo_min,
+            tempo_max=tempo_max,
+            archived=archived,
+            min_effort=min_effort,
+            max_effort=max_effort,
+            broken=broken,
+            order_by=order_by,
+            order_dir=order_dir,
+            limit=limit,
+            cursor=cursor,
+        )
+    except InvalidCursor as e:
+        raise HTTPException(status_code=400, detail=f"invalid cursor: {e}") from e
 
 
 @router.get("/{project_id}")
@@ -92,6 +104,8 @@ def open_project(project_id: int) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail=f"no project id={project_id}")
     target = Path(row[0])
+    if target.suffix.lower() != ".als":
+        raise HTTPException(status_code=400, detail=f"refusing to open non-.als file: {target}")
     try:
         ensure_within(target, projects_root())
     except PermissionError as e:

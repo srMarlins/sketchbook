@@ -65,8 +65,9 @@ def main() -> int:
     print("/api/projects")
     r = client.get("/api/projects", params={"limit": 50})
     check("status 200", r.status_code == 200, str(r.status_code))
-    rows = r.json() if r.status_code == 200 else []
-    check("returns a list", isinstance(rows, list))
+    body = r.json() if r.status_code == 200 else {"items": [], "next_cursor": None}
+    rows = body.get("items", [])
+    check("returns paginated shape", isinstance(rows, list) and "next_cursor" in body)
     if rows:
         first: dict[str, Any] = rows[0]
         check("row has tags array", isinstance(first.get("tags"), list))
@@ -77,8 +78,22 @@ def main() -> int:
                 for k in ("id", "name", "path", "parent_dir", "tempo", "color_tag")
             ),
         )
-    print(f"  --> {len(rows)} projects returned")
+    print(f"  --> {len(rows)} projects returned (next_cursor={body.get('next_cursor')!r})")
     print()
+
+    # cursor pagination — fetch second page if there's one
+    if body.get("next_cursor"):
+        print("/api/projects (page 2 via cursor)")
+        r2 = client.get(
+            "/api/projects", params={"limit": 50, "cursor": body["next_cursor"]}
+        )
+        check("status 200", r2.status_code == 200, str(r2.status_code))
+        page2 = r2.json().get("items", [])
+        page1_ids = {p["id"] for p in rows}
+        page2_ids = {p["id"] for p in page2}
+        check("page 2 has no overlap with page 1", page1_ids.isdisjoint(page2_ids))
+        print(f"  --> {len(page2)} projects on page 2")
+        print()
 
     # query filter
     print("/api/projects?query=...")
@@ -90,7 +105,7 @@ def main() -> int:
     print("/api/projects?tempo_min&tempo_max")
     r = client.get("/api/projects", params={"tempo_min": 100, "tempo_max": 140})
     check("status 200", r.status_code == 200, str(r.status_code))
-    band = r.json() if r.status_code == 200 else []
+    band = r.json().get("items", []) if r.status_code == 200 else []
     check(
         "all returned tempos within [100,140]",
         all(p.get("tempo") is None or 100 <= p["tempo"] <= 140 for p in band),

@@ -63,7 +63,11 @@ def test_archive_command(tmp_path, monkeypatch):
     pid = _seed(tmp_path)
     res = CliRunner().invoke(app, ["archive", str(pid)])
     assert res.exit_code == 0, res.stdout
-    assert (tmp_path / "Projects" / "_Archive" / "p Project" / "x.als").is_file()
+    archive_root = tmp_path / "Projects" / "_Archive"
+    archived = list(archive_root.iterdir())
+    assert len(archived) == 1
+    assert archived[0].name.startswith("p Project__")
+    assert (archived[0] / "x.als").is_file()
 
 
 def test_journal_lists_recent_batches(tmp_path, monkeypatch):

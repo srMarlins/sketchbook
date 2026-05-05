@@ -62,11 +62,37 @@ def test_archive_moves_into_archive_dir_and_flags_db(tmp_path):
     action = ArchiveProject(project_id=pid, root=tmp_path)
     action.validate(conn)
     entry = action.execute(conn)
-    expected = tmp_path / ARCHIVE_DIR_NAME / "p Project" / "x.als"
-    assert expected.is_file()
+    # Archive dir is timestamped to prevent silent collision with prior archives
+    archive_root = tmp_path / ARCHIVE_DIR_NAME
+    archived_subdirs = list(archive_root.iterdir())
+    assert len(archived_subdirs) == 1
+    assert archived_subdirs[0].name.startswith("p Project__")
+    assert (archived_subdirs[0] / "x.als").is_file()
     archived = conn.execute("SELECT is_archived FROM projects WHERE id=?", (pid,)).fetchone()[0]
     assert archived == 1
     assert entry["type"] == "ArchiveProject"
+    assert entry["path_before"] == str(als)
+    assert entry["path_after"] == str(archived_subdirs[0] / "x.als")
+
+
+def test_archive_two_same_named_projects_no_collision(tmp_path):
+    """Two projects with the same dir name archived separately must coexist."""
+    import shutil as _shutil
+    from audio_core.actions.runner import run_batch
+
+    conn, pid_a, _ = _seed(tmp_path, "shared name Project")
+    # Restore the source dir under a different intermediate parent so we can
+    # archive two projects whose archived basename would collide.
+    second = tmp_path / "subdir" / "shared name Project"
+    second.mkdir(parents=True)
+    _shutil.copy(FIX / "tiny.als", second / "x.als")
+    pid_b = scan_one(conn, second / "x.als")
+    journal = tmp_path / "journal"
+    run_batch(conn, [ArchiveProject(project_id=pid_a, root=tmp_path)], actor="t", journal_dir=journal)
+    run_batch(conn, [ArchiveProject(project_id=pid_b, root=tmp_path)], actor="t", journal_dir=journal)
+    archived = sorted((tmp_path / ARCHIVE_DIR_NAME).iterdir())
+    assert len(archived) == 2
+    assert all((d / "x.als").is_file() for d in archived)
 
 
 # --- SetColorTag ---

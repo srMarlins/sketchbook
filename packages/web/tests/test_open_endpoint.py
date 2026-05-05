@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -26,7 +27,13 @@ def _seed(tmp_path, *, path: Path) -> int:
     )
 
 
-def test_open_endpoint_calls_subprocess(tmp_path, monkeypatch):
+def _launch_patch_target() -> str:
+    if sys.platform == "win32":
+        return "audio_web.routes_projects.os.startfile"
+    return "audio_web.routes_projects.subprocess.Popen"
+
+
+def test_open_endpoint_launches(tmp_path, monkeypatch):
     monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
     proj_dir = tmp_path / "Projects" / "x Project"
     proj_dir.mkdir(parents=True)
@@ -34,15 +41,11 @@ def test_open_endpoint_calls_subprocess(tmp_path, monkeypatch):
     als.write_bytes(b"fake")
     pid = _seed(tmp_path, path=als)
     client = TestClient(create_app())
-    with patch("audio_web.routes_open.subprocess.run") as mock_run:
-        mock_run.return_value = None
+    with patch(_launch_patch_target()) as mock_launch:
         res = client.post(f"/api/projects/{pid}/open")
     assert res.status_code == 200
-    assert res.json() == {"ok": True}
-    mock_run.assert_called_once()
-    call_args = mock_run.call_args[0][0]
-    # The .als path should be the last argument
-    assert str(als) in call_args
+    assert res.json() == {"opened": str(als)}
+    mock_launch.assert_called_once()
 
 
 def test_open_endpoint_404_on_missing_project(tmp_path, monkeypatch):
@@ -56,14 +59,41 @@ def test_open_endpoint_404_on_missing_project(tmp_path, monkeypatch):
 def test_open_endpoint_403_on_path_outside_allowlist(tmp_path, monkeypatch):
     """If the row's path is outside the projects root, refuse to launch."""
     monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
-    # Seed a project at a path OUTSIDE tmp_path/Projects
     rogue_dir = tmp_path / "elsewhere"
     rogue_dir.mkdir()
     rogue = rogue_dir / "rogue.als"
     rogue.write_bytes(b"fake")
     pid = _seed(tmp_path, path=rogue)
     client = TestClient(create_app())
-    with patch("audio_web.routes_open.subprocess.run") as mock_run:
+    with patch(_launch_patch_target()) as mock_launch:
         res = client.post(f"/api/projects/{pid}/open")
     assert res.status_code == 403
-    mock_run.assert_not_called()
+    mock_launch.assert_not_called()
+
+
+def test_open_endpoint_400_on_non_als(tmp_path, monkeypatch):
+    """Refuse to shell-launch anything that isn't a .als."""
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    proj_dir = tmp_path / "Projects" / "x Project"
+    proj_dir.mkdir(parents=True)
+    bad = proj_dir / "x.exe"
+    bad.write_bytes(b"fake")
+    pid = _seed(tmp_path, path=bad)
+    client = TestClient(create_app())
+    with patch(_launch_patch_target()) as mock_launch:
+        res = client.post(f"/api/projects/{pid}/open")
+    assert res.status_code == 400
+    mock_launch.assert_not_called()
+
+
+def test_open_endpoint_404_on_file_missing(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    proj_dir = tmp_path / "Projects" / "x Project"
+    proj_dir.mkdir(parents=True)
+    als = proj_dir / "x.als"
+    pid = _seed(tmp_path, path=als)  # don't write the file
+    client = TestClient(create_app())
+    with patch(_launch_patch_target()) as mock_launch:
+        res = client.post(f"/api/projects/{pid}/open")
+    assert res.status_code == 404
+    mock_launch.assert_not_called()

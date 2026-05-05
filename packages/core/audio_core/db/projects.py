@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import base64
 import json
 import sqlite3
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from audio_core.parser.model import ProjectMetadata
 from audio_core.scoring import compute_effort
@@ -31,8 +32,9 @@ def upsert_project(
         INSERT INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den,
             track_count, audio_tracks, midi_tracks, return_tracks, length_seconds, live_version,
             last_modified, last_scanned, file_hash, effort_score, effort_breakdown,
-            parse_status, parse_error, mac_paths_count, has_project_info)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok', NULL, ?, ?)
+            file_size_bytes, parse_status, parse_error,
+            mac_paths_count, has_project_info)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok', NULL, ?, ?)
         ON CONFLICT(path) DO UPDATE SET
             name=excluded.name, parent_dir=excluded.parent_dir,
             tempo=excluded.tempo, time_sig_num=excluded.time_sig_num,
@@ -42,6 +44,7 @@ def upsert_project(
             live_version=excluded.live_version, last_modified=excluded.last_modified,
             last_scanned=excluded.last_scanned, file_hash=excluded.file_hash,
             effort_score=excluded.effort_score, effort_breakdown=excluded.effort_breakdown,
+            file_size_bytes=excluded.file_size_bytes,
             parse_status='ok', parse_error=NULL,
             mac_paths_count=excluded.mac_paths_count,
             has_project_info=excluded.has_project_info
@@ -65,6 +68,7 @@ def upsert_project(
             file_hash,
             score,
             breakdown_json,
+            file_size_bytes,
             mac_paths_count,
             has_project_info,
         ),
@@ -196,8 +200,46 @@ def _safe_fts_query(query: str) -> str:
 _ORDER_COLS = {
     "mtime": "p.last_modified",
     "name": "p.name",
-    "effort": "p.effort_score",
+    # COALESCE so NULL effort scores have a definite position (last in DESC,
+    # first in ASC). Without this, NULLs make keyset pagination ambiguous —
+    # SQLite's NULL ordering rules differ from the < / > comparisons we need
+    # for the cursor predicate.
+    "effort": "COALESCE(p.effort_score, -1)",
 }
+
+
+# ---- Cursor encode/decode ------------------------------------------------
+#
+# Cursors are opaque to clients: a base64url-encoded JSON `{k: [<sort_value>,
+# <id>], v: 1}`. The ordering tuple `(sort_value, id)` is what makes
+# pagination stable across rows with equal sort keys. `v` is a forward-compat
+# version so future cursor shapes can coexist with old ones.
+
+
+class InvalidCursor(ValueError):
+    """Raised when a cursor cannot be decoded (corruption, version mismatch,
+    base64/JSON garbage). Treat as a 400 at the API layer."""
+
+
+def _encode_cursor(sort_value: Any, project_id: int) -> str:
+    payload = {"v": 1, "k": [sort_value, project_id]}
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _decode_cursor(cursor: str) -> tuple[Any, int]:
+    try:
+        pad = "=" * (-len(cursor) % 4)
+        raw = base64.urlsafe_b64decode(cursor + pad)
+        payload = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as e:
+        raise InvalidCursor(f"malformed cursor: {e}") from e
+    if not isinstance(payload, dict) or payload.get("v") != 1:
+        raise InvalidCursor(f"unsupported cursor version: {payload!r}")
+    k = payload.get("k")
+    if not isinstance(k, list) or len(k) != 2 or not isinstance(k[1], int):
+        raise InvalidCursor(f"malformed cursor key: {k!r}")
+    return (k[0], k[1])
 
 
 def search_projects(
@@ -213,7 +255,15 @@ def search_projects(
     order_by: Literal["mtime", "name", "effort"] = "mtime",
     order_dir: Literal["asc", "desc"] = "desc",
     limit: int = 200,
+    cursor: str | None = None,
 ) -> list[dict]:
+    """List projects matching the filters. Returns at most `limit` rows.
+
+    Pagination is keyset/cursor based: pass `cursor` (an opaque string from
+    the previous page's `next_cursor` via `search_projects_page`) to fetch
+    the next page. `cursor=None` starts at the beginning. Use
+    `search_projects_page` if you also want a `next_cursor` back.
+    """
     conn.row_factory = sqlite3.Row
     where: list[str] = []
     params: list = []
@@ -259,10 +309,19 @@ def search_projects(
             where.append(broken_predicate)
         else:
             where.append(f"NOT {broken_predicate}")
-    sql = base + ((" WHERE " + " AND ".join(where)) if where else "")
     col = _ORDER_COLS.get(order_by, _ORDER_COLS["mtime"])
     direction = "ASC" if order_dir.lower() == "asc" else "DESC"
-    sql += f" ORDER BY {col} {direction} LIMIT ?"
+    # Cursor predicate: keyset on (sort_col, id). `<` for DESC, `>` for ASC.
+    # SQLite supports row-value comparisons since 3.15 — we depend on that
+    # for the (col, id) tuple compare to be one expression.
+    if cursor:
+        cursor_value, cursor_id = _decode_cursor(cursor)
+        cmp = "<" if direction == "DESC" else ">"
+        where.append(f"({col}, p.id) {cmp} (?, ?)")
+        params.append(cursor_value)
+        params.append(cursor_id)
+    sql = base + ((" WHERE " + " AND ".join(where)) if where else "")
+    sql += f" ORDER BY {col} {direction}, p.id {direction} LIMIT ?"
     params.append(limit)
     rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     if not rows:
@@ -282,3 +341,64 @@ def search_projects(
     for r in rows:
         r["tags"] = tags_by_pid.get(r["id"], [])
     return rows
+
+
+def search_projects_page(
+    conn: sqlite3.Connection,
+    *,
+    query: str | None = None,
+    tempo_min: float | None = None,
+    tempo_max: float | None = None,
+    archived: bool | None = False,
+    min_effort: int | None = None,
+    max_effort: int | None = None,
+    broken: bool | None = None,
+    order_by: Literal["mtime", "name", "effort"] = "mtime",
+    order_dir: Literal["asc", "desc"] = "desc",
+    limit: int = 200,
+    cursor: str | None = None,
+) -> dict:
+    """Cursor-paginated search.
+
+    Fetches `limit + 1` rows; if a (limit+1)th row comes back, builds a
+    `next_cursor` from the last item in the returned page. The cursor encodes
+    the (sort_value, id) pair of that item so the next page resumes exactly
+    after it — stable across concurrent inserts and rows with equal sort keys.
+
+    Returns: `{"items": [...], "next_cursor": str | None}`.
+    """
+    rows = search_projects(
+        conn,
+        query=query,
+        tempo_min=tempo_min,
+        tempo_max=tempo_max,
+        archived=archived,
+        min_effort=min_effort,
+        max_effort=max_effort,
+        broken=broken,
+        order_by=order_by,
+        order_dir=order_dir,
+        limit=limit + 1,
+        cursor=cursor,
+    )
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    next_cursor: str | None = None
+    if has_more and items:
+        last = items[-1]
+        sort_value = _project_sort_value(last, order_by)
+        next_cursor = _encode_cursor(sort_value, last["id"])
+    return {"items": items, "next_cursor": next_cursor}
+
+
+def _project_sort_value(row: dict, order_by: str) -> Any:
+    """Extract the keyset value from a project row, matching the SQL
+    expression in `_ORDER_COLS`. For `effort`, the SQL uses
+    COALESCE(effort_score, -1); we mirror that here so a NULL effort_score
+    encodes as -1 in the cursor and the next page's WHERE clause matches."""
+    if order_by == "name":
+        return row["name"]
+    if order_by == "effort":
+        v = row.get("effort_score")
+        return -1 if v is None else v
+    return row["last_modified"]

@@ -38,10 +38,11 @@ class MoveProject:
     def execute(self, conn: sqlite3.Connection) -> dict:
         row = self._row(conn)
         old_dir = Path(row["parent_dir"])
+        old_path = row["path"]
         new_dir = self.new_parent / old_dir.name
         new_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(old_dir), str(new_dir))
-        new_path = str(new_dir / Path(row["path"]).name)
+        new_path = str(new_dir / Path(old_path).name)
         conn.execute(
             "UPDATE projects SET parent_dir=?, path=? WHERE id=?",
             (str(new_dir), new_path, self.project_id),
@@ -52,5 +53,7 @@ class MoveProject:
             "project_id": self.project_id,
             "from_": str(old_dir),
             "to": str(new_dir),
+            "path_before": old_path,
+            "path_after": new_path,
             "hash_before": row["file_hash"],
         }

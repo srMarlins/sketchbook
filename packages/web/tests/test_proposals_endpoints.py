@@ -158,9 +158,7 @@ def test_approve_repair_mac_paths_proposal(tmp_path, monkeypatch):
     approve = client.post(f"/api/proposals/{proposal_id}/approve")
     assert approve.status_code == 200, approve.text
 
-    # Backup created beside the .als
     assert bak.is_file()
-    # Repaired .als no longer contains Mac-prefixed paths
     import gzip
 
     with gzip.open(als, "rb") as fh:
@@ -168,7 +166,6 @@ def test_approve_repair_mac_paths_proposal(tmp_path, monkeypatch):
     for prefix in (b"/Volumes/", b"/Users/", b"/Library/", b"/Applications/", b"/private/"):
         assert prefix not in body, f"Mac prefix {prefix!r} still present in {als}"
 
-    # Catalog row reflects the repair
     import sqlite3
 
     conn = open_db(tmp_path / "data" / "catalog.db")
@@ -179,6 +176,112 @@ def test_approve_repair_mac_paths_proposal(tmp_path, monkeypatch):
     assert row["mac_paths_count"] == 0
     assert row["has_project_info"] == 1
 
-    # Proposal was consumed; journal batch was written.
     assert not (tmp_path / "data" / "proposals" / f"{proposal_id}.json").exists()
     assert (tmp_path / "data" / "journal" / f"{approve.json()['batch_id']}.json").exists()
+
+
+def test_submit_rejects_move_outside_allowlist(tmp_path, monkeypatch):
+    """A MoveProject with new_parent outside projects_root must be rejected
+    at SUBMIT, not just at approve — never write a malicious proposal to disk."""
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    pid = _seed_real_project(tmp_path)
+    client = TestClient(create_app())
+    res = client.post(
+        "/api/proposals",
+        json={
+            "actor": "claude",
+            "actions": [
+                {
+                    "type": "MoveProject",
+                    "args": {
+                        "project_id": pid,
+                        "new_parent": "C:/Windows/Temp",
+                    },
+                }
+            ],
+        },
+    )
+    assert res.status_code == 400, res.text
+    assert "MoveProject" in res.text
+    pdir = tmp_path / "data" / "proposals"
+    if pdir.exists():
+        assert list(pdir.glob("*.json")) == []
+
+
+def test_submit_rejects_unknown_action_type(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    _seed_real_project(tmp_path)
+    client = TestClient(create_app())
+    res = client.post(
+        "/api/proposals",
+        json={
+            "actor": "claude",
+            "actions": [{"type": "DropDatabase", "args": {}}],
+        },
+    )
+    assert res.status_code == 422
+
+
+def test_approve_race_second_call_404s(tmp_path, monkeypatch):
+    """Once approve renames the proposal to .processing, a concurrent call
+    for the same proposal id sees the original path missing and 404s."""
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    pid = _seed_real_project(tmp_path, "old Project")
+    client = TestClient(create_app())
+    submit = client.post(
+        "/api/proposals",
+        json={
+            "actor": "claude",
+            "actions": [
+                {
+                    "type": "RenameProject",
+                    "args": {"project_id": pid, "new_dir_name": "new Project"},
+                }
+            ],
+        },
+    )
+    proposal_id = submit.json()["proposal_id"]
+    p = tmp_path / "data" / "proposals" / f"{proposal_id}.json"
+    p.rename(p.with_suffix(p.suffix + ".processing"))
+    res = client.post(f"/api/proposals/{proposal_id}/approve")
+    assert res.status_code == 404
+
+
+def test_approve_failure_restores_proposal_for_retry(tmp_path, monkeypatch):
+    """If run_batch raises, the .processing file is renamed back so the user
+    can fix and retry. The proposal must NOT be lost on the floor."""
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    pid = _seed_real_project(tmp_path)
+    client = TestClient(create_app())
+    submit = client.post(
+        "/api/proposals",
+        json={
+            "actor": "claude",
+            "actions": [
+                {
+                    "type": "RenameProject",
+                    "args": {"project_id": pid, "new_dir_name": "a:b"},
+                }
+            ],
+        },
+    )
+    proposal_id = submit.json()["proposal_id"]
+    res = client.post(f"/api/proposals/{proposal_id}/approve")
+    assert res.status_code == 400
+    proposal_path = tmp_path / "data" / "proposals" / f"{proposal_id}.json"
+    assert proposal_path.exists(), "failed approve must leave the proposal in place for retry"
+
+
+def test_submit_rejects_missing_args(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    _seed_real_project(tmp_path)
+    client = TestClient(create_app())
+    res = client.post(
+        "/api/proposals",
+        json={
+            "actor": "claude",
+            "actions": [{"type": "RenameProject", "args": {"project_id": 1}}],
+        },
+    )
+    assert res.status_code == 400
+    assert "new_dir_name" in res.text or "field required" in res.text.lower()

@@ -7,15 +7,37 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 
 def open_db(path: str | Path) -> sqlite3.Connection:
+    """Open a SQLite connection.
+
+    Schema bootstrap + migrations are skipped on connections to a database
+    that already has the `projects` table. Cold-start (fresh DB file) pays
+    the bootstrap cost once; every subsequent connection just sets PRAGMAs
+    and returns. This was previously paid on every FastAPI request (~10-30ms
+    of executescript + migration checks for nothing).
+    """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(p)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
-    conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
-    _apply_migrations(conn)
-    conn.commit()
+    conn.execute("PRAGMA busy_timeout = 5000")
+    if not _is_initialized(conn):
+        conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _apply_migrations(conn)
+        conn.commit()
+    else:
+        # Existing DB — still need to run idempotent migrations cheaply, in case
+        # the schema added columns since the file was first created.
+        _apply_migrations(conn)
+        conn.commit()
     return conn
+
+
+def _is_initialized(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='projects'"
+    ).fetchone()
+    return row is not None
 
 
 def _apply_migrations(conn: sqlite3.Connection) -> None:
@@ -24,6 +46,8 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
     PRAGMA table_info first.
     """
     cols = {r[1] for r in conn.execute("PRAGMA table_info(projects)")}
+    if not cols:
+        return  # projects table doesn't exist yet (only true mid-init)
     if "effort_score" not in cols:
         conn.execute("ALTER TABLE projects ADD COLUMN effort_score INTEGER")
     if "effort_breakdown" not in cols:
@@ -36,6 +60,8 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE projects ADD COLUMN mac_paths_count INTEGER")
     if "has_project_info" not in cols:
         conn.execute("ALTER TABLE projects ADD COLUMN has_project_info INTEGER")
+    if "file_size_bytes" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN file_size_bytes INTEGER")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_effort_score ON projects(effort_score)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_color_tag ON projects(color_tag)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parse_status ON projects(parse_status)")
