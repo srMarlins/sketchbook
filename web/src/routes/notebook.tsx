@@ -226,11 +226,15 @@ function GroupedStrips({
     getScrollElement: () => parentRef.current,
     estimateSize: (index) => {
       const r = rows[index];
-      if (!r) return 76;
-      if (r.kind === 'header') return 38;
-      // Standalone rows have a visual gap above (pt-3) — taller estimate.
-      if (r.kind === 'standalone') return 78;
-      // Variants are densely stacked inside a group container.
+      if (!r) return 84;
+      // Header has bigger top breathing room so groups visibly start a section.
+      if (r.kind === 'header') return 46;
+      // Standalone rows get extra padding top + bottom to clearly stand apart
+      // from neighboring group containers / other standalones.
+      if (r.kind === 'standalone') return 92;
+      // Variants are densely stacked inside a group container; last gets a
+      // closing pad-bottom that bumps its size.
+      if (r.variantPos === 'last') return 70;
       return 64;
     },
     overscan: 8,
@@ -255,18 +259,24 @@ function GroupedStrips({
                 transform: `translateY(${vRow.start}px)`,
                 paddingTop:
                   row.kind === 'header'
-                    ? 12
+                    ? 18
                     : row.kind === 'standalone'
-                      ? 12
+                      ? 18
                       : 0,
-                paddingBottom: row.kind === 'variant' && row.variantPos === 'last' ? 4 : 0,
+                paddingBottom:
+                  row.kind === 'standalone'
+                    ? 8
+                    : row.kind === 'variant' && row.variantPos === 'last'
+                      ? 8
+                      : 0,
               }}
             >
               {row.kind === 'header' ? (
-                // Multi-variant group header: paper-tint background that matches the
-                // variant body below, rounded top, folder icon, prominent title.
-                <div className="flex items-center gap-2 px-3 py-2 bg-paper-tint-cream/60 border border-rule-line-strong border-b-0 rounded-t-card">
-                  <Sprite name="folder" size={14} className="text-accent-muted shrink-0" />
+                // Multi-variant group header: full-opacity paper-tint
+                // background with a small drop shadow so the group container
+                // visibly "lifts" off the page. Folder icon + prominent title.
+                <div className="flex items-center gap-2 px-3 py-2 bg-paper-tint-cream border border-rule-line-strong border-b-0 rounded-t-card shadow-card">
+                  <Sprite name="folder" size={14} className="text-accent shrink-0" />
                   <span className="font-display text-[14px] font-semibold text-ink-primary truncate">
                     {row.group.title}
                   </span>
@@ -275,20 +285,18 @@ function GroupedStrips({
                   </span>
                 </div>
               ) : row.kind === 'variant' ? (
-                // Variant row inside a multi-variant group: shares a paper-tint
-                // container with siblings, marked by a colored left rule. Last
-                // variant rounds the bottom + adds the closing border.
+                // Variant row inside a multi-variant group: shares the
+                // tinted container with siblings, accent rule on the left,
+                // closes with a bottom border + rounded corner on the last.
                 <div
                   className={clsx(
-                    'px-3 py-1 bg-paper-tint-cream/60 border-x border-rule-line-strong',
-                    'relative',
-                    row.variantPos === 'last' && 'border-b rounded-b-card pb-2',
+                    'px-3 py-1 bg-paper-tint-cream border-x border-rule-line-strong relative',
+                    row.variantPos === 'last' && 'border-b rounded-b-card pb-2 shadow-card',
                   )}
                 >
-                  {/* Left accent rule visually ties the variants to their group */}
                   <span
                     aria-hidden
-                    className="absolute left-0 top-0 bottom-0 w-0.5 bg-accent-soft/60"
+                    className="absolute left-0 top-0 bottom-0 w-0.5 bg-accent-soft"
                   />
                   <SongStrip
                     project={row.project!}
@@ -297,12 +305,17 @@ function GroupedStrips({
                   />
                 </div>
               ) : (
-                // Single-variant project (no group container — flat, distinct).
-                <SongStrip
-                  project={row.project!}
-                  onOpen={() => onOpen(row.project!)}
-                  onLaunch={onLaunch}
-                />
+                // Single-variant project — explicitly "outside any group."
+                // Wrap in a subtle 1px ring so the standalone reads as a
+                // self-contained card, even when the SongStrip's own border
+                // is too quiet against neighboring tinted group containers.
+                <div className="ring-1 ring-rule-line-strong/40 rounded-card">
+                  <SongStrip
+                    project={row.project!}
+                    onOpen={() => onOpen(row.project!)}
+                    onLaunch={onLaunch}
+                  />
+                </div>
               )}
             </div>
           );
