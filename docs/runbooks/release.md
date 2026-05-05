@@ -38,10 +38,20 @@ For the first signing-key generation and any local-only releases:
 | Platform | Command |
 |---|---|
 | macOS | `brew install --cask hydraulic/tap/conveyor` |
-| Windows | `scoop bucket add hydraulic https://github.com/hydraulic-software/scoop-bucket && scoop install conveyor` |
-| Linux | Download from https://downloads.hydraulic.dev/ |
+| Windows / Linux | Download zip/tarball from https://downloads.hydraulic.dev/conveyor/download.html and extract to a directory on `PATH`. |
 
-Verify: `conveyor --version` prints something.
+Windows one-liner (PowerShell, not admin):
+
+```powershell
+$dest = "$env:LOCALAPPDATA\Conveyor"
+New-Item -ItemType Directory -Force -Path $dest | Out-Null
+Invoke-WebRequest -Uri "https://downloads.hydraulic.dev/conveyor/conveyor-18-windows-amd64.zip" -OutFile "$env:TEMP\conveyor.zip"
+Expand-Archive -Force "$env:TEMP\conveyor.zip" -DestinationPath $dest
+[Environment]::SetEnvironmentVariable("PATH", "$env:PATH;$dest\conveyor-18\bin", "User")
+$env:PATH = "$env:PATH;$dest\conveyor-18\bin"
+```
+
+Verify: `conveyor --version` prints something. (No Hydraulic Scoop bucket exists; do not search for one.)
 
 ### 3. Generate the Conveyor signing keypair
 
