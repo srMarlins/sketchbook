@@ -191,3 +191,33 @@ def test_find_duplicates_tool_returns_groups(tmp_path, monkeypatch):
             assert [l["id"] for l in data[0]["losers"]] == [drop]
 
     asyncio.run(go())
+
+
+def test_find_missing_samples_tool(tmp_path, monkeypatch):
+    import shutil
+    from pathlib import Path
+    from audio_core.db.connection import open_db
+    from audio_core.samples import upsert_sample
+    from audio_core.scanner.scan import scan_one
+
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    conn = open_db(tmp_path / "data" / "catalog.db")
+    fixtures = Path(__file__).parents[2] / "core" / "tests" / "fixtures"
+    proj = tmp_path / "Projects" / "p Project"
+    proj.mkdir(parents=True)
+    shutil.copy(fixtures / "missing_sample_tiny.als", proj / "p.als")
+    pid = scan_one(conn, proj / "p.als")
+    cand = tmp_path / "lib" / "relink_test_kick.wav"
+    cand.parent.mkdir(parents=True)
+    cand.write_bytes(b"x")
+    upsert_sample(conn, cand)
+
+    server = build_server()
+
+    async def go():
+        async with Client(server) as c:
+            res = await c.call_tool("find_missing_samples", {})
+            data = res.data
+            assert any(item["project_id"] == pid for item in data)
+
+    asyncio.run(go())

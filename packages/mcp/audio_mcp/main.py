@@ -11,6 +11,7 @@ from audio_core.db.connection import open_db
 from audio_core.db.projects import search_projects as _search_projects
 from audio_core.dedup import find_duplicates as _find_duplicates
 from audio_core.macpath import find_mac_imports as _find_mac_imports
+from audio_core.relink import find_missing_samples as _find_missing_samples
 from audio_core.proposals import InvalidProposal, validate_proposed_actions
 from fastmcp import FastMCP
 
@@ -225,6 +226,27 @@ def build_server() -> FastMCP:
                 "name": f.name,
                 "mac_paths_count": f.mac_paths_count,
                 "project_info_missing": f.project_info_missing,
+            }
+            for f in findings
+        ]
+
+    @mcp.tool
+    def find_missing_samples(limit: int = 200) -> list[dict]:
+        """Projects with one or more samples that don't exist on disk. Each finding
+        includes either an `auto_match` (filename matches exactly one indexed
+        candidate) or a list of `candidates` for the user to pick from. Pair with
+        `propose_batch` and `RelinkMissingSamples` actions to fix.
+        """
+        conn = open_db(db_path())
+        findings = _find_missing_samples(conn)[:limit]
+        return [
+            {
+                "project_id": f.project_id,
+                "project_path": f.project_path,
+                "project_name": f.project_name,
+                "missing_path": f.missing_path,
+                "auto_match": f.auto_match.path if f.auto_match else None,
+                "candidates": [c.path for c in f.candidates],
             }
             for f in findings
         ]
