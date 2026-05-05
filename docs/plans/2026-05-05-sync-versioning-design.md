@@ -304,6 +304,36 @@ Roots are configured per-machine in `feature-settings`. Each `External` root con
 
 **Why this matters:** Splice subscribers and factory-pack users have hundreds of GB of samples that are *already* replicated on each machine via vendor mechanisms (Splice client, Live install). Syncing them again would waste bandwidth, storage, and potentially trip subscription/DRM weirdness. The alias model captures the user's mental model directly: "this sample is from Splice, you'll have it on the other machine because Splice client put it there."
 
+### 3.6 Cloud auth model
+
+Sketchbook v1 authenticates to GCS with a **service-account JSON key** (long-lived RSA keypair). Per machine, exchanged for short-lived (1-hour) bearer tokens via OAuth2 JWT-bearer.
+
+**Provisioned for v1 (live as of 2026-05-05):**
+- Project: `sketchbook-jtf-2026` (under organization `jtfowler93-org`).
+- Bucket: `gs://sketchbook-jtf-2026` in `US-EAST4` (Northern Virginia, ~10ms from NYC).
+- Service account: `sketchbook-app@sketchbook-jtf-2026.iam.gserviceaccount.com`.
+- IAM: **bucket-scoped only** (`roles/storage.objectAdmin` + `roles/storage.legacyBucketReader` on the bucket; NO project-level binding). The SA cannot touch any other resource in the project even if the project later gains other resources.
+- Key file: `%APPDATA%\sketchbook\gcp-sa.json` (Windows) / `~/.config/sketchbook/gcp-sa.json` (macOS). Outside the repo. Gitignored. Distributed per-machine via secure channel (your responsibility).
+
+**Auth flow (implemented in `:shared:cloud`):**
+1. `GcsAuth.signJwt(serviceAccount, scope, now)` — builds claims `{iss=client_email, scope="…/devstorage.read_write", aud="…/oauth2/token", iat, exp=now+3600}`, RS256-signs with the JSON's `private_key`. Tested against published JWT/JWS vectors.
+2. `GcsAuth.exchangeJwtForAccessToken()` — POSTs the JWT to `https://oauth2.googleapis.com/token` with `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`. Returns 1-hour bearer token.
+3. `GcsAuth.tokenManager()` — caches the current token, refreshes proactively at the 50-minute mark, exposes `suspend fun token(): String`. Single in-flight refresh; concurrent callers de-duplicated.
+4. `DirectGcsBackend` injects `Authorization: Bearer <token>` on every GCS API call.
+
+**Scope choice:** we request `https://www.googleapis.com/auth/devstorage.read_write` (not the broader `cloud-platform`). The JWT scope is the second IAM gate; narrow it so even a leaked access token can't escalate.
+
+**Bearer tokens, not the SA JSON, are the in-memory secret.** The JSON is read once at startup, the parsed `private_key` lives in process memory, and only short-lived bearer tokens hit the network. Tokens are never logged (Kermit redacts to `ya29.****`).
+
+**Key rotation:** annually or on suspected compromise via `tools/rotate-gcp-key.ps1`. Two keys can coexist briefly during rotation; old key is deleted after the new key is verified working on every machine.
+
+**v1.2 multi-user pivot:** the SA-JSON-per-machine model is replaced by per-user OAuth (each user signs in with their Google account; Cloudflare Worker coordinator brokers GCS access via signed URLs). The `CloudBackend` interface stays; `DirectGcsBackend` is replaced or supplemented by `CoordinatedBackend`. No long-lived keys handed around between users.
+
+**Belt-and-suspenders defenses:**
+- `.gitignore` catches `*-sa.json`, `service-account*.json`, `gcp-sa*.json`, `.gcp/`.
+- `gitleaks` runs in CI on every PR (`.github/workflows/secret-scan.yml`), with project-tuned config in `.gitleaks.toml` that whitelists known-safe PEM string literals in source.
+- Repo is private; even if a secret slipped through, the blast radius is the project's collaborators only.
+
 ### 3.3 Local on-disk layout
 
 ```

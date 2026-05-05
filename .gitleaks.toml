@@ -1,0 +1,33 @@
+# Sketchbook-specific gitleaks config.
+#
+# Extends the built-in default rules with project-specific allowlists and
+# extra rules tuned to the Sketchbook codebase.
+
+title = "Sketchbook gitleaks config"
+
+# Use the built-in default ruleset as a base (Google SA keys, AWS, GitHub
+# tokens, generic high-entropy strings, etc.).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Project-level allowlist — strings that look like secrets but aren't"
+paths = [
+  # Test fixtures intentionally contain ephemeral test-only PEM keys
+  # (generated at runtime, never real credentials).
+  '''shared/cloud/src/.*Test\.kt''',
+]
+
+# Patterns that are LITERAL strings in source code (not actual secrets):
+regexes = [
+  # PEM markers that appear as string literals in JWT-signing code.
+  '''-----BEGIN (PRIVATE|RSA PRIVATE) KEY-----''',
+  '''-----END (PRIVATE|RSA PRIVATE) KEY-----''',
+]
+
+# Identifiers that LOOK secret but are public (project IDs, bucket names,
+# SA emails). These appear in commit messages, docs, and code.
+stopwords = [
+  "sketchbook-jtf-2026",
+  "sketchbook-app@sketchbook-jtf-2026.iam.gserviceaccount.com",
+]
