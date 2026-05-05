@@ -147,6 +147,61 @@ def _shelf_has_potential(conn: sqlite3.Connection) -> Shelf:
     )
 
 
+def _shelf_recent_activity(conn: sqlite3.Connection) -> Shelf:
+    """Most recently touched projects, regardless of color/effort. Powers the
+    'recent activity' strip on the home page below the notebook grid. We
+    over-fetch (30) so the UI can group by parent_dir and still render 8-12
+    distinct projects."""
+    rows = _rows_to_dicts(
+        conn.execute(
+            """
+            SELECT * FROM projects
+            WHERE is_archived = 0
+            ORDER BY last_modified DESC
+            LIMIT 30
+            """
+        )
+    )
+    return Shelf(
+        id="recent-activity",
+        title="Recent activity",
+        description="Latest edits across the library.",
+        see_all_query=urlencode({"order_by": "mtime", "order_dir": "desc"}),
+        projects=rows,
+    )
+
+
+def _shelf_gems_sample(conn: sqlite3.Connection, *, now: float) -> Shelf:
+    """Random sample of high-effort old projects — same filter as forgotten-gems
+    but ORDER BY RANDOM() so each refresh surfaces a different rotation. We
+    over-fetch (30) so UI grouping still leaves ~8-12 distinct projects."""
+    cutoff = now - 180 * _DAY
+    excluded = (COLOR_NAMES["green"], COLOR_NAMES["red"])
+    rows = _rows_to_dicts(
+        conn.execute(
+            """
+            SELECT * FROM projects
+            WHERE is_archived = 0
+              AND effort_score >= 80
+              AND last_modified < ?
+              AND (color_tag IS NULL OR color_tag NOT IN (?, ?))
+            ORDER BY RANDOM()
+            LIMIT 30
+            """,
+            (cutoff, *excluded),
+        )
+    )
+    return Shelf(
+        id="gems-sample",
+        title="Forgotten gems — random pick",
+        description="A fresh rotation each refresh.",
+        see_all_query=urlencode(
+            {"min_effort": 80, "order_by": "effort", "order_dir": "desc"}
+        ),
+        projects=rows,
+    )
+
+
 def _shelf_untriaged(conn: sqlite3.Connection) -> Shelf:
     rows = _rows_to_dicts(
         conn.execute(
@@ -182,4 +237,6 @@ def compute_shelves(conn: sqlite3.Connection) -> list[Shelf]:
         _shelf_almost_done(conn),
         _shelf_has_potential(conn),
         _shelf_untriaged(conn),
+        _shelf_recent_activity(conn),
+        _shelf_gems_sample(conn, now=now),
     ]

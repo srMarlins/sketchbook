@@ -46,7 +46,7 @@ def _shelf(shelves, sid):
     return next(s for s in shelves if s["id"] == sid)
 
 
-def test_home_returns_all_five_shelves(tmp_path, monkeypatch):
+def test_home_returns_all_shelves_in_order(tmp_path, monkeypatch):
     monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
     open_db(tmp_path / "data" / "catalog.db")
     res = TestClient(create_app()).get("/api/home")
@@ -59,6 +59,8 @@ def test_home_returns_all_five_shelves(tmp_path, monkeypatch):
         "almost-done",
         "has-potential",
         "untriaged",
+        "recent-activity",
+        "gems-sample",
     ]
 
 

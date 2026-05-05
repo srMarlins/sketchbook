@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { BrandingHeader } from '../components/surface/BrandingHeader';
 import { Desk } from '../components/surface/Desk';
@@ -5,14 +6,19 @@ import { Sidebar } from '../components/surface/Sidebar';
 import { Shelf } from '../components/surface/Shelf';
 import { NotebookSpine } from '../components/surface/NotebookSpine';
 import { HighlightsStrip, type HighlightShelfId } from '../components/data/HighlightsStrip';
+import { SongStrip } from '../components/data/SongStrip';
+import { ProjectCorkboard } from '../components/corkboard';
 import { SearchBar } from '../components/inputs/SearchBar';
 import { LoadingState } from '../components/feedback/LoadingState';
 import { ErrorState } from '../components/feedback/ErrorState';
 import { EmptyState } from '../components/feedback/EmptyState';
-import { useHome, useProjects, useProposals } from '../app/queries';
+import { useHome, useOpenProject, useProjects, useProposals } from '../app/queries';
 import { deriveNotebooks, fmtDate } from '../app/notebooks';
+import { deriveProjectGroups } from '../lib/project-groups';
 import type { ProjectSummary, Shelf as HomeShelf } from '../lib/types';
 import type { NotebookKind as SpineKind } from '../components/surface/NotebookSpine';
+
+const STRIP_LIMIT = 8;
 
 const KIND_TO_SPINE: Record<string, SpineKind> = {
   manila: 'tinted-cream',
@@ -24,7 +30,10 @@ export function HomeRoute() {
   const projects = useProjects();
   const proposals = useProposals();
   const home = useHome();
+  const openMut = useOpenProject();
   const navigate = useNavigate();
+  const [openProjectId, setOpenProjectId] = useState<number | null>(null);
+  const [corkOpen, setCorkOpen] = useState(false);
 
   const sidebarItems = [
     { id: 'home', label: 'Home', icon: 'house' as const },
@@ -67,7 +76,85 @@ export function HomeRoute() {
         <ErrorState body={String(projects.error)} onRetry={() => projects.refetch()} />
       ) : null}
       {projects.data ? <NotebooksGrid projects={projects.data} /> : null}
+      {home.data ? (
+        <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-2">
+          <ShelfStrip
+            shelf={home.data.shelves.find((s) => s.id === 'recent-activity')}
+            seeAllTo="cat-currently-working"
+            onOpenDetail={(p) => {
+              setOpenProjectId(p.id);
+              setCorkOpen(true);
+            }}
+            onLaunch={(id) => openMut.mutate(id)}
+            onSeeAll={(target) =>
+              void navigate({ to: '/n/$notebookId', params: { notebookId: target } })
+            }
+          />
+          <ShelfStrip
+            shelf={home.data.shelves.find((s) => s.id === 'gems-sample')}
+            seeAllTo="cat-forgotten-gems"
+            onOpenDetail={(p) => {
+              setOpenProjectId(p.id);
+              setCorkOpen(true);
+            }}
+            onLaunch={(id) => openMut.mutate(id)}
+            onSeeAll={(target) =>
+              void navigate({ to: '/n/$notebookId', params: { notebookId: target } })
+            }
+          />
+        </div>
+      ) : null}
+      <ProjectCorkboard projectId={openProjectId} open={corkOpen} onOpenChange={setCorkOpen} />
     </Desk>
+  );
+}
+
+function ShelfStrip({
+  shelf,
+  seeAllTo,
+  onOpenDetail,
+  onLaunch,
+  onSeeAll,
+}: {
+  shelf: HomeShelf | undefined;
+  seeAllTo: string;
+  onOpenDetail: (project: ProjectSummary) => void;
+  onLaunch: (projectId: number) => void;
+  onSeeAll: (target: string) => void;
+}) {
+  if (!shelf) return null;
+  // Group raw rows by parent_dir, then take one representative per group up to STRIP_LIMIT.
+  const groups = deriveProjectGroups(shelf.projects).slice(0, STRIP_LIMIT);
+  return (
+    <section className="space-y-2">
+      <header className="flex items-baseline justify-between gap-3 px-1">
+        <div>
+          <h2 className="font-display text-base text-ink-primary">{shelf.title}</h2>
+          <p className="text-xs text-ink-muted">{shelf.description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onSeeAll(seeAllTo)}
+          className="font-mono text-[11px] text-ink-muted uppercase tracking-wide hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-chip px-1.5 py-0.5"
+        >
+          see all →
+        </button>
+      </header>
+      {groups.length === 0 ? (
+        <p className="px-1 text-xs italic text-ink-muted">Nothing here yet.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {groups.map((g) => (
+            <SongStrip
+              key={g.id}
+              project={g.representative}
+              onOpen={() => onOpenDetail(g.representative)}
+              onLaunch={onLaunch}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
