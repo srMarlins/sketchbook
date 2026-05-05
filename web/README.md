@@ -87,6 +87,10 @@ uv run uvicorn audio_web.app:create_app --factory --host 127.0.0.1 --port 7878
 
 Server state caching is TanStack Query; queries + mutations are declared in [`app/queries.ts`](./src/app/queries.ts) (`useProjects`, `useProject`, `useProposals`, `useJournal`, plus `useApproveProposal`/`useRejectProposal`/`useUndoBatch`/`useSubmitProposal`).
 
+### Live indexer events
+
+The backend publishes scanner/backfill/watcher events on `/api/events` (SSE). [`hooks/useIndexerEvents.ts`](./src/hooks/useIndexerEvents.ts) is the raw subscription; [`hooks/useIndexerCachePatcher.ts`](./src/hooks/useIndexerCachePatcher.ts) invalidates `['project', id]` and `['projects']` on every `scan_row` and writes findings counts directly into `['findings']`. The `<IndexerStatus />` chip in the page header surfaces live state (idle / scanning / backfilling / watcher_warning / disconnected). The first-launch splash (`<FirstLaunch />`) takes over when the catalog is empty and the scanner is active, auto-dismissing once 30+ rows are in the catalog.
+
 ### Proposal/journal translation
 
 Backend ProposedAction is a discriminated union by `type` (`RenameProject`, `MoveProject`, `ArchiveProject`, `SetColorTag`, `SetTags`). The UI never reads the per-type args directly — it goes through [`lib/proposal-translate.ts`](./src/lib/proposal-translate.ts), which produces a uniform `{verb, label, before, after}` shape. Adding a new action type = adding one branch in `proposal-translate.ts` and TS narrowing surfaces every UI site that needs an update.
