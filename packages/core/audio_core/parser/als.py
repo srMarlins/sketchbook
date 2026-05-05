@@ -134,6 +134,8 @@ _TRACK_TAGS = frozenset(
     {"MidiTrack", "AudioTrack", "ReturnTrack", "GroupTrack", "MasterTrack", "MainTrack"}
 )
 
+_MAC_PATH_PREFIXES = ("/Volumes/", "/Users/", "/Library/", "/Applications/", "/private/")
+
 
 def _track_name_for(node: etree._Element) -> str | None:
     """Walk up to the nearest containing track and return its EffectiveName.
@@ -263,6 +265,7 @@ _INTERESTING_END_TAGS = frozenset(
         "PluginDevice",
         "AuPluginDevice",
         "SampleRef",
+        "Path",
         *_TRACK_TAGS,
         *NATIVE_DEVICE_TAGS,
     }
@@ -299,6 +302,7 @@ def parse_als(path: str | Path) -> ProjectMetadata:
     audio = midi = ret_ = group = 0
     plugins: list[PluginRef] = []
     samples: list[SampleRef] = []
+    mac_paths_count = 0
 
     # Stack of [tag, name] for currently-open track ancestors (innermost on top).
     track_stack: list[list] = []
@@ -444,6 +448,13 @@ def parse_als(path: str | Path) -> ProjectMetadata:
                     )
                 _free_subtree(elem)
 
+            elif tag == "Path":
+                parent = elem.getparent()
+                if parent is not None and parent.tag == "FileRef":
+                    v = elem.get("Value", "")
+                    if v.startswith(_MAC_PATH_PREFIXES):
+                        mac_paths_count += 1
+
             elif tag == "SampleRef":
                 file_ref = elem.find("FileRef")
                 if file_ref is not None:
@@ -472,4 +483,5 @@ def parse_als(path: str | Path) -> ProjectMetadata:
         live_version=live_version,
         plugins=plugins,
         samples=samples,
+        mac_paths_count=mac_paths_count,
     )

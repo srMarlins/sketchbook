@@ -26,6 +26,7 @@ class ProjectMetadata(BaseModel):
     audio_track_count: int = 0
     midi_track_count: int = 0
     return_track_count: int = 0
+    mac_paths_count: int = 0
     length_seconds: float | None = None
     live_version: str | None = None
     plugins: list[PluginRef] = []
