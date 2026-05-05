@@ -47,3 +47,12 @@ _[!_]*.py
 
 # project data: logs are reproducible at runtime
 data/logs/
+
+# Gradle
+.gradle/
+build/
+**/build/
+!gradle-wrapper.jar
+out/
+local.properties
+

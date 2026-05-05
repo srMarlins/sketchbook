@@ -1,0 +1,80 @@
+[versions]
+# Toolchain
+kotlin = "2.3.21"
+gradle = "9.0.0"
+jvm-toolchain = "17"
+
+# UI
+compose = "1.11.0-rc01"
+material3-adaptive = "1.1.2"
+
+# DI
+metro = "1.0.0"
+
+# Persistence
+sqldelight = "2.1.0"
+
+# Networking
+ktor = "3.4.3"
+
+# Coroutines / IO / serialization
+coroutines = "1.10.2"
+kotlinx-io = "0.8.0"
+kotlinx-serialization = "1.9.0"
+kotlinx-datetime = "0.7.0"
+
+# Logging
+kermit = "2.0.6"
+
+# Filesystem (JVM)
+directory-watcher = "0.19.0"
+
+# Hashing — coordinates TBD in PR-7 (design's `io.lktk:blake3-jni` is not on Maven Central)
+# blake3 = ""
+
+# Testing
+kotest = "6.0.0.M4"
+turbine = "1.2.0"
+
+[libraries]
+# Kotlinx
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
+
+# DI
+metro-runtime = { module = "dev.zacsweers.metro:runtime", version.ref = "metro" }
+
+# Persistence
+sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
+sqldelight-coroutines-extensions = { module = "app.cash.sqldelight:coroutines-extensions", version.ref = "sqldelight" }
+sqldelight-jvm-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+
+# Networking
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+
+# Logging
+kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
+
+# Filesystem (JVM)
+directory-watcher = { module = "io.methvin:directory-watcher", version.ref = "directory-watcher" }
+
+# UI
+material3-adaptive = { module = "org.jetbrains.compose.material3.adaptive:adaptive", version.ref = "material3-adaptive" }
+
+# Test
+kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
+turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-power-assert = { id = "org.jetbrains.kotlin.plugin.power-assert", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+metro = { id = "dev.zacsweers.metro", version.ref = "metro" }
