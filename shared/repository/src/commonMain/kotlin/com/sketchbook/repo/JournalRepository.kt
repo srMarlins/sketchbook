@@ -1,0 +1,22 @@
+package com.sketchbook.repo
+
+import kotlinx.coroutines.flow.Flow
+
+/**
+ * Append-only journal of project actions. Mirrors v0.1 semantics so Python and Kotlin can read
+ * each other's entries during the parity period.
+ *
+ * v0.1 stored entries as JSON files under `data/journal/<timestamp>.json`. PR-8 (`actions`)
+ * adds the disk writer; this interface stays storage-agnostic.
+ */
+interface JournalRepository {
+
+    /** Live tail, most recent first, capped at [limit]. */
+    fun observeRecent(limit: Int = 100): Flow<List<JournalEntry>>
+
+    /** Append a new entry. Returns the entry with its assigned [JournalEntry.sequence]. */
+    suspend fun append(entry: JournalEntry): Result<JournalEntry>
+
+    /** Pop the most recent entry; the returned entry is the one to undo. Returns failure if empty. */
+    suspend fun undoLast(): Result<JournalEntry>
+}

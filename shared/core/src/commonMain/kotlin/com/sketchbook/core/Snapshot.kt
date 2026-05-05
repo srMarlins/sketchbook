@@ -22,7 +22,7 @@ enum class SnapshotKind {
  * One row in a project's history. Materialized from a manifest on the cloud + local sync state.
  */
 data class Snapshot(
-    val projectId: ProjectId,
+    val projectUuid: ProjectUuid,
     val rev: SnapshotRev,
     val parentRev: SnapshotRev?,
     val timestamp: Instant,

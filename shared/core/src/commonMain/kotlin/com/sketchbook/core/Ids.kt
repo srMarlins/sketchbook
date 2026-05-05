@@ -3,13 +3,26 @@ package com.sketchbook.core
 import kotlinx.serialization.Serializable
 
 /**
- * Stable identifier for a project. ULID/UUID string at the wire layer; opaque to consumers.
+ * Local catalog primary key. Stable for the lifetime of a single machine's `catalog.db`.
+ * Use [ProjectUuid] for cross-machine identity (manifests, snapshots, sync).
  */
 @JvmInline
 @Serializable
-value class ProjectId(val value: String) {
+value class ProjectId(val value: Long) {
     init {
-        require(value.isNotBlank()) { "ProjectId must not be blank" }
+        require(value > 0) { "ProjectId must be positive, got $value" }
+    }
+}
+
+/**
+ * Cross-machine project identity. ULID-shaped string written into `.audio-id` sidecars and
+ * referenced in cloud manifests / snapshots. Constant across renames, moves, and machines.
+ */
+@JvmInline
+@Serializable
+value class ProjectUuid(val value: String) {
+    init {
+        require(value.isNotBlank()) { "ProjectUuid must not be blank" }
     }
 }
 

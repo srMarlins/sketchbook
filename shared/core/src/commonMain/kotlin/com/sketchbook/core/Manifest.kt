@@ -20,7 +20,7 @@ import kotlinx.serialization.Serializable
 data class Manifest(
     @SerialName("v") val version: Int = 1,
     @SerialName("owner_user_id") val ownerUserId: UserId = UserId.DEFAULT,
-    @SerialName("project_uuid") val projectUuid: ProjectId,
+    @SerialName("project_uuid") val projectUuid: ProjectUuid,
     @SerialName("rev") val rev: SnapshotRev,
     @SerialName("parent_rev") val parentRev: SnapshotRev? = null,
     @SerialName("timestamp") val timestamp: Instant,

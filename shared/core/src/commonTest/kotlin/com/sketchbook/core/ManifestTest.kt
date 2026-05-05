@@ -18,7 +18,7 @@ class ManifestTest {
     private fun fixture(): Manifest = Manifest(
         version = 1,
         ownerUserId = UserId("default"),
-        projectUuid = ProjectId("01HZQX5N3M8F9G2K7B1A6Y4WCE"),
+        projectUuid = ProjectUuid("01HZQX5N3M8F9G2K7B1A6Y4WCE"),
         rev = SnapshotRev(47),
         parentRev = SnapshotRev(46),
         timestamp = Instant.parse("2026-05-05T14:22:31.412Z"),
