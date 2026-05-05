@@ -33,6 +33,7 @@ include(
     ":shared:mcp-server",
     ":shared:ui-shared",
     ":shared:feature-projects",
+    ":shared:feature-project-detail",
     ":app-desktop",
     ":app-mcp",
 )
