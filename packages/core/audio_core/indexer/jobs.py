@@ -120,6 +120,60 @@ class IncrementalScan:
 
 
 @dataclass
+class FullSampleScan:
+    """Walk every configured sample root and upsert a row per audio file.
+    Idempotent. Emits sample_scan_started / sample_scan_progress / sample_scan_finished."""
+
+    db_path: Path
+    roots: list[Path]
+    bus: EventBus
+
+    def __call__(self) -> None:
+        from audio_core.samples import upsert_sample
+        from audio_core.scanner.walker import walk_samples
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            self.bus.publish({"kind": "sample_scan_started", "roots": [str(r) for r in self.roots]})
+            done = 0
+            for root in self.roots:
+                for p in walk_samples(root):
+                    try:
+                        upsert_sample(conn, p)
+                    except Exception:
+                        # one bad file shouldn't kill the pass
+                        pass
+                    done += 1
+                    if done % 100 == 0:
+                        self.bus.publish({"kind": "sample_scan_progress", "done": done})
+            self.bus.publish({"kind": "sample_scan_finished", "done": done})
+        finally:
+            conn.close()
+
+
+@dataclass
+class IncrementalSampleScan:
+    db_path: Path
+    paths: list[Path]
+    bus: EventBus
+
+    def __call__(self) -> None:
+        from audio_core.samples import delete_sample, upsert_sample
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            for p in self.paths:
+                if p.exists():
+                    upsert_sample(conn, p)
+                    self.bus.publish({"kind": "sample_row", "path": str(p), "status": "updated"})
+                else:
+                    delete_sample(conn, p)
+                    self.bus.publish({"kind": "sample_row", "path": str(p), "status": "removed"})
+        finally:
+            conn.close()
+
+
+@dataclass
 class BackfillColumn:
     """Run a single BackfillSpec against the catalog: select rows whose target
     columns are NULL, call spec.fill_one per row, emit progress on the bus."""
