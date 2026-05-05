@@ -37,6 +37,7 @@ include(
     ":shared:feature-timeline",
     ":shared:feature-proposals",
     ":shared:feature-needs-attention",
+    ":shared:feature-settings",
     ":app-desktop",
     ":app-mcp",
 )
