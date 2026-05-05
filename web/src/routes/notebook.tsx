@@ -1,11 +1,13 @@
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import clsx from 'clsx';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { BrandingHeader } from '../components/surface/BrandingHeader';
 import { Desk } from '../components/surface/Desk';
 import { Sidebar } from '../components/surface/Sidebar';
 import { NotebookPage } from '../components/surface/NotebookPage';
 import { SongStrip } from '../components/data/SongStrip';
+import { Sprite } from '../components/primitives/Sprite';
 import { SearchBar, useSearchStore } from '../components/inputs/SearchBar';
 import { ProjectCorkboard } from '../components/corkboard';
 import { LoadingState } from '../components/feedback/LoadingState';
@@ -169,9 +171,12 @@ export function NotebookRoute() {
 }
 
 interface FlatRow {
-  kind: 'header' | 'variant';
+  kind: 'header' | 'variant' | 'standalone';
   group: ProjectGroup;
   project?: ProjectSummary;
+  /** For multi-variant rows: position within the group, used to round corners
+   * + add bottom border on the last variant. Undefined for headers and standalone. */
+  variantPos?: 'first' | 'middle' | 'last';
   /** Stable key. */
   key: string;
 }
@@ -181,11 +186,24 @@ function flattenGroups(groups: ProjectGroup[]): FlatRow[] {
   for (const g of groups) {
     if (g.variant_count > 1) {
       rows.push({ kind: 'header', group: g, key: `h:${g.id}` });
-      for (const v of g.variants) {
-        rows.push({ kind: 'variant', group: g, project: v, key: `v:${v.id}` });
-      }
+      g.variants.forEach((v, i) => {
+        const isFirst = i === 0;
+        const isLast = i === g.variants.length - 1;
+        rows.push({
+          kind: 'variant',
+          group: g,
+          project: v,
+          variantPos: isFirst ? 'first' : isLast ? 'last' : 'middle',
+          key: `v:${v.id}`,
+        });
+      });
     } else {
-      rows.push({ kind: 'variant', group: g, project: g.representative, key: `v:${g.representative.id}` });
+      rows.push({
+        kind: 'standalone',
+        group: g,
+        project: g.representative,
+        key: `s:${g.representative.id}`,
+      });
     }
   }
   return rows;
@@ -206,7 +224,15 @@ function GroupedStrips({
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: (index) => (rows[index]?.kind === 'header' ? 32 : 68),
+    estimateSize: (index) => {
+      const r = rows[index];
+      if (!r) return 76;
+      if (r.kind === 'header') return 38;
+      // Standalone rows have a visual gap above (pt-3) — taller estimate.
+      if (r.kind === 'standalone') return 78;
+      // Variants are densely stacked inside a group container.
+      return 64;
+    },
     overscan: 8,
   });
 
@@ -220,31 +246,63 @@ function GroupedStrips({
               key={row.key}
               data-index={vRow.index}
               data-row-kind={row.kind}
+              data-variant-pos={row.variantPos ?? ''}
               style={{
                 position: 'absolute',
                 top: 0,
                 left: 0,
                 width: '100%',
                 transform: `translateY(${vRow.start}px)`,
-                paddingTop: row.kind === 'header' ? 8 : 4,
-                paddingBottom: row.kind === 'header' ? 0 : 4,
+                paddingTop:
+                  row.kind === 'header'
+                    ? 12
+                    : row.kind === 'standalone'
+                      ? 12
+                      : 0,
+                paddingBottom: row.kind === 'variant' && row.variantPos === 'last' ? 4 : 0,
               }}
             >
               {row.kind === 'header' ? (
-                <div className="flex items-baseline gap-2 pl-1 pb-1 border-b border-rule-line/60">
-                  <span className="font-display text-sm text-ink-primary">{row.group.title}</span>
-                  <span className="font-mono text-[11px] text-ink-muted">
-                    {row.group.variant_count} variants
+                // Multi-variant group header: paper-tint background that matches the
+                // variant body below, rounded top, folder icon, prominent title.
+                <div className="flex items-center gap-2 px-3 py-2 bg-paper-tint-cream/60 border border-rule-line-strong border-b-0 rounded-t-card">
+                  <Sprite name="folder" size={14} className="text-accent-muted shrink-0" />
+                  <span className="font-display text-[14px] font-semibold text-ink-primary truncate">
+                    {row.group.title}
+                  </span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-ink-muted shrink-0">
+                    · {row.group.variant_count} variants
                   </span>
                 </div>
-              ) : (
-                <div className={row.group.variant_count > 1 ? 'pl-3' : ''}>
+              ) : row.kind === 'variant' ? (
+                // Variant row inside a multi-variant group: shares a paper-tint
+                // container with siblings, marked by a colored left rule. Last
+                // variant rounds the bottom + adds the closing border.
+                <div
+                  className={clsx(
+                    'px-3 py-1 bg-paper-tint-cream/60 border-x border-rule-line-strong',
+                    'relative',
+                    row.variantPos === 'last' && 'border-b rounded-b-card pb-2',
+                  )}
+                >
+                  {/* Left accent rule visually ties the variants to their group */}
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-0 bottom-0 w-0.5 bg-accent-soft/60"
+                  />
                   <SongStrip
                     project={row.project!}
                     onOpen={() => onOpen(row.project!)}
                     onLaunch={onLaunch}
                   />
                 </div>
+              ) : (
+                // Single-variant project (no group container — flat, distinct).
+                <SongStrip
+                  project={row.project!}
+                  onOpen={() => onOpen(row.project!)}
+                  onLaunch={onLaunch}
+                />
               )}
             </div>
           );

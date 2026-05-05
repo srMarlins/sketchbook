@@ -20,11 +20,32 @@ import type { NotebookKind as SpineKind } from '../components/surface/NotebookSp
 
 const STRIP_LIMIT = 8;
 
-const KIND_TO_SPINE: Record<string, SpineKind> = {
-  manila: 'tinted-cream',
-  kraft: 'tinted-rose',
-  lined: 'plain',
-};
+// Map deriveNotebooks() kinds to spine visual variants. Year notebooks (kind
+// 'lined') cycle through tints so adjacent years are visually distinct.
+const LINED_TINT_CYCLE: SpineKind[] = ['tinted-blue', 'tinted-sage', 'tinted-cream'];
+
+// Tab strip colors per notebook id-prefix — small accent across the top of
+// each spine so different sections don't all read identical at a glance.
+// Uses CSS custom properties so the colors stay correct across light/dark.
+function spineFor(
+  id: string,
+  kind: 'manila' | 'kraft' | 'lined',
+  index: number,
+): { spineKind: SpineKind; tabColor: string | null } {
+  if (id === 'inbox') return { spineKind: 'tinted-cream', tabColor: 'var(--accent)' };
+  if (id === 'archive') return { spineKind: 'aged', tabColor: null };
+  if (id === 'claude') return { spineKind: 'tinted-rose', tabColor: 'var(--als-13)' };
+  if (kind === 'lined') {
+    // Years and tags cycle through tints; each gets a distinct als-color tab.
+    const tints: SpineKind[] = LINED_TINT_CYCLE;
+    const tabColors = ['var(--als-10)', 'var(--als-6)', 'var(--als-3)']; // blue / green / mustard
+    return {
+      spineKind: tints[index % tints.length]!,
+      tabColor: tabColors[index % tabColors.length]!,
+    };
+  }
+  return { spineKind: 'tinted-cream', tabColor: null };
+}
 
 export function HomeRoute() {
   const projects = useProjects();
@@ -201,16 +222,29 @@ function NotebooksGrid({ projects }: { projects: ProjectSummary[] }) {
     return <EmptyState title="no projects" body="run `audio-cli scan` to populate the catalog" />;
   }
 
+  // Track index per kind so the cycling tints/tabs in spineFor stay stable
+  // even as inbox/archive/claude break the natural ordering.
+  const linedIndices = new Map<string, number>();
+  let linedCounter = 0;
+  for (const nb of notebooks) {
+    if (nb.kind === 'lined') {
+      linedIndices.set(nb.id, linedCounter);
+      linedCounter += 1;
+    }
+  }
+
   return (
     <Shelf title={`${projects.length} projects across ${notebooks.length} notebooks`}>
       {notebooks.map((nb) => {
         const lastUpdated = fmtDate(nb.lastUpdated);
+        const { spineKind, tabColor } = spineFor(nb.id, nb.kind, linedIndices.get(nb.id) ?? 0);
         return (
           <NotebookSpine
             key={nb.id}
             id={nb.id}
             title={nb.title}
-            kind={KIND_TO_SPINE[nb.kind] ?? 'plain'}
+            kind={spineKind}
+            tabColor={tabColor}
             count={nb.count}
             {...(lastUpdated ? { lastUpdated } : {})}
             onOpen={(id) => navigate({ to: '/n/$notebookId', params: { notebookId: id } })}

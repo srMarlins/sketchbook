@@ -80,7 +80,7 @@ describe('<HighlightsStrip />', () => {
     render(<HighlightsStrip shelves={fullShelves} onSelect={() => {}} />);
     const empty = screen.getByTestId('highlight-chip-untriaged');
     expect(empty).toHaveAttribute('data-empty', 'true');
-    expect(empty.className).toMatch(/opacity-50/);
+    expect(empty.className).toMatch(/opacity-55/);
 
     const filled = screen.getByTestId('highlight-chip-currently-working');
     expect(filled).not.toHaveAttribute('data-empty');

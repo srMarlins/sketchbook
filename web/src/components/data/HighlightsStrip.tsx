@@ -24,42 +24,44 @@ interface CategoryDef {
   tint: string;
 }
 
-// Display order is fixed.
+// Display order is fixed. Each category gets its own tint + dot pairing so
+// chips read distinctly at a glance. Three previously shared paper-tint-cream
+// (gems / almost-done / untriaged) and were indistinguishable.
 const CATEGORIES: CategoryDef[] = [
   {
     id: 'currently-working',
     fallbackTitle: 'Currently working on',
-    dot: 'var(--als-11)', // blue
+    dot: 'var(--als-10)', // blue — active
     tint: 'bg-paper-tint-blue',
   },
   {
     id: 'forgotten-gems',
     fallbackTitle: 'Forgotten gems',
-    dot: null,
+    dot: 'var(--accent-warning)', // gold — buried treasure
     tint: 'bg-paper-tint-cream',
   },
   {
     id: 'almost-done',
     fallbackTitle: 'Almost done',
-    dot: 'var(--als-3)', // orange
-    tint: 'bg-paper-tint-cream',
+    dot: 'var(--als-2)', // orange
+    tint: 'bg-paper-tint-sage',
   },
   {
     id: 'has-potential',
     fallbackTitle: 'Has potential',
-    dot: 'var(--als-13)', // purple
+    dot: 'var(--als-12)', // magenta
     tint: 'bg-paper-tint-rose',
   },
   {
     id: 'untriaged',
     fallbackTitle: 'Untriaged',
-    dot: null,
-    tint: 'bg-paper-tint-cream',
+    dot: 'var(--ink-muted)', // neutral gray dot — matches "no decision yet"
+    tint: 'bg-surface-card',
   },
   {
     id: 'broken',
     fallbackTitle: 'Broken',
-    dot: 'var(--als-1)', // red — small breadcrumb, not a flashing alarm
+    dot: 'var(--accent-danger)', // red — small breadcrumb, not a flashing alarm
     tint: 'bg-paper-tint-rose',
   },
 ];
@@ -93,15 +95,16 @@ export function HighlightsStrip({ shelves, onSelect, className }: HighlightsStri
             onClick={() => onSelect(cat.id)}
             className={clsx(
               'group inline-flex items-center gap-2 px-2.5 py-1 rounded-chip',
-              'border border-rule-line',
+              // Stronger border so chips don't fade into the desk surface.
+              'border border-rule-line-strong',
               cat.tint,
               'font-mono text-[11px] uppercase tracking-wider',
               'text-ink-secondary',
-              'transition-shadow duration-fast ease-paper',
-              'hover:shadow-pin focus-visible:shadow-pin',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-              'motion-reduce:transition-none',
-              empty && 'opacity-50 text-ink-muted',
+              'transition-all duration-fast ease-paper',
+              'hover:shadow-card hover:-translate-y-px hover:text-ink-primary',
+              'focus-visible:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              'motion-reduce:transition-none motion-reduce:hover:translate-y-0',
+              empty && 'opacity-55 text-ink-muted hover:translate-y-0 hover:shadow-none',
             )}
           >
             {cat.dot ? (
