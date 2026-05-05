@@ -13,7 +13,27 @@ The server reads `data/catalog.db` and writes proposals to `data/proposals/` und
 
 ## Add it to a Claude Code `.mcp.json`
 
-Drop this into the workspace's `.mcp.json` (or merge with the existing one):
+There are two implementations of this server during the parity period — both speak the same MCP wire surface, both write proposal files in the same `data/proposals/` layout. Pick one.
+
+### Option A — Kotlin server (preferred, `app-mcp`)
+
+```json
+{
+  "mcpServers": {
+    "sketchbook": {
+      "command": "Z:/User/audio/gradlew.bat",
+      "args": ["--quiet", ":app-mcp:run"],
+      "env": {
+        "AUDIO_ROOT": "Z:/User/audio"
+      }
+    }
+  }
+}
+```
+
+`./gradlew :app-mcp:run` launches `com.sketchbook.mcp.app.MainKt` with the Kotlin MCP server on stdio. Repository wiring lands in PR-18 once the Metro graph composes.
+
+### Option B — Python reference impl (`packages/mcp`, fallback)
 
 ```json
 {
@@ -29,7 +49,7 @@ Drop this into the workspace's `.mcp.json` (or merge with the existing one):
 }
 ```
 
-`uv run audio-mcp` resolves the entry point declared in `packages/mcp/pyproject.toml` (`audio_mcp.main:run`) inside the workspace's venv.
+`uv run audio-mcp` resolves the entry point declared in `packages/mcp/pyproject.toml` (`audio_mcp.main:run`) inside the workspace's venv. Use this if the Kotlin server hasn't been wired to a real catalog yet for your environment.
 
 ## Verify
 
