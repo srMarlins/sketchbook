@@ -1,10 +1,12 @@
 package com.sketchbook.desktop
 
+import com.sketchbook.desktop.repo.InMemoryLockRepository
 import com.sketchbook.desktop.repo.InMemoryProjectRepository
 import com.sketchbook.desktop.repo.InMemoryProposalsRepository
 import com.sketchbook.desktop.repo.InMemoryRepairRepository
 import com.sketchbook.desktop.repo.InMemorySettingsRepository
 import com.sketchbook.desktop.repo.InMemorySnapshotRepository
+import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProposalsRepository
 import com.sketchbook.repo.RepairRepository
@@ -29,4 +31,5 @@ class DesktopAppGraph(
     val proposalsRepository: ProposalsRepository = InMemoryProposalsRepository(),
     val repairRepository: RepairRepository = InMemoryRepairRepository(),
     val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
+    val lockRepository: LockRepository = InMemoryLockRepository(),
 )
