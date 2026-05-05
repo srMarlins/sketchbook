@@ -1,0 +1,221 @@
+-- Sketchbook catalog schema.
+-- Original v0.1 (Python) tables preserved unchanged for parity. Sync tables added per design
+-- doc §3.4. Migrations live alongside as `*.sqm` files when we evolve the schema.
+
+-- ============================================================================
+-- v0.1 catalog tables
+-- ============================================================================
+
+CREATE TABLE projects (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  path            TEXT    NOT NULL UNIQUE,
+  name            TEXT    NOT NULL,
+  parent_dir      TEXT    NOT NULL,
+  tempo           REAL,
+  time_sig_num    INTEGER,
+  time_sig_den    INTEGER,
+  key             TEXT,
+  track_count     INTEGER NOT NULL DEFAULT 0,
+  audio_tracks    INTEGER NOT NULL DEFAULT 0,
+  midi_tracks     INTEGER NOT NULL DEFAULT 0,
+  return_tracks   INTEGER NOT NULL DEFAULT 0,
+  length_seconds  REAL,
+  live_version    TEXT,
+  last_modified   REAL    NOT NULL,
+  last_scanned    REAL    NOT NULL,
+  file_hash       TEXT,
+  is_archived     INTEGER NOT NULL DEFAULT 0,
+  color_tag       INTEGER,
+  notes           TEXT,
+  effort_score    INTEGER,
+  effort_breakdown TEXT,
+  parse_status    TEXT,
+  parse_error     TEXT,
+  mac_paths_count INTEGER,
+  has_project_info INTEGER,
+  file_size_bytes INTEGER,
+  is_missing      INTEGER NOT NULL DEFAULT 0,
+  last_seen       REAL
+);
+
+CREATE INDEX idx_projects_parent_dir ON projects(parent_dir);
+CREATE INDEX idx_projects_last_modified ON projects(last_modified);
+CREATE INDEX idx_projects_tempo ON projects(tempo);
+
+CREATE TABLE project_plugins (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  plugin_name TEXT NOT NULL,
+  plugin_type TEXT NOT NULL,
+  track_name  TEXT
+);
+
+CREATE INDEX idx_pp_project ON project_plugins(project_id);
+CREATE INDEX idx_pp_name ON project_plugins(plugin_name);
+
+CREATE TABLE project_samples (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  sample_path  TEXT NOT NULL,
+  sample_hash  TEXT,
+  is_missing   INTEGER NOT NULL DEFAULT 0,
+  size_bytes   INTEGER
+);
+
+CREATE INDEX idx_ps_project ON project_samples(project_id);
+CREATE INDEX idx_ps_hash ON project_samples(sample_hash);
+
+CREATE TABLE samples (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  path         TEXT NOT NULL UNIQUE,
+  filename     TEXT NOT NULL,
+  size_bytes   INTEGER NOT NULL,
+  mtime        REAL NOT NULL,
+  parent_dir   TEXT NOT NULL
+);
+
+CREATE INDEX idx_samples_filename_size ON samples(filename, size_bytes);
+CREATE INDEX idx_samples_parent ON samples(parent_dir);
+
+CREATE TABLE tags (
+  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE project_tags (
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  tag_id     INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  PRIMARY KEY (project_id, tag_id)
+);
+
+CREATE VIRTUAL TABLE projects_fts USING fts5(
+  name, parent_dir, plugin_names, sample_filenames, notes,
+  tokenize='porter unicode61'
+);
+
+-- ============================================================================
+-- v1 sync tables (design doc §3.4)
+-- ============================================================================
+
+CREATE TABLE project_identity (
+  project_id  INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  uuid        TEXT NOT NULL UNIQUE,
+  created_at  TEXT NOT NULL
+);
+
+CREATE TABLE snapshots (
+  project_uuid     TEXT NOT NULL,
+  rev              INTEGER NOT NULL,
+  parent_rev       INTEGER,
+  timestamp        TEXT NOT NULL,
+  host_id          TEXT NOT NULL,
+  kind             TEXT NOT NULL CHECK(kind IN ('auto','named','branch')),
+  label            TEXT,
+  manifest_path    TEXT NOT NULL,
+  manifest_hash    TEXT NOT NULL,
+  file_count       INTEGER NOT NULL,
+  total_bytes      INTEGER NOT NULL,
+  new_bytes        INTEGER NOT NULL,
+  PRIMARY KEY (project_uuid, rev)
+);
+
+CREATE INDEX snapshots_by_uuid_kind ON snapshots(project_uuid, kind, rev DESC);
+
+CREATE TABLE blob_cache (
+  hash         TEXT PRIMARY KEY,
+  size         INTEGER NOT NULL,
+  last_used    TEXT NOT NULL,
+  pinned       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE sync_state (
+  project_uuid     TEXT PRIMARY KEY,
+  local_rev        INTEGER NOT NULL,
+  cloud_head_rev   INTEGER NOT NULL,
+  dirty            INTEGER NOT NULL DEFAULT 0,
+  self_contained   INTEGER NOT NULL DEFAULT 0,
+  lock_owner       TEXT,
+  lock_expires     TEXT,
+  last_pulled      TEXT
+);
+
+CREATE TABLE pending_uploads (
+  hash         TEXT PRIMARY KEY,
+  size         INTEGER NOT NULL,
+  source_path  TEXT NOT NULL,
+  enqueued_at  TEXT NOT NULL,
+  attempts     INTEGER NOT NULL DEFAULT 0
+);
+
+-- ============================================================================
+-- Queries
+-- ============================================================================
+
+-- projects
+selectAllProjects:
+SELECT * FROM projects WHERE is_archived = 0 ORDER BY last_modified DESC;
+
+selectProjectById:
+SELECT * FROM projects WHERE id = :id;
+
+selectProjectByPath:
+SELECT * FROM projects WHERE path = :path;
+
+insertOrReplaceProject:
+INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, mac_paths_count)
+VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :mac_paths_count);
+
+selectProjectIdByPath:
+SELECT id FROM projects WHERE path = :path;
+
+deleteAllProjects:
+DELETE FROM projects;
+
+-- project_plugins / project_samples
+deletePluginsForProject:
+DELETE FROM project_plugins WHERE project_id = :project_id;
+
+insertProjectPlugin:
+INSERT INTO project_plugins (project_id, plugin_name, plugin_type, track_name)
+VALUES (:project_id, :plugin_name, :plugin_type, :track_name);
+
+deleteSamplesForProject:
+DELETE FROM project_samples WHERE project_id = :project_id;
+
+insertProjectSample:
+INSERT INTO project_samples (project_id, sample_path) VALUES (:project_id, :sample_path);
+
+selectPluginsForProject:
+SELECT plugin_name, plugin_type, track_name FROM project_plugins WHERE project_id = :project_id;
+
+selectSamplesForProject:
+SELECT sample_path FROM project_samples WHERE project_id = :project_id;
+
+-- FTS5: SQLDelight 2.1 cannot statically type-check the `MATCH` operator or `bm25()` function
+-- on virtual tables (StackOverflow / "Failed to compile" in the typer). FTS reads/writes are
+-- driven via raw `driver.execute*` in `CatalogFts.kt`. The virtual table itself lives here so
+-- migrations stay in one place.
+
+-- sync identity
+insertProjectIdentityIfAbsent:
+INSERT OR IGNORE INTO project_identity (project_id, uuid, created_at)
+VALUES (:project_id, :uuid, :created_at);
+
+selectIdentityByProjectId:
+SELECT * FROM project_identity WHERE project_id = :project_id;
+
+-- snapshots
+insertSnapshot:
+INSERT INTO snapshots (project_uuid, rev, parent_rev, timestamp, host_id, kind, label, manifest_path, manifest_hash, file_count, total_bytes, new_bytes)
+VALUES (:project_uuid, :rev, :parent_rev, :timestamp, :host_id, :kind, :label, :manifest_path, :manifest_hash, :file_count, :total_bytes, :new_bytes);
+
+selectSnapshotsForProject:
+SELECT * FROM snapshots WHERE project_uuid = :project_uuid ORDER BY rev DESC;
+
+-- sync_state
+insertOrReplaceSyncState:
+INSERT OR REPLACE INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained)
+VALUES (:project_uuid, :local_rev, :cloud_head_rev, :dirty, :self_contained);
+
+selectSyncState:
+SELECT * FROM sync_state WHERE project_uuid = :project_uuid;
