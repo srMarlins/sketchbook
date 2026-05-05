@@ -68,6 +68,11 @@ export async function getProject(id: number): Promise<ProjectDetail | undefined>
   return http<ProjectDetail>(`/api/projects/${id}`);
 }
 
+export async function getCategory(id: string): Promise<ProjectSummary[]> {
+  if (USE_MOCKS) return Promise.resolve(mock.getCategory?.(id) ?? []);
+  return http<ProjectSummary[]>(`/api/categories/${encodeURIComponent(id)}`);
+}
+
 export async function listProposals(): Promise<Proposal[]> {
   if (USE_MOCKS) return Promise.resolve(mock.listProposals());
   return http<Proposal[]>('/api/proposals');

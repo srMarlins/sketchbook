@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveProposal,
+  getCategory,
   getHome,
   getProject,
   listJournal,
@@ -17,6 +18,7 @@ import type { ProposalSubmission } from '../lib/types';
 export const projectsKey = (params: ListProjectsParams = {}) =>
   ['projects', params] as const;
 export const projectKey = (id: number) => ['project', id] as const;
+export const categoryKey = (id: string) => ['category', id] as const;
 export const proposalsKey = () => ['proposals'] as const;
 export const journalKey = () => ['journal'] as const;
 export const homeKey = () => ['home'] as const;
@@ -57,6 +59,14 @@ export function useProjects(params: ListProjectsParams = {}) {
 }
 export function useProject(id: number | null) {
   return useQuery(projectQuery(id));
+}
+export function useCategory(id: string | null | undefined) {
+  return useQuery({
+    queryKey: categoryKey(id ?? ''),
+    queryFn: () => getCategory(id ?? ''),
+    staleTime: 60_000,
+    enabled: !!id,
+  });
 }
 export function useProposals() {
   return useQuery(proposalsQuery());

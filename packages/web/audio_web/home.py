@@ -309,6 +309,105 @@ def _shelf_untriaged(conn: sqlite3.Connection) -> Shelf:
     )
 
 
+def category_full(conn: sqlite3.Connection, shelf_id: str, *, now: float) -> list[dict]:
+    """Return ALL qualifying projects for a given shelf (no cap, ungrouped, raw rows).
+    Powers the category detail view at /api/categories/{shelf_id}, which the
+    frontend uses for /n/cat-<shelf_id> notebook pages.
+
+    Filter logic mirrors the corresponding `_shelf_*` function above — keep
+    the WHERE clauses in sync. We deliberately do NOT apply the parent_dir
+    grouping here: callers want every variant so they can group client-side
+    and show variant headers ("3 variants") in the notebook UI.
+    """
+    conn.row_factory = sqlite3.Row
+    if shelf_id == "currently-working":
+        cutoff = now - 14 * _DAY
+        return _rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM projects
+                WHERE is_archived = 0
+                  AND (color_tag = ? OR last_modified >= ?)
+                ORDER BY last_modified DESC
+                """,
+                (COLOR_NAMES["blue"], cutoff),
+            )
+        )
+    if shelf_id == "forgotten-gems":
+        cutoff = now - 180 * _DAY
+        excluded = (COLOR_NAMES["green"], COLOR_NAMES["red"])
+        return _rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM projects
+                WHERE is_archived = 0
+                  AND effort_score >= 65
+                  AND last_modified < ?
+                  AND (color_tag IS NULL OR color_tag NOT IN (?, ?))
+                ORDER BY effort_score DESC, last_modified DESC
+                """,
+                (cutoff, *excluded),
+            )
+        )
+    if shelf_id == "almost-done":
+        return _rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM projects
+                WHERE is_archived = 0
+                  AND color_tag IN (?, ?)
+                ORDER BY effort_score DESC, last_modified DESC
+                """,
+                (COLOR_NAMES["orange"], COLOR_NAMES["yellow"]),
+            )
+        )
+    if shelf_id == "has-potential":
+        return _rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM projects
+                WHERE is_archived = 0
+                  AND color_tag = ?
+                ORDER BY last_modified DESC
+                """,
+                (COLOR_NAMES["purple"],),
+            )
+        )
+    if shelf_id == "untriaged":
+        return _rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM projects
+                WHERE is_archived = 0
+                  AND color_tag IS NULL
+                ORDER BY effort_score DESC, last_modified DESC
+                """
+            )
+        )
+    if shelf_id == "broken":
+        return _rows_to_dicts(
+            conn.execute(
+                """
+                SELECT p.*, (
+                  SELECT COUNT(*) FROM project_samples ps
+                  WHERE ps.project_id = p.id AND ps.is_missing = 1
+                ) AS missing_sample_count
+                FROM projects p
+                WHERE p.is_archived = 0
+                  AND (
+                    p.parse_status = 'failed'
+                    OR (
+                      SELECT COUNT(*) FROM project_samples ps
+                      WHERE ps.project_id = p.id AND ps.is_missing = 1
+                    ) > 0
+                  )
+                ORDER BY missing_sample_count DESC, p.last_modified DESC
+                """
+            )
+        )
+    raise KeyError(shelf_id)
+
+
 def compute_shelves(conn: sqlite3.Connection) -> list[Shelf]:
     """Build all home-page shelves in a single pass.
 

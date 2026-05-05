@@ -12,7 +12,7 @@ import { LoadingState } from '../components/feedback/LoadingState';
 import { ErrorState } from '../components/feedback/ErrorState';
 import { EmptyState } from '../components/feedback/EmptyState';
 import { useKeyboard } from '../hooks/useKeyboard';
-import { useHome, useOpenProject, useProjects, useProposals } from '../app/queries';
+import { useCategory, useHome, useOpenProject, useProjects, useProposals } from '../app/queries';
 import { deriveNotebooks } from '../app/notebooks';
 import { deriveProjectGroups, type ProjectGroup } from '../lib/project-groups';
 import type { ProjectSummary } from '../lib/types';
@@ -34,6 +34,7 @@ export function NotebookRoute() {
 
   const isCategory = notebookId.startsWith('cat-');
   const categoryId = isCategory ? notebookId.slice('cat-'.length) : null;
+  const categoryQ = useCategory(categoryId);
 
   const notebooks = useMemo(
     () => (projectsQ.data ? deriveNotebooks(projectsQ.data) : []),
@@ -50,7 +51,8 @@ export function NotebookRoute() {
     if (notebookId === 'claude') return [];
     let list: ProjectSummary[];
     if (isCategory) {
-      list = categoryShelf?.projects ?? [];
+      // Full category set (uncapped, all variants) from /api/categories/{id}
+      list = categoryQ.data ?? [];
     } else {
       if (!projectsQ.data) return [];
       list = projectsQ.data.filter(notebook?.filter ?? (() => true));
@@ -63,7 +65,7 @@ export function NotebookRoute() {
         p.path.toLowerCase().includes(lower) ||
         p.tags.some((t) => t.toLowerCase().includes(lower)),
     );
-  }, [projectsQ.data, notebook, query, notebookId, isCategory, categoryShelf]);
+  }, [projectsQ.data, notebook, query, notebookId, isCategory, categoryQ.data]);
 
   const groups = useMemo(() => deriveProjectGroups(filtered), [filtered]);
 
@@ -138,12 +140,12 @@ export function NotebookRoute() {
               setCorkOpen(true);
             }}
           />
-        ) : (isCategory ? homeQ.isLoading : projectsQ.isLoading) ? (
+        ) : (isCategory ? categoryQ.isLoading : projectsQ.isLoading) ? (
           <LoadingState />
-        ) : (isCategory ? homeQ.isError : projectsQ.isError) ? (
+        ) : (isCategory ? categoryQ.isError : projectsQ.isError) ? (
           <ErrorState
-            body={String(isCategory ? homeQ.error : projectsQ.error)}
-            onRetry={() => (isCategory ? homeQ.refetch() : projectsQ.refetch())}
+            body={String(isCategory ? categoryQ.error : projectsQ.error)}
+            onRetry={() => (isCategory ? categoryQ.refetch() : projectsQ.refetch())}
           />
         ) : filtered.length === 0 ? (
           <EmptyState

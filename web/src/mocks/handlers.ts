@@ -224,6 +224,13 @@ export const mock = {
   getHome(): HomeResponse {
     return { shelves: _shelvesFor(projectsState) };
   },
+  getCategory(id: string): ProjectSummary[] {
+    // Mock falls back to whatever the home shelf already returns. The real
+    // backend endpoint returns the full uncapped set, but for offline UI dev
+    // the home sample is plenty.
+    const shelf = _shelvesFor(projectsState).find((s) => s.id === id);
+    return shelf ? shelf.projects : [];
+  },
   openProject(_id: number): { ok: true } {
     return { ok: true };
   },
