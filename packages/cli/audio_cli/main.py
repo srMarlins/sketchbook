@@ -16,6 +16,7 @@ from audio_core.db.projects import search_projects
 from audio_core.dedup import build_archive_proposal, find_duplicates
 from audio_core.journal.manifest import list_batches
 from audio_core.macpath import build_repair_proposal, find_mac_imports
+from audio_core.relink import build_relink_proposal, find_missing_samples
 from audio_core.scanner.scan import scan_root
 from rich.console import Console
 from rich.table import Table
@@ -270,6 +271,62 @@ def repair_mac_paths(
         if f.project_info_missing:
             flags.append("no Ableton Project Info/")
         con.print(f"  id={f.project_id}  {f.path}  [{', '.join(flags)}]")
+
+
+@app.command("relink-missing-samples")
+def relink_missing_samples(
+    json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+    propose: bool = typer.Option(
+        False, "--propose", help="Write a proposal of auto-match relinks."
+    ),
+) -> None:
+    """List projects with missing samples; --propose drafts a batch of
+    auto-match relinks (filename matches exactly one indexed candidate)."""
+    import json as _json
+
+    conn = open_db(db_path())
+    findings = find_missing_samples(conn)
+
+    if propose:
+        actions = build_relink_proposal(findings, picks={})
+        if not actions:
+            con.print("No auto-matchable missing samples.")
+            raise typer.Exit(code=0)
+        from datetime import UTC, datetime
+        from uuid import uuid4
+        from audio_cli.config import proposals_dir
+        d = proposals_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        pid = f"{datetime.now(UTC).strftime('%Y-%m-%dT%H-%M-%S')}_{uuid4().hex[:8]}"
+        payload = {
+            "proposal_id": pid,
+            "actor": "cli",
+            "actions": actions,
+            "rationale": f"relink-missing-samples: {len(actions)} project(s)",
+        }
+        (d / f"{pid}.json").write_text(_json.dumps(payload, indent=2), encoding="utf-8")
+        con.print(f"proposal {pid} written ({len(actions)} action(s))")
+        return
+
+    if json_out:
+        payload = [
+            {
+                "project_id": f.project_id,
+                "missing_path": f.missing_path,
+                "auto_match": f.auto_match.path if f.auto_match else None,
+                "candidate_count": len(f.candidates),
+            }
+            for f in findings
+        ]
+        print(_json.dumps(payload, indent=2))
+        return
+
+    if not findings:
+        con.print("No missing samples found.")
+        return
+    for f in findings:
+        tail = f"auto={f.auto_match.path}" if f.auto_match else f"candidates={len(f.candidates)}"
+        con.print(f"  id={f.project_id}  {f.missing_path}  [{tail}]")
 
 
 # ---------------------------------------------------------------------------
