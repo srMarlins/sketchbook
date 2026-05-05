@@ -36,6 +36,12 @@ export interface ListProjectsParams {
   max_effort?: number;
   /** Restrict to (true) or exclude (false) projects flagged as broken. */
   broken?: boolean;
+  /**
+   * Restrict to (true) or exclude (false) projects flagged as "needs
+   * attention": unresolved Mac paths, missing project_info sidecar, or the
+   * .als file gone from disk.
+   */
+  needs_attention?: boolean;
   order_by?: 'mtime' | 'name' | 'effort';
   order_dir?: 'asc' | 'desc';
   /** Opaque pagination cursor from a previous page's `next_cursor`. */
@@ -54,6 +60,8 @@ export async function listProjects(params: ListProjectsParams = {}): Promise<Pro
   if (params.min_effort !== undefined) qs.set('min_effort', String(params.min_effort));
   if (params.max_effort !== undefined) qs.set('max_effort', String(params.max_effort));
   if (params.broken !== undefined) qs.set('broken', String(params.broken));
+  if (params.needs_attention !== undefined)
+    qs.set('needs_attention', String(params.needs_attention));
   if (params.order_by !== undefined) qs.set('order_by', params.order_by);
   if (params.order_dir !== undefined) qs.set('order_dir', params.order_dir);
   if (params.cursor) qs.set('cursor', params.cursor);

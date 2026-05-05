@@ -51,3 +51,9 @@ mcp__audio__search query="diva"
 - The MCP server has the same path allowlist as the rest of the system (`Z:/User/audio/Projects`) — proposals are validated at approval time, not submission time, so a malformed proposal still gets rejected at the user's discretion.
 - The server is read-mostly: it never executes a mutation. The only side effect of any tool is writing a JSON file to `data/proposals/`.
 - `propose_batch` actions follow the same shape as `POST /api/proposals` in `audio-web` — see `docs/plans/2026-05-04-audio-catalog-design.md` for the full action schema.
+
+## Indexing is automatic
+
+The desktop app (and any `audio-web` server you run for local dev) owns the indexer. On launch it walks `AUDIO_ROOT/Projects`, runs any pending NULL-column backfills, then starts a filesystem watcher that catches subsequent saves within ~2 seconds. Progress streams to the UI over `/api/events` (SSE) and the IndexerStatus chip in the header surfaces live state.
+
+You don't need to run anything manually. The `audio scan` CLI still exists, but it's for headless / scripting workflows only — running it from a terminal is not part of the user flow.

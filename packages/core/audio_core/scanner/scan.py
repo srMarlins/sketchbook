@@ -105,7 +105,6 @@ def scan_root(
         try:
             stat = als.stat()
         except OSError:
-            # Couldn't stat — let worker handle and record failure
             todo.append(als)
             continue
         if (
@@ -126,8 +125,6 @@ def scan_root(
 
     workers = max_workers if max_workers is not None else _default_workers()
 
-    # Single-threaded fast path for tests / tiny libraries — avoids the
-    # threadpool spin-up overhead for trivial inputs.
     if workers <= 1 or len(todo) == 1:
         for als in todo:
             _commit_result(conn, _process_one(als), stats, on_progress)
@@ -139,7 +136,6 @@ def scan_root(
             try:
                 result = fut.result()
             except Exception as e:
-                # Worker raised something un-handled; record as a failure.
                 als = futures[fut]
                 result = ("fail", als, (None, None, e))
             _commit_result(conn, result, stats, on_progress)
@@ -155,17 +151,21 @@ def _commit_result(
     kind, als, payload = result
     if kind == "ok":
         stat, fh, meta = payload
-        # Strong-equality check: file changed (size or mtime) but content
-        # turned out to be identical — skip the upsert too.
         existing = conn.execute(
             "SELECT file_hash FROM projects WHERE path = ?", (str(als),)
         ).fetchone()
         if existing and existing[0] == fh:
+            conn.execute(
+                "UPDATE projects SET last_modified=?, file_size_bytes=? WHERE path=?",
+                (stat.st_mtime, stat.st_size, str(als)),
+            )
+            conn.commit()
             stats.skipped += 1
             if on_progress:
                 on_progress(als, "skipped")
             return
         try:
+            has_pi = 1 if (als.parent / "Ableton Project Info").is_dir() else 0
             upsert_project(
                 conn,
                 path=str(als),
@@ -175,6 +175,8 @@ def _commit_result(
                 last_modified=stat.st_mtime,
                 meta=meta,
                 file_size_bytes=stat.st_size,
+                mac_paths_count=meta.mac_paths_count,
+                has_project_info=has_pi,
             )
             stats.scanned += 1
             if on_progress:

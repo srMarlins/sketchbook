@@ -24,6 +24,7 @@ def list_projects(
     min_effort: Annotated[int | None, Query(ge=0, le=100)] = None,
     max_effort: Annotated[int | None, Query(ge=0, le=100)] = None,
     broken: Annotated[bool | None, Query()] = None,
+    needs_attention: Annotated[bool | None, Query()] = None,
     order_by: Annotated[Literal["mtime", "name", "effort"], Query()] = "mtime",
     order_dir: Annotated[Literal["asc", "desc"], Query()] = "desc",
     # Per-page cap. Hard ceiling at 1000 — the cursor lets clients walk past
@@ -47,6 +48,7 @@ def list_projects(
             min_effort=min_effort,
             max_effort=max_effort,
             broken=broken,
+            needs_attention=needs_attention,
             order_by=order_by,
             order_dir=order_dir,
             limit=limit,

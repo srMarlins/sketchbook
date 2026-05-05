@@ -252,6 +252,7 @@ def search_projects(
     min_effort: int | None = None,
     max_effort: int | None = None,
     broken: bool | None = None,
+    needs_attention: bool | None = None,
     order_by: Literal["mtime", "name", "effort"] = "mtime",
     order_dir: Literal["asc", "desc"] = "desc",
     limit: int = 200,
@@ -309,6 +310,16 @@ def search_projects(
             where.append(broken_predicate)
         else:
             where.append(f"NOT {broken_predicate}")
+    if needs_attention is not None:
+        needs_attention_predicate = (
+            "(COALESCE(p.mac_paths_count, 0) > 0 "
+            "OR COALESCE(p.has_project_info, 1) = 0 "
+            "OR COALESCE(p.is_missing, 0) = 1)"
+        )
+        if needs_attention:
+            where.append(needs_attention_predicate)
+        else:
+            where.append(f"NOT {needs_attention_predicate}")
     col = _ORDER_COLS.get(order_by, _ORDER_COLS["mtime"])
     direction = "ASC" if order_dir.lower() == "asc" else "DESC"
     # Cursor predicate: keyset on (sort_col, id). `<` for DESC, `>` for ASC.
@@ -353,6 +364,7 @@ def search_projects_page(
     min_effort: int | None = None,
     max_effort: int | None = None,
     broken: bool | None = None,
+    needs_attention: bool | None = None,
     order_by: Literal["mtime", "name", "effort"] = "mtime",
     order_dir: Literal["asc", "desc"] = "desc",
     limit: int = 200,
@@ -376,6 +388,7 @@ def search_projects_page(
         min_effort=min_effort,
         max_effort=max_effort,
         broken=broken,
+        needs_attention=needs_attention,
         order_by=order_by,
         order_dir=order_dir,
         limit=limit + 1,

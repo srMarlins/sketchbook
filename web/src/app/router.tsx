@@ -10,6 +10,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HomeRoute } from '../routes/index';
 import { ProposalsRoute } from '../routes/proposals';
 import { NotebookRoute } from '../routes/notebook';
+import { useIndexerCachePatcher } from '../hooks/useIndexerCachePatcher';
+
+// Invisible component that subscribes to /api/events and patches the
+// TanStack cache as scan_row / findings_changed events arrive. Lives
+// inside QueryClientProvider so it has access to the cache.
+function IndexerEventBridge() {
+  useIndexerCachePatcher();
+  return null;
+}
 
 // /_dev pulls in the entire component registry; lazy-load so it doesn't
 // land in the main user bundle.
@@ -22,6 +31,7 @@ const queryClient = new QueryClient();
 const rootRoute = createRootRoute({
   component: () => (
     <QueryClientProvider client={queryClient}>
+      <IndexerEventBridge />
       <Outlet />
     </QueryClientProvider>
   ),
