@@ -1,8 +1,8 @@
-# Kotlin / Compose Multiplatform Rewrite — Implementation Plan
+# Sketchbook — Kotlin / Compose Multiplatform Rewrite Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Read `docs/plans/2026-05-05-sync-versioning-design.md` *first* (authoritative architecture); this plan is the *how*, not the *what*.
 
-**Goal:** Rewrite the audio app in Kotlin + Compose Multiplatform with cross-device sync, versioning, and content-addressed cloud storage. The existing Python implementation stays as a parity reference until cutover.
+**Goal:** Rewrite the audio app (now named **Sketchbook**) in Kotlin + Compose Multiplatform with cross-device sync, versioning, and content-addressed cloud storage. The existing Python implementation stays as a parity reference until cutover.
 
 **Architecture:** See `docs/plans/2026-05-05-sync-versioning-design.md`. Multi-module Gradle KMP; Compose Desktop first (Mac + Windows JVM); Metro DI; SQLDelight + FTS5; Ktor 3.2 (CIO); content-addressed B2/R2 blobs; plain Kotlin `StateFlow` state-holders + sealed-class intents (no MVI library); in-house sealed-class `NavStack`; `repository` as the single seam between data and features.
 
@@ -76,7 +76,7 @@ Code review process (Claude Code performs after self-review):
 
 **Tasks:**
 
-1. Create GitHub repo `srMarlins/audio` (private). Push existing local `main`. Set default branch `main`.
+1. Create GitHub repo `srMarlins/sketchbook` (private). Push existing local `main`. Set default branch `main`.
 2. Add `.gitattributes` with LF normalization for code files. Commit.
 3. Write `CONTRIBUTING.md`: branch naming, commit format, PR workflow, "no merges without AI review", visual-verification requirement for UI PRs.
 4. Write `docs/ai/CLAUDE.md`: project context (point to design doc + this plan); module boundary rules; state-holder pattern; repository-as-seam; Metro DI conventions; testing approach (kotlin.test + Turbine + hand-written fakes; no MockK in commonTest); PR workflow; visual-verification steps; explicit list of *avoided* libraries (MVI frameworks, Decompose, screenshot tests, Koin, Room).
@@ -144,19 +144,19 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Pure-Kotlin domain types referenced by every other module. No platform deps; no I/O.
 
 **Files:**
-- Create: `shared/core/src/commonMain/kotlin/com/audio/core/Ids.kt` — `value class ProjectId`, `value class BlobHash`, `value class SnapshotRev`, `value class UserId`.
-- Create: `shared/core/src/commonMain/kotlin/com/audio/core/ProjectPath.kt` — own value type (no `java.io.File`/`okio.Path` leak).
-- Create: `shared/core/src/commonMain/kotlin/com/audio/core/Errors.kt` — sealed `AudioError` hierarchy.
-- Create: `shared/core/src/commonMain/kotlin/com/audio/core/Project.kt` — `Project`, `ProjectRow`, `ProjectMetadata`.
-- Create: `shared/core/src/commonMain/kotlin/com/audio/core/Snapshot.kt` — `Snapshot`, `SnapshotKind`.
-- Create: `shared/core/src/commonMain/kotlin/com/audio/core/Manifest.kt` — `Manifest` (matches §3.1 schema).
-- Create: `shared/core/src/commonTest/kotlin/com/audio/core/*Test.kt`
+- Create: `shared/core/src/commonMain/kotlin/com/sketchbook/core/Ids.kt` — `value class ProjectId`, `value class BlobHash`, `value class SnapshotRev`, `value class UserId`.
+- Create: `shared/core/src/commonMain/kotlin/com/sketchbook/core/ProjectPath.kt` — own value type (no `java.io.File`/`okio.Path` leak).
+- Create: `shared/core/src/commonMain/kotlin/com/sketchbook/core/Errors.kt` — sealed `SketchbookError` hierarchy.
+- Create: `shared/core/src/commonMain/kotlin/com/sketchbook/core/Project.kt` — `Project`, `ProjectRow`, `ProjectMetadata`.
+- Create: `shared/core/src/commonMain/kotlin/com/sketchbook/core/Snapshot.kt` — `Snapshot`, `SnapshotKind`.
+- Create: `shared/core/src/commonMain/kotlin/com/sketchbook/core/Manifest.kt` — `Manifest` (matches §3.1 schema).
+- Create: `shared/core/src/commonTest/kotlin/com/sketchbook/core/*Test.kt`
 
 **Tasks:**
 
 1. TDD `BlobHash`: write test asserting it parses `b3:` prefix and rejects malformed input. Run failing → implement → green.
 2. TDD `ProjectPath`: write test for path normalization (forward-slash internal) and `relativeTo` semantics. Run failing → implement → green.
-3. Define `AudioError` sealed hierarchy with `NotFound`, `Conflict`, `IntegrityError`, `IoFailure`, `RemoteFailure(status, body)`.
+3. Define `SketchbookError` sealed hierarchy with `NotFound`, `Conflict`, `IntegrityError`, `IoFailure`, `RemoteFailure(status, body)`.
 4. Define `Manifest` with `kotlinx.serialization` `@Serializable` + `@SerialName("v")` for the version field.
 5. Roundtrip-test `Manifest` JSON serialization (encode → decode → equals).
 6. Commit progressively.
@@ -170,8 +170,8 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Port the Python `lxml`-iterparse parser to Kotlin StAX. Hard requirement: bounded memory on a 543MB project (the prior Python DOM blew to 25 GB).
 
 **Files:**
-- Create: `shared/parser-als/src/jvmMain/kotlin/com/audio/als/AlsParser.kt`
-- Create: `shared/parser-als/src/jvmTest/kotlin/com/audio/als/AlsParserTest.kt`
+- Create: `shared/parser-als/src/jvmMain/kotlin/com/sketchbook/als/AlsParser.kt`
+- Create: `shared/parser-als/src/jvmTest/kotlin/com/sketchbook/als/AlsParserTest.kt`
 - Add: small fixture `.als` files in `shared/parser-als/src/jvmTest/resources/fixtures/`
 
 **Tasks:**
@@ -193,10 +193,10 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Replicate the v0.1 catalog schema in SQLDelight; add new sync-related tables (§3.4); wire the scanner (parallel walk + parser invocation + upsert).
 
 **Files:**
-- Create: `shared/catalog/src/commonMain/sqldelight/com/audio/catalog/Catalog.sq` — full schema including FTS5 virtual table.
-- Create: `shared/catalog/src/commonMain/kotlin/com/audio/catalog/CatalogDb.kt` — driver setup (xerial JDBC on JVM).
-- Create: `shared/catalog/src/commonMain/kotlin/com/audio/catalog/Scanner.kt`.
-- Create: `shared/catalog/src/jvmTest/kotlin/com/audio/catalog/*Test.kt`
+- Create: `shared/catalog/src/commonMain/sqldelight/com/sketchbook/catalog/Catalog.sq` — full schema including FTS5 virtual table.
+- Create: `shared/catalog/src/commonMain/kotlin/com/sketchbook/catalog/CatalogDb.kt` — driver setup (xerial JDBC on JVM).
+- Create: `shared/catalog/src/commonMain/kotlin/com/sketchbook/catalog/Scanner.kt`.
+- Create: `shared/catalog/src/jvmTest/kotlin/com/sketchbook/catalog/*Test.kt`
 
 **Tasks:**
 
@@ -219,8 +219,8 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Define `ProjectRepository`, `SnapshotRepository`, `JournalRepository` interfaces in `shared/repository/commonMain`. SQLDelight-backed impl. UI never reaches past this.
 
 **Files:**
-- Create: `shared/repository/src/commonMain/kotlin/com/audio/repo/*.kt` (interfaces + impls)
-- Create: `shared/repository/src/commonTest/kotlin/com/audio/repo/*Test.kt`
+- Create: `shared/repository/src/commonMain/kotlin/com/sketchbook/repo/*.kt` (interfaces + impls)
+- Create: `shared/repository/src/commonTest/kotlin/com/sketchbook/repo/*Test.kt`
 
 **Tasks:**
 
@@ -240,11 +240,11 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Build the dumb-cloud client. Conditional PUT/GET, multipart for >100MB, content-addressed paths, lock CAS primitives.
 
 **Files:**
-- Create: `shared/cloud/src/commonMain/kotlin/com/audio/cloud/CloudBackend.kt` (interface).
-- Create: `shared/cloud/src/commonMain/kotlin/com/audio/cloud/SigV4.kt` (hand-rolled).
-- Create: `shared/cloud/src/commonMain/kotlin/com/audio/cloud/DirectB2Backend.kt` (Ktor CIO impl).
-- Create: `shared/cloud/src/commonTest/kotlin/com/audio/cloud/SigV4Test.kt` — vectors against AWS-published SigV4 test vectors.
-- Create: `shared/cloud/src/jvmTest/kotlin/com/audio/cloud/DirectB2BackendTest.kt` — uses MockEngine.
+- Create: `shared/cloud/src/commonMain/kotlin/com/sketchbook/cloud/CloudBackend.kt` (interface).
+- Create: `shared/cloud/src/commonMain/kotlin/com/sketchbook/cloud/SigV4.kt` (hand-rolled).
+- Create: `shared/cloud/src/commonMain/kotlin/com/sketchbook/cloud/DirectB2Backend.kt` (Ktor CIO impl).
+- Create: `shared/cloud/src/commonTest/kotlin/com/sketchbook/cloud/SigV4Test.kt` — vectors against AWS-published SigV4 test vectors.
+- Create: `shared/cloud/src/jvmTest/kotlin/com/sketchbook/cloud/DirectB2BackendTest.kt` — uses MockEngine.
 
 **Tasks:**
 
@@ -277,10 +277,10 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Pure I/O primitives: watcher Flow over `Backup/`, BLAKE3 hashing of files, hardlink-or-copy materialization. No orchestration here.
 
 **Files:**
-- Create: `shared/sync-io/src/jvmMain/kotlin/com/audio/syncio/Watcher.kt` — wraps `directory-watcher` in a Kotlin Flow.
-- Create: `shared/sync-io/src/jvmMain/kotlin/com/audio/syncio/Hasher.kt` — BLAKE3 over `RawSource` chunks.
-- Create: `shared/sync-io/src/jvmMain/kotlin/com/audio/syncio/Materializer.kt` — `Files.createLink` with cross-volume copy fallback.
-- Create: `shared/sync-io/src/jvmTest/kotlin/com/audio/syncio/*Test.kt`
+- Create: `shared/sync-io/src/jvmMain/kotlin/com/sketchbook/syncio/Watcher.kt` — wraps `directory-watcher` in a Kotlin Flow.
+- Create: `shared/sync-io/src/jvmMain/kotlin/com/sketchbook/syncio/Hasher.kt` — BLAKE3 over `RawSource` chunks.
+- Create: `shared/sync-io/src/jvmMain/kotlin/com/sketchbook/syncio/Materializer.kt` — `Files.createLink` with cross-volume copy fallback.
+- Create: `shared/sync-io/src/jvmTest/kotlin/com/sketchbook/syncio/*Test.kt`
 
 **Tasks:**
 
@@ -300,8 +300,8 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Port v0.1 `Action` types to Kotlin. Each goes through `repository`. Journal entries written to disk in the same format as Python (so the parity period works).
 
 **Files:**
-- Create: `shared/actions/src/commonMain/kotlin/com/audio/actions/Action.kt` — sealed interface + impls.
-- Create: `shared/actions/src/commonMain/kotlin/com/audio/actions/Journal.kt` — JSON writer matching Python's format.
+- Create: `shared/actions/src/commonMain/kotlin/com/sketchbook/actions/Action.kt` — sealed interface + impls.
+- Create: `shared/actions/src/commonMain/kotlin/com/sketchbook/actions/Journal.kt` — JSON writer matching Python's format.
 - Tests: `shared/actions/src/commonTest/kotlin/...`
 
 **Tasks:**
@@ -321,10 +321,10 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Compose `sync-io` + `cloud` + `repository` into the snapshot pipeline (§4.2), the pull poller (§4.3), and the coalesce job (§4.5).
 
 **Files:**
-- Create: `shared/sync/src/commonMain/kotlin/com/audio/sync/SnapshotPipeline.kt`
-- Create: `shared/sync/src/commonMain/kotlin/com/audio/sync/PullPoller.kt`
-- Create: `shared/sync/src/commonMain/kotlin/com/audio/sync/CoalesceJob.kt`
-- Create: `shared/sync/src/commonMain/kotlin/com/audio/sync/LeaseLockState.kt` (state machine)
+- Create: `shared/sync/src/commonMain/kotlin/com/sketchbook/sync/SnapshotPipeline.kt`
+- Create: `shared/sync/src/commonMain/kotlin/com/sketchbook/sync/PullPoller.kt`
+- Create: `shared/sync/src/commonMain/kotlin/com/sketchbook/sync/CoalesceJob.kt`
+- Create: `shared/sync/src/commonMain/kotlin/com/sketchbook/sync/LeaseLockState.kt` (state machine)
 - Tests: in-memory fake `CloudBackend` + `ProjectRepository`.
 
 **Tasks:**
@@ -348,8 +348,8 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Replace FastMCP. Same tool surface as v0.1 (queries: `search_projects`, `get_project`, `list_recent`; actions: `propose_batch`).
 
 **Files:**
-- Create: `shared/mcp-server/src/jvmMain/kotlin/com/audio/mcp/McpServer.kt`
-- Create: `shared/mcp-server/src/jvmMain/kotlin/com/audio/mcp/Tools.kt`
+- Create: `shared/mcp-server/src/jvmMain/kotlin/com/sketchbook/mcp/McpServer.kt`
+- Create: `shared/mcp-server/src/jvmMain/kotlin/com/sketchbook/mcp/Tools.kt`
 - Create: `app-mcp/` — separate JVM entry point, depends on `:shared:mcp-server` + `:shared:repository`.
 - Update: Claude Desktop config snippet in `docs/mcp-setup.md`.
 
@@ -375,8 +375,8 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Headless-style design system. `LocalAppColors`/`LocalAppTypography`/`LocalAppSpacing` `CompositionLocal`s. Reusable primitives that depend on `core` only.
 
 **Files:**
-- Create: `shared/ui-shared/src/commonMain/kotlin/com/audio/uishared/theme/*.kt` (Colors, Typography, Spacing, Theme)
-- Create: `shared/ui-shared/src/commonMain/kotlin/com/audio/uishared/components/{Button,TextField,Surface,RowItem,Badge,Tag,Pill,EmptyState}.kt`
+- Create: `shared/ui-shared/src/commonMain/kotlin/com/sketchbook/uishared/theme/*.kt` (Colors, Typography, Spacing, Theme)
+- Create: `shared/ui-shared/src/commonMain/kotlin/com/sketchbook/uishared/components/{Button,TextField,Surface,RowItem,Badge,Tag,Pill,EmptyState}.kt`
 - Create: `app-gallery/` Compose Desktop module that loads every component (used for visual review during PRs).
 
 **Tasks:**
@@ -404,9 +404,9 @@ Code review process (Claude Code performs after self-review):
 **Goal:** First feature module. Project list with search-as-you-type. Establishes the per-feature pattern.
 
 **Files:**
-- Create: `shared/feature-projects/src/commonMain/kotlin/com/audio/featureprojects/ProjectListStateHolder.kt`
-- Create: `shared/feature-projects/src/commonMain/kotlin/com/audio/featureprojects/ProjectListScreen.kt`
-- Create: `shared/feature-projects/src/commonMain/kotlin/com/audio/featureprojects/ProjectListComponent.kt` — DI binding via Metro.
+- Create: `shared/feature-projects/src/commonMain/kotlin/com/sketchbook/featureprojects/ProjectListStateHolder.kt`
+- Create: `shared/feature-projects/src/commonMain/kotlin/com/sketchbook/featureprojects/ProjectListScreen.kt`
+- Create: `shared/feature-projects/src/commonMain/kotlin/com/sketchbook/featureprojects/ProjectListComponent.kt` — DI binding via Metro.
 - Tests: `shared/feature-projects/src/commonTest/...`
 
 **Tasks:**
@@ -490,10 +490,10 @@ Code review process (Claude Code performs after self-review):
 **Goal:** Wire everything. Single executable produces `.dmg` (Mac) and `.msi` (Windows).
 
 **Files:**
-- Create: `app-desktop/src/jvmMain/kotlin/com/audio/desktop/Main.kt`
-- Create: `app-desktop/src/jvmMain/kotlin/com/audio/desktop/DesktopAppGraph.kt` (Metro `@DependencyGraph`)
-- Create: `app-desktop/src/jvmMain/kotlin/com/audio/desktop/RootStateHolder.kt` (NavStack)
-- Create: `app-desktop/src/jvmMain/kotlin/com/audio/desktop/Os.kt` (file dialogs, "open in Live", system tray)
+- Create: `app-desktop/src/jvmMain/kotlin/com/sketchbook/desktop/Main.kt`
+- Create: `app-desktop/src/jvmMain/kotlin/com/sketchbook/desktop/DesktopAppGraph.kt` (Metro `@DependencyGraph`)
+- Create: `app-desktop/src/jvmMain/kotlin/com/sketchbook/desktop/RootStateHolder.kt` (NavStack)
+- Create: `app-desktop/src/jvmMain/kotlin/com/sketchbook/desktop/Os.kt` (file dialogs, "open in Live", system tray)
 
 **Tasks:**
 

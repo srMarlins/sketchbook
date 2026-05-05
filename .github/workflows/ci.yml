@@ -21,11 +21,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Gradle check (skip-on-empty until PR-1 wires the build)
-        shell: bash
-        run: |
-          if [ -x ./gradlew ]; then
-            ./gradlew --no-daemon check
-          else
-            echo "No Gradle wrapper yet — bootstrap CI placeholder. Will be wired in PR-1."
-          fi
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Gradle check
+        run: ./gradlew --no-daemon check
