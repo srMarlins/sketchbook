@@ -88,6 +88,32 @@ If the design doc adds an exception, follow it. Otherwise, do not introduce thes
 6. `gh pr review <pr> --comment` with concrete `file:line` citations for any concerns; approve only after tests pass and design alignment is confirmed.
 7. Squash-merge.
 
+## Cloud auth & credential handling
+
+Sketchbook v1 authenticates to Google Cloud Storage with a **service-account JSON key** (long-lived RSA keypair issued by GCP). The flow:
+
+1. Settings stores the path to `gcp-sa.json` (parsed and validated; *contents* live in the OS keychain in v1.1, in `java.util.prefs.Preferences` in v1).
+2. `GcsAuth.signJwt(...)` constructs a JWT every ~50 minutes: claims `iss=client_email`, `scope=https://www.googleapis.com/auth/devstorage.read_write`, `aud=https://oauth2.googleapis.com/token`, `iat=now`, `exp=now+3600`. RS256-signed with the JSON's `private_key`.
+3. `GcsAuth.exchangeJwtForAccessToken()` POSTs the JWT to `https://oauth2.googleapis.com/token` with `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`. Returns a 1-hour bearer token.
+4. `GcsAuth.tokenManager()` holds the current token, proactively refreshes at the 50-minute mark, exposes `suspend fun token(): String`. Single in-flight refresh; concurrent callers de-duplicated.
+5. `DirectGcsBackend` injects the bearer on every API call (`Authorization: Bearer ya29...`).
+
+**Use `devstorage.read_write` scope, not `cloud-platform`.** The JWT scope is the second IAM gate (alongside the SA's IAM role); narrow it.
+
+**Service account IAM is bucket-scoped, not project-scoped.** `roles/storage.objectAdmin` + `roles/storage.legacyBucketReader` on `gs://sketchbook-jtf-2026` only. Do not request or rely on project-level bindings.
+
+**Never log the JSON key, the private_key, or the access token.** Kermit log statements that handle auth state must redact (`token = ya29.****`).
+
+**v1.2 multi-user pivot:** the long-lived SA key is replaced by per-user OAuth (each user signs in with their Google account; Cloudflare Worker brokers per-user signed URLs). Same `CloudBackend` interface; new `CoordinatedBackend` impl alongside `DirectGcsBackend`. Do not design v1 in a way that assumes the SA-key model is forever.
+
+## Credential rules
+
+- **NEVER commit a service-account JSON or any file matching `*-sa.json`, `service-account*.json`, `gcp-sa*.json`.** `.gitignore` catches these and gitleaks runs in CI; trust both, but write code that doesn't require their bailout.
+- The SA key lives at `%APPDATA%\sketchbook\gcp-sa.json` (Windows) or `~/.config/sketchbook/gcp-sa.json` (macOS). Do not move, copy, or print it inside the repo.
+- Test fixtures may generate ephemeral RSA keypairs in-memory (e.g., `KeyPairGenerator.getInstance("RSA")` inside a test). PEM string LITERALS in source code (`-----BEGIN PRIVATE KEY-----`) are fine; embedded actual key material is not.
+- If you ever see a `private_key`, `private_key_id`, or base64 blob >60 chars in a diff, stop and verify before pushing. Gitleaks will block, but never test the alarm.
+- Rotate the SA key annually or on suspected compromise: `pwsh -File tools/rotate-gcp-key.ps1 -DeleteOldKeyId <ID>`.
+
 ## When to stop and ask
 
 - A plan task references a file/module that doesn't exist yet and isn't created in this PR.
