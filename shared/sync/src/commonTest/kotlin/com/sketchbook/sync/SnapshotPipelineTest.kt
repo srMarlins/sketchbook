@@ -153,6 +153,56 @@ class SnapshotPipelineTest {
     }
 
     @Test
+    fun selfContainedUsesPrivateBlobScopeAndSkipsSharedDedup() = runTest {
+        val cloud = FakeCloudBackend()
+        val bytes = "shared".encodeToByteArray()
+        val hash = FakeWorkingTree.hashOf(bytes)
+        // A different project already populated the SHARED pool with this blob.
+        cloud.putBlob(hash, FakeWorkingTree(mapOf("x" to FakeWorkingTree.FileBlob(bytes, now))).read("x"), bytes.size.toLong())
+        val sharedBefore = cloud.sharedBlobsCount()
+
+        val tree = FakeWorkingTree(mapOf("Project.als" to FakeWorkingTree.FileBlob(bytes, now)))
+        val events = pipeline(cloud).run(
+            PipelineInput(
+                uuid = uuid,
+                tree = tree,
+                lastKnownManifest = null,
+                expectedHeadGeneration = Generation.ZERO,
+                selfContained = true,
+            ),
+        ).toList()
+
+        assertNotNull(events.filterIsInstance<SnapshotProgress.Saved>().singleOrNull())
+        // Shared pool unchanged — the project did NOT dedup against it.
+        assertEquals(sharedBefore, cloud.sharedBlobsCount(), "shared pool should be untouched")
+        // Private pool got the upload.
+        assertEquals(1, cloud.privateBlobsCount(uuid))
+        // Manifest carries the flag for downstream readers (PullPoller, sync_state hydrate).
+        assertEquals(true, cloud.manifestsFor(uuid).single().selfContained)
+    }
+
+    @Test
+    fun selfContainedDedupesWithinProjectAcrossRuns() = runTest {
+        val cloud = FakeCloudBackend()
+        val bytes = "v1".encodeToByteArray()
+        val tree = FakeWorkingTree(mapOf("Project.als" to FakeWorkingTree.FileBlob(bytes, now)))
+
+        val firstEvents = pipeline(cloud).run(
+            PipelineInput(uuid, tree, null, Generation.ZERO, selfContained = true),
+        ).toList()
+        assertNotNull(firstEvents.filterIsInstance<SnapshotProgress.Saved>().firstOrNull())
+        val privateAfterFirst = cloud.privateBlobsCount(uuid)
+        assertEquals(1, privateAfterFirst)
+
+        // Re-sync the same project: same hash, should NOT re-upload (private-pool dedup).
+        val parent = cloud.manifestsFor(uuid).single()
+        pipeline(cloud).run(
+            PipelineInput(uuid, tree, parent, Generation("1"), selfContained = true),
+        ).toList()
+        assertEquals(privateAfterFirst, cloud.privateBlobsCount(uuid))
+    }
+
+    @Test
     fun heldLeaseAbortsWithoutUpload() = runTest {
         val cloud = FakeCloudBackend()
         cloud.forceLock(

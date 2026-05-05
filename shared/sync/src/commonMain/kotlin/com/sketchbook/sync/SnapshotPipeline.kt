@@ -1,5 +1,6 @@
 package com.sketchbook.sync
 
+import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
 import com.sketchbook.cloud.LeaseAcquireResult
@@ -43,6 +44,7 @@ class SnapshotPipeline(
         val parentRev = input.lastKnownManifest?.rev
         val parentFiles = input.lastKnownManifest?.files ?: emptyMap()
         val parentExpectedHead = input.expectedHeadGeneration
+        val blobScope: BlobScope = if (input.selfContained) BlobScope.Private(uuid) else BlobScope.Shared
 
         // 1) Lease.
         val leaseInstant = clock.now()
@@ -93,12 +95,12 @@ class SnapshotPipeline(
             for ((hash, entries) in uniqueByHash) {
                 val first = entries.first()
                 val anyRel = toUpload.entries.first { it.value.hash == hash }.key
-                if (cloud.headBlob(hash)) {
+                if (cloud.headBlob(hash, blobScope)) {
                     bytesDone += first.size
                     emit(SnapshotProgress.Uploading(uuid, hash, bytesDone, totalUploadBytes))
                     continue
                 }
-                cloud.putBlob(hash, input.tree.read(anyRel), first.size)
+                cloud.putBlob(hash, input.tree.read(anyRel), first.size, blobScope)
                 bytesDone += first.size
                 emit(SnapshotProgress.Uploading(uuid, hash, bytesDone, totalUploadBytes))
             }
@@ -127,6 +129,7 @@ class SnapshotPipeline(
                     totalBytes = totalBytes,
                     newBytes = newBytes,
                 ),
+                selfContained = input.selfContained,
             )
 
             // 5) CAS HEAD. On Conflict, re-fetch and write our work as a branch.
@@ -190,4 +193,10 @@ data class PipelineInput(
     val tree: WorkingTree,
     val lastKnownManifest: Manifest?,
     val expectedHeadGeneration: Generation?,
+    /**
+     * When true, blob uploads use [BlobScope.Private] keyed by [uuid]: the project's bytes never
+     * dedup with any other project. Driven by `sync_state.self_contained` (managed via
+     * `SettingsRepository.setSelfContained`).
+     */
+    val selfContained: Boolean = false,
 )
