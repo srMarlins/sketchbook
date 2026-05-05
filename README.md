@@ -1,21 +1,16 @@
+<div align="center">
+
 # Sketchbook
 
-A versioning and sync layer for an Ableton Live library.
+*A versioning and sync layer for an Ableton library.*
 
-Download: <https://srmarlins.github.io/sketchbook/>
+[**Download**](https://srmarlins.github.io/sketchbook/)  ·  Apache-2.0  ·  Packaged with [Conveyor](https://hydraulic.dev)
 
-Run from source:
+</div>
 
-```pwsh
-./gradlew :app-desktop:run
-```
-
-MCP server for Claude Desktop (config in `docs/mcp-setup.md`):
+---
 
 ```pwsh
-./gradlew :app-mcp:run
+./gradlew :app-desktop:run    # desktop app
+./gradlew :app-mcp:run        # mcp server, for Claude Desktop
 ```
-
-Architecture lives in `docs/plans/2026-05-05-sync-versioning-design.md`. Release flow in `docs/runbooks/release.md`.
-
-Apache-2.0. Packaged with [Conveyor](https://hydraulic.dev).
