@@ -41,3 +41,12 @@ def find_mac_imports(conn: sqlite3.Connection) -> list[MacImportFinding]:
         )
         for r in rows
     ]
+
+
+def build_repair_proposal(findings: list[MacImportFinding]) -> list[dict]:
+    """One RepairMacPaths action per finding. Returns the same proposal-action
+    shape used elsewhere in the codebase: list of {"type", "args"} dicts."""
+    return [
+        {"type": "RepairMacPaths", "args": {"project_id": f.project_id}}
+        for f in findings
+    ]

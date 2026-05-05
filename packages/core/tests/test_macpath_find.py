@@ -48,3 +48,17 @@ def test_archived_excluded(tmp_path):
     conn.execute("UPDATE projects SET is_archived=1 WHERE id=?", (pid,))
     conn.commit()
     assert find_mac_imports(conn) == []
+
+
+def test_build_repair_proposal_one_action_per_finding(tmp_path):
+    from audio_core.macpath import build_repair_proposal
+
+    conn = open_db(tmp_path / "c.db")
+    p1 = scan_one(conn, _seed_proj(tmp_path, "mac_imported_tiny.als", "a"))
+    p2 = scan_one(conn, _seed_proj(tmp_path, "tiny.als", "b"))   # missing project info
+    p3 = scan_one(conn, _seed_proj(tmp_path, "tiny.als", "c", with_info=True))  # clean
+    actions = build_repair_proposal(find_mac_imports(conn))
+    pids = {a["args"]["project_id"] for a in actions}
+    assert pids == {p1, p2}
+    assert all(a["type"] == "RepairMacPaths" for a in actions)
+    assert p3 not in pids
