@@ -38,6 +38,15 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE projects ADD COLUMN has_project_info INTEGER")
     if "file_size_bytes" not in cols:
         conn.execute("ALTER TABLE projects ADD COLUMN file_size_bytes INTEGER")
+    if "is_missing" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN is_missing INTEGER NOT NULL DEFAULT 0")
+    if "last_seen" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN last_seen REAL")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_effort_score ON projects(effort_score)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_color_tag ON projects(color_tag)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_parse_status ON projects(parse_status)")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS indexer_state ("
+        "id INTEGER PRIMARY KEY CHECK (id = 1), "
+        "job_kind TEXT, job_path TEXT, total INTEGER, done INTEGER, started_at REAL, pid INTEGER)"
+    )

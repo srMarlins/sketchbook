@@ -29,7 +29,19 @@ CREATE TABLE IF NOT EXISTS projects (
   parse_error     TEXT,
   mac_paths_count INTEGER,
   has_project_info INTEGER,
-  file_size_bytes INTEGER
+  file_size_bytes INTEGER,
+  is_missing      INTEGER NOT NULL DEFAULT 0,
+  last_seen       REAL
+);
+
+CREATE TABLE IF NOT EXISTS indexer_state (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  job_kind     TEXT,
+  job_path     TEXT,
+  total        INTEGER,
+  done         INTEGER,
+  started_at   REAL,
+  pid          INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_projects_parent_dir ON projects(parent_dir);
