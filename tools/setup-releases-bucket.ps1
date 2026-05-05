@@ -62,6 +62,11 @@ Step 4 "Set short cache header default for the auto-update manifest"
 # (No bucket-level default cache header on GCS — handled at upload time.)
 Write-Host "Cache headers handled per-object at upload time in release.yml."
 
+Step 4b "Configure bucket as a static website (index.html as main page)"
+# Lets visitors hit https://storage.googleapis.com/sketchbook-releases/ directly
+# and get the landing page (site/index.html), instead of an XML bucket listing.
+gcloud storage buckets update "gs://$Bucket" --web-main-page-suffix=index.html | Out-Host
+
 Step 5 "Create release-uploader service account '$ServiceAccount'"
 $saEmail = "$ServiceAccount@$Project.iam.gserviceaccount.com"
 $saExists = $null -ne (gcloud iam service-accounts describe $saEmail --format="value(email)" 2>$null)
