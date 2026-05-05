@@ -2,15 +2,24 @@
 
 Cross-device catalog, versioning, and AI-assisted curation for your Ableton Live projects.
 
+**Landing page + downloads:** <https://srmarlins.github.io/sketchbook/>
+
 **Status (2026-05-05):** Kotlin / Compose Multiplatform rewrite landed. Python `packages/` retained as the parity reference until validation completes (see `docs/parity.md`). The Tauri/web shell that previously lived in `web/` and `src-tauri/` is retired — Compose Desktop is the v1 surface.
 
-## Run the desktop app
+## Install
+
+Latest release: <https://srmarlins.github.io/sketchbook/>. The page detects your OS and links the right artifact:
+
+- **macOS** (Apple Silicon / Intel) — `.zip` containing the `.app`.
+- **Windows** — `.exe` launcher that installs the signed MSIX and wires up auto-update.
+
+Already running Sketchbook? It checks for updates on launch and applies them in place — no reinstall needed. See `docs/runbooks/release.md` for the release flow.
+
+## Run from source
 
 ```pwsh
 ./gradlew :app-desktop:run
 ```
-
-Builds installers (`.dmg` for Mac, `.msi` for Windows) via Conveyor — see `docs/runbooks/release.md`.
 
 ## Run the MCP server (for Claude Desktop)
 
@@ -35,3 +44,9 @@ See `docs/mcp-setup.md` for the Claude Desktop config snippet.
 
 - `docs/plans/2026-05-05-sync-versioning-design.md` — authoritative architecture.
 - `docs/plans/2026-05-05-kotlin-rewrite-impl-plan.md` — PR-by-PR roadmap.
+
+## License + packaging
+
+Apache 2.0 — see [`LICENSE`](LICENSE).
+
+Packaged with [Conveyor](https://hydraulic.dev) (free for open-source projects). Conveyor handles cross-platform installers, code signing, and the static auto-update site.
