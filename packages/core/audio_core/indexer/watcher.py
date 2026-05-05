@@ -9,8 +9,11 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from audio_core.indexer.events import EventBus
-from audio_core.indexer.jobs import IncrementalScan
+from audio_core.indexer.jobs import IncrementalSampleScan, IncrementalScan
 from audio_core.indexer.queue import JobQueue
+from audio_core.scanner.walker import SAMPLE_EXTENSIONS
+
+_SAMPLE_EXT_LOWER = tuple(SAMPLE_EXTENSIONS)
 
 DEBOUNCE_S = 2.0
 POLL_INTERVAL_S = 0.1
@@ -58,8 +61,11 @@ class _Handler(FileSystemEventHandler):
         self._owner = owner
 
     def _maybe(self, path: str) -> None:
-        if path.lower().endswith(".als"):
+        low = path.lower()
+        if low.endswith(".als"):
             self._owner._touch(path)
+        elif low.endswith(_SAMPLE_EXT_LOWER):
+            self._owner._touch_sample(path)
 
     def on_modified(self, event: FileSystemEvent) -> None:
         if not event.is_directory:
@@ -97,6 +103,7 @@ class FsWatcher:
         poll_s: float = POLL_INTERVAL_S,
         network_rediscovery_s: float = NETWORK_REDISCOVERY_S,
         drive_check=_drive_supports_events,
+        sample_roots: list[Path] | None = None,
     ) -> None:
         self._root = root
         self._queue = queue
@@ -106,8 +113,10 @@ class FsWatcher:
         self._poll_s = poll_s
         self._network_rediscovery_s = network_rediscovery_s
         self._drive_check = drive_check
+        self._sample_roots = list(sample_roots or [])
         self._observer: Observer | None = None
         self._pending: dict[str, float] = {}
+        self._pending_samples: dict[str, float] = {}
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._flusher: threading.Thread | None = None
@@ -122,6 +131,14 @@ class FsWatcher:
         if self._drive_check(self._root):
             self._observer = Observer()
             self._observer.schedule(_Handler(self), str(self._root), recursive=True)
+            for extra in self._sample_roots:
+                # don't double-schedule a path already covered by self._root
+                try:
+                    Path(extra).resolve().relative_to(self._root.resolve())
+                    continue
+                except ValueError:
+                    pass
+                self._observer.schedule(_Handler(self), str(extra), recursive=True)
             self._observer.start()
             self._flusher = threading.Thread(
                 target=self._flush_loop, daemon=True, name="fs-watcher-flusher"
@@ -161,20 +178,37 @@ class FsWatcher:
         with self._lock:
             self._pending[path] = time.monotonic() + self._debounce_s
 
+    def _touch_sample(self, path: str) -> None:
+        with self._lock:
+            self._pending_samples[path] = time.monotonic() + self._debounce_s
+
     def _flush_loop(self) -> None:
         while not self._stop.wait(self._poll_s):
             now = time.monotonic()
             ready: list[str] = []
+            ready_samples: list[str] = []
             with self._lock:
                 for path, deadline in list(self._pending.items()):
                     if deadline <= now:
                         ready.append(path)
                         del self._pending[path]
+                for path, deadline in list(self._pending_samples.items()):
+                    if deadline <= now:
+                        ready_samples.append(path)
+                        del self._pending_samples[path]
             if ready:
                 self._queue.submit(
                     IncrementalScan(
                         db_path=self._db_path,
                         paths=[Path(p) for p in ready],
+                        bus=self._bus,
+                    )
+                )
+            if ready_samples:
+                self._queue.submit(
+                    IncrementalSampleScan(
+                        db_path=self._db_path,
+                        paths=[Path(p) for p in ready_samples],
                         bus=self._bus,
                     )
                 )
