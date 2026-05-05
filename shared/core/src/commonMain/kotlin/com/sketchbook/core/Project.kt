@@ -33,13 +33,18 @@ data class ProjectMetadata(
     val tempo: Double?,
     val timeSignatureNumerator: Int?,
     val timeSignatureDenominator: Int?,
-    val midiTrackCount: Int,
     val audioTrackCount: Int,
+    val midiTrackCount: Int,
     val returnTrackCount: Int,
+    val groupTrackCount: Int,
     val plugins: List<PluginRef>,
     val sampleRefs: List<SampleRef>,
     val lastSavedLiveVersion: String?,
-)
+    /** Count of `FileRef/Path` values starting with a Mac-only prefix (`/Volumes/`, `/Users/`, etc.). */
+    val macPathsCount: Int,
+) {
+    val totalTrackCount: Int get() = audioTrackCount + midiTrackCount + returnTrackCount + groupTrackCount
+}
 
 data class PluginRef(
     val name: String,
@@ -47,10 +52,12 @@ data class PluginRef(
     val trackName: String?,
 )
 
-enum class PluginFormat { Vst2, Vst3, Au, Native, Unknown }
+enum class PluginFormat { Vst2, Vst3, Au, AbletonNative, Unknown }
 
+/**
+ * Sample reference recovered from a `.als` file. The [rawPath] is whatever Live wrote — relative,
+ * absolute, Mac-style, etc. Resolution to a real file (and size/exists) happens later.
+ */
 data class SampleRef(
-    val path: ProjectPath,
-    val exists: Boolean,
-    val sizeBytes: Long?,
+    val rawPath: String,
 )
