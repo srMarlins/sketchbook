@@ -36,7 +36,32 @@ def undo_batch(conn: sqlite3.Connection, journal_dir: str | Path, batch_id: str)
         elif t == "SetTags":
             _set_tags(conn, entry["project_id"], list(entry["before"]))
 
+        elif t == "RepairMacPaths":
+            _undo_repair_mac_paths(entry, conn)
+
         else:
             raise NotImplementedError(f"undo not implemented for action type {t!r}")
 
     conn.commit()
+
+
+def _undo_repair_mac_paths(entry: dict, conn: sqlite3.Connection) -> None:
+    """Restore the .als from its .als.bak and re-scan to refresh the catalog row.
+
+    The Ableton Project Info/ folder (if created by the repair) is left in place;
+    undo doesn't delete directories. The .als.bak file is also left in place so a
+    subsequent undo (or re-undo after redo) is cheap.
+    """
+    if entry.get("noop"):
+        return
+    # Lazy import to avoid a circular dependency between scanner and actions.
+    from audio_core.scanner.scan import scan_one
+
+    als = Path(entry["path"])
+    bak = Path(entry["backup"])
+    if not bak.exists():
+        raise FileNotFoundError(
+            f"cannot undo RepairMacPaths: backup missing at {bak}"
+        )
+    shutil.copy2(bak, als)
+    scan_one(conn, als)

@@ -93,3 +93,28 @@ def test_repair_refuses_when_live_has_file_open(tmp_path, monkeypatch):
     )
     with pytest.raises(RuntimeError):
         RepairMacPaths(project_id=pid, root=root / "Projects").validate(conn)
+
+
+def test_undo_restores_als_from_backup(tmp_path):
+    from audio_core.actions.undo import undo_batch
+
+    root, conn, pid, als = _seed_mac_project(tmp_path)
+    pre_bytes = als.read_bytes()
+
+    batch_id = run_batch(
+        conn,
+        [RepairMacPaths(project_id=pid, root=root / "Projects")],
+        actor="test",
+        journal_dir=root / "data" / "journal",
+    )
+    assert als.read_bytes() != pre_bytes
+
+    undo_batch(conn, root / "data" / "journal", batch_id)
+
+    assert als.read_bytes() == pre_bytes
+    assert (als.with_suffix(".als.bak")).exists()
+    row = conn.execute(
+        "SELECT mac_paths_count, has_project_info FROM projects WHERE id=?", (pid,)
+    ).fetchone()
+    # Re-scan after restore: row reflects the original (Mac-imported) state.
+    assert row[0] == 3
