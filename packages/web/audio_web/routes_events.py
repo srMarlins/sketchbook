@@ -5,10 +5,13 @@ event is always a ``hello`` snapshot so clients can detect a successful
 connection. Thereafter every event published on ``app.state.event_bus`` is
 forwarded with its ``kind`` as the SSE ``event:`` field.
 
-The route is unit-tested via :func:`event_stream` (the inner async generator)
-because httpx's ``ASGITransport`` and Starlette's ``TestClient`` both buffer
-the entire response body before returning, which makes them unable to drive a
-long-lived streaming endpoint in-process.
+Tested two ways: ``test_routes_events.py`` drives :func:`event_stream`
+(the inner async generator) directly for fast logic coverage, and
+``test_routes_events_e2e.py`` runs uvicorn on a loopback port for true
+end-to-end framing + bus → wire delivery. The unit-level tests bypass the
+ASGI layer because httpx's ``ASGITransport`` and Starlette's ``TestClient``
+buffer the entire response before returning, so neither can drive an
+unending stream in-process.
 """
 
 from __future__ import annotations
