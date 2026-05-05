@@ -81,20 +81,22 @@ def upsert_project(
         "VALUES (?, ?, ?, ?)",
         [(pid, p.name, p.plugin_type, p.track_name) for p in meta.plugins],
     )
+    sample_rows = []
+    for s in meta.samples:
+        exists, size = _sample_exists_with_size(s.path, parent_dir)
+        sample_rows.append((pid, s.path, 0 if exists else 1, size))
     conn.executemany(
-        "INSERT INTO project_samples (project_id, sample_path, is_missing) VALUES (?, ?, ?)",
-        [
-            (pid, s.path, 0 if _sample_exists(s.path, parent_dir) else 1)
-            for s in meta.samples
-        ],
+        "INSERT INTO project_samples (project_id, sample_path, is_missing, size_bytes) "
+        "VALUES (?, ?, ?, ?)",
+        sample_rows,
     )
     _refresh_fts(conn, pid)
     conn.commit()
     return pid
 
 
-def _sample_exists(sample_path: str, parent_dir: str) -> bool:
-    """Test whether a parsed sample path actually exists on disk.
+def _sample_exists_with_size(sample_path: str, parent_dir: str) -> tuple[bool, int | None]:
+    """Test whether a parsed sample path exists on disk; if so, return its size.
 
     Sample paths inside .als files come in two flavors: absolute (Live's
     'Collected and Saved' or external samples) or relative to the project
@@ -106,10 +108,12 @@ def _sample_exists(sample_path: str, parent_dir: str) -> bool:
         p = Path(sample_path)
         if not p.is_absolute():
             p = Path(parent_dir) / p
-        return p.exists()
+        if p.is_file():
+            return True, p.stat().st_size
+        return False, None
     except (OSError, ValueError):
         # Malformed path (e.g. invalid Windows characters) → treat as missing.
-        return False
+        return False, None
 
 
 def upsert_failed_parse(
