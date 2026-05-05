@@ -96,6 +96,30 @@ class FullScan:
 
 
 @dataclass
+class IncrementalScan:
+    db_path: Path
+    paths: list[Path]
+    bus: EventBus
+
+    def __call__(self) -> None:
+        conn = sqlite3.connect(self.db_path)
+        try:
+            for p in self.paths:
+                if not p.exists():
+                    conn.execute("UPDATE projects SET is_missing=1 WHERE path=?", (str(p),))
+                    self.bus.publish({"kind": "scan_row", "path": str(p), "status": "missing"})
+                    continue
+                try:
+                    pid = scan_one(conn, p)
+                    self.bus.publish({"kind": "scan_row", "project_id": pid, "path": str(p), "status": "updated"})
+                except Exception as exc:
+                    self.bus.publish({"kind": "scan_row", "path": str(p), "status": "failed", "error": f"{type(exc).__name__}: {exc}"})
+            conn.commit()
+        finally:
+            conn.close()
+
+
+@dataclass
 class BackfillColumn:
     """Run a single BackfillSpec against the catalog: select rows whose target
     columns are NULL, call spec.fill_one per row, emit progress on the bus."""
