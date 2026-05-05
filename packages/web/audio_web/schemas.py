@@ -12,6 +12,7 @@ ActionType = Literal[
     "SetColorTag",
     "SetTags",
     "ArchiveProject",
+    "RepairMacPaths",
 ]
 
 

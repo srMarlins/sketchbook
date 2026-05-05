@@ -123,3 +123,62 @@ def test_unknown_proposal_404(tmp_path, monkeypatch):
     assert client.get("/api/proposals/nope").status_code == 404
     assert client.post("/api/proposals/nope/approve").status_code == 404
     assert client.delete("/api/proposals/nope").status_code == 404
+
+
+def _seed_mac_project(tmp_path: Path, dir_name: str = "mac Project"):
+    proj = tmp_path / "Projects" / dir_name
+    proj.mkdir(parents=True)
+    als = proj / "m.als"
+    shutil.copy(FIX / "mac_imported_tiny.als", als)
+    conn = open_db(tmp_path / "data" / "catalog.db")
+    return scan_one(conn, als)
+
+
+def test_approve_repair_mac_paths_proposal(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    pid = _seed_mac_project(tmp_path)
+    als = tmp_path / "Projects" / "mac Project" / "m.als"
+    bak = als.with_suffix(".als.bak")
+    assert als.is_file()
+    assert not bak.exists()
+
+    client = TestClient(create_app())
+    submit = client.post(
+        "/api/proposals",
+        json={
+            "actor": "claude",
+            "actions": [
+                {"type": "RepairMacPaths", "args": {"project_id": pid}},
+            ],
+        },
+    )
+    assert submit.status_code == 201, submit.text
+    proposal_id = submit.json()["proposal_id"]
+
+    approve = client.post(f"/api/proposals/{proposal_id}/approve")
+    assert approve.status_code == 200, approve.text
+
+    # Backup created beside the .als
+    assert bak.is_file()
+    # Repaired .als no longer contains Mac-prefixed paths
+    import gzip
+
+    with gzip.open(als, "rb") as fh:
+        body = fh.read()
+    for prefix in (b"/Volumes/", b"/Users/", b"/Library/", b"/Applications/", b"/private/"):
+        assert prefix not in body, f"Mac prefix {prefix!r} still present in {als}"
+
+    # Catalog row reflects the repair
+    import sqlite3
+
+    conn = open_db(tmp_path / "data" / "catalog.db")
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT mac_paths_count, has_project_info FROM projects WHERE id=?", (pid,)
+    ).fetchone()
+    assert row["mac_paths_count"] == 0
+    assert row["has_project_info"] == 1
+
+    # Proposal was consumed; journal batch was written.
+    assert not (tmp_path / "data" / "proposals" / f"{proposal_id}.json").exists()
+    assert (tmp_path / "data" / "journal" / f"{approve.json()['batch_id']}.json").exists()
