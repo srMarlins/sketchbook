@@ -6,6 +6,8 @@ import com.sketchbook.repo.JournalRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -25,17 +27,17 @@ class InMemoryJournalRepository : JournalRepository {
     override suspend fun append(entry: JournalEntry): Result<JournalEntry> {
         val seq = seqMutex.withLock { nextSequence++ }
         val stamped = entry.copy(sequence = seq)
-        state.value = listOf(stamped) + state.value
+        state.update { listOf(stamped) + it }
         return Result.success(stamped)
     }
 
     override suspend fun undoLast(): Result<JournalEntry> {
-        val current = state.value
-        if (current.isEmpty()) {
-            return Result.failure(SketchbookError.NotFound("journal is empty"))
+        // getAndUpdate atomically returns the previous list while replacing it with the tail.
+        // The lambda is pure (no side effects), so we read the head off the snapshot it returns.
+        val previous = state.getAndUpdate { current ->
+            if (current.isEmpty()) current else current.drop(1)
         }
-        val head = current.first()
-        state.value = current.drop(1)
-        return Result.success(head)
+        return previous.firstOrNull()?.let { Result.success(it) }
+            ?: Result.failure(SketchbookError.NotFound("journal is empty"))
     }
 }

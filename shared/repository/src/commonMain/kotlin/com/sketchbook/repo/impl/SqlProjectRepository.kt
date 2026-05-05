@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -117,7 +118,7 @@ class SqlProjectRepository(
                 projectId = id,
                 action = ActionRecord.SetTags(before = before, after = tags),
             )
-            ftsTrigger.value++
+            ftsTrigger.update { it + 1 }
             journal.append(entry)
         }
     }
@@ -132,7 +133,7 @@ class SqlProjectRepository(
                     SketchbookError.NotFound("project $id not found"),
                 )
             val record = catalog.transactionWithResult<ActionRecord> { build(row) }
-            ftsTrigger.value++
+            ftsTrigger.update { it + 1 }
             journal.append(
                 JournalEntry(
                     timestamp = clock.now(),
