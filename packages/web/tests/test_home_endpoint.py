@@ -22,12 +22,18 @@ def _seed(
     color: int | None = None,
     effort: int | None = None,
     archived: bool = False,
+    parent_dir: str | None = None,
 ) -> int:
+    # Default to a unique parent_dir per seeded project so server-side
+    # parent_dir-grouping in shelves like forgotten-gems does not collapse
+    # distinct fixtures together. Tests that explicitly want shared dirs can
+    # pass the parent_dir kwarg.
+    pdir = parent_dir if parent_dir is not None else f"/x/{name}"
     pid = upsert_project(
         conn,
-        path=f"/x/{name}.als",
+        path=f"{pdir}/{name}.als",
         name=name,
-        parent_dir="/x",
+        parent_dir=pdir,
         file_hash=name,
         last_modified=mtime,
         meta=ProjectMetadata(),

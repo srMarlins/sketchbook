@@ -76,22 +76,49 @@ def _shelf_currently_working(conn: sqlite3.Connection, *, now: float) -> Shelf:
 
 
 def _shelf_forgotten_gems(conn: sqlite3.Connection, *, now: float) -> Shelf:
+    """High-effort, untouched-6+-months projects, capped at 80 distinct *project
+    folders* (not raw .als rows). A folder with 5 .als variants counts as one
+    group; we return its highest-effort variant as the representative.
+
+    Server-side grouping mirrors the gems-sample shelf — the previous raw-row
+    cap was misleading because UI-side grouping collapsed it down to ~50."""
     cutoff = now - 180 * _DAY
     excluded = (COLOR_NAMES["green"], COLOR_NAMES["red"])
     rows = _rows_to_dicts(
         conn.execute(
             """
-            SELECT * FROM projects
-            WHERE is_archived = 0
-              AND effort_score >= 80
-              AND last_modified < ?
-              AND (color_tag IS NULL OR color_tag NOT IN (?, ?))
+            WITH qualifying AS (
+              SELECT *
+              FROM projects
+              WHERE is_archived = 0
+                AND effort_score >= 80
+                AND last_modified < ?
+                AND (color_tag IS NULL OR color_tag NOT IN (?, ?))
+            ),
+            chosen_dirs AS (
+              SELECT parent_dir, MAX(effort_score) AS top_effort
+              FROM qualifying
+              GROUP BY parent_dir
+              ORDER BY top_effort DESC
+              LIMIT 80
+            ),
+            ranked AS (
+              SELECT q.*,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY q.parent_dir
+                       ORDER BY q.effort_score DESC, q.last_modified DESC
+                     ) AS rn
+              FROM qualifying q
+              JOIN chosen_dirs c ON c.parent_dir = q.parent_dir
+            )
+            SELECT * FROM ranked WHERE rn = 1
             ORDER BY effort_score DESC
-            LIMIT 150
             """,
             (cutoff, *excluded),
         )
     )
+    for r in rows:
+        r.pop("rn", None)
     return Shelf(
         id="forgotten-gems",
         title="Forgotten gems",
