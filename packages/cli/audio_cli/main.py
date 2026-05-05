@@ -337,6 +337,46 @@ def score_backfill() -> None:
     con.print(f"recomputed effort_score for {updated} project(s)")
 
 
+@app.command("detect-broken")
+def detect_broken() -> None:
+    """Recompute project_samples.is_missing for every catalog row.
+
+    Pure-DB pass — does NOT re-parse .als files. Use after moving samples on
+    disk, or to backfill a pre-existing DB whose samples were never checked.
+    parse_status is left alone; that gets refreshed by the next `audio scan`.
+    """
+    conn = open_db(db_path())
+    rows = list(
+        conn.execute(
+            "SELECT ps.id, ps.sample_path, ps.is_missing, p.parent_dir "
+            "FROM project_samples ps JOIN projects p ON p.id = ps.project_id"
+        )
+    )
+    recomputed = 0
+    for row_id, sample_path, was_missing, parent_dir in rows:
+        try:
+            p = _Path(sample_path)
+            if not p.is_absolute():
+                p = _Path(parent_dir) / p
+            now_missing = 0 if p.exists() else 1
+        except (OSError, ValueError):
+            now_missing = 1
+        if now_missing != was_missing:
+            conn.execute(
+                "UPDATE project_samples SET is_missing=? WHERE id=?",
+                (now_missing, row_id),
+            )
+        recomputed += 1
+    conn.commit()
+    affected = conn.execute(
+        "SELECT COUNT(*) FROM (SELECT DISTINCT project_id FROM project_samples "
+        "WHERE is_missing = 1)"
+    ).fetchone()[0]
+    con.print(
+        f"recomputed {recomputed} project_samples; {affected} project(s) now have missing samples"
+    )
+
+
 @app.command()
 def journal(
     limit: int = typer.Option(20, "--limit", help="Max rows."),

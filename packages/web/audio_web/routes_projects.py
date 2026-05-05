@@ -23,6 +23,7 @@ def list_projects(
     archived: Annotated[bool | None, Query()] = False,
     min_effort: Annotated[int | None, Query(ge=0, le=100)] = None,
     max_effort: Annotated[int | None, Query(ge=0, le=100)] = None,
+    broken: Annotated[bool | None, Query()] = None,
     order_by: Annotated[Literal["mtime", "name", "effort"], Query()] = "mtime",
     order_dir: Annotated[Literal["asc", "desc"], Query()] = "desc",
     limit: Annotated[int, Query(ge=1, le=1000)] = 200,
@@ -36,6 +37,7 @@ def list_projects(
         archived=archived,
         min_effort=min_effort,
         max_effort=max_effort,
+        broken=broken,
         order_by=order_by,
         order_dir=order_dir,
         limit=limit,
@@ -50,6 +52,11 @@ def project_detail(project_id: int) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail=f"no project id={project_id}")
     proj = dict(row)
+    # Derived count, mirrors what search_projects() exposes on listings.
+    proj["missing_sample_count"] = conn.execute(
+        "SELECT COUNT(*) FROM project_samples WHERE project_id=? AND is_missing=1",
+        (project_id,),
+    ).fetchone()[0]
     proj["plugins"] = [
         dict(r)
         for r in conn.execute(

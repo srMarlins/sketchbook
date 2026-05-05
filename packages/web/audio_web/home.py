@@ -226,6 +226,41 @@ def _shelf_gems_sample(conn: sqlite3.Connection, *, now: float) -> Shelf:
     )
 
 
+def _shelf_broken(conn: sqlite3.Connection) -> Shelf:
+    """Projects that failed to parse OR reference samples missing from disk.
+
+    Read-only detection — surfacing only. The UI can show a small chip / row
+    indicator so the user notices these projects without us touching the .als.
+    Ordering: most-broken first (missing-sample count desc, then mtime desc),
+    so a project missing a dozen samples sits above one missing one.
+    """
+    rows = _rows_to_dicts(
+        conn.execute(
+            """
+            SELECT p.*, (
+              SELECT COUNT(*) FROM project_samples ps
+              WHERE ps.project_id = p.id AND ps.is_missing = 1
+            ) AS missing_sample_count
+            FROM projects p
+            WHERE p.is_archived = 0
+              AND (p.parse_status = 'failed' OR EXISTS (
+                SELECT 1 FROM project_samples ps
+                WHERE ps.project_id = p.id AND ps.is_missing = 1
+              ))
+            ORDER BY missing_sample_count DESC, p.last_modified DESC
+            LIMIT 20
+            """
+        )
+    )
+    return Shelf(
+        id="broken",
+        title="Broken",
+        description="Failed to parse or referencing missing samples.",
+        see_all_query=urlencode({"broken": "true", "order_by": "mtime", "order_dir": "desc"}),
+        projects=rows,
+    )
+
+
 def _shelf_untriaged(conn: sqlite3.Connection) -> Shelf:
     rows = _rows_to_dicts(
         conn.execute(
@@ -261,6 +296,7 @@ def compute_shelves(conn: sqlite3.Connection) -> list[Shelf]:
         _shelf_almost_done(conn),
         _shelf_has_potential(conn),
         _shelf_untriaged(conn),
+        _shelf_broken(conn),
         _shelf_recent_activity(conn),
         _shelf_gems_sample(conn, now=now),
     ]

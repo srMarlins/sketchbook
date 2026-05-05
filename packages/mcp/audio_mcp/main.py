@@ -83,6 +83,21 @@ def build_server() -> FastMCP:
             "When batch-tagging or triaging, sort untriaged projects by `order_by='effort'` "
             "desc — wrong-tagging a high-effort project costs more than wrong-tagging a "
             "sketch, so triage the loaded ones first.\n"
+            "\n"
+            "## Broken projects (read-only detection)\n"
+            "\n"
+            "Every project carries `parse_status` ('ok' | 'failed' | null for legacy rows) and "
+            "`missing_sample_count` (integer; 0 means clean). A project is considered 'broken' "
+            "when `parse_status='failed'` (the .als itself is corrupt or un-parseable) OR "
+            "`missing_sample_count > 0` (one or more referenced samples are not on disk).\n"
+            "\n"
+            "When the user asks about 'broken', 'won't open', 'missing samples', 'corrupt', or "
+            "'lost samples' projects, call `search` with `broken=true`. To explicitly exclude "
+            "them from a list, pass `broken=false`. Default (`broken=None`) returns everything.\n"
+            "\n"
+            "Detection is read-only: this MCP cannot fix broken projects (no .als writers and "
+            "no sample-relinker exist yet). When the user asks to repair, explain the limitation "
+            "and either suggest manual steps or wait for that feature.\n"
         ),
     )
 
@@ -94,6 +109,7 @@ def build_server() -> FastMCP:
         archived: bool | None = False,
         min_effort: int | None = None,
         max_effort: int | None = None,
+        broken: bool | None = None,
         order_by: Literal["mtime", "name", "effort"] = "mtime",
         order_dir: Literal["asc", "desc"] = "desc",
         limit: int = 50,
@@ -101,10 +117,14 @@ def build_server() -> FastMCP:
         """Search the project catalog by FTS query (name/plugin/sample) and/or tempo range.
 
         Returns a list of project rows with id, name, path, tempo, time signature, track counts,
-        live_version, last_modified, archived flag, and effort_score (0-100, derived).
+        live_version, last_modified, archived flag, effort_score (0-100, derived),
+        parse_status ('ok' | 'failed' | null), and missing_sample_count.
 
         Effort filters and `order_by="effort"` power forgotten-gem queries: e.g. high-effort
         projects untouched in 6+ months. Use min_effort=60 + a date filter for that pattern.
+
+        `broken=True` returns only projects that failed to parse OR have at least one missing
+        sample. `broken=False` excludes them. `broken=None` (default) returns everything.
         """
         conn = open_db(db_path())
         return _search_projects(
@@ -115,6 +135,7 @@ def build_server() -> FastMCP:
             archived=archived,
             min_effort=min_effort,
             max_effort=max_effort,
+            broken=broken,
             order_by=order_by,
             order_dir=order_dir,
             limit=limit,

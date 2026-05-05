@@ -59,6 +59,7 @@ def test_home_returns_all_shelves_in_order(tmp_path, monkeypatch):
         "almost-done",
         "has-potential",
         "untriaged",
+        "broken",
         "recent-activity",
         "gems-sample",
     ]
@@ -161,3 +162,66 @@ def test_empty_shelves_remain_in_response(tmp_path, monkeypatch):
         assert "title" in s
         assert "description" in s
         assert "see_all_query" in s
+
+
+def test_broken_shelf_includes_failed_parse_and_missing_samples(tmp_path, monkeypatch):
+    from audio_core.db.projects import upsert_failed_parse
+    from audio_core.parser.model import SampleRef
+
+    monkeypatch.setenv("AUDIO_ROOT", str(tmp_path))
+    conn = open_db(tmp_path / "data" / "catalog.db")
+    now = time.time()
+
+    failed_pid = upsert_failed_parse(
+        conn,
+        path=str(tmp_path / "broken.als"),
+        name="broken",
+        parent_dir=str(tmp_path),
+        file_hash="hb",
+        last_modified=now,
+        error="GzipError",
+    )
+    missing_pid = upsert_project(
+        conn,
+        path=str(tmp_path / "missing.als"),
+        name="missing",
+        parent_dir=str(tmp_path),
+        file_hash="hm",
+        last_modified=now - 1,
+        meta=ProjectMetadata(
+            samples=[
+                SampleRef(path=str(tmp_path / "g1.wav")),
+                SampleRef(path=str(tmp_path / "g2.wav")),
+                SampleRef(path=str(tmp_path / "g3.wav")),
+            ]
+        ),
+    )
+    # Healthy project should NOT appear.
+    upsert_project(
+        conn,
+        path=str(tmp_path / "ok.als"),
+        name="ok",
+        parent_dir=str(tmp_path),
+        file_hash="ho",
+        last_modified=now,
+        meta=ProjectMetadata(),
+    )
+    # Archived broken should NOT appear.
+    archived_pid = upsert_failed_parse(
+        conn,
+        path=str(tmp_path / "archived_broken.als"),
+        name="archived_broken",
+        parent_dir=str(tmp_path),
+        file_hash="ha",
+        last_modified=now,
+        error="boom",
+    )
+    conn.execute("UPDATE projects SET is_archived=1 WHERE id=?", (archived_pid,))
+    conn.commit()
+
+    res = TestClient(create_app()).get("/api/home")
+    shelf = _shelf(res.json()["shelves"], "broken")
+    ids = [p["id"] for p in shelf["projects"]]
+    # missing-sample-count desc puts the one with 3 missing first; the failed
+    # parse has missing_sample_count=0 so falls behind.
+    assert ids == [missing_pid, failed_pid]
