@@ -67,6 +67,37 @@ export interface ProjectDetail extends ProjectSummary {
   samples: SampleRow[];
 }
 
+// --- repair ----------------------------------------------------------------
+
+export interface MacImportFinding {
+  projectId: number;
+  path: string;
+  name: string;
+  parentDir: string;
+  macPathsCount: number;
+  projectInfoMissing: boolean;
+}
+
+export interface SampleCandidate {
+  path: string;
+  filename: string;
+  sizeBytes: number;
+}
+
+export interface MissingSampleFinding {
+  projectId: number;
+  projectPath: string;
+  projectName: string;
+  missingPath: string;
+  autoMatch: SampleCandidate | null;
+  candidates: SampleCandidate[];
+}
+
+export interface RepairFindings {
+  macImports: MacImportFinding[];
+  missingSamples: MissingSampleFinding[];
+}
+
 // --- proposals ---------------------------------------------------------------
 
 export type ActionType =
@@ -74,7 +105,23 @@ export type ActionType =
   | 'MoveProject'
   | 'ArchiveProject'
   | 'SetColorTag'
-  | 'SetTags';
+  | 'SetTags'
+  | 'RepairMacPaths'
+  | 'RelinkMissingSamples';
+
+export interface RepairMacPathsArgs {
+  project_id: number;
+}
+
+export interface RelinkSpec {
+  old: string;
+  new: string;
+}
+
+export interface RelinkMissingSamplesArgs {
+  project_id: number;
+  relinks: RelinkSpec[];
+}
 
 export interface RenameProjectArgs {
   project_id: number;
@@ -102,7 +149,9 @@ export type ProposedAction =
   | { type: 'MoveProject'; args: MoveProjectArgs }
   | { type: 'ArchiveProject'; args: ArchiveProjectArgs }
   | { type: 'SetColorTag'; args: SetColorTagArgs }
-  | { type: 'SetTags'; args: SetTagsArgs };
+  | { type: 'SetTags'; args: SetTagsArgs }
+  | { type: 'RepairMacPaths'; args: RepairMacPathsArgs }
+  | { type: 'RelinkMissingSamples'; args: RelinkMissingSamplesArgs };
 
 export type Actor = 'claude' | 'user';
 

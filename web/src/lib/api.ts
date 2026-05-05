@@ -6,6 +6,7 @@ import type {
   ProjectSummary,
   Proposal,
   ProposalSubmission,
+  RepairFindings,
 } from './types';
 
 const USE_MOCKS = import.meta.env['VITE_USE_MOCKS'] === 'true';
@@ -184,4 +185,66 @@ export async function getJournalBatch(batchId: string): Promise<JournalBatch> {
 export async function undoBatch(batchId: string): Promise<{ undone: string }> {
   if (USE_MOCKS) return Promise.resolve(mock.undoBatch(batchId));
   return http<{ undone: string }>(`/api/journal/${batchId}/undo`, { method: 'POST' });
+}
+
+interface MacImportFindingDTO {
+  project_id: number;
+  path: string;
+  name: string;
+  parent_dir: string;
+  mac_paths_count: number;
+  project_info_missing: boolean;
+}
+
+interface SampleCandidateDTO {
+  path: string;
+  filename: string;
+  size_bytes: number;
+}
+
+interface MissingSampleFindingDTO {
+  project_id: number;
+  project_path: string;
+  project_name: string;
+  missing_path: string;
+  auto_match: SampleCandidateDTO | null;
+  candidates: SampleCandidateDTO[];
+}
+
+interface RepairFindingsDTO {
+  mac_imports: MacImportFindingDTO[];
+  missing_samples: MissingSampleFindingDTO[];
+}
+
+export async function fetchRepairFindings(): Promise<RepairFindings> {
+  if (USE_MOCKS) return { macImports: [], missingSamples: [] };
+  const j = await http<RepairFindingsDTO>('/api/repair/findings');
+  return {
+    macImports: j.mac_imports.map((m) => ({
+      projectId: m.project_id,
+      path: m.path,
+      name: m.name,
+      parentDir: m.parent_dir,
+      macPathsCount: m.mac_paths_count,
+      projectInfoMissing: m.project_info_missing,
+    })),
+    missingSamples: j.missing_samples.map((s) => ({
+      projectId: s.project_id,
+      projectPath: s.project_path,
+      projectName: s.project_name,
+      missingPath: s.missing_path,
+      autoMatch: s.auto_match
+        ? {
+            path: s.auto_match.path,
+            filename: s.auto_match.filename,
+            sizeBytes: s.auto_match.size_bytes,
+          }
+        : null,
+      candidates: (s.candidates || []).map((c) => ({
+        path: c.path,
+        filename: c.filename,
+        sizeBytes: c.size_bytes,
+      })),
+    })),
+  };
 }
