@@ -575,17 +575,16 @@ Code review process (Claude Code performs after self-review):
 
 **Files:**
 - `conveyor.conf` — HOCON config; includes `/stdlib/jvm/17/compose.conf`, points `app.jvm.gradle-project = ":app-desktop"`, sets `site.base-url = https://storage.googleapis.com/sketchbook-releases`, `updates = "background"`, `machines = [macos.amd64, macos.aarch64, windows.amd64]`.
-- `.github/workflows/release.yml` — triggered by `v*` tags; restores `CONVEYOR_SIGNING_KEY` from Secrets, runs `./gradlew :app-desktop:build` then `conveyor make site`, auths GCS via `SKETCHBOOK_RELEASES_SA`, uploads `output/*` to `gs://sketchbook-releases/` with `Cache-Control: max-age=300`, creates GitHub Release with auto-generated changelog (notes only, no binary assets).
-- `tools/setup-releases-bucket.ps1` — one-time bootstrap: creates public `gs://sketchbook-releases` (US-EAST4, uniform access, `allUsers` viewer), creates dedicated `sketchbook-release-uploader` SA scoped to that bucket only, generates JSON key for GH Secrets.
+- `.github/workflows/release.yml` — triggered by `v*` tags; restores `CONVEYOR_SIGNING_KEY` from Secrets, runs `./gradlew :app-desktop:build` then `conveyor make site`, auths GCS via Workload Identity Federation (no JSON key — short-lived OIDC-bound token), uploads `output/*` to `gs://sketchbook-releases/` with `Cache-Control: max-age=300`, creates GitHub Release with auto-generated changelog (notes only, no binary assets).
+- `tools/setup-releases-bucket.ps1` — one-time bootstrap: creates public `gs://sketchbook-releases` (US-EAST4, uniform access, `allUsers` viewer), creates dedicated `sketchbook-release-uploader` SA scoped to that bucket only, sets up the WIF pool + provider restricted to `srMarlins`-owned repos, and binds the SA to be impersonated only from `srMarlins/sketchbook`.
 - `tools/release.ps1` — local-only fallback that mirrors the workflow.
 - `docs/runbooks/release.md` — bootstrap, routine release, recovery from bad release, rationale for public-bucket vs companion-repo.
 
 **One-time bootstrap (manual, documented in runbook):**
-1. `pwsh -File tools/setup-releases-bucket.ps1` → creates public bucket + uploader SA + key.
-2. `gh secret set SKETCHBOOK_RELEASES_SA --body "$(Get-Content $env:APPDATA\sketchbook\release-uploader-sa.json -Raw)"`.
-3. Install Conveyor CLI locally (one-off, for signing-key generation).
-4. `conveyor keys generate` → `gh secret set CONVEYOR_SIGNING_KEY --body "$(cat ~/.conveyor/signing.json)"`. Back up the key offline; loss = no recovery.
-5. Smoke test: `git tag v0.0.1 && git push origin v0.0.1` → workflow uploads to bucket and creates release.
+1. `pwsh -File tools/setup-releases-bucket.ps1` → creates public bucket + uploader SA + WIF pool/provider/binding. No JSON key created (org policy forbids; WIF replaces it).
+2. Install Conveyor CLI locally (one-off, for signing-key generation).
+3. `conveyor keys generate` → `gh secret set CONVEYOR_SIGNING_KEY --body "$(cat ~/.conveyor/signing.json)"`. Back up the key offline; loss = no recovery.
+4. Smoke test: `git tag v0.0.1 && git push origin v0.0.1` → workflow uploads to bucket and creates release.
 
 **Acceptance:**
 - Pushing a `v*` tag produces signed `.dmg` (Apple Silicon + Intel) and `.msi` (x64) artifacts in `gs://sketchbook-releases/`, plus `metadata.json` for the auto-updater.

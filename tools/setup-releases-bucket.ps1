@@ -10,8 +10,10 @@
 #   2. Creates a dedicated service account for release uploads (not reusing the
 #      app SA — separation of duties: the app SA can't push fake releases).
 #   3. Grants that SA roles/storage.objectAdmin on the releases bucket only.
-#   4. Generates a JSON key for the SA and prints it so you can paste it into
-#      GitHub Secrets as SKETCHBOOK_RELEASES_SA.
+#   4. Sets up Workload Identity Federation so GitHub Actions can impersonate
+#      the SA via OIDC — no long-lived JSON key, restricted to repos owned by
+#      $RepoOwner. (Org policy iam.disableServiceAccountKeyCreation forbids
+#      key creation anyway, and WIF is the better practice.)
 
 [CmdletBinding()]
 param(
@@ -19,7 +21,10 @@ param(
     [string]$Bucket  = "sketchbook-releases",
     [string]$Region  = "US-EAST4",
     [string]$ServiceAccount = "sketchbook-release-uploader",
-    [string]$KeyDir  = "$env:APPDATA\sketchbook"
+    [string]$RepoOwner = "srMarlins",
+    [string]$Repo = "srMarlins/sketchbook",
+    [string]$PoolId = "github",
+    [string]$ProviderId = "github-provider"
 )
 
 $ErrorActionPreference = "Stop"
@@ -73,26 +78,58 @@ gcloud storage buckets add-iam-policy-binding "gs://$Bucket" `
     --member="serviceAccount:$saEmail" `
     --role="roles/storage.objectAdmin" | Select-Object -Last 4 | Out-Host
 
-Step 7 "Generate the SA key for GitHub Actions"
-New-Item -ItemType Directory -Force -Path $KeyDir | Out-Null
-$keyPath = "$KeyDir\release-uploader-sa.json"
-if (Test-Path $keyPath) {
-    Write-Host "Key already exists at $keyPath. Delete it manually if you want to rotate."
+Step 7 "Enable iamcredentials.googleapis.com (required for WIF token exchange)"
+gcloud services enable iamcredentials.googleapis.com --project=$Project | Out-Host
+
+Step 8 "Create Workload Identity Pool '$PoolId'"
+$poolExists = $null -ne (gcloud iam workload-identity-pools describe $PoolId `
+    --project=$Project --location=global --format="value(name)" 2>$null)
+if ($poolExists) {
+    Write-Host "Pool already exists, reusing."
 } else {
-    gcloud iam service-accounts keys create $keyPath --iam-account=$saEmail | Out-Host
+    gcloud iam workload-identity-pools create $PoolId `
+        --project=$Project --location=global `
+        --display-name="GitHub Actions" | Out-Host
 }
+
+Step 9 "Create OIDC provider '$ProviderId' (restricted to $RepoOwner repos)"
+$providerExists = $null -ne (gcloud iam workload-identity-pools providers describe $ProviderId `
+    --project=$Project --location=global --workload-identity-pool=$PoolId `
+    --format="value(name)" 2>$null)
+if ($providerExists) {
+    Write-Host "Provider already exists, reusing."
+} else {
+    gcloud iam workload-identity-pools providers create-oidc $ProviderId `
+        --project=$Project --location=global --workload-identity-pool=$PoolId `
+        --display-name="GitHub Provider" `
+        --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner,attribute.ref=assertion.ref" `
+        --attribute-condition="assertion.repository_owner == '$RepoOwner'" `
+        --issuer-uri="https://token.actions.githubusercontent.com" | Out-Host
+}
+
+Step 10 "Bind WIF principal -> $ServiceAccount (only $Repo can impersonate)"
+$projectNumber = (gcloud projects describe $Project --format="value(projectNumber)")
+$principal = "principalSet://iam.googleapis.com/projects/$projectNumber/locations/global/workloadIdentityPools/$PoolId/attribute.repository/$Repo"
+gcloud iam service-accounts add-iam-policy-binding $saEmail `
+    --project=$Project `
+    --role="roles/iam.workloadIdentityUser" `
+    --member=$principal | Select-Object -Last 4 | Out-Host
+
+$providerResource = "projects/$projectNumber/locations/global/workloadIdentityPools/$PoolId/providers/$ProviderId"
 
 Write-Host "`n=== Public Releases Bucket Setup Complete ===" -ForegroundColor Green
 Write-Host "Public URL prefix: https://storage.googleapis.com/$Bucket/"
-Write-Host "Release uploader: $saEmail (CI only)"
-Write-Host "SA key path:      $keyPath  (DO NOT COMMIT)"
+Write-Host "Release uploader:  $saEmail (CI only, WIF-impersonated)"
+Write-Host "WIF provider:      $providerResource"
+Write-Host ""
+Write-Host "These values are already baked into .github/workflows/release.yml — no GitHub"
+Write-Host "Secret needed for GCS auth. The workflow uses GitHub's OIDC token to"
+Write-Host "impersonate the SA at runtime; no long-lived key exists."
 Write-Host ""
 Write-Host "Next steps:"
-Write-Host "  1. Copy the contents of $keyPath into a new GitHub Secret"
-Write-Host "     named SKETCHBOOK_RELEASES_SA on srMarlins/sketchbook."
-Write-Host "       gh secret set SKETCHBOOK_RELEASES_SA --body `"$(Get-Content $keyPath -Raw)`""
-Write-Host "  2. Generate Conveyor signing key (one-time):"
+Write-Host "  1. Generate Conveyor signing key (one-time):"
 Write-Host "       conveyor keys generate"
 Write-Host "     and store the resulting signing.json content as the"
-Write-Host "     CONVEYOR_SIGNING_KEY GitHub Secret."
-Write-Host "  3. Tag a release (`git tag v0.0.1 && git push --tags`); the workflow takes it from there."
+Write-Host "     CONVEYOR_SIGNING_KEY GitHub Secret:"
+Write-Host "       gh secret set CONVEYOR_SIGNING_KEY --body `"`$(cat ~/.conveyor/signing.json)`""
+Write-Host "  2. Tag a release (git tag v0.0.1 && git push --tags); the workflow takes it from there."
