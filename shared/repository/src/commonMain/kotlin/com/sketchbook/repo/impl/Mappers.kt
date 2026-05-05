@@ -4,7 +4,7 @@ import com.sketchbook.catalog.db.Projects
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectPath
 import com.sketchbook.core.ProjectRow
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Map a SQLDelight row to a domain [ProjectRow]. Tags are joined into the row by the caller

@@ -1,6 +1,6 @@
 package com.sketchbook.cloud
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
 /**

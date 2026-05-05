@@ -9,7 +9,7 @@ import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull

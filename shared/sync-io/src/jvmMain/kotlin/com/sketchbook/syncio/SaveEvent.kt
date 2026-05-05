@@ -1,6 +1,6 @@
 package com.sketchbook.syncio
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import java.nio.file.Path
 
 /**

@@ -15,7 +15,7 @@ import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.UserId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
