@@ -15,9 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import com.sketchbook.repo.LockStatus
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.EmptyState
+import com.sketchbook.uishared.components.LockBadge
 import com.sketchbook.uishared.components.Pill
 import com.sketchbook.uishared.components.RowItem
 import com.sketchbook.uishared.components.Surface
@@ -74,10 +76,36 @@ private fun Header(state: ProjectDetailStateHolder.State, holder: ProjectDetailS
             Text(row.name, style = AppTheme.typography.display)
             Text(row.path.value, style = AppTheme.typography.caption)
         }
+        LockSlot(state.lockStatus, holder)
         Button(
             onClick = { holder.dispatch(ProjectDetailStateHolder.Intent.OpenInLive) },
             variant = ButtonVariant.Primary,
         ) { Text("Open in Live") }
+    }
+}
+
+@Composable
+private fun LockSlot(status: LockStatus, holder: ProjectDetailStateHolder) {
+    when (status) {
+        LockStatus.Free -> Unit // chrome stays clean when there's nothing to say
+        is LockStatus.Ours -> LockBadge(
+            label = "editing here",
+            color = AppTheme.colors.pinGreen,
+        )
+        is LockStatus.HeldByOther -> LockBadge(
+            label = "locked",
+            color = AppTheme.colors.accentSecondary,
+            detail = status.ownerHostName,
+            actionLabel = "Force-take",
+            onAction = { holder.dispatch(ProjectDetailStateHolder.Intent.ForceTakeLock) },
+        )
+        is LockStatus.Stale -> LockBadge(
+            label = "stale lock",
+            color = AppTheme.colors.pinOrange,
+            detail = status.ownerHostName,
+            actionLabel = "Take",
+            onAction = { holder.dispatch(ProjectDetailStateHolder.Intent.ForceTakeLock) },
+        )
     }
 }
 

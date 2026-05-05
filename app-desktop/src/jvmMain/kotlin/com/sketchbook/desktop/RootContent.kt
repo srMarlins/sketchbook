@@ -53,7 +53,12 @@ fun RootContent(graph: DesktopAppGraph, root: RootStateHolder) {
         ProjectListStateHolder(graph.projectRepository, graph.appScope)
     }
     val projectDetailHolder = remember {
-        ProjectDetailStateHolder(graph.projectRepository, graph.snapshotRepository, graph.appScope)
+        ProjectDetailStateHolder(
+            projects = graph.projectRepository,
+            snapshots = graph.snapshotRepository,
+            scope = graph.appScope,
+            locks = graph.lockRepository,
+        )
     }
     val timelineHolder = remember {
         TimelineStateHolder(graph.snapshotRepository, graph.appScope)
@@ -81,6 +86,9 @@ fun RootContent(graph: DesktopAppGraph, root: RootStateHolder) {
                 is ProjectDetailStateHolder.Effect.LaunchLive -> {
                     Os.openInLive(effect.projectPath)
                 }
+                ProjectDetailStateHolder.Effect.LockTaken,
+                is ProjectDetailStateHolder.Effect.LockTakeFailed,
+                -> Unit
             }
         }
     }

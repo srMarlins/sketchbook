@@ -4,6 +4,8 @@ import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
+import com.sketchbook.repo.LockRepository
+import com.sketchbook.repo.LockStatus
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.SnapshotRepository
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /**
  * Single-project pane. The selected project id and tab live in `MutableStateFlow`s; the
@@ -34,8 +37,9 @@ import kotlinx.coroutines.flow.update
 class ProjectDetailStateHolder(
     private val projects: ProjectRepository,
     private val snapshots: SnapshotRepository,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     private val projectUuidLookup: suspend (ProjectId) -> ProjectUuid? = { null },
+    private val locks: LockRepository? = null,
 ) {
 
     private val selectedId = MutableStateFlow<ProjectId?>(null)
@@ -59,8 +63,26 @@ class ProjectDetailStateHolder(
         }
     }
 
-    val state: StateFlow<State> = combine(rowFlow, historyFlow, tabSelection) { row, history, tab ->
-        State(row = row, history = history, tab = tab, loading = row == null && selectedId.value != null)
+    private val lockFlow: Flow<LockStatus> = selectedId.flatMapLatest { id ->
+        val repo = locks
+        if (id == null || repo == null) {
+            flowOf(LockStatus.Free)
+        } else {
+            flow<LockStatus> {
+                val uuid = projectUuidLookup(id)
+                if (uuid == null) emit(LockStatus.Free) else emitAll(repo.observe(uuid))
+            }
+        }
+    }
+
+    val state: StateFlow<State> = combine(rowFlow, historyFlow, tabSelection, lockFlow) { row, history, tab, lock ->
+        State(
+            row = row,
+            history = history,
+            tab = tab,
+            loading = row == null && selectedId.value != null,
+            lockStatus = lock,
+        )
     }.stateIn(scope, SharingStarted.Eagerly, State())
 
     fun load(id: ProjectId) {
@@ -74,6 +96,18 @@ class ProjectDetailStateHolder(
                 val path = state.value.row?.path?.value ?: return
                 _effects.tryEmit(Effect.LaunchLive(path))
             }
+            is Intent.ForceTakeLock -> forceTake()
+        }
+    }
+
+    private fun forceTake() {
+        val repo = locks ?: return
+        val id = selectedId.value ?: return
+        scope.launch {
+            val uuid = projectUuidLookup(id) ?: return@launch
+            val r = repo.forceTake(uuid)
+            if (r.isSuccess) _effects.tryEmit(Effect.LockTaken)
+            else _effects.tryEmit(Effect.LockTakeFailed(r.exceptionOrNull()?.message ?: "force-take failed"))
         }
     }
 
@@ -82,6 +116,7 @@ class ProjectDetailStateHolder(
         val history: List<Snapshot> = emptyList(),
         val tab: Tab = Tab.Overview,
         val loading: Boolean = false,
+        val lockStatus: LockStatus = LockStatus.Free,
     )
 
     enum class Tab { Overview, Tracks, Samples, Plugins, History }
@@ -89,9 +124,12 @@ class ProjectDetailStateHolder(
     sealed interface Intent {
         data class SelectTab(val tab: Tab) : Intent
         data object OpenInLive : Intent
+        data object ForceTakeLock : Intent
     }
 
     sealed interface Effect {
         data class LaunchLive(val projectPath: String) : Effect
+        data object LockTaken : Effect
+        data class LockTakeFailed(val reason: String) : Effect
     }
 }
