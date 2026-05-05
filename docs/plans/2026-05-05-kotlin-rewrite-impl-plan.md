@@ -4,7 +4,7 @@
 
 **Goal:** Rewrite the audio app (now named **Sketchbook**) in Kotlin + Compose Multiplatform with cross-device sync, versioning, and content-addressed cloud storage. The existing Python implementation stays as a parity reference until cutover.
 
-**Architecture:** See `docs/plans/2026-05-05-sync-versioning-design.md`. Multi-module Gradle KMP; Compose Desktop first (Mac + Windows JVM); Metro DI; SQLDelight + FTS5; Ktor 3.2 (CIO); content-addressed B2/R2 blobs; plain Kotlin `StateFlow` state-holders + sealed-class intents (no MVI library); in-house sealed-class `NavStack`; `repository` as the single seam between data and features.
+**Architecture:** See `docs/plans/2026-05-05-sync-versioning-design.md`. Multi-module Gradle KMP; Compose Desktop first (Mac + Windows JVM); Metro DI; SQLDelight + FTS5; Ktor 3.2 (CIO); content-addressed Google Cloud Storage blobs in v1 (Cloudflare R2 reconsidered at v1.2); plain Kotlin `StateFlow` state-holders + sealed-class intents (no MVI library); in-house sealed-class `NavStack`; `repository` as the single seam between data and features.
 
 **Tech Stack:** Kotlin 2.3.x, Gradle 9.0, Compose Multiplatform 1.11.x, Metro 0.7.x, SQLDelight 2.3.x, Ktor 3.2.x, kotlinx-io 0.9.x, kotlinx-coroutines 1.10.x, kotlinx.serialization 1.8.x, BLAKE3-jni 0.5.x, directory-watcher 0.18.x, Kermit 2.x, material3-adaptive 1.1.x, Turbine 1.2.x, Kotest assertions, Power-Assert plugin.
 
@@ -235,21 +235,26 @@ Code review process (Claude Code performs after self-review):
 
 ---
 
-### PR-6: `cloud` module — `CloudBackend` interface + SigV4 signer + `DirectB2Backend`
+### PR-6: `cloud` module — `CloudBackend` interface + GCS service-account auth + `DirectGcsBackend`
 
-**Goal:** Build the dumb-cloud client. Conditional PUT/GET, multipart for >100MB, content-addressed paths, lock CAS primitives.
+**Goal:** Build the dumb-cloud client against Google Cloud Storage. Conditional PUT/GET via `x-goog-if-generation-match`, resumable upload for ≥100MB blobs, content-addressed paths, lock CAS primitives.
+
+**Provider note:** v1 ships on GCS to use the user's $100/year Dev Program credit. The `CloudBackend` interface is provider-agnostic; v1.2 re-evaluates against Cloudflare R2 at credit expiry (~Jan 2027). Migration cost is bytes (`rclone copy`) + backend impl swap.
 
 **Files:**
-- Create: `shared/cloud/src/commonMain/kotlin/com/sketchbook/cloud/CloudBackend.kt` (interface).
-- Create: `shared/cloud/src/commonMain/kotlin/com/sketchbook/cloud/SigV4.kt` (hand-rolled).
-- Create: `shared/cloud/src/commonMain/kotlin/com/sketchbook/cloud/DirectB2Backend.kt` (Ktor CIO impl).
-- Create: `shared/cloud/src/commonTest/kotlin/com/sketchbook/cloud/SigV4Test.kt` — vectors against AWS-published SigV4 test vectors.
-- Create: `shared/cloud/src/jvmTest/kotlin/com/sketchbook/cloud/DirectB2BackendTest.kt` — uses MockEngine.
+- Create: `shared/cloud/src/commonMain/kotlin/com/sketchbook/cloud/CloudBackend.kt` (interface — provider-agnostic).
+- Create: `shared/cloud/src/commonMain/kotlin/com/sketchbook/cloud/Generation.kt` — provider-neutral `value class Generation(val raw: String)` wrapping GCS generation numbers (and future R2 etags).
+- Create: `shared/cloud/src/commonMain/kotlin/com/sketchbook/cloud/GcsAuth.kt` — service-account JWT (RS256) signing + access-token exchange + refresh.
+- Create: `shared/cloud/src/commonMain/kotlin/com/sketchbook/cloud/DirectGcsBackend.kt` — Ktor CIO impl using GCS JSON API.
+- Create: `shared/cloud/src/commonTest/kotlin/com/sketchbook/cloud/GcsAuthTest.kt` — JWT signing tested against a test-only fixture service-account JSON.
+- Create: `shared/cloud/src/jvmTest/kotlin/com/sketchbook/cloud/DirectGcsBackendTest.kt` — uses Ktor `MockEngine`.
 
 **Tasks:**
 
-1. TDD SigV4 with the published test vectors (`https://docs.aws.amazon.com/general/latest/gr/sigv4_signing.html`). 4-5 vectors covering canonical request, string-to-sign, signing key, final signature.
-2. Define `CloudBackend`:
+1. TDD `GcsAuth.signJwt(serviceAccount, scope, now)`: RS256 sign over `{header, claims}` per Google's [service account auth docs](https://cloud.google.com/docs/authentication/getting-started). Test against a fixture service-account JSON (test-only key, never a real credential) — assert produced JWT decodes correctly and signature verifies against the fixture's public key.
+2. TDD `GcsAuth.exchangeJwtForAccessToken()`: POST signed JWT to `https://oauth2.googleapis.com/token`; receive 1-hour bearer token. MockEngine asserts request shape; nightly smoke test against the real endpoint with sandbox account.
+3. TDD `GcsAuth.tokenManager()`: holds current access token, refreshes proactively at 50-minute mark in a coroutine, exposes `suspend fun token(): String`. Tests cover refresh-while-in-flight (multiple callers see one refresh).
+4. Define `CloudBackend` (provider-agnostic):
    ```kotlin
    interface CloudBackend {
      suspend fun headBlob(hash: BlobHash): Boolean
@@ -257,18 +262,25 @@ Code review process (Claude Code performs after self-review):
      suspend fun getBlob(hash: BlobHash): RawSource
      suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest
      suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?): List<ManifestRef>
-     suspend fun appendManifestHead(uuid: ProjectUuid, expectedHeadEtag: String?, manifest: Manifest): Result<String>
+     suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest): Result<Generation>
      suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock): LeaseAcquireResult
-     suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expectedEtag: String): LeaseRefreshResult
-     suspend fun releaseLock(uuid: ProjectUuid, expectedEtag: String)
+     suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation): LeaseRefreshResult
+     suspend fun releaseLock(uuid: ProjectUuid, expected: Generation)
    }
    ```
-3. Implement `DirectB2Backend` using Ktor CIO + the SigV4 signer. Single PUT path; multipart path (>100MB).
-4. TDD with `MockEngine`: assert correct paths, headers (`If-None-Match`/`If-Match`), body hash.
-5. Wire to a real B2 sandbox bucket (env vars only, never committed). Smoke test optional in CI nightly.
-6. Commit.
+   The provider-neutral `Generation` value class wraps GCS's `x-goog-generation` (Long-as-String) today, and would wrap R2/B2 etags in a future backend.
+5. Implement `DirectGcsBackend` against the GCS JSON API:
+   - `HEAD https://storage.googleapis.com/storage/v1/b/<bucket>/o/<urlEncoded(path)>` → existence + generation.
+   - Single PUT (<100MB): `POST .../upload/storage/v1/b/<bucket>/o?uploadType=media&name=<path>`.
+   - Resumable upload (≥100MB): `POST ...?uploadType=resumable` to start, returns session URI; `PUT` chunks against the URI; `Content-Range: bytes <start>-<end>/<total>` per chunk.
+   - GET: `GET .../b/<bucket>/o/<path>?alt=media`.
+   - Conditional writes: `x-goog-if-generation-match: <gen>` header (use `0` for "must not exist").
+   - `Authorization: Bearer <token-from-tokenManager>` on every request.
+6. TDD with `MockEngine`: assert request paths/methods, `Authorization` header presence, `x-goog-if-generation-match` value, multipart chunk boundaries at 100MB threshold, retry behavior on 503/429.
+7. Wire to a real GCS sandbox bucket via env vars (`SKETCHBOOK_GCS_PROJECT`, `SKETCHBOOK_GCS_BUCKET`, `SKETCHBOOK_GCS_SA_JSON_PATH`). Smoke test optional in CI nightly.
+8. Commit.
 
-**Acceptance:** Unit tests + MockEngine green. SigV4 vectors pass byte-for-byte.
+**Acceptance:** Unit tests + MockEngine green. JWT signing produces decodable, verifiable tokens. Smoke test against real GCS round-trips a blob, performs a conditional manifest write, exercises a resumable upload across the 100MB threshold.
 
 ---
 
@@ -477,9 +489,12 @@ Code review process (Claude Code performs after self-review):
 
 ### PR-17: `feature-settings` — library roots, cloud config, self-contained toggles
 
-**Goal:** UI to configure library root, cloud credentials (B2 keys), per-project self-contained toggle.
+**Goal:** UI to configure library roots (typed list per the multi-root architecture), cloud credentials (GCS service-account JSON), per-project self-contained toggle.
 
-**Tasks:** State-holder + screen. B2 credentials stored via OS keychain (JVM: `java.util.prefs.Preferences` is fine for v1; rotate to OS keychain in v1.1).
+**Tasks:** State-holder + screen.
+- **GCS service-account JSON** is the credential format. User uploads the JSON file via a native file picker in `app-desktop`; we parse it and store via `java.util.prefs.Preferences` for v1 (rotate to OS keychain in v1.1).
+- **Library roots** as typed list: `Projects(path)`, `UserSamples(path)`, `External(path, kind=SPLICE/FACTORY/OTHER, alias)`. Each `External` root has a canonical alias (e.g. `"splice"`) that's the same string on every machine but maps to different absolute paths per host. Manifest stores `<alias>://<rel_path>` references; materialization translates via the per-machine alias map. External roots are NEVER synced to the cloud — they're "expected local" and surface as needs-attention findings if missing.
+- **Self-contained toggle** per project (writes to `sync_state.self_contained`).
 
 ---
 
@@ -559,7 +574,9 @@ Code review process (Claude Code performs after self-review):
 ## Risks & mitigations
 
 - **Compose Desktop perf with 1,628 rows.** `LazyColumn` virtualizes fine; mitigate with `key = { it.id.value }` and `contentType`. If rendering stutters, profile with the Compose tracer.
-- **B2 multipart upload edge cases.** Mitigate by smoke-testing against a real bucket in CI nightly with a dedicated test prefix.
+- **GCS resumable upload edge cases.** Resumable sessions can expire if interrupted >7 days. Mitigate by smoke-testing against a real bucket in CI nightly; on session expiry, restart the upload from scratch (we re-hash anyway).
+- **GCS access-token rotation.** OAuth tokens expire after 1 hour. `GcsAuth.tokenManager` refreshes proactively at the 50-minute mark; tests cover refresh-during-upload.
+- **Provider lock-in.** Mitigated by `CloudBackend` interface + provider-neutral `Generation` value class. v1.2 re-evaluation point is calendared for ~Jan 2027 (credit expiry). Migration to R2 is `rclone copy` + backend impl swap; manifest format unchanged.
 - **`.audio-id` sidecar conflict.** If a project already has an unrelated `.audio-id` file (it won't, but defensively): refuse to overwrite, emit a `NeedsAttention` finding.
 - **iOS/Android path lurking.** Resist the urge to write `expect/actual` for `Watcher`, `Materializer`, `BlobHasher` until v1.1 actually needs them. v1 is JVM-only — `jvmMain` is fine.
 - **MCP server topology.** If shared catalog.db locking becomes an issue (separate JVM process holding open writer locks while desktop app also writes), switch to read-only mode in MCP and route writes via desktop-app RPC. Defer until measured.
