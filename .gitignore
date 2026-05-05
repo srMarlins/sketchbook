@@ -56,3 +56,9 @@ build/
 out/
 local.properties
 
+# Cloud credentials — never commit (Sketchbook GCS service-account keys, etc.)
+**/gcp-sa*.json
+**/*-sa.json
+**/service-account*.json
+.gcp/
+
