@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from audio_core.config import db_path, journal_dir, projects_root, workspace_root
+from audio_core.config import db_path, journal_dir, projects_root, sample_roots, workspace_root
 from audio_core.indexer import driver
 from audio_core.indexer.events import EventBus
 from audio_core.indexer.queue import JobQueue
@@ -81,12 +81,20 @@ def create_app() -> FastAPI:
         queue.start()
         app.state.event_bus = bus
         app.state.job_queue = queue
-        driver.boot(db_path=db_path(), root=projects_root(), bus=bus, queue=queue)
+        roots = sample_roots()
+        driver.boot(
+            db_path=db_path(),
+            root=projects_root(),
+            bus=bus,
+            queue=queue,
+            sample_roots=roots,
+        )
         watcher = FsWatcher(
             root=projects_root(),
             queue=queue,
             bus=bus,
             db_path=db_path(),
+            sample_roots=roots,
         )
         try:
             watcher.start()
