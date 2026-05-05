@@ -11,6 +11,8 @@ class FakeEventSource {
   url: string;
   listeners: Record<string, ((m: MessageEvent) => void)[]> = {};
   closed = false;
+  onopen: ((ev: Event) => void) | null = null;
+  onerror: ((ev: Event) => void) | null = null;
   constructor(url: string) {
     this.url = url;
     FakeEventSource.instances.push(this);
@@ -25,6 +27,12 @@ class FakeEventSource {
     (this.listeners[kind] || []).forEach((h) =>
       h(new MessageEvent(kind, { data: JSON.stringify(data) })),
     );
+  }
+  open() {
+    this.onopen?.(new Event('open'));
+  }
+  error() {
+    this.onerror?.(new Event('error'));
   }
 }
 
@@ -152,6 +160,52 @@ describe('IndexerStatus', () => {
     const chip = screen.getByTestId('indexer-status-chip');
     expect(chip.textContent).toMatch(/watching/i);
     expect(screen.queryByTestId('indexer-status-spinner')).toBeNull();
+  });
+
+  test('h) onerror sets chip to disconnected with warning dot', () => {
+    renderStatus();
+    const es = FakeEventSource.instances[0]!;
+    act(() => {
+      es.error();
+    });
+    const chip = screen.getByTestId('indexer-status-chip');
+    expect(chip.textContent).toMatch(/reconnecting/i);
+    const dot = screen.getByTestId('indexer-status-dot');
+    expect(dot.className).toMatch(/bg-accent-warning/);
+  });
+
+  test('i) disconnected overrides scanning state', () => {
+    renderStatus();
+    const es = FakeEventSource.instances[0]!;
+    act(() => {
+      es.fire('scan_started', {
+        kind: 'scan_started',
+        discovered: 100,
+        to_parse: 100,
+        missing: 0,
+      });
+      es.error();
+    });
+    const chip = screen.getByTestId('indexer-status-chip');
+    expect(chip.textContent).toMatch(/reconnecting/i);
+    expect(chip.textContent).not.toMatch(/Scanning/);
+  });
+
+  test('j) onopen after onerror clears disconnected state', () => {
+    renderStatus();
+    const es = FakeEventSource.instances[0]!;
+    act(() => {
+      es.error();
+    });
+    expect(screen.getByTestId('indexer-status-chip').textContent).toMatch(
+      /reconnecting/i,
+    );
+    act(() => {
+      es.open();
+    });
+    const chip = screen.getByTestId('indexer-status-chip');
+    expect(chip.textContent).not.toMatch(/reconnecting/i);
+    expect(chip.textContent).toMatch(/watching/i);
   });
 
   test('g) backfill takes priority over concurrent scan', () => {

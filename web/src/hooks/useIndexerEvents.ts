@@ -25,9 +25,17 @@ export type IndexerEvent =
   | { kind: 'watcher_status'; mode: 'watching' | 'polling' | 'off'; reason?: string }
   | { kind: 'findings_changed'; macpath: number; duplicates: number };
 
-export function useIndexerEvents(onEvent: (ev: IndexerEvent) => void) {
+export type IndexerConnState = 'connecting' | 'open' | 'error';
+
+export function useIndexerEvents(
+  onEvent: (ev: IndexerEvent) => void,
+  onState?: (state: IndexerConnState) => void,
+) {
   useEffect(() => {
     const es = new EventSource('/api/events');
+    onState?.('connecting');
+    es.onopen = () => onState?.('open');
+    es.onerror = () => onState?.('error');
     const onMsg = (m: MessageEvent) => {
       try {
         onEvent(JSON.parse(m.data));
@@ -45,5 +53,5 @@ export function useIndexerEvents(onEvent: (ev: IndexerEvent) => void) {
     es.addEventListener('watcher_status', onMsg);
     es.addEventListener('findings_changed', onMsg);
     return () => es.close();
-  }, [onEvent]);
+  }, [onEvent, onState]);
 }

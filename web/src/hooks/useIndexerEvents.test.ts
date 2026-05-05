@@ -7,6 +7,8 @@ class FakeEventSource {
   url: string;
   listeners: Record<string, ((m: MessageEvent) => void)[]> = {};
   closed = false;
+  onopen: ((ev: Event) => void) | null = null;
+  onerror: ((ev: Event) => void) | null = null;
   constructor(url: string) {
     this.url = url;
     FakeEventSource.instances.push(this);
@@ -26,6 +28,12 @@ class FakeEventSource {
     (this.listeners[kind] || []).forEach((h) =>
       h(new MessageEvent(kind, { data: raw })),
     );
+  }
+  open() {
+    this.onopen?.(new Event('open'));
+  }
+  error() {
+    this.onerror?.(new Event('error'));
   }
 }
 
@@ -91,5 +99,30 @@ describe('useIndexerEvents', () => {
 
     expect(() => es.fireRaw('scan_progress', '{{not-json')).not.toThrow();
     expect(onEvent).not.toHaveBeenCalled();
+  });
+
+  test('onState fires connecting synchronously on subscribe', () => {
+    const onEvent = vi.fn();
+    const onState = vi.fn();
+    renderHook(() => useIndexerEvents(onEvent, onState));
+    expect(onState).toHaveBeenCalledWith('connecting');
+  });
+
+  test('onState fires open when EventSource opens', () => {
+    const onEvent = vi.fn();
+    const onState = vi.fn();
+    renderHook(() => useIndexerEvents(onEvent, onState));
+    const es = FakeEventSource.instances[0]!;
+    es.open();
+    expect(onState).toHaveBeenCalledWith('open');
+  });
+
+  test('onState fires error when EventSource errors', () => {
+    const onEvent = vi.fn();
+    const onState = vi.fn();
+    renderHook(() => useIndexerEvents(onEvent, onState));
+    const es = FakeEventSource.instances[0]!;
+    es.error();
+    expect(onState).toHaveBeenCalledWith('error');
   });
 });

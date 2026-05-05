@@ -1,6 +1,10 @@
 import { useCallback, useReducer } from 'react';
 import clsx from 'clsx';
-import { useIndexerEvents, type IndexerEvent } from '../hooks/useIndexerEvents';
+import {
+  useIndexerEvents,
+  type IndexerConnState,
+  type IndexerEvent,
+} from '../hooks/useIndexerEvents';
 import { useFindings } from './queries';
 
 /**
@@ -25,15 +29,25 @@ interface StatusState {
   backfill: ProgressState;
   watcherMode: WatcherMode;
   watcherReason?: string;
+  connState: IndexerConnState;
 }
 
 const INITIAL: StatusState = {
   scan: { kind: 'idle' },
   backfill: { kind: 'idle' },
   watcherMode: 'watching',
+  connState: 'connecting',
 };
 
-function reducer(state: StatusState, ev: IndexerEvent): StatusState {
+type StatusAction =
+  | { type: 'event'; ev: IndexerEvent }
+  | { type: 'conn'; state: IndexerConnState };
+
+function reducer(state: StatusState, action: StatusAction): StatusState {
+  if (action.type === 'conn') {
+    return { ...state, connState: action.state };
+  }
+  const ev = action.ev;
   switch (ev.kind) {
     case 'scan_started':
       return {
@@ -83,9 +97,13 @@ type ChipKind =
   | { kind: 'idle' }
   | { kind: 'scanning'; done: number; total: number }
   | { kind: 'backfilling'; name: string; done: number; total: number }
-  | { kind: 'watcher_warning'; reason?: string };
+  | { kind: 'watcher_warning'; reason?: string }
+  | { kind: 'disconnected' };
 
 function deriveChip(state: StatusState): ChipKind {
+  if (state.connState === 'error') {
+    return { kind: 'disconnected' };
+  }
   if (state.backfill.kind === 'backfilling') {
     return {
       kind: 'backfilling',
@@ -181,6 +199,16 @@ function chipContent(chip: ChipKind): {
           ? `Watching unavailable (${chip.reason}) · polling every 5 min`
           : 'Watching unavailable · polling every 5 min',
       };
+    case 'disconnected':
+      return {
+        body: (
+          <>
+            <StatusDot tone="warning" />
+            <span>Reconnecting...</span>
+          </>
+        ),
+        title: 'Lost connection to backend',
+      };
   }
 }
 
@@ -197,8 +225,15 @@ export interface IndexerStatusProps {
 
 export function IndexerStatus({ onFindingsClick }: IndexerStatusProps = {}) {
   const [state, dispatch] = useReducer(reducer, INITIAL);
-  const onEvent = useCallback((ev: IndexerEvent) => dispatch(ev), []);
-  useIndexerEvents(onEvent);
+  const onEvent = useCallback(
+    (ev: IndexerEvent) => dispatch({ type: 'event', ev }),
+    [],
+  );
+  const onState = useCallback(
+    (s: IndexerConnState) => dispatch({ type: 'conn', state: s }),
+    [],
+  );
+  useIndexerEvents(onEvent, onState);
   const findings = useFindings();
   const chip = deriveChip(state);
   const { body, title } = chipContent(chip);
