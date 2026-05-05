@@ -15,6 +15,7 @@ from audio_core.db.connection import open_db
 from audio_core.db.projects import search_projects
 from audio_core.dedup import build_archive_proposal, find_duplicates
 from audio_core.journal.manifest import list_batches
+from audio_core.macpath import build_repair_proposal, find_mac_imports
 from audio_core.scanner.scan import scan_root
 from rich.console import Console
 from rich.table import Table
@@ -208,6 +209,67 @@ def _row_summary(row: dict) -> dict:
         "last_modified": row["last_modified"],
         "is_archived": bool(row["is_archived"]),
     }
+
+
+@app.command("repair-mac-paths")
+def repair_mac_paths(
+    json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+    propose: bool = typer.Option(
+        False, "--propose", help="Write a proposal JSON for the findings."
+    ),
+) -> None:
+    """List projects that look Mac-saved-on-Windows.
+
+    --propose writes a proposal JSON (one RepairMacPaths action per finding) to
+    the proposals dir; approve it via the web UI to actually repair the rows.
+    """
+    import json as _json
+
+    conn = open_db(db_path())
+    findings = find_mac_imports(conn)
+    if propose:
+        actions = build_repair_proposal(findings)
+        if not actions:
+            con.print("No Mac-imported projects to repair.")
+            raise typer.Exit(code=0)
+        from datetime import UTC, datetime
+        from uuid import uuid4
+        from audio_cli.config import proposals_dir
+        d = proposals_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        pid = f"{datetime.now(UTC).strftime('%Y-%m-%dT%H-%M-%S')}_{uuid4().hex[:8]}"
+        payload = {
+            "proposal_id": pid,
+            "actor": "cli",
+            "actions": actions,
+            "rationale": f"audio repair-mac-paths: {len(actions)} finding(s)",
+        }
+        (d / f"{pid}.json").write_text(_json.dumps(payload, indent=2), encoding="utf-8")
+        con.print(f"proposal {pid} written ({len(actions)} action(s))")
+        return
+    if json_out:
+        payload = [
+            {
+                "project_id": f.project_id,
+                "path": f.path,
+                "name": f.name,
+                "mac_paths_count": f.mac_paths_count,
+                "project_info_missing": f.project_info_missing,
+            }
+            for f in findings
+        ]
+        print(_json.dumps(payload, indent=2))
+        return
+    if not findings:
+        con.print("No Mac-imported projects found.")
+        return
+    for f in findings:
+        flags = []
+        if f.mac_paths_count:
+            flags.append(f"{f.mac_paths_count} mac path(s)")
+        if f.project_info_missing:
+            flags.append("no Ableton Project Info/")
+        con.print(f"  id={f.project_id}  {f.path}  [{', '.join(flags)}]")
 
 
 # ---------------------------------------------------------------------------
