@@ -146,6 +146,27 @@ class SqlRepairRepository(
         }
     }
 
+    override suspend fun applyMissingSampleMatch(
+        projectId: ProjectId,
+        missingPath: String,
+        candidatePath: String,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            catalog.transaction {
+                catalog.catalogQueries.applyMissingSampleMatch(
+                    new_path = candidatePath,
+                    project_id = projectId.value,
+                    old_path = missingPath,
+                )
+            }
+            // Re-emit findings so the row drops out of Needs Attention immediately. The
+            // underlying SQLDelight Flow does observe project_samples writes, but bouncing the
+            // tick here keeps the timing tight (no relying on whether the asFlow() observer has
+            // landed yet).
+            ackTick.value = ackTick.value + 1
+        }
+    }
+
     private companion object {
         const val SCOPE_MAC = "mac_import"
         const val SCOPE_MISS = "missing_sample"
