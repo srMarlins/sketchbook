@@ -53,7 +53,7 @@ class LeasedLockRepositoryTest {
         val catalog = handle.catalog
         catalog.catalogQueries.insertOrReplaceProject(
             path = "/tmp/p.als", name = "p", parent_dir = "/tmp",
-            tempo = null, time_sig_num = null, time_sig_den = null,
+            tempo = null, time_sig_num = null, time_sig_den = null, key = null,
             track_count = 0, audio_tracks = 0, midi_tracks = 0, return_tracks = 0,
             live_version = null, last_modified = 0.0, last_scanned = 0.0,
             parse_status = "ok", parse_error = null, mac_paths_count = null,

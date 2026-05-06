@@ -143,6 +143,7 @@ class GcsSyncQueueDrainTest {
             tempo = null,
             time_sig_num = null,
             time_sig_den = null,
+            key = null,
             track_count = 0,
             audio_tracks = 0,
             midi_tracks = 0,

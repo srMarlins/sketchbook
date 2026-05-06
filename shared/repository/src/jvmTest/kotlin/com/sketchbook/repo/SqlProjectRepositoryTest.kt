@@ -39,6 +39,7 @@ class SqlProjectRepositoryTest {
             tempo = 120.0,
             time_sig_num = 4,
             time_sig_den = 4,
+            key = null,
             track_count = 1,
             audio_tracks = 1,
             midi_tracks = 0,

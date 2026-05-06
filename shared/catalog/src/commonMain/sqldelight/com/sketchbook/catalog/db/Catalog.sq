@@ -41,6 +41,7 @@ CREATE TABLE projects (
 CREATE INDEX idx_projects_parent_dir ON projects(parent_dir);
 CREATE INDEX idx_projects_last_modified ON projects(last_modified);
 CREATE INDEX idx_projects_tempo ON projects(tempo);
+CREATE INDEX idx_projects_key ON projects(key);
 
 CREATE TABLE project_plugins (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -209,8 +210,8 @@ selectProjectByPath:
 SELECT * FROM projects WHERE path = :path;
 
 insertOrReplaceProject:
-INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes)
-VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :parse_error, :mac_paths_count, :effort_score, :effort_breakdown, :file_size_bytes);
+INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, key, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes)
+VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :key, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :parse_error, :mac_paths_count, :effort_score, :effort_breakdown, :file_size_bytes);
 
 insertProjectSampleWithMissing:
 INSERT INTO project_samples (project_id, sample_path, is_missing) VALUES (:project_id, :sample_path, :is_missing);

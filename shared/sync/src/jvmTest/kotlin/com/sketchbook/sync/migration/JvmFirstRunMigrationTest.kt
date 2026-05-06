@@ -34,6 +34,7 @@ class JvmFirstRunMigrationTest {
             tempo = 120.0,
             time_sig_num = 4,
             time_sig_den = 4,
+            key = null,
             track_count = 0,
             audio_tracks = 0,
             midi_tracks = 0,

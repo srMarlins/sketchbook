@@ -96,6 +96,61 @@ class JvmScannerTest {
     }
 
     @Test
+    fun persistsKeySignatureFromScaleInformation() = runTest {
+        val root = createTempDirectory("scanner-key-")
+        try {
+            // F# Major: RootNote=6 (semitones from C), Name=Major.
+            writeAls(
+                root.resolve("Projects/Keyed/Keyed.als"),
+                """<?xml version="1.0"?>
+                <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
+                  <ScaleInformation>
+                    <RootNote Value="6"/>
+                    <Name Value="Major"/>
+                  </ScaleInformation>
+                </LiveSet></Ableton>"""
+            )
+            // No ScaleInformation — key column should remain NULL.
+            writeAls(
+                root.resolve("Projects/Keyless/Keyless.als"),
+                """<?xml version="1.0"?>
+                <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
+                  <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="120"/></Tempo></Mixer></DeviceChain></MainTrack>
+                </LiveSet></Ableton>"""
+            )
+
+            val handle = CatalogDb.openInMemory()
+            val catalog = handle.catalog
+            val scanner = JvmScanner(catalog, CatalogFts(handle.driver), ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)
+            scanner.scan(root).toList()
+
+            val rows = catalog.catalogQueries.selectAllProjects().executeAsList()
+            val keyed = rows.first { it.name == "Keyed" }
+            val keyless = rows.first { it.name == "Keyless" }
+            assertEquals("F# Major", keyed.key)
+            assertEquals(null, keyless.key)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun keyIndexIsPresent() {
+        val handle = CatalogDb.openInMemory()
+        val out = mutableSetOf<String>()
+        handle.driver.executeQuery(
+            identifier = null,
+            sql = "SELECT name FROM sqlite_master WHERE type = 'index'",
+            mapper = { c ->
+                while (c.next().value) c.getString(0)?.let { out += it }
+                app.cash.sqldelight.db.QueryResult.Unit
+            },
+            parameters = 0,
+        )
+        assertTrue("idx_projects_key" in out, "missing idx_projects_key — got $out")
+    }
+
+    @Test
     fun populatesSampleSizeBytesFromDisk() = runTest {
         val root = createTempDirectory("scanner-sample-size-")
         try {
