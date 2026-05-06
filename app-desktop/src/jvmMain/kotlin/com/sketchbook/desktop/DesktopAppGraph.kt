@@ -35,9 +35,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.nio.file.Files
@@ -257,12 +260,45 @@ fun startBackgroundPull(graph: DesktopAppGraph) {
                                 startAfter = if (row.localRev > 0) SnapshotRev(row.localRev) else null,
                             ).collect { newSnapshot ->
                                 store.markCloudHead(newSnapshot.projectUuid, newSnapshot.rev.value)
+                                autoMaterializeAfterPull(store, snapshots, newSnapshot.projectUuid)
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * Auto-materialize inbound cloud manifests when it's safe to clobber the working tree:
+ *  - local has no unpushed work (`dirty == false`) — drain owns the dirty path,
+ *  - cloud is actually ahead of local (`cloud_head_rev > local_rev`),
+ *  - destination files aren't held open by another process (Live with the project loaded).
+ *
+ * On busy failure we retry on a 30s cadence — `PullPoller.subscribe` only emits when a NEW
+ * manifest lands, which could be never. Retrying inline closes the loop without a separate
+ * timer. `collectLatest` upstream cancels us if a newer manifest arrives mid-loop, so the
+ * unbounded `while` is bounded in practice by either success, dirty-flip, or replacement.
+ */
+internal suspend fun autoMaterializeAfterPull(
+    store: SyncStateStore,
+    snapshots: SnapshotRepository,
+    uuid: ProjectUuid,
+) {
+    while (currentCoroutineContext().isActive) {
+        val state = store.stateOf(uuid) ?: break
+        if (state.dirty) break
+        if (state.cloudHeadRev <= state.localRev) break
+        val r = snapshots.materializeAt(uuid, SnapshotRev(state.cloudHeadRev))
+        if (r.isSuccess) {
+            store.markSynced(uuid, state.cloudHeadRev)
+            break
+        }
+        // Retry on busy (Live has the file); break on any other error so a real bug doesn't
+        // infinite-loop (and cloud_head_rev > local_rev keeps the UI in RemoteAhead state).
+        if (r.exceptionOrNull() !is com.sketchbook.syncio.WorkingTreeBusyException) break
+        delay(30_000)
     }
 }
 

@@ -5,9 +5,11 @@ import com.sketchbook.sync.FileStat
 import com.sketchbook.sync.WorkingTree
 import kotlinx.io.RawSource
 import kotlinx.io.asSource
+import java.nio.channels.FileChannel
 import java.nio.file.FileVisitOption
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import kotlin.io.path.isRegularFile
 import kotlin.streams.asSequence
 import kotlin.time.Instant
@@ -58,6 +60,44 @@ class JvmWorkingTree(private val root: Path) : WorkingTree {
 
     private companion object {
         val SKIP_DIRS: Set<String> = setOf("Backup", "Samples", "Ableton Project Info")
+    }
+}
+
+/**
+ * True when [path] exists and another process holds it in a sharing mode that blocks our
+ * exclusive WRITE+lock acquisition. False when the file doesn't exist, when we can acquire
+ * the lock immediately, or when probing fails for benign reasons (we fail open — better to
+ * try-and-fail-loudly than refuse-to-try).
+ *
+ * On Windows, Live's open .als typically refuses our `FileChannel.open(WRITE)` with
+ * `AccessDeniedException`. On POSIX, `tryLock()` returning null is the canonical signal.
+ */
+internal fun isInUse(path: Path): Boolean {
+    if (!Files.exists(path)) return false
+    val channel = try {
+        FileChannel.open(path, StandardOpenOption.WRITE)
+    } catch (_: java.nio.file.AccessDeniedException) {
+        // Windows sharing mode prevents WRITE access — Live has it.
+        return true
+    } catch (_: Throwable) {
+        // FileSystemException etc. opening — fail open so a flaky probe can't gate real work.
+        return false
+    }
+    return channel.use { ch ->
+        // Once we hold a writable channel: tryLock returning null OR throwing means somebody
+        // else holds an overlapping lock (in-process or out-of-process). Treat both as busy —
+        // we can't safely overwrite a locked file regardless of where the lock came from.
+        try {
+            val lock = ch.tryLock()
+            if (lock == null) {
+                true
+            } else {
+                lock.release()
+                false
+            }
+        } catch (_: Throwable) {
+            true
+        }
     }
 }
 
