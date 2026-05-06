@@ -126,6 +126,20 @@ class ProjectDetailStateHolder(
                 _effects.tryEmit(Effect.LaunchLive(path))
             }
             is Intent.ForceTakeLock -> forceTake()
+            is Intent.Rename -> {
+                val id = selectedId.value ?: return
+                val trimmed = intent.name.trim()
+                if (trimmed.isEmpty() || trimmed == state.value.row?.name) return
+                scope.launch { projects.rename(id, trimmed) }
+            }
+            is Intent.SetTags -> {
+                val id = selectedId.value ?: return
+                val cleaned = intent.tags
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+                scope.launch { projects.setTags(id, cleaned) }
+            }
         }
     }
 
@@ -156,6 +170,8 @@ class ProjectDetailStateHolder(
         data class SelectTab(val tab: Tab) : Intent
         data object OpenInLive : Intent
         data object ForceTakeLock : Intent
+        data class Rename(val name: String) : Intent
+        data class SetTags(val tags: List<String>) : Intent
     }
 
     sealed interface Effect {
