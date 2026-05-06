@@ -32,10 +32,12 @@ class AlsPatcher(
         if (mapping.isEmpty()) return Outcome.NoChange
         if (busyDetector(als)) return Outcome.SkippedBusy
         return runCatching {
+            // Janitor: drop any stale temp left by a prior crashed run. CREATE_NEW would otherwise throw.
+            val temp = als.resolveSibling("${als.fileName}.patcher-tmp")
+            Files.deleteIfExists(temp)
             val original = Files.readAllBytes(als)
             val rewritten = AlsRewriter.rewriteSamplePaths(original, mapping)
             if (rewritten.contentEquals(original)) return Outcome.NoChange
-            val temp = als.resolveSibling("${als.fileName}.patcher-tmp")
             Files.write(temp, rewritten, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
             Files.move(temp, als, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             Outcome.Patched as Outcome
@@ -51,6 +53,7 @@ class AlsPatcher(
         if (busyDetector(als)) return Outcome.SkippedBusy
         return runCatching {
             val temp = als.resolveSibling("${als.fileName}.patcher-tmp")
+            Files.deleteIfExists(temp)
             Files.write(temp, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
             Files.move(temp, als, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             Outcome.Patched as Outcome
