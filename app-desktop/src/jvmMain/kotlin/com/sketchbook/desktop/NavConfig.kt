@@ -19,6 +19,7 @@ internal val NavSavedStateConfig: SavedStateConfiguration = SavedStateConfigurat
             subclass(Screen.Proposals::class)
             subclass(Screen.NeedsAttention::class)
             subclass(Screen.Settings::class)
+            subclass(Screen.Journal::class)
         }
     }
 }

@@ -36,6 +36,7 @@ kotlin {
             implementation(project(":shared:feature-proposals"))
             implementation(project(":shared:feature-needs-attention"))
             implementation(project(":shared:feature-settings"))
+            implementation(project(":shared:feature-journal"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
