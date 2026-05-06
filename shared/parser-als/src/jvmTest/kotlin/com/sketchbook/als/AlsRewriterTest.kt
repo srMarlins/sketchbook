@@ -6,6 +6,7 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -90,6 +91,44 @@ class AlsRewriterTest {
         val text = ungzipToString(rewritten)
         assertContains(text, """<RelativePath Value="rel/found.wav"""")
         assertFalse("rel/missing.wav" in text)
+    }
+
+    @Test fun rewriteSampleRefsUpdatesPrimaryAndOriginalFileRefSibling() {
+        val gz = javaClass.getResourceAsStream("/live12-sampleref.xml.gz")!!.readBytes()
+        val edit = SampleRefEdit(
+            oldPath = "D:/Audio/Project/Samples/Imported/kick.wav",
+            newPath = "E:/NewLocation/kick.wav",
+            newRelativePath = "Samples/Imported/kick.wav",
+            newRelativePathType = 1,
+            newOriginalFileSize = 58394528L,
+            newOriginalCrc = 0L,           // force Live to recompute
+            newLastModDate = 1700000000L,
+        )
+        val out = AlsRewriter.rewriteSampleRefs(gz, listOf(edit))
+        val md = AlsParser.parse(out.inputStream())
+        assertEquals(1, md.sampleRefs.size)
+        val s = md.sampleRefs[0]
+        assertEquals("E:/NewLocation/kick.wav", s.rawPath)
+        assertEquals(1, s.relativePathType)
+        assertEquals(0L, s.originalCrc)
+        assertEquals(1700000000L, s.lastModDate)
+        // Verify the OriginalFileRef sibling was patched too — re-parse the gunzipped output as raw
+        // XML and assert the second Path also moved.
+        val xml = java.util.zip.GZIPInputStream(out.inputStream()).readBytes().decodeToString()
+        val pathOccurrences = Regex("""<Path Value="([^"]+)"></Path>|<Path Value="([^"]+)"/>""")
+            .findAll(xml).map { m -> m.groupValues[1].ifEmpty { m.groupValues[2] } }.toList()
+        assertEquals(2, pathOccurrences.size)
+        assertTrue(pathOccurrences.all { it == "E:/NewLocation/kick.wav" })
+    }
+
+    @Test fun rewriteSampleRefsIsIdempotentWhenOldPathDoesNotMatch() {
+        val gz = javaClass.getResourceAsStream("/live12-sampleref.xml.gz")!!.readBytes()
+        val edit = SampleRefEdit(oldPath = "no-such-path.wav", newPath = "x.wav")
+        val out = AlsRewriter.rewriteSampleRefs(gz, listOf(edit))
+        // gunzip both sides and compare — byte-equal
+        val before = java.util.zip.GZIPInputStream(gz.inputStream()).readBytes()
+        val after = java.util.zip.GZIPInputStream(out.inputStream()).readBytes()
+        assertContentEquals(before, after)
     }
 
     @Test
