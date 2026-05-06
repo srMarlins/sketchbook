@@ -41,7 +41,7 @@ class ProposalApplyTest {
             catalog = handle.catalog,
             ioDispatcher = UnconfinedTestDispatcher(),
             journal = journal,
-            ftsSearch = { _ -> emptyList() },
+            fts = com.sketchbook.repo.ProjectFtsSearcher { _ -> emptyList() },
         )
         val executor = ProposalActionExecutor(repo)
 
@@ -82,7 +82,7 @@ class ProposalApplyTest {
             catalog = handle.catalog,
             ioDispatcher = UnconfinedTestDispatcher(),
             journal = journal,
-            ftsSearch = { _ -> emptyList() },
+            fts = com.sketchbook.repo.ProjectFtsSearcher { _ -> emptyList() },
         )
         val executor = ProposalActionExecutor(repo)
 

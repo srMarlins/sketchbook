@@ -3,10 +3,14 @@ package com.sketchbook.repo.impl
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.sketchbook.catalog.db.Catalog
+import com.sketchbook.core.AppScope
 import com.sketchbook.repo.Proposal
 import com.sketchbook.repo.ProposalAction
 import com.sketchbook.repo.ProposalStatus
 import com.sketchbook.repo.ProposalsRepository
+import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +41,9 @@ import kotlin.time.Instant
  * mutating the catalog. Here we just record the user's decision and return the (now
  * `Approved`) Proposal so the holder can dispatch the side effect.
  */
+@SingleIn(AppScope::class)
+@ContributesBinding(AppScope::class)
+@Inject
 class SqlProposalsRepository(
     private val catalog: Catalog,
     private val ioDispatcher: CoroutineDispatcher,

@@ -3,6 +3,7 @@ package com.sketchbook.repo.impl
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.sketchbook.catalog.db.Catalog
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.SampleRefEdit
 import com.sketchbook.repo.ActionRecord
@@ -14,6 +15,9 @@ import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.RepairFindings
 import com.sketchbook.repo.RepairRepository
 import com.sketchbook.repo.SampleCandidate
+import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import java.io.BufferedInputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -52,6 +56,9 @@ import kotlin.time.Clock
  *    one-click apply. Filename-only is the fallback (multiple "kick.wav" files are common in
  *    sample libraries — we surface them as `candidates` but never auto-pick).
  */
+@SingleIn(AppScope::class)
+@ContributesBinding(AppScope::class)
+@Inject
 class SqlRepairRepository(
     private val catalog: Catalog,
     private val ioDispatcher: CoroutineDispatcher,

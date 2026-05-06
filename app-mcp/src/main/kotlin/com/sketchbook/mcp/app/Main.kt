@@ -6,6 +6,7 @@ import com.sketchbook.mcp.FileProposalsWriter
 import com.sketchbook.mcp.McpServer
 import com.sketchbook.mcp.Tools
 import com.sketchbook.mcp.runStdio
+import com.sketchbook.repo.ProjectFtsSearcher
 import com.sketchbook.repo.impl.SqlJournalRepository
 import com.sketchbook.repo.impl.SqlProjectRepository
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +40,7 @@ fun main() {
         catalog = handle.catalog,
         ioDispatcher = Dispatchers.IO,
         journal = journal,
-        ftsSearch = { query -> fts.search(query) },
+        fts = ProjectFtsSearcher { query -> fts.search(query) },
     )
     val proposalsWriter = FileProposalsWriter(root = proposalsDir)
     val tools = Tools(repository = repository, proposalsWriter = proposalsWriter)

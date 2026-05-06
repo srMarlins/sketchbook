@@ -4,13 +4,18 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.cash.sqldelight.coroutines.mapToOneOrNull
 import com.sketchbook.catalog.db.Catalog
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.SketchbookError
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
+import com.sketchbook.repo.ProjectFtsSearcher
 import com.sketchbook.repo.ProjectRepository
+import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -29,14 +34,16 @@ import kotlin.time.Clock
  * row-mutate are atomic (either both happen or neither).
  *
  * FTS search uses raw driver calls (see `:shared:catalog`'s `CatalogFts`); the JVM-only impl
- * supplies its [ftsSearch] callback so this class stays in `commonMain`.
+ * is adapted to [ProjectFtsSearcher] in the desktop graph so this class stays in `commonMain`.
  */
+@SingleIn(AppScope::class)
+@ContributesBinding(AppScope::class)
+@Inject
 class SqlProjectRepository(
     private val catalog: Catalog,
     private val ioDispatcher: CoroutineDispatcher,
     private val journal: JournalRepository,
-    /** Returns matching project ids for a non-empty FTS query. Empty query → null (use list). */
-    private val ftsSearch: (String) -> List<Long>,
+    private val fts: ProjectFtsSearcher,
     private val clock: Clock = Clock.System,
 ) : ProjectRepository {
 
@@ -69,7 +76,7 @@ class SqlProjectRepository(
             // — the caller's dispatcher is typically the UI's stateIn scope, where blocking
             // SQLite would stall recomposition.
             ftsTrigger.flatMapLatest {
-                val ids = withContext(ioDispatcher) { ftsSearch(q) }
+                val ids = withContext(ioDispatcher) { fts.search(q) }
                 if (ids.isEmpty()) flowOf(emptyList()) else loadByIds(ids)
             }
         }

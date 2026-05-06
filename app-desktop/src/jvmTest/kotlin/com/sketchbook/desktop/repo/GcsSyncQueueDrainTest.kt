@@ -84,7 +84,7 @@ class GcsSyncQueueDrainTest {
             catalog = catalog,
             ioDispatcher = testDispatcher,
             journal = journal,
-            ftsSearch = { q -> fts.search(q) },
+            fts = com.sketchbook.repo.ProjectFtsSearcher { q -> fts.search(q) },
         )
         val syncState = SyncStateStore(catalog)
         val cloud = CountingCloudBackend()

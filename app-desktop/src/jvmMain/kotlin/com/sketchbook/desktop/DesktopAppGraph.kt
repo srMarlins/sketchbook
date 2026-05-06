@@ -15,16 +15,13 @@ import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.repo.AlsPatchService
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
+import com.sketchbook.repo.ProjectFtsSearcher
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProposalsRepository
 import com.sketchbook.repo.RepairRepository
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.SyncQueue
-import com.sketchbook.repo.impl.SqlJournalRepository
-import com.sketchbook.repo.impl.SqlProjectRepository
-import com.sketchbook.repo.impl.SqlProposalsRepository
-import com.sketchbook.repo.impl.SqlRepairRepository
 import com.sketchbook.syncio.AlsPatcher
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
@@ -37,6 +34,7 @@ import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.createGraph
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -97,6 +95,15 @@ interface DesktopAppGraph {
     fun provideAppScope(): CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /**
+     * Single `CoroutineDispatcher` binding used by repositories that need to leave Compose's
+     * stateIn dispatcher for blocking JDBC. `JvmScanner`/`JvmSampleScanner` keep their own
+     * defaults — they need both an IO and a Default dispatcher and would require a qualifier
+     * if injected through the graph.
+     */
+    @Provides @SingleIn(AppScope::class)
+    fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
+
     @Provides @SingleIn(AppScope::class)
     fun provideCatalogHandle(): CatalogHandle = CatalogDb.openOnDisk(catalogDbPath())
 
@@ -106,6 +113,14 @@ interface DesktopAppGraph {
     @Provides @SingleIn(AppScope::class)
     fun provideCatalogFts(handle: CatalogHandle): CatalogFts = CatalogFts(handle.driver)
 
+    /**
+     * Adapt the JVM-only [CatalogFts] to the common-side [ProjectFtsSearcher] so
+     * [com.sketchbook.repo.impl.SqlProjectRepository] can stay in `commonMain`.
+     */
+    @Provides @SingleIn(AppScope::class)
+    fun provideProjectFtsSearcher(fts: CatalogFts): ProjectFtsSearcher =
+        ProjectFtsSearcher { query -> fts.search(query) }
+
     @Provides @SingleIn(AppScope::class)
     fun provideJvmScanner(catalog: Catalog, fts: CatalogFts): JvmScanner =
         JvmScanner(catalog = catalog, fts = fts)
@@ -114,25 +129,8 @@ interface DesktopAppGraph {
     fun provideJvmSampleScanner(catalog: Catalog): JvmSampleScanner =
         JvmSampleScanner(catalog = catalog)
 
-    @Provides @SingleIn(AppScope::class)
-    fun provideSyncStateStore(catalog: Catalog): SyncStateStore = SyncStateStore(catalog)
-
-    @Provides @SingleIn(AppScope::class)
-    fun provideJournalRepository(catalog: Catalog): JournalRepository =
-        SqlJournalRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
-
-    @Provides @SingleIn(AppScope::class)
-    fun provideProjectRepository(
-        catalog: Catalog,
-        fts: CatalogFts,
-        journal: JournalRepository,
-    ): ProjectRepository = SqlProjectRepository(
-        catalog = catalog,
-        ioDispatcher = Dispatchers.IO,
-        journal = journal,
-        ftsSearch = { query -> fts.search(query) },
-    )
-
+    // SqlSnapshotRepository stays manually wired — the `materialize` lambda is coupled to
+    // SwappableSyncQueue's current backend. Future `CloudScope` PR cleans this up.
     @Provides @SingleIn(AppScope::class)
     fun provideSnapshotRepository(
         catalog: Catalog,
@@ -156,27 +154,7 @@ interface DesktopAppGraph {
     )
 
     @Provides @SingleIn(AppScope::class)
-    fun provideProposalsRepository(catalog: Catalog): ProposalsRepository =
-        SqlProposalsRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
-
-    @Provides @SingleIn(AppScope::class)
-    fun provideProposalActionExecutor(projects: ProjectRepository): ProposalActionExecutor =
-        ProposalActionExecutor(projects)
-
-    @Provides @SingleIn(AppScope::class)
     fun provideAlsPatchService(): AlsPatchService = AlsPatcher()
-
-    @Provides @SingleIn(AppScope::class)
-    fun provideRepairRepository(
-        catalog: Catalog,
-        journal: JournalRepository,
-        patcher: AlsPatchService,
-    ): RepairRepository = SqlRepairRepository(
-        catalog = catalog,
-        ioDispatcher = Dispatchers.IO,
-        journal = journal,
-        patcher = patcher,
-    )
 
     @Provides @SingleIn(AppScope::class)
     fun provideSettingsRepository(): SettingsRepository = PreferencesSettingsRepository(

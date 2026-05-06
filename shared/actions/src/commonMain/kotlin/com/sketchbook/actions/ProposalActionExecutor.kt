@@ -1,8 +1,11 @@
 package com.sketchbook.actions
 
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProposalAction
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -17,6 +20,8 @@ import kotlinx.serialization.json.long
  * Stops on the first failure; the caller (ProposalsStateHolder) reports the message back as a
  * `Failed` effect rather than recording an Approved status.
  */
+@SingleIn(AppScope::class)
+@Inject
 class ProposalActionExecutor(private val projects: ProjectRepository) {
 
     suspend fun apply(actions: List<ProposalAction>): Result<Unit> {

@@ -70,7 +70,7 @@ class ScanAndEditE2ETest {
             catalog = handle.catalog,
             ioDispatcher = UnconfinedTestDispatcher(),
             journal = journal,
-            ftsSearch = { _ -> emptyList() },
+            fts = com.sketchbook.repo.ProjectFtsSearcher { _ -> emptyList() },
         )
         val cleanId = ProjectId(byName["clean"]!!.id)
 
