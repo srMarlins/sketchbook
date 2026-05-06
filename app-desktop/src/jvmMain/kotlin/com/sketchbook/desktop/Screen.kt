@@ -21,4 +21,5 @@ sealed interface Screen : NavKey {
     @Serializable data object Proposals : Screen
     @Serializable data object NeedsAttention : Screen
     @Serializable data object Settings : Screen
+    @Serializable data object Journal : Screen
 }

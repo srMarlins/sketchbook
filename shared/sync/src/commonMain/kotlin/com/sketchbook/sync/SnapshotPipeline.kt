@@ -88,10 +88,13 @@ class SnapshotPipeline(
                 }
             }
 
-            // 3) Upload deduped: HEAD-then-PUT each unique blob.
+            // 3) Upload deduped: HEAD-then-PUT each unique blob. `actuallyUploadedBytes` tracks
+            // only the bytes that left this host — when `headBlob` returns true we count it as
+            // reused, not new. The figure flows into the manifest's stats.newBytes.
             var bytesDone = 0L
             val totalUploadBytes = toUpload.values.sumOf { it.size }
             val uniqueByHash = toUpload.values.groupBy { it.hash }
+            var actuallyUploadedBytes = 0L
             for ((hash, entries) in uniqueByHash) {
                 val first = entries.first()
                 val anyRel = toUpload.entries.first { it.value.hash == hash }.key
@@ -101,6 +104,7 @@ class SnapshotPipeline(
                     continue
                 }
                 cloud.putBlob(hash, input.tree.read(anyRel), first.size, blobScope)
+                actuallyUploadedBytes += first.size
                 bytesDone += first.size
                 emit(SnapshotProgress.Uploading(uuid, hash, bytesDone, totalUploadBytes))
             }
@@ -113,7 +117,7 @@ class SnapshotPipeline(
             files.putAll(unchanged)
             files.putAll(toUpload)
             val totalBytes = files.values.sumOf { it.size }
-            val newBytes = toUpload.values.sumOf { it.size }
+            val newBytes = actuallyUploadedBytes
             val auto = Manifest(
                 ownerUserId = ownerUserId,
                 projectUuid = uuid,

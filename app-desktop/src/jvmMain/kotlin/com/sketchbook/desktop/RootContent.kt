@@ -52,6 +52,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import com.sketchbook.featuredetail.ProjectDetailScreen
 import com.sketchbook.featuredetail.ProjectDetailStateHolder
+import com.sketchbook.featurejournal.JournalScreen
+import com.sketchbook.featurejournal.JournalStateHolder
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.featureneedsattention.NeedsAttentionScreen
@@ -118,6 +120,9 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     val settingsHolder = remember {
         SettingsStateHolder(graph.settingsRepository, graph.appScope)
     }
+    val journalHolder = remember {
+        JournalStateHolder(graph.journalRepository, graph.appScope)
+    }
     val scanner = graph.scanner
     val sampleScanner = graph.sampleScanner
     // The catalog scanner is a cold Flow; we derive a single-state holder here so the UI can
@@ -132,6 +137,16 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     val syncImpl = syncQueue as? SwappableSyncQueue
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
+    // Journal row taps navigate to project detail. Push onto the stack so the back gesture
+    // returns to the journal list.
+    LaunchedEffect(journalHolder) {
+        journalHolder.effects.collect { effect ->
+            when (effect) {
+                is JournalStateHolder.Effect.NavigateToProject ->
+                    backStack.add(Screen.ProjectDetail(effect.projectId))
+            }
+        }
+    }
     // Project list now opens detail in a side-panel locally — no nav-stack push. The
     // Navigate effect is left intact in the state holder for future shared-detail callers
     // (deep-links, MCP tool invocations) but the desktop dashboard ignores it.
@@ -313,6 +328,7 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
                                 }
                                 Screen.Proposals -> ProposalsScreen(proposalsHolder)
                                 Screen.NeedsAttention -> NeedsAttentionScreen(needsAttentionHolder)
+                                Screen.Journal -> JournalScreen(journalHolder)
                                 Screen.Settings -> SettingsScreen(
                                     holder = settingsHolder,
                                     syncState = syncState,
@@ -371,6 +387,11 @@ private fun sidebarItems(
         label = "Settings",
         active = current == Screen.Settings,
     ),
+    SidebarItem(
+        id = "journal",
+        label = "Journal",
+        active = current == Screen.Journal,
+    ),
 )
 
 // Cap at 99 so the binding doesn't get pushed off the row by a big "missing samples" count.
@@ -385,6 +406,7 @@ private fun screenForId(id: String): Screen = when (id) {
     "proposals" -> Screen.Proposals
     "needs-attention" -> Screen.NeedsAttention
     "settings" -> Screen.Settings
+    "journal" -> Screen.Journal
     else -> Screen.Projects
 }
 

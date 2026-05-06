@@ -11,13 +11,17 @@ import com.sketchbook.cloud.LeaseRefreshResult
 import com.sketchbook.cloud.ManifestRef
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
+import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.LockStatus
+import com.sketchbook.repo.impl.InMemoryJournalRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.RawSource
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class LeasedLockRepositoryTest {
@@ -39,6 +43,42 @@ class LeasedLockRepositoryTest {
         assertTrue(r.isSuccess, "forceTake failed: ${r.exceptionOrNull()}")
         val status = repo.observe(uuid).first()
         assertTrue(status is LockStatus.Ours, "expected Ours, got $status")
+    }
+
+    @Test
+    fun forceTakeAppendsForceTakeLockJournalEntry() = runTest {
+        val cloud = FakeLockCloud()
+        // Seed a project + identity so projectIdFor(uuid) resolves to a real ProjectId.
+        val handle = CatalogDb.openInMemory()
+        val catalog = handle.catalog
+        catalog.catalogQueries.insertOrReplaceProject(
+            path = "/tmp/p.als", name = "p", parent_dir = "/tmp",
+            tempo = null, time_sig_num = null, time_sig_den = null,
+            track_count = 0, audio_tracks = 0, midi_tracks = 0, return_tracks = 0,
+            live_version = null, last_modified = 0.0, last_scanned = 0.0,
+            parse_status = "ok", parse_error = null, mac_paths_count = null,
+            effort_score = null, effort_breakdown = null, file_size_bytes = 0,
+        )
+        val projectId = catalog.catalogQueries.selectProjectIdByPath("/tmp/p.als").executeAsOne()
+        catalog.catalogQueries.insertProjectIdentityIfAbsent(
+            project_id = projectId, uuid = uuid.value, created_at = "2026-05-06T00:00:00Z",
+        )
+        val store = SyncStateStore(catalog)
+        val journal = InMemoryJournalRepository()
+        val repo = LeasedLockRepository(
+            cloud = { cloud },
+            syncStateStore = store,
+            hostId = "host-a",
+            hostName = "DesktopA",
+            scope = backgroundScope,
+            journal = journal,
+        )
+        val r = repo.forceTake(uuid)
+        assertTrue(r.isSuccess)
+        val entries = journal.observeRecent().first()
+        assertEquals(1, entries.size)
+        assertTrue(entries.single().action is ActionRecord.ForceTakeLock)
+        assertEquals(ProjectId(projectId), entries.single().projectId)
     }
 
     @Test

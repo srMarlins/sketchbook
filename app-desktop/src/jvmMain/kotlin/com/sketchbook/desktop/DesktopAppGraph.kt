@@ -168,6 +168,7 @@ interface DesktopAppGraph {
         store: SyncStateStore,
         scope: CoroutineScope,
         syncQueue: SyncQueue,
+        journal: JournalRepository,
     ): LockRepository = LeasedLockRepository(
         cloud = {
             (syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue)?.currentCloud?.value
@@ -176,6 +177,7 @@ interface DesktopAppGraph {
         hostId = hostIdentity().id,
         hostName = hostIdentity().name,
         scope = scope,
+        journal = journal,
     )
 
     @Provides @SingleIn(AppScope::class)

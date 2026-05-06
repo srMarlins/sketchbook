@@ -202,6 +202,10 @@ VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :track_
 insertProjectSampleWithMissing:
 INSERT INTO project_samples (project_id, sample_path, is_missing) VALUES (:project_id, :sample_path, :is_missing);
 
+insertProjectSampleWithMissingAndSize:
+INSERT INTO project_samples (project_id, sample_path, is_missing, size_bytes)
+VALUES (:project_id, :sample_path, :is_missing, :size_bytes);
+
 countMissingSamplesForProject:
 SELECT COUNT(*) FROM project_samples WHERE project_id = :project_id AND is_missing = 1;
 

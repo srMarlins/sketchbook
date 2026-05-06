@@ -272,11 +272,13 @@ class JvmScanner(
         }
         catalog.catalogQueries.deleteSamplesForProject(project_id = id)
         for (s in o.md.sampleRefs) {
-            val isMissing = if (SampleResolver.exists(s.rawPath, o.projectDir)) 0L else 1L
-            catalog.catalogQueries.insertProjectSampleWithMissing(
+            val sizeBytes = SampleResolver.sizeOf(s.rawPath, o.projectDir)
+            val isMissing = if (sizeBytes != null) 0L else 1L
+            catalog.catalogQueries.insertProjectSampleWithMissingAndSize(
                 project_id = id,
                 sample_path = s.rawPath,
                 is_missing = isMissing,
+                size_bytes = sizeBytes,
             )
         }
         fts.delete(id)

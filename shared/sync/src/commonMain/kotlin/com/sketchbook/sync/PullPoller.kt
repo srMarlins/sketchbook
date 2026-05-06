@@ -49,6 +49,7 @@ class PullPoller(
                     selfContained = manifest.selfContained,
                     fileCount = manifest.stats.fileCount,
                     totalBytes = manifest.stats.totalBytes,
+                    newBytes = manifest.stats.newBytes,
                 )
                 snapshots.recordSnapshot(snapshot, manifestPath = ref.path, manifestHash = "")
                 sinceRev = rev

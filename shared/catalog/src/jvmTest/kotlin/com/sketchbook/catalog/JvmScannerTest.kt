@@ -94,4 +94,42 @@ class JvmScannerTest {
             root.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun populatesSampleSizeBytesFromDisk() = runTest {
+        val root = createTempDirectory("scanner-sample-size-")
+        try {
+            // Drop a real sample next to the project so the parser's relative-path resolves.
+            val sampleBytes = ByteArray(2048) { (it and 0xFF).toByte() }
+            Files.createDirectories(root.resolve("Projects/Sized/Samples"))
+            Files.write(root.resolve("Projects/Sized/Samples/loop.wav"), sampleBytes)
+            writeAls(
+                root.resolve("Projects/Sized/Sized.als"),
+                """<?xml version="1.0"?>
+                <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
+                  <Tracks><AudioTrack><DeviceChain>
+                    <SampleRef>
+                      <FileRef>
+                        <Path Value="Samples/loop.wav"/>
+                      </FileRef>
+                    </SampleRef>
+                  </DeviceChain></AudioTrack></Tracks>
+                </LiveSet></Ableton>"""
+            )
+            val handle = CatalogDb.openInMemory()
+            val catalog = handle.catalog
+            val scanner = JvmScanner(catalog, CatalogFts(handle.driver), ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)
+            scanner.scan(root).toList()
+
+            val rows = catalog.catalogQueries.selectAllProjects().executeAsList()
+            val sized = rows.first { it.name == "Sized" }
+            val samples = catalog.catalogQueries.selectSampleEntriesForProject(sized.id).executeAsList()
+            assertEquals(1, samples.size)
+            val sample = samples.single()
+            assertEquals(0L, sample.is_missing)
+            assertEquals(sampleBytes.size.toLong(), sample.size_bytes)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
 }

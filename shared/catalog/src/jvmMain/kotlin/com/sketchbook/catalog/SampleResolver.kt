@@ -36,6 +36,19 @@ object SampleResolver {
     /** Per-ref miss detection. Returns true if the file exists on disk. */
     fun exists(rawPath: String, projectDir: Path): Boolean = existsForRef(rawPath, projectDir)
 
+    /** Resolve [rawPath] (relative or absolute) and return the file's size in bytes, or null
+     *  if the file is missing/unreadable. Mirrors [exists] but reads `Files.size`. */
+    fun sizeOf(rawPath: String, projectDir: Path): Long? {
+        if (rawPath.isBlank()) return null
+        return try {
+            val p = Paths.get(rawPath)
+            val resolved = if (p.isAbsolute) p else projectDir.resolve(p)
+            if (Files.isRegularFile(resolved)) Files.size(resolved) else null
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     private fun existsForRef(rawPath: String, projectDir: Path): Boolean {
         if (rawPath.isBlank()) return false
         return try {

@@ -5,7 +5,11 @@ import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.LeaseAcquireResult
 import com.sketchbook.cloud.LeaseLock
 import com.sketchbook.cloud.LeaseRefreshResult
+import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.repo.ActionRecord
+import com.sketchbook.repo.JournalEntry
+import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.LockStatus
 import com.sketchbook.sync.LeaseLockState
@@ -40,8 +44,8 @@ class LeasedLockRepository(
     private val hostId: String,
     private val hostName: String,
     private val scope: CoroutineScope,
+    private val journal: JournalRepository? = null,
     private val clock: Clock = Clock.System,
-    private val heartbeatInterval: kotlin.time.Duration = 1.minutes,
 ) : LockRepository {
 
     private data class PerUuid(
@@ -62,7 +66,6 @@ class LeasedLockRepository(
                     hostId = hostId,
                     hostName = hostName,
                     clock = clock,
-                    heartbeatInterval = heartbeatInterval,
                 ),
                 flow = MutableStateFlow<LockStatus>(LockStatus.Free),
             )
@@ -81,7 +84,9 @@ class LeasedLockRepository(
             acquiredAt = clock.now(),
             expiresAt = clock.now() + 15.minutes,
         )
-        return runCatching {
+        var priorOwnerHostName: String? = null
+        var priorExpiresAtMs: Long? = null
+        val outcome = runCatching {
             // Best-effort: if a lock already exists, try refresh-overwrite via CAS.
             val acquireResult = backend.acquireLock(uuid, lock)
             when (acquireResult) {
@@ -90,6 +95,8 @@ class LeasedLockRepository(
                     startHeartbeat(uuid, per)
                 }
                 is LeaseAcquireResult.Held -> {
+                    priorOwnerHostName = acquireResult.held.ownerHostName
+                    priorExpiresAtMs = acquireResult.held.expiresAt.toEpochMilliseconds()
                     // Force-take: overwrite via refresh CAS targeting the held generation.
                     val r = backend.refreshLock(uuid, lock, acquireResult.generation)
                     when (r) {
@@ -108,6 +115,25 @@ class LeasedLockRepository(
                 }
             }
         }
+        if (outcome.isSuccess) {
+            recordForceTake(uuid, priorOwnerHostName, priorExpiresAtMs)
+        }
+        return outcome
+    }
+
+    private suspend fun recordForceTake(uuid: ProjectUuid, priorOwnerHostName: String?, priorExpiresAtMs: Long?) {
+        val journalRepo = journal ?: return
+        val projectId: ProjectId = syncStateStore.projectIdFor(uuid) ?: return
+        journalRepo.append(
+            JournalEntry(
+                timestamp = clock.now(),
+                projectId = projectId,
+                action = ActionRecord.ForceTakeLock(
+                    priorOwnerHostName = priorOwnerHostName,
+                    priorExpiresAtMs = priorExpiresAtMs,
+                ),
+            ),
+        )
     }
 
     private fun startHeartbeat(uuid: ProjectUuid, per: PerUuid) {

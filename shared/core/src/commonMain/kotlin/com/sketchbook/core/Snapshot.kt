@@ -33,4 +33,6 @@ data class Snapshot(
     val selfContained: Boolean,
     val fileCount: Int,
     val totalBytes: Long,
+    /** Bytes actually uploaded to the cloud for this snapshot (HEAD-deduplicated). */
+    val newBytes: Long = 0L,
 )
