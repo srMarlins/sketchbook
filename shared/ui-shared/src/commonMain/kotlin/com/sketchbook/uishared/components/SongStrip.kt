@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.width
@@ -86,21 +87,33 @@ fun SongStrip(
     val isHovered by interaction.collectIsHoveredAsState()
     val bg = if (isHovered) colors.surfaceSunken else colors.surfaceCard
     val colorVar = data.colorTag?.let { AbletonPalette[it] } ?: colors.ruleLineStrong
+    val isGroup = data.variantCount > 1
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(bg)
-            .border(1.dp, colors.ruleLine, shape)
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                onClick = onOpen,
+    Box(modifier = modifier.fillMaxWidth()) {
+        if (isGroup) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .offset(x = 3.dp, y = 3.dp)
+                    .clip(shape)
+                    .background(colors.surfaceSunken)
+                    .border(1.dp, colors.ruleLine, shape),
             )
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(bg)
+                .border(1.dp, colors.ruleLine, shape)
+                .clickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    onClick = onOpen,
+                )
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val widthDp = maxWidth.value
             val showLength = widthDp >= 880f
@@ -143,6 +156,9 @@ fun SongStrip(
                                 Text("⚠", style = AppTheme.typography.caption)
                             }
                         }
+                    }
+                    if (data.variantCount > 1) {
+                        VersionPill(count = data.variantCount)
                     }
                     // Mono stat columns
                     Row(
@@ -202,6 +218,7 @@ fun SongStrip(
                 }
             }
         }
+        }
     }
 }
 
@@ -250,6 +267,25 @@ private fun SyncPip(badge: SongSyncBadge) {
             Text(
                 badge.glyph,
                 style = AppTheme.typography.mono.copy(fontSize = 13.sp()),
+            )
+        }
+    }
+}
+
+@Composable
+private fun VersionPill(count: Int) {
+    val colors = AppTheme.colors
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(colors.tintCream)
+            .border(1.dp, colors.ruleLine, RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        ProvideContentColor(colors.inkSecondary) {
+            Text(
+                "v$count",
+                style = AppTheme.typography.mono.copy(fontSize = 11.sp()),
             )
         }
     }
