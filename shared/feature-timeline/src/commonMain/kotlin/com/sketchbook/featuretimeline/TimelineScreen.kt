@@ -69,6 +69,7 @@ fun TimelineScreen(
                                 host = snap.hostName,
                                 files = snap.fileCount,
                                 bytes = snap.totalBytes,
+                                newBytes = snap.newBytes,
                                 onRewind = { holder.dispatch(TimelineStateHolder.Intent.RequestRewind(snap.rev)) },
                             )
                         }
@@ -112,6 +113,7 @@ private fun SnapshotRow(
     host: String,
     files: Int,
     bytes: Long,
+    newBytes: Long,
     onRewind: () -> Unit,
 ) {
     val isBranch = kind == SnapshotKind.Branch
@@ -135,7 +137,7 @@ private fun SnapshotRow(
         RowItem(
             modifier = Modifier.weight(1f),
             title = label,
-            subtitle = "$host · $files files · ${humanBytes(bytes)}",
+            subtitle = "$host · $files files · ${humanBytes(newBytes)} new of ${humanBytes(bytes)}",
         )
         Button(onClick = onRewind, variant = ButtonVariant.Ghost) { Text("Rewind") }
     }
