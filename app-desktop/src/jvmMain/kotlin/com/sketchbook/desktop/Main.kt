@@ -30,7 +30,12 @@ fun main() {
 }
 
 private fun runApp() = application {
-    val graph = remember { buildDesktopAppGraph().also { startBackgroundPull(it) } }
+    val graph = remember {
+        buildDesktopAppGraph().also {
+            startBackgroundPull(it)
+            startWatcher(it)
+        }
+    }
     // Dev convenience: if SKETCHBOOK_DEFAULT_ROOT is set and Settings has no roots, seed it
     // once at launch so the iteration loop (build → run → screenshot) doesn't require clicking
     // through the folder picker every time. No-op for normal users (env unset).

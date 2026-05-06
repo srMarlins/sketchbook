@@ -225,6 +225,12 @@ SELECT COUNT(*) FROM project_samples WHERE project_id = :project_id AND is_missi
 selectProjectIdByPath:
 SELECT id FROM projects WHERE path = :path;
 
+-- Look up project ids by their parent directory. Used by the Watcher → markDirty wiring:
+-- a save event for ".../<Project> Project/Backup/foo.als" matches by directory, not by file
+-- path (the backup files have timestamped names that don't equal projects.path).
+selectProjectIdsByParentDir:
+SELECT id FROM projects WHERE parent_dir = :parent_dir;
+
 deleteAllProjects:
 DELETE FROM projects;
 
