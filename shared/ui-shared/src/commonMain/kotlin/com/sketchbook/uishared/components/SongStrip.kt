@@ -124,6 +124,8 @@ fun SongStrip(
                         text = data.name,
                         style = AppTheme.typography.bodyEmphasis,
                         modifier = Modifier.weight(1f, fill = false),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (data.warning != null) {

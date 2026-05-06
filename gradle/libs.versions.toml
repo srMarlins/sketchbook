@@ -63,6 +63,8 @@ sqldelight-fts5-dialect = { module = "app.cash.sqldelight:sqlite-3-38-dialect", 
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+ktor-utils-jvm = { module = "io.ktor:ktor-utils-jvm", version.ref = "ktor" }
+ktor-io-jvm = { module = "io.ktor:ktor-io-jvm", version.ref = "ktor" }
 
 # Logging
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }

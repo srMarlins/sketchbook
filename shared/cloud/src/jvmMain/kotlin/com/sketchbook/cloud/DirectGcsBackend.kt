@@ -20,16 +20,28 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsBytes
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.content.OutgoingContent
 import io.ktor.http.encodeURLPath
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.writeFully
+import kotlinx.io.Buffer
 import kotlinx.io.RawSource
 import kotlinx.io.Source
 import kotlinx.io.buffered
 import kotlinx.io.readByteArray
+import kotlinx.io.readAtMostTo
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -66,11 +78,12 @@ class DirectGcsBackend(
     }
 
     override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) {
-        val bytes = source.buffered().readAllBytes()
-        require(bytes.size.toLong() == size) {
-            "size mismatch: declared=$size, actual=${bytes.size}"
-        }
         val path = blobPath(hash, scope)
+        // Stream the source into the request body chunk-by-chunk. The previous implementation
+        // called `source.readAllBytes()` and held the full blob (up to several hundred MB on a
+        // real Live session) on the heap before sending it. With a streaming `WriteChannel`
+        // body the JVM only ever holds [STREAM_CHUNK_BYTES] at a time and the SocketChannel
+        // pulls bytes from us as fast as it can write to the wire.
         val response = http.post(uploadUrl()) {
             authHeader()
             parameter("uploadType", "media")
@@ -79,7 +92,7 @@ class DirectGcsBackend(
             // identical blob returns 412 which we treat as success (content-addressed).
             headers { append("x-goog-if-generation-match", "0") }
             contentType(ContentType.Application.OctetStream)
-            setBody(bytes)
+            setBody(StreamingSourceContent(source, size))
         }
         when (response.status) {
             HttpStatusCode.OK -> Unit
@@ -95,7 +108,12 @@ class DirectGcsBackend(
             parameter("alt", "media")
         }
         if (!response.status.isSuccess) throw remoteFailure(response, "GET $path")
-        return ByteArrayRawSource(response.bodyAsBytes())
+        // Stream the response body into a temp file, then hand the caller a RawSource backed by
+        // that file. Avoids materializing potentially-hundreds-of-MB of blob into the heap and
+        // lets the materializer hardlink/copy from a real on-disk file. The file is unlinked
+        // when the source is closed (POSIX) — on Windows the JDK keeps the handle valid for
+        // reading even after the unlink, so this is safe across both.
+        return drainToTempFile(response.bodyAsChannel(), prefix = "sketchbook-blob-")
     }
 
     override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest {
@@ -318,4 +336,90 @@ private class ByteArrayRawSource(private val bytes: ByteArray) : RawSource {
         return bytes.size.toLong()
     }
     override fun close() {}
+}
+
+/** 64 KB chunks — large enough to keep the wire saturated, small enough to keep heap bounded. */
+private const val STREAM_CHUNK_BYTES = 64 * 1024
+
+/**
+ * Ktor `OutgoingContent` that streams a kotlinx.io [RawSource] into the request body without
+ * ever materializing it in memory. `contentLength` is set so the precondition path on the
+ * server (and any chunked-transfer fallback) sees the declared size up front.
+ */
+private class StreamingSourceContent(
+    private val source: RawSource,
+    override val contentLength: Long,
+) : OutgoingContent.WriteChannelContent() {
+
+    override val contentType: ContentType = ContentType.Application.OctetStream
+
+    override suspend fun writeTo(channel: ByteWriteChannel) {
+        val chunk = ByteArray(STREAM_CHUNK_BYTES)
+        var totalSent = 0L
+        try {
+            val buffered = source.buffered()
+            while (true) {
+                val read = buffered.readAtMostTo(chunk, 0, chunk.size)
+                if (read == -1) break
+                channel.writeFully(chunk, 0, read)
+                totalSent += read
+            }
+            channel.flushAndClose()
+        } finally {
+            source.close()
+        }
+        require(totalSent == contentLength) {
+            "size mismatch: declared=$contentLength, actually streamed=$totalSent"
+        }
+    }
+}
+
+/**
+ * Drain a Ktor [ByteReadChannel] into a temp file, returning a [RawSource] that streams from
+ * the file and deletes it on close. Used by `getBlob` so a 543 MB download doesn't sit on the
+ * heap waiting for the caller to consume it.
+ */
+private suspend fun drainToTempFile(channel: ByteReadChannel, prefix: String): RawSource {
+    val tmp = Files.createTempFile(prefix, ".bin")
+    try {
+        // Ktor's JVM `toInputStream` adapter (in ktor-io-jvm) gives us a blocking
+        // InputStream view over the channel. Streaming chunk-by-chunk into the temp file
+        // means a 543 MB blob never lands on the heap as a single allocation.
+        channel.toInputStream().use { input ->
+            Files.newOutputStream(tmp, StandardOpenOption.WRITE).use { out ->
+                val chunk = ByteArray(STREAM_CHUNK_BYTES)
+                while (true) {
+                    val read = input.read(chunk)
+                    if (read <= 0) break
+                    out.write(chunk, 0, read)
+                }
+            }
+        }
+    } catch (t: Throwable) {
+        runCatching { Files.deleteIfExists(tmp) }
+        throw t
+    }
+    return TempFileRawSource(tmp)
+}
+
+private class TempFileRawSource(private val path: Path) : RawSource {
+    private val stream = Files.newInputStream(path, StandardOpenOption.READ)
+    private val chunk = ByteArray(STREAM_CHUNK_BYTES)
+    private var closed = false
+
+    override fun readAtMostTo(sink: Buffer, byteCount: Long): Long {
+        if (closed) return -1
+        val target = minOf(byteCount, chunk.size.toLong()).toInt()
+        val read = stream.read(chunk, 0, target)
+        if (read == -1) return -1L
+        sink.write(chunk, 0, read)
+        return read.toLong()
+    }
+
+    override fun close() {
+        if (closed) return
+        closed = true
+        runCatching { stream.close() }
+        runCatching { Files.deleteIfExists(path) }
+    }
 }
