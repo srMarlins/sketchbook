@@ -36,6 +36,4 @@ spotless {
     }
 }
 
-tasks.named<Delete>("clean") {
-    delete(rootProject.layout.buildDirectory)
-}
+// `clean` is provided by the `base` plugin (transitively applied by spotless).
