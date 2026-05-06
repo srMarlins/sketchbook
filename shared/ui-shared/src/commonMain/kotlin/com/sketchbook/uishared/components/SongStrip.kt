@@ -7,11 +7,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidthIn
 import androidx.compose.foundation.layout.width
@@ -85,110 +87,144 @@ fun SongStrip(
     val isHovered by interaction.collectIsHoveredAsState()
     val bg = if (isHovered) colors.surfaceSunken else colors.surfaceCard
     val colorVar = data.colorTag?.let { AbletonPalette[it] } ?: colors.ruleLineStrong
+    val isGroup = data.variantCount > 1
+    val borderColor = if (data.warning != null) colors.accentDanger.copy(alpha = 0.4f) else colors.ruleLine
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(bg)
-            .border(1.dp, colors.ruleLine, shape)
-            .clickable(
-                interactionSource = interaction,
-                indication = null,
-                onClick = onOpen,
-            )
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            // Color bar
+    Box(modifier = modifier.fillMaxWidth()) {
+        if (isGroup) {
             Box(
                 modifier = Modifier
-                    .width(6.dp)
-                    .height(28.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(colorVar),
+                    .matchParentSize()
+                    .offset(x = 3.dp, y = 3.dp)
+                    .clip(shape)
+                    .background(colors.surfaceSunken)
+                    .border(1.dp, colors.ruleLine, shape),
             )
-            // Name + warning
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                ProvideContentColor(colors.inkPrimary) {
-                    Text(
-                        text = data.name,
-                        style = AppTheme.typography.bodyEmphasis,
-                        modifier = Modifier.weight(1f, fill = false),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (data.warning != null) {
-                    ProvideContentColor(colors.accentWarning) {
-                        Text("⚠", style = AppTheme.typography.caption)
-                    }
-                }
-            }
-            // Mono stat columns
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Stat("bpm", data.tempo?.let { it.toInt().toString() } ?: "—", 36.dp)
-                Stat("meter", fmtTimeSig(data.timeSigNum, data.timeSigDen), 36.dp)
-                Stat("tracks", data.trackCount?.toString() ?: "—", 38.dp)
-                Stat("length", fmtSeconds(data.lengthSeconds), 42.dp)
-                // Effort 0..100 (matches web SongStrip + Python compute_effort). >=60 hits the
-                // forgotten-gem threshold so it earns a terracotta accent.
-                Stat("effort", data.effortScore?.toString() ?: "—", 36.dp, accent = (data.effortScore ?: 0) >= 60)
-            }
-            Spacer(Modifier.width(4.dp))
-            // Sync pip
-            if (data.sync != null) SyncPip(data.sync)
-            // Relative timestamp
-            Box(modifier = Modifier.requiredWidthIn(min = 64.dp)) {
-                ProvideContentColor(colors.inkMuted) {
-                    Text(
-                        data.lastModifiedRelative ?: "—",
-                        style = AppTheme.typography.mono.copy(fontSize = 11.sp()),
-                    )
-                }
-            }
-            if (onLaunch != null) {
-                LaunchIcon(onLaunch)
-            }
         }
-        Row(
-            modifier = Modifier.padding(start = 20.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            ProvideContentColor(colors.inkMuted) {
-                Text(
-                    data.parentDir,
-                    style = AppTheme.typography.mono.copy(fontSize = 11.sp()),
-                    overflow = TextOverflow.Ellipsis,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(bg)
+                .border(1.dp, borderColor, shape)
+                .clickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    onClick = onOpen,
                 )
-            }
-            if (data.tags.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    for (t in data.tags.take(3)) {
-                        TagChip(t)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val widthDp = maxWidth.value
+            val showLength = widthDp >= 880f
+            val showMeter = widthDp >= 760f
+            val showTracks = widthDp >= 640f
+            val showBpm = widthDp >= 520f
+            val tagsLimit = if (widthDp >= 760f) 3 else 2
+
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    // Color bar
+                    Box(
+                        modifier = Modifier
+                            .width(6.dp)
+                            .height(28.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(colorVar),
+                    )
+                    // Name + warning
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        ProvideContentColor(colors.inkPrimary) {
+                            Text(
+                                text = data.name,
+                                style = AppTheme.typography.bodyEmphasis,
+                                modifier = Modifier.weight(1f, fill = false),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (data.warning != null) {
+                            ProvideContentColor(colors.accentWarning) {
+                                Text("⚠", style = AppTheme.typography.caption)
+                            }
+                        }
                     }
-                    if (data.tags.size > 3) {
+                    if (data.variantCount > 1) {
+                        VersionPill(count = data.variantCount)
+                    }
+                    // Mono stat columns
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (showBpm) Stat("bpm", data.tempo?.let { it.toInt().toString() } ?: "—", 36.dp)
+                        if (showMeter) Stat("meter", fmtTimeSig(data.timeSigNum, data.timeSigDen), 36.dp)
+                        if (showTracks) Stat("tracks", data.trackCount?.toString() ?: "—", 38.dp)
+                        if (showLength) Stat("length", fmtSeconds(data.lengthSeconds), 42.dp)
+                        // Effort 0..100 (matches web SongStrip + Python compute_effort). >=60 hits the
+                        // forgotten-gem threshold so it earns a terracotta accent.
+                        Stat(
+                            label = "effort",
+                            value = data.effortScore?.toString() ?: "—",
+                            width = 36.dp,
+                            accent = (data.effortScore ?: 0) >= 60,
+                            empty = data.effortScore == null || data.effortScore == 0,
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    // Sync pip
+                    if (data.sync != null) SyncPip(data.sync)
+                    // Relative timestamp
+                    Box(modifier = Modifier.requiredWidthIn(min = 64.dp)) {
                         ProvideContentColor(colors.inkMuted) {
-                            Text("+${data.tags.size - 3}", style = AppTheme.typography.caption)
+                            Text(
+                                data.lastModifiedRelative ?: "—",
+                                style = AppTheme.typography.mono.copy(fontSize = 11.sp()),
+                            )
+                        }
+                    }
+                    if (onLaunch != null) {
+                        LaunchIcon(onLaunch)
+                    }
+                }
+                Row(
+                    modifier = Modifier.padding(start = 20.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    ProvideContentColor(colors.inkMuted) {
+                        Text(
+                            data.parentDir,
+                            style = AppTheme.typography.mono.copy(fontSize = 11.sp()),
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (data.tags.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            for (t in data.tags.take(tagsLimit)) {
+                                TagChip(t)
+                            }
+                            if (data.tags.size > tagsLimit) {
+                                ProvideContentColor(colors.inkMuted) {
+                                    Text("+${data.tags.size - tagsLimit}", style = AppTheme.typography.caption)
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
         }
     }
 }
@@ -199,6 +235,7 @@ private fun Stat(
     value: String,
     width: androidx.compose.ui.unit.Dp,
     accent: Boolean = false,
+    empty: Boolean = false,
 ) {
     val colors = AppTheme.colors
     Column(
@@ -208,7 +245,12 @@ private fun Stat(
         ProvideContentColor(colors.inkMuted) {
             Text(label, style = AppTheme.typography.mono.copy(fontSize = 9.sp(), letterSpacing = 0.5.sp()))
         }
-        ProvideContentColor(if (accent) colors.accentAction else colors.inkSecondary) {
+        val tone = when {
+            empty -> colors.inkFaint
+            accent -> colors.accentAction
+            else -> colors.inkSecondary
+        }
+        ProvideContentColor(tone) {
             Text(
                 value,
                 style = AppTheme.typography.mono.copy(
@@ -238,6 +280,25 @@ private fun SyncPip(badge: SongSyncBadge) {
             Text(
                 badge.glyph,
                 style = AppTheme.typography.mono.copy(fontSize = 13.sp()),
+            )
+        }
+    }
+}
+
+@Composable
+private fun VersionPill(count: Int) {
+    val colors = AppTheme.colors
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(colors.tintCream)
+            .border(1.dp, colors.ruleLine, RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        ProvideContentColor(colors.inkSecondary) {
+            Text(
+                "v$count",
+                style = AppTheme.typography.mono.copy(fontSize = 11.sp()),
             )
         }
     }
