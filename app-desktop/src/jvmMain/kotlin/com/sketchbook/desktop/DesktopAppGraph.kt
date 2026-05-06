@@ -184,6 +184,7 @@ interface DesktopAppGraph {
         projects: ProjectRepository,
         store: SyncStateStore,
         catalog: Catalog,
+        journal: JournalRepository,
         scope: CoroutineScope,
     ): SyncQueue = SwappableSyncQueue(
         settings = settings,
@@ -194,6 +195,7 @@ interface DesktopAppGraph {
         scope = scope,
         hostId = hostIdentity().id,
         hostName = hostIdentity().name,
+        journal = journal,
     )
 }
 

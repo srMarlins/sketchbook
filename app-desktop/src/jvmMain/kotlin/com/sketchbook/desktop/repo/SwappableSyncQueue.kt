@@ -15,6 +15,7 @@ import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.repo.BlobCacheSettings
+import com.sketchbook.repo.JournalRepository
 import com.sketchbook.sync.JvmBlobCache
 import com.sketchbook.sync.SnapshotPipeline
 import com.sketchbook.syncio.ManifestMaterializer
@@ -58,6 +59,7 @@ class SwappableSyncQueue(
     private val scope: CoroutineScope,
     private val hostId: String,
     private val hostName: String,
+    private val journal: JournalRepository? = null,
     private val httpClient: HttpClient = HttpClient(CIO),
     private val json: Json = Json { ignoreUnknownKeys = false },
 ) : SyncQueue {
@@ -150,6 +152,7 @@ class SwappableSyncQueue(
                 syncState = syncStateStore,
                 projects = projects,
                 scope = scope,
+                journal = journal,
             )
         }.getOrElse {
             // Bad creds JSON or unsupported scheme — fall back to in-memory so the UI keeps
@@ -184,6 +187,13 @@ class SwappableSyncQueue(
         is GcsSyncQueue -> current.snapshotFor(id)
         is InMemorySyncQueue -> current.snapshotFor(id)
         else -> ProjectSyncState.Unknown
+    }
+
+    /** Inline conflict message for the detail-panel hint. Null when none. */
+    fun conflictMessage(id: ProjectId): String? {
+        val current = delegate.value as? GcsSyncQueue ?: return null
+        val uuid = syncStateStore.identityFor(id)
+        return current.conflictMessage(uuid)
     }
 
     /** Whether the live queue is the real GCS impl (rather than the in-memory fallback). */
