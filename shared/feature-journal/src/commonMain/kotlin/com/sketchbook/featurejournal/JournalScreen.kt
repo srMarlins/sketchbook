@@ -1,7 +1,9 @@
 package com.sketchbook.featurejournal
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -19,6 +22,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.featurejournal.format.JournalLabel
@@ -70,6 +75,9 @@ fun JournalScreen(
     }
     val onDateRange: (JournalViewModel.DateRange) -> Unit = remember(vm) {
         { r -> vm.dispatch(JournalViewModel.Intent.SetDateRange(r)) }
+    }
+    val onUndo: (JournalEntry) -> Unit = remember(vm) {
+        { e -> vm.dispatch(JournalViewModel.Intent.UndoOne(e)) }
     }
 
     Row(modifier = modifier.fillMaxSize()) {
@@ -123,6 +131,7 @@ fun JournalScreen(
                         expanded = expanded[day.label] ?: true,
                         onToggle = { expanded[day.label] = !(expanded[day.label] ?: true) },
                         onOpen = { openEntry = it },
+                        onUndo = onUndo,
                         showBulkUndo = showBulkUndoOnFirstDay && idx == 0,
                         bulkUndoCount = state.invertibleEntries.size,
                         onBulkUndo = {
@@ -165,6 +174,7 @@ private fun DayGroupCard(
     expanded: Boolean,
     onToggle: () -> Unit,
     onOpen: (JournalEntry) -> Unit,
+    onUndo: (JournalEntry) -> Unit,
     showBulkUndo: Boolean,
     bulkUndoCount: Int,
     onBulkUndo: () -> Unit,
@@ -191,6 +201,7 @@ private fun DayGroupCard(
                         data = rowData,
                         last = idx == lastIndex,
                         onOpen = onOpen,
+                        onUndo = onUndo,
                     )
                 }
             }
@@ -210,6 +221,7 @@ private data class JournalRowData(
     val label: JournalLabel,
     val projectName: String,
     val time: String,
+    val isInvertible: Boolean,
 )
 
 private fun rowDataFor(row: JournalViewModel.JournalRow): JournalRowData = JournalRowData(
@@ -217,6 +229,7 @@ private fun rowDataFor(row: JournalViewModel.JournalRow): JournalRowData = Journ
     label = journalLabel(row.entry.action),
     projectName = row.projectName,
     time = shortTime(row.entry.timestamp),
+    isInvertible = row.isInvertible,
 )
 
 @Composable
@@ -224,6 +237,7 @@ private fun JournalRowItem(
     data: JournalRowData,
     last: Boolean,
     onOpen: (JournalEntry) -> Unit,
+    onUndo: (JournalEntry) -> Unit,
 ) {
     val entry = data.entry
     val label = data.label
@@ -250,6 +264,23 @@ private fun JournalRowItem(
         }
         ProvideContentColor(AppTheme.colors.inkMuted) {
             Text(data.time, style = AppTheme.typography.caption, maxLines = 1)
+        }
+        if (data.isInvertible) {
+            IconAction(glyph = "↩", color = AppTheme.colors.accentAction) { onUndo(entry) }
+        }
+    }
+}
+
+@Composable
+private fun IconAction(glyph: String, color: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
+            .clickable(onClick = onClick)
+            .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
+    ) {
+        ProvideContentColor(color) {
+            Text(glyph, style = AppTheme.typography.bodyEmphasis)
         }
     }
 }

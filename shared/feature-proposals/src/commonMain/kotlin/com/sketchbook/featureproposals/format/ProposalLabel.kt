@@ -33,10 +33,18 @@ fun proposalLabel(
 ): ProposalLabel {
     fun s(key: String): String? =
         (action.args[key] as? JsonPrimitive)?.contentOrNull
-    val pidLong = (action.args["project_id"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
-    val pid = (action.args["project_id"] as? JsonPrimitive)?.contentOrNull
+    val pidLong = s("project_id")?.toLongOrNull()
     val resolvedName = pidLong?.let { projectNameById[it] }
-    val projectLabel = resolvedName ?: if (pid != null) "project #$pid" else "project"
+    // Fallback chain: catalog lookup → JSON `name` → JSON `path` basename → "project #ID" →
+    // "project". Proposals from `SqlProposalsRepository` carry `name` and `path` in args, so the
+    // row reads as the project name even before the projects flow has populated the names map.
+    val nameFromArgs = s("name")?.takeIf { it.isNotBlank() }
+    val basenameFromArgs = s("path")?.let { filenameOf(it) }?.takeIf { it.isNotBlank() }
+    val projectLabel = resolvedName
+        ?: nameFromArgs
+        ?: basenameFromArgs
+        ?: pidLong?.let { "project #$it" }
+        ?: "project"
     return when (action.type) {
         "MoveProject" -> {
             val to = s("to").orEmpty()
