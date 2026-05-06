@@ -1,6 +1,7 @@
 plugins {
     id("kmp-test")
     alias(libs.plugins.sqldelight)
+    alias(libs.plugins.metro)
 }
 
 sqldelight {
@@ -29,6 +30,7 @@ kotlin {
             implementation(libs.kotlinx.datetime)
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines.extensions)
+            implementation(libs.metro.runtime)
         }
         jvmMain.dependencies {
             implementation(project(":shared:parser-als"))

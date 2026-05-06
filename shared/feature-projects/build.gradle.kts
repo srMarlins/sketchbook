@@ -2,6 +2,7 @@ plugins {
     id("kmp-compose")
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.metro)
 }
 
 kotlin {
@@ -13,6 +14,12 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(compose.runtime)
             implementation(compose.foundation)
+            implementation(libs.metro.runtime)
+            implementation(libs.metro.viewmodel.compose)
+            implementation(libs.lifecycle.viewmodel)
+            implementation(libs.lifecycle.viewmodel.compose)
+            implementation(libs.lifecycle.viewmodel.savedstate)
+            implementation(libs.lifecycle.runtime.compose)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
