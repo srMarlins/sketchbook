@@ -86,11 +86,36 @@ $denyPolicyJson | Out-File -Encoding utf8 $denyPath
 # unauthenticated client before declaring victory.
 Write-Host "Deny-policy template written to $denyPath (apply via Org admin if needed)."
 
-Step 4 "Set short cache header default for the auto-update manifest"
-# Conveyor's metadata.json must be fresh; binaries can cache longer. We rely
-# on the workflow setting Cache-Control:public,max-age=300 on upload, but a
-# bucket-default is a belt-and-suspenders fallback.
-# (No bucket-level default cache header on GCS — handled at upload time.)
+Step 4 "Enable object versioning + 30-day noncurrent lifecycle"
+# Object versioning lets us recover from a bad release (overwritten manifest,
+# clobbered binary) by promoting the previous noncurrent generation. Without
+# versioning, an `gsutil cp` overwrite is unrecoverable.
+# The lifecycle rule deletes noncurrent versions after 30 days so we don't
+# accumulate unbounded storage cost from every release ever made.
+gcloud storage buckets update "gs://$Bucket" --versioning | Out-Host
+
+$lifecycleJson = @"
+{
+  "lifecycle": {
+    "rule": [
+      {
+        "action": { "type": "Delete" },
+        "condition": {
+          "daysSinceNoncurrentTime": 30,
+          "numNewerVersions": 3
+        }
+      }
+    ]
+  }
+}
+"@
+$lifecyclePath = Join-Path $env:TEMP "sketchbook-releases-lifecycle.json"
+$lifecycleJson | Out-File -Encoding utf8 $lifecyclePath
+gcloud storage buckets update "gs://$Bucket" --lifecycle-file=$lifecyclePath | Out-Host
+
+# Conveyor's metadata.properties must be fresh; binaries can cache longer.
+# Cache-Control is set per-object at upload time in release.yml (long-cache
+# immutable for binaries, max-age=300 for the manifest).
 Write-Host "Cache headers handled per-object at upload time in release.yml."
 
 # Note: we deliberately don't set --web-main-page-suffix on this bucket.

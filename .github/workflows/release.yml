@@ -18,6 +18,14 @@ permissions:
   contents: write    # to create the GitHub Release + upload notes
   id-token: write    # to mint the OIDC token for Workload Identity Federation
 
+# Serialize releases. Two tag pushes racing would both try to write
+# metadata.properties to the bucket, and the loser would clobber the winner's
+# manifest with a stale value. cancel-in-progress=false because killing a
+# half-finished release leaves a tag with no binaries and no manifest update.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   build:
     name: build + sign + upload site
@@ -72,10 +80,18 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f  # v2
 
+      # Cache-Control split: versioned binaries (e.g. Sketchbook-1.2.3-windows-amd64.msi)
+      # are immutable - clients caching them forever is correct. The auto-update
+      # manifest (`metadata.properties`) is mutable; cap it at 5 minutes so installed
+      # clients pick up new releases promptly. Doing one bulk upload with a long TTL
+      # then re-uploading the manifest with a short TTL is simpler than per-glob
+      # tagging and matches the local fallback in tools/release.ps1.
       - name: Upload Conveyor output to gs://sketchbook-releases
         run: |
-          gsutil -m -h "Cache-Control:public, max-age=300" \
+          gsutil -m -h "Cache-Control:public, max-age=31536000, immutable" \
             cp -r output/* gs://sketchbook-releases/
+          gsutil -h "Cache-Control:public, max-age=300" \
+            cp output/metadata.properties gs://sketchbook-releases/metadata.properties
 
       # The custom landing page lives on GitHub Pages (.github/workflows/pages.yml)
       # rather than the bucket. GCS only honors MainPageSuffix on buckets fronted
