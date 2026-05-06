@@ -213,10 +213,11 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     // "always-on" affordance.
     val scanIndicatorActive = scanProgress is ScanUiState.Scanning || scanProgress is ScanUiState.Done
     val activityState = when {
-        // Scan wins precedence — it's the louder, time-bounded activity. Sync is steady-state
-        // background work, surfaced once the scan ribbon clears.
+        // Scan wins precedence — it's the louder, time-bounded activity. Sync activity is shown
+        // only when something is actively uploading; a non-empty pending queue with no upload in
+        // flight reads as "stuck loading" — the sidebar caption already exposes the queue depth.
         scanProgress is ScanUiState.Scanning -> ActivityState.Scanning
-        syncState.uploading > 0 || syncState.pending > 0 -> ActivityState.Syncing
+        syncState.uploading > 0 -> ActivityState.Syncing
         else -> ActivityState.Idle
     }
 
