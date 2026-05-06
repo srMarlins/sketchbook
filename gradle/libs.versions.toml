@@ -11,6 +11,14 @@ nav3 = "1.0.0-alpha06"
 
 # DI
 metro = "1.0.0"
+# `metrox-viewmodel-compose` is a Sweers extension artifact tracked on its own
+# version line; it's currently behind metro core. Bump independently.
+metro-viewmodel-compose = "0.10.1"
+
+# Lifecycle (JetBrains KMP fork — used with nav3 for ViewModel scoping).
+# 2.11.0-beta01 is the only published JetBrains fork currently; tracks the
+# alpha nav3 line we're already on (see `nav3 = "1.0.0-alpha06"` above).
+lifecycle = "2.11.0-beta01"
 
 # Packaging / auto-update
 conveyor = "2.0"
@@ -47,12 +55,21 @@ turbine = "1.2.1"
 # Kotlinx
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
 kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 
 # DI
 metro-runtime = { module = "dev.zacsweers.metro:runtime", version.ref = "metro" }
+metro-viewmodel-compose = { module = "dev.zacsweers.metro:metrox-viewmodel-compose", version.ref = "metro-viewmodel-compose" }
+
+# Lifecycle (JetBrains KMP fork)
+lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "lifecycle" }
+lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+lifecycle-viewmodel-savedstate = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate", version.ref = "lifecycle" }
+lifecycle-viewmodel-navigation3 = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycle" }
+lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 
 # Persistence
 sqldelight-runtime = { module = "app.cash.sqldelight:runtime", version.ref = "sqldelight" }
