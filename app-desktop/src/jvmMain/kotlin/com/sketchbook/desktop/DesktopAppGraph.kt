@@ -8,7 +8,7 @@ import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.actions.ProposalActionExecutor
 import com.sketchbook.catalog.db.Catalog
-import com.sketchbook.desktop.repo.InMemoryLockRepository
+import com.sketchbook.desktop.repo.LeasedLockRepository
 import com.sketchbook.desktop.repo.PreferencesSettingsRepository
 import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.repo.JournalRepository
@@ -164,7 +164,19 @@ interface DesktopAppGraph {
     )
 
     @Provides @SingleIn(AppScope::class)
-    fun provideLockRepository(): LockRepository = InMemoryLockRepository()
+    fun provideLockRepository(
+        store: SyncStateStore,
+        scope: CoroutineScope,
+        syncQueue: SyncQueue,
+    ): LockRepository = LeasedLockRepository(
+        cloud = {
+            (syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue)?.currentCloud?.value
+        },
+        syncStateStore = store,
+        hostId = hostIdentity().id,
+        hostName = hostIdentity().name,
+        scope = scope,
+    )
 
     @Provides @SingleIn(AppScope::class)
     fun provideSyncQueue(
