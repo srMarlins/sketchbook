@@ -71,3 +71,4 @@ local.properties
 src-tauri/
 web/
 
+.tmp_screens/

@@ -1,27 +1,44 @@
 package com.sketchbook.desktop
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.ui.NavDisplay
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.unit.dp
 import com.sketchbook.featuredetail.ProjectDetailScreen
 import com.sketchbook.featuredetail.ProjectDetailStateHolder
+import com.sketchbook.uishared.components.ProvideContentColor
+import com.sketchbook.uishared.components.Text
 import com.sketchbook.featureneedsattention.NeedsAttentionScreen
 import com.sketchbook.featureneedsattention.NeedsAttentionStateHolder
 import com.sketchbook.featureprojects.ProjectListScreen
@@ -33,16 +50,29 @@ import com.sketchbook.featuresettings.SettingsStateHolder
 import com.sketchbook.featuretimeline.TimelineScreen
 import com.sketchbook.featuretimeline.TimelineStateHolder
 import com.sketchbook.repo.LibraryRoot
-import com.sketchbook.uishared.components.Surface
-import com.sketchbook.uishared.components.Text
-import com.sketchbook.uishared.theme.AppTheme
+import com.sketchbook.repo.ProjectSyncState
+import com.sketchbook.repo.SyncQueueState
+import com.sketchbook.desktop.repo.InMemorySyncQueue
+import com.sketchbook.uishared.components.ActivityBar
+import com.sketchbook.uishared.components.ActivityState
+import com.sketchbook.uishared.components.InkLoading
+import com.sketchbook.uishared.components.NotebookSidebar
+import com.sketchbook.uishared.components.PaperPage
+import com.sketchbook.uishared.components.SidebarItem
+import kotlinx.coroutines.launch
 
 /**
- * Root composable: a sidebar of top-level destinations + a `NavDisplay` body.
+ * Root composable: notebook-style sidebar of top-level destinations + a `NavDisplay` body.
  *
  * Compose Navigation 3 owns the back stack. We pass it in from [Main] so the app menu can
  * reset/push too. Per-screen `StateHolder`s are remembered against the graph's app scope so
  * navigating away and back keeps `stateIn` caches warm.
+ *
+ * Sidebar siblings have no positional axis between them, so swapping top-level destinations
+ * uses Material's "fade-through" — quick fade-out + paired fade-in with a tiny inward scale
+ * on the entering screen. The previous slide-X transition implied a left/right relationship
+ * between siblings that didn't exist. Hierarchical push/pop (Projects → Detail → Timeline)
+ * keeps a slide accent; the back-stack's depth tells us which is happening.
  */
 @Composable
 fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
@@ -69,15 +99,20 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     val settingsHolder = remember {
         SettingsStateHolder(graph.settingsRepository, graph.appScope)
     }
-
-    LaunchedEffect(projectListHolder) {
-        projectListHolder.effects.collect { effect ->
-            when (effect) {
-                is ProjectListStateHolder.Effect.Navigate ->
-                    backStack.add(Screen.ProjectDetail(effect.id))
-            }
-        }
+    val scanner = remember {
+        LibraryScanner(graph.inMemoryProjectRepository, graph.appScope)
     }
+    val scanProgress by scanner.progress.collectAsState()
+    val syncQueue = graph.syncQueue
+    val syncState by syncQueue.observe().collectAsState(initial = SyncQueueState())
+    // Concrete handle so we can call the desktop-only `seedDeterministic` / `pushNowById`. The
+    // public `SyncQueue` interface stays narrow; desktop niceties live on the impl.
+    val syncImpl = syncQueue as? InMemorySyncQueue
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+
+    // Project list now opens detail in a side-panel locally — no nav-stack push. The
+    // Navigate effect is left intact in the state holder for future shared-detail callers
+    // (deep-links, MCP tool invocations) but the desktop dashboard ignores it.
     LaunchedEffect(projectDetailHolder) {
         projectDetailHolder.effects.collect { effect ->
             when (effect) {
@@ -88,94 +123,759 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
             }
         }
     }
+    // Kick a scan whenever a library root is added (or the app starts with roots already in
+    // settings). Scan progress is exposed to the sidebar via [scanner.progress].
+    LaunchedEffect(settingsHolder) {
+        settingsHolder.state.collect { settingsState ->
+            for (root in settingsState.libraryRoots) {
+                if (root is LibraryRoot.Projects) {
+                    scanner.scan(root.path)
+                    break // one root at a time at v1
+                }
+            }
+        }
+    }
+    // (Sync-state seeding lives on the queue itself — see InMemorySyncQueue.start; the graph
+    // hands it the project repository at construction. The UI just observes; it never feeds.)
 
-    Row(modifier = Modifier.fillMaxSize().background(AppTheme.colors.surfacePage)) {
-        Sidebar(
-            current = backStack.lastOrNull() ?: Screen.Projects,
-            onSelect = { target ->
-                backStack.clear()
-                backStack.add(target)
-            },
-        )
-        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            NavDisplay(
-                backStack = backStack,
-                onBack = { backStack.removeLastOrNull() },
-                entryProvider = { key ->
-                    NavEntry(key) { current ->
-                        when (current) {
-                            Screen.Projects -> ProjectListScreen(projectListHolder)
-                            is Screen.ProjectDetail -> {
-                                LaunchedEffect(current.id) { projectDetailHolder.load(current.id) }
-                                ProjectDetailScreen(projectDetailHolder)
-                            }
-                            is Screen.Timeline -> {
-                                LaunchedEffect(current.uuid) { timelineHolder.load(current.uuid) }
-                                TimelineScreen(timelineHolder)
-                            }
-                            Screen.Proposals -> ProposalsScreen(proposalsHolder)
-                            Screen.NeedsAttention -> NeedsAttentionScreen(needsAttentionHolder)
-                            Screen.Settings -> SettingsScreen(
-                                holder = settingsHolder,
-                                onAddRootClicked = {
-                                    Os.pickDirectory(title = "Add library root")?.let { path ->
-                                        settingsHolder.dispatch(
-                                            SettingsStateHolder.Intent.AddRoot(LibraryRoot.Projects(path)),
+    val current = backStack.lastOrNull() ?: Screen.Projects
+    val items = sidebarItems(current)
+    // Sidebar caption priority: scan first (most acute, time-bounded), then sync (slower
+    // background activity), then offline marker, else nothing.
+    val scanCaption = when (val p = scanProgress) {
+        LibraryScanner.Progress.Idle -> null
+        is LibraryScanner.Progress.Scanning -> "Scanning… ${p.filesVisited} files"
+        is LibraryScanner.Progress.Done -> "Indexed ${p.rowsAdded} projects"
+        is LibraryScanner.Progress.Failed -> "Scan failed: ${p.message}"
+    }
+    val syncCaption: String? = when {
+        !syncState.online -> "Cloud: offline"
+        syncState.uploading > 0 -> "Cloud: uploading ${syncState.uploading}"
+        syncState.pending > 0 -> "Cloud: ${syncState.pending} pending"
+        else -> null
+    }
+    val statusText = scanCaption ?: syncCaption
+    // Drive the animated indicator on both Scanning *and* Done so the ribbon doesn't disappear
+    // the instant the walk finishes — Done lingers ~3.5s before the scanner flips to Idle.
+    val scanIndicatorLabel = when (val p = scanProgress) {
+        is LibraryScanner.Progress.Scanning -> "Scanning your library — ${p.filesVisited} files, ${p.projectsFound} projects"
+        is LibraryScanner.Progress.Done -> "Indexed ${p.rowsAdded} projects"
+        else -> null
+    }
+    // Show the inline ribbon during both Scanning and Done so the success state has time to
+    // register; idle hides it. The persistent ActivityBar at the top of the pane covers the
+    // "always-on" affordance.
+    val scanIndicatorActive = scanProgress is LibraryScanner.Progress.Scanning ||
+        scanProgress is LibraryScanner.Progress.Done
+    val activityState = when {
+        // Scan wins precedence — it's the louder, time-bounded activity. Sync is steady-state
+        // background work, surfaced once the scan ribbon clears.
+        scanProgress is LibraryScanner.Progress.Scanning -> ActivityState.Scanning
+        syncState.uploading > 0 || syncState.pending > 0 -> ActivityState.Syncing
+        else -> ActivityState.Idle
+    }
+
+    PaperPage {
+        Row(modifier = Modifier.fillMaxSize()) {
+            NotebookSidebar(
+                title = "Sketchbook",
+                items = items,
+                onSelect = { item ->
+                    val target = screenForId(item.id)
+                    backStack.clear()
+                    backStack.add(target)
+                },
+                statusText = statusText,
+            )
+            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxHeight().fillMaxWidth()) {
+                    ActivityBar(state = activityState, modifier = Modifier.fillMaxWidth())
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                NavDisplay(
+                    backStack = backStack,
+                    onBack = { backStack.removeLastOrNull() },
+                    transitionSpec = {
+                        // Material fade-through + tiny scale-in. No positional slide because
+                        // sidebar siblings aren't on a left/right axis.
+                        val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+                        val fadeOutSpec = tween<Float>(durationMillis = 90, easing = ease)
+                        val fadeInSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
+                        val scaleSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
+                        (fadeIn(fadeInSpec) + scaleIn(scaleSpec, initialScale = 0.985f)) togetherWith
+                            (fadeOut(fadeOutSpec) + scaleOut(scaleSpec, targetScale = 1.005f))
+                    },
+                    popTransitionSpec = {
+                        val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+                        val fadeOutSpec = tween<Float>(durationMillis = 90, easing = ease)
+                        val fadeInSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
+                        val scaleSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
+                        (fadeIn(fadeInSpec) + scaleIn(scaleSpec, initialScale = 1.015f)) togetherWith
+                            (fadeOut(fadeOutSpec) + scaleOut(scaleSpec, targetScale = 0.99f))
+                    },
+                    entryProvider = { key ->
+                        NavEntry(key) { current ->
+                            when (current) {
+                                Screen.Projects -> ProjectListScreen(
+                                    holder = projectListHolder,
+                                    scanLabel = scanIndicatorLabel,
+                                    scanActive = scanIndicatorActive,
+                                    syncStateFor = syncImpl?.let { impl -> { id -> impl.snapshotFor(id) } },
+                                    detailPanel = { id, dismiss ->
+                                        LaunchedEffect(id) { projectDetailHolder.load(id) }
+                                        DetailPanelContent(
+                                            holder = projectDetailHolder,
+                                            onDismiss = dismiss,
+                                            syncStateFor = syncImpl?.let { impl -> { pid -> impl.snapshotFor(pid) } },
+                                            onPushNow = syncImpl?.let { impl -> { pid ->
+                                                coroutineScope.launch { impl.pushNowById(pid) }
+                                            } },
                                         )
-                                    }
-                                },
-                                onUploadCredentialClicked = {
-                                    Os.pickFile(title = "Service account JSON")?.let { path ->
-                                        val json = runCatching { java.io.File(path).readText() }.getOrNull()
-                                        settingsHolder.dispatch(
-                                            SettingsStateHolder.Intent.SetCloudCredential(json),
-                                        )
-                                    }
-                                },
-                            )
-                            else -> Unit // unknown NavKey types are ignored
+                                    },
+                                )
+                                is Screen.ProjectDetail -> {
+                                    LaunchedEffect(current.id) { projectDetailHolder.load(current.id) }
+                                    ProjectDetailScreen(projectDetailHolder)
+                                }
+                                is Screen.Timeline -> {
+                                    LaunchedEffect(current.uuid) { timelineHolder.load(current.uuid) }
+                                    TimelineScreen(timelineHolder)
+                                }
+                                Screen.Proposals -> ProposalsScreen(proposalsHolder)
+                                Screen.NeedsAttention -> NeedsAttentionScreen(needsAttentionHolder)
+                                Screen.Settings -> SettingsScreen(
+                                    holder = settingsHolder,
+                                    syncState = syncState,
+                                    onAddRootClicked = {
+                                        Os.pickDirectory(title = "Add library root")?.let { path ->
+                                            settingsHolder.dispatch(
+                                                SettingsStateHolder.Intent.AddRoot(LibraryRoot.Projects(path)),
+                                            )
+                                        }
+                                    },
+                                    onUploadCredentialClicked = {
+                                        Os.pickFile(title = "Service account JSON")?.let { path ->
+                                            val json = runCatching { java.io.File(path).readText() }.getOrNull()
+                                            settingsHolder.dispatch(
+                                                SettingsStateHolder.Intent.SetCloudCredential(json),
+                                            )
+                                        }
+                                    },
+                                )
+                                else -> Unit // unknown NavKey types are ignored
+                            }
+                        }
+                    },
+                )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun sidebarItems(current: NavKey): List<SidebarItem> = listOf(
+    SidebarItem(
+        id = "projects",
+        label = "Projects",
+        active = current is Screen.Projects || current is Screen.ProjectDetail || current is Screen.Timeline,
+    ),
+    SidebarItem(
+        id = "proposals",
+        label = "Proposals",
+        active = current == Screen.Proposals,
+    ),
+    SidebarItem(
+        id = "needs-attention",
+        label = "Needs attention",
+        active = current == Screen.NeedsAttention,
+    ),
+    SidebarItem(
+        id = "settings",
+        label = "Settings",
+        active = current == Screen.Settings,
+    ),
+)
+
+private fun screenForId(id: String): Screen = when (id) {
+    "projects" -> Screen.Projects
+    "proposals" -> Screen.Proposals
+    "needs-attention" -> Screen.NeedsAttention
+    "settings" -> Screen.Settings
+    else -> Screen.Projects
+}
+
+/**
+ * Detail panel: header band + tab strip + scrollable body, mirroring `web/CorkboardPanel`.
+ *
+ * Tabs:
+ *  - **Overview** — path/folder/modified/tempo/tracks/Live version/tags + primary actions.
+ *  - **Versions** — unified timeline merging the project's *local variants* (sibling `.als`
+ *    files in the project root) with *remote snapshots* (from `SnapshotRepository.history`).
+ *    Each entry carries an origin badge (LOCAL / LOCAL ALT / REMOTE) so the user can see at
+ *    a glance which copies live where.
+ *  - **Tracks / Samples / Plugins** — placeholder until the `.als` parser is wired in.
+ *  - **History** — the journal entries (move/rename/archive/setTags). Empty until actions wire
+ *    through MCP.
+ */
+@Composable
+private fun DetailPanelContent(
+    holder: ProjectDetailStateHolder,
+    onDismiss: () -> Unit,
+    syncStateFor: ((com.sketchbook.core.ProjectId) -> ProjectSyncState)? = null,
+    onPushNow: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
+) {
+    val state by holder.state.collectAsState()
+    val theme = com.sketchbook.uishared.theme.AppTheme
+
+    var tab by remember { mutableStateOf(DetailTab.Overview) }
+
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier.fillMaxHeight().fillMaxWidth(),
+    ) {
+        // Header band.
+        androidx.compose.foundation.layout.Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+        ) {
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+                ) {
+                    ProvideContentColor(theme.colors.inkPrimary) {
+                        Text(
+                            text = state.row?.name ?: if (state.loading) "Loading" else "Project not found",
+                            style = theme.typography.title,
+                        )
+                    }
+                    if (state.loading) InkLoading()
+                }
+                state.row?.let { row ->
+                    ProvideContentColor(theme.colors.inkMuted) {
+                        Text(
+                            text = com.sketchbook.featureprojects.projectRootDir(row.path.value),
+                            style = theme.typography.mono.copy(
+                                fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            ),
+                        )
+                    }
+                    // Sync pill + Sync-now CTA. Pill always present (even if "—") so the
+                    // detail panel has a consistent "where does this live in the cloud" slot.
+                    val sync = syncStateFor?.invoke(row.id) ?: ProjectSyncState.Unknown
+                    androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    ) {
+                        SyncPill(sync, theme)
+                        if (onPushNow != null && sync != ProjectSyncState.Synced && sync != ProjectSyncState.Uploading) {
+                            com.sketchbook.uishared.components.Button(
+                                onClick = { onPushNow(row.id) },
+                                variant = com.sketchbook.uishared.components.ButtonVariant.Ghost,
+                            ) { Text("Sync now") }
                         }
                     }
-                },
+                }
+            }
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                ProvideContentColor(theme.colors.inkMuted) {
+                    Text(
+                        "✕  CLOSE",
+                        style = theme.typography.mono.copy(
+                            fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        ),
+                    )
+                }
+            }
+        }
+        // Tabs strip on a sunken band — like notebook page-tabs.
+        androidx.compose.foundation.layout.Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(theme.colors.surfaceSunken)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
+        ) {
+            for (t in DetailTab.entries) {
+                DetailTabButton(t, t == tab, onClick = { tab = t }, theme = theme)
+            }
+        }
+
+        // Body
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        ) {
+            val row = state.row
+            if (row == null) {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.fillMaxHeight().fillMaxWidth().padding(24.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center,
+                ) {
+                    ProvideContentColor(theme.colors.inkMuted) {
+                        Text(
+                            text = if (state.loading) "Loading project metadata…"
+                                else "We couldn't find this project. It may have been removed since the last scan.",
+                            style = theme.typography.body,
+                        )
+                    }
+                }
+            } else {
+                val scroll = rememberScrollState()
+                androidx.compose.foundation.layout.Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(scroll)
+                        .padding(horizontal = 24.dp, vertical = 20.dp),
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(20.dp),
+                ) {
+                    when (tab) {
+                        DetailTab.Overview -> {
+                            DetailMetaSection(row, theme)
+                            DetailActionsSection(row, holder, theme)
+                            DetailQuickVersions(row, state, theme)
+                        }
+                        DetailTab.Versions -> DetailVersionsTab(row, state, theme)
+                        DetailTab.Tracks -> PlaceholderTab(
+                            "Tracks",
+                            "Per-track listing with audio/MIDI/return/group counts arrives once the `.als` parser is wired into the indexer. Today the scanner only sees the file path, not the contents.",
+                            theme,
+                        )
+                        DetailTab.Samples -> PlaceholderTab(
+                            "Samples",
+                            "Sample-reference list (rawPath, missing-file flag, mac-path detection) lives behind the parser too. Until then, broken-sample repair runs on a per-folder heuristic — see Needs Attention.",
+                            theme,
+                        )
+                        DetailTab.Plugins -> PlaceholderTab(
+                            "Plugins",
+                            "Plugin chain extraction (VST2/VST3/AU/Ableton-native) requires walking the device tree in the `.als` XML. Stub for now.",
+                            theme,
+                        )
+                        DetailTab.History -> DetailHistoryTab(state, theme)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum class DetailTab(val label: String) {
+    Overview("Overview"),
+    Versions("Versions"),
+    Tracks("Tracks"),
+    Samples("Samples"),
+    Plugins("Plugins"),
+    History("History"),
+}
+
+@Composable
+private fun DetailTabButton(
+    tab: DetailTab,
+    active: Boolean,
+    onClick: () -> Unit,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    val bg = if (active) theme.colors.surfaceCard else androidx.compose.ui.graphics.Color.Transparent
+    val fg = if (active) theme.colors.inkPrimary else theme.colors.inkSecondary
+    androidx.compose.foundation.layout.Box(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .background(bg, androidx.compose.foundation.shape.RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    ) {
+        ProvideContentColor(fg) {
+            Text(
+                tab.label,
+                style = if (active) theme.typography.bodyEmphasis else theme.typography.body,
+            )
+        }
+    }
+}
+
+
+@Composable
+private fun DetailMetaSection(row: com.sketchbook.core.ProjectRow, theme: com.sketchbook.uishared.theme.AppTheme) {
+    Section("Overview", theme) {
+        DetailRow("Project root", com.sketchbook.featureprojects.projectRootDir(row.path.value), theme, mono = true)
+        DetailRow("Active variant", java.io.File(row.path.value).name, theme, mono = true)
+        DetailRow("Last modified", relativeFromInstant(row.updatedAt), theme)
+        row.tempo?.let { DetailRow("Tempo", "${it.toInt()} bpm", theme) }
+        if (row.trackCount > 0) DetailRow("Tracks", row.trackCount.toString(), theme)
+        row.lastSavedLiveVersion?.let { DetailRow("Last saved with", it, theme) }
+        if (row.tags.isNotEmpty()) DetailRow("Tags", row.tags.joinToString(", "), theme)
+    }
+}
+
+@Composable
+private fun DetailQuickVersions(
+    row: com.sketchbook.core.ProjectRow,
+    state: ProjectDetailStateHolder.State,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    val unified = remember(row.path.value, state.history) { unifyVersions(row, state.history) }
+    val sample = unified.take(4)
+    val total = unified.size
+    if (total == 0) return
+    Section("Versions ($total)", theme) {
+        for (entry in sample) {
+            VersionRow(entry, isCurrent = entry.absPath == row.path.value, theme = theme)
+        }
+        if (total > sample.size) {
+            ProvideContentColor(theme.colors.inkMuted) {
+                Text(
+                    "+ ${total - sample.size} more — see Versions tab",
+                    style = theme.typography.caption,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailActionsSection(
+    row: com.sketchbook.core.ProjectRow,
+    holder: com.sketchbook.featuredetail.ProjectDetailStateHolder,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    Section("Actions", theme) {
+        androidx.compose.foundation.layout.Row(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        ) {
+            com.sketchbook.uishared.components.Button(
+                onClick = { holder.dispatch(com.sketchbook.featuredetail.ProjectDetailStateHolder.Intent.OpenInLive) },
+                variant = com.sketchbook.uishared.components.ButtonVariant.Primary,
+            ) { Text("Open in Live") }
+            com.sketchbook.uishared.components.Button(
+                onClick = { Os.openInLive(parentDirOf(row.path.value)) },
+                variant = com.sketchbook.uishared.components.ButtonVariant.Secondary,
+            ) { Text("Reveal folder") }
+        }
+    }
+}
+
+@Composable
+private fun DetailVersionsTab(
+    row: com.sketchbook.core.ProjectRow,
+    state: ProjectDetailStateHolder.State,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    val unified = remember(row.path.value, state.history) { unifyVersions(row, state.history) }
+    Section("Local + remote", theme) {
+        ProvideContentColor(theme.colors.inkMuted) {
+            Text(
+                "Files in this project's folder, merged with snapshots Sketchbook has uploaded to the cloud. The currently-open variant is highlighted.",
+                style = theme.typography.body,
+            )
+        }
+    }
+    Section("Versions (${unified.size})", theme) {
+        if (unified.isEmpty()) {
+            ProvideContentColor(theme.colors.inkMuted) {
+                Text("Nothing yet — once you save in Live a few times, Sketchbook starts tracking variants here.", style = theme.typography.body)
+            }
+        } else {
+            androidx.compose.foundation.layout.Column(
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
+            ) {
+                for (entry in unified) {
+                    VersionRow(entry, isCurrent = entry.absPath == row.path.value, theme = theme)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailHistoryTab(
+    state: ProjectDetailStateHolder.State,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    Section("Journal", theme) {
+        ProvideContentColor(theme.colors.inkMuted) {
+            Text(
+                "Move/rename/archive/tag actions from Sketchbook itself land here. The .als file's own modification timestamp lives in Versions.",
+                style = theme.typography.body,
+            )
+        }
+    }
+    if (state.history.isEmpty()) {
+        ProvideContentColor(theme.colors.inkMuted) {
+            Text("No journal entries yet.", style = theme.typography.body)
+        }
+    } else {
+        androidx.compose.foundation.layout.Column(
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+        ) {
+            for (snap in state.history) {
+                ProvideContentColor(theme.colors.inkSecondary) {
+                    Text(
+                        text = (snap.label ?: "rev ${snap.rev.value}")
+                            + " · ${snap.kind.name.lowercase()}"
+                            + " · ${snap.fileCount} files",
+                        style = theme.typography.body,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaceholderTab(
+    title: String,
+    body: String,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    Section(title, theme) {
+        ProvideContentColor(theme.colors.inkMuted) {
+            Text(body, style = theme.typography.body)
+        }
+    }
+}
+
+@Composable
+private fun VersionRow(
+    entry: VersionEntry,
+    isCurrent: Boolean,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+    ) {
+        // Origin badge
+        val (badgeBg, badgeFg, badgeLabel) = when (entry.origin) {
+            VersionOrigin.LocalActive -> Triple(theme.colors.accentSoft, theme.colors.inkPrimary, "ACTIVE")
+            VersionOrigin.LocalAlternate -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "LOCAL")
+            VersionOrigin.Remote -> Triple(theme.colors.tintSage, theme.colors.inkPrimary, "REMOTE")
+        }
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .background(badgeBg, androidx.compose.foundation.shape.RoundedCornerShape(50))
+                .padding(horizontal = 6.dp, vertical = 1.dp),
+        ) {
+            ProvideContentColor(badgeFg) {
+                Text(
+                    badgeLabel,
+                    style = theme.typography.mono.copy(
+                        fontSize = androidx.compose.ui.unit.TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
+                )
+            }
+        }
+        ProvideContentColor(if (isCurrent) theme.colors.accentAction else theme.colors.inkPrimary) {
+            Text(
+                text = entry.label,
+                style = theme.typography.body,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        ProvideContentColor(theme.colors.inkMuted) {
+            Text(
+                text = entry.subtitle,
+                style = theme.typography.mono.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ),
+            )
+        }
+    }
+}
+
+private data class VersionEntry(
+    val origin: VersionOrigin,
+    val label: String,
+    val subtitle: String,
+    val absPath: String?,
+    val timestampMs: Long,
+)
+
+private enum class VersionOrigin { LocalActive, LocalAlternate, Remote }
+
+private fun unifyVersions(
+    row: com.sketchbook.core.ProjectRow,
+    history: List<com.sketchbook.core.Snapshot>,
+): List<VersionEntry> {
+    val out = mutableListOf<VersionEntry>()
+    // Local variants — siblings under the project root.
+    val parent = java.io.File(row.path.value).parentFile
+    if (parent != null && parent.isDirectory) {
+        val siblings = parent.listFiles { f ->
+            f.isFile &&
+                f.name.endsWith(".als", ignoreCase = true) &&
+                !f.name.endsWith(".als.bak", ignoreCase = true) &&
+                !f.name.startsWith(".")
+        }?.toList() ?: emptyList()
+        for (sib in siblings) {
+            val abs = sib.absolutePath.replace('\\', '/')
+            val isActive = abs == row.path.value
+            out += VersionEntry(
+                origin = if (isActive) VersionOrigin.LocalActive else VersionOrigin.LocalAlternate,
+                label = sib.nameWithoutExtension,
+                subtitle = relativeFromMs(sib.lastModified()) + " · " + formatBytes(sib.length()),
+                absPath = abs,
+                timestampMs = sib.lastModified(),
+            )
+        }
+    }
+    // Remote snapshots from the SnapshotRepository.
+    for (snap in history) {
+        out += VersionEntry(
+            origin = VersionOrigin.Remote,
+            label = snap.label ?: "rev ${snap.rev.value}",
+            subtitle = "${snap.kind.name.lowercase()} · ${snap.fileCount} files · ${snap.hostName}",
+            absPath = null,
+            timestampMs = runCatching { snap.timestamp.toEpochMilliseconds() }.getOrDefault(0L),
+        )
+    }
+    return out.sortedByDescending { it.timestampMs }
+}
+
+private fun relativeFromInstant(instant: kotlin.time.Instant): String =
+    relativeFromMs(instant.toEpochMilliseconds())
+
+private fun relativeFromMs(ms: Long): String {
+    val deltaMs = System.currentTimeMillis() - ms
+    val days = deltaMs / (24L * 60 * 60 * 1000)
+    return when {
+        days < 1 -> "today"
+        days < 2 -> "yesterday"
+        days < 30 -> "${days}d ago"
+        days < 365 -> "${days / 30}mo ago"
+        else -> "${days / 365}y ago"
+    }
+}
+
+// Project-root detection lives in :shared:feature-projects so the list and the detail panel
+// agree. Imported as `com.sketchbook.featureprojects.projectRootDir`.
+
+@Composable
+private fun SyncPill(state: ProjectSyncState, theme: com.sketchbook.uishared.theme.AppTheme) {
+    val (bg, fg, label) = when (state) {
+        ProjectSyncState.Synced -> Triple(theme.colors.tintSage, theme.colors.inkPrimary, "SYNCED")
+        ProjectSyncState.Pending -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "PENDING")
+        ProjectSyncState.Uploading -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "UPLOADING…")
+        ProjectSyncState.Conflict -> Triple(theme.colors.tintRose, theme.colors.inkPrimary, "CONFLICT")
+        ProjectSyncState.LocalOnly -> Triple(theme.colors.surfaceSunken, theme.colors.inkSecondary, "LOCAL ONLY")
+        ProjectSyncState.Unknown -> Triple(theme.colors.surfaceSunken, theme.colors.inkMuted, "—")
+    }
+    androidx.compose.foundation.layout.Box(
+        modifier = Modifier
+            .background(bg, androidx.compose.foundation.shape.RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        ProvideContentColor(fg) {
+            Text(
+                label,
+                style = theme.typography.mono.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ),
             )
         }
     }
 }
 
 @Composable
-private fun Sidebar(current: NavKey, onSelect: (Screen) -> Unit) {
-    Column(
-        modifier = Modifier
-            .width(220.dp)
-            .fillMaxHeight()
-            .background(AppTheme.colors.surfacePanel)
-            .padding(PaddingValues(AppTheme.spacing.md)),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-    ) {
-        Text("Sketchbook", style = AppTheme.typography.title)
-        SidebarItem("Projects", isActive(current, Screen.Projects)) { onSelect(Screen.Projects) }
-        SidebarItem("Proposals", isActive(current, Screen.Proposals)) { onSelect(Screen.Proposals) }
-        SidebarItem("Needs attention", isActive(current, Screen.NeedsAttention)) { onSelect(Screen.NeedsAttention) }
-        SidebarItem("Settings", isActive(current, Screen.Settings)) { onSelect(Screen.Settings) }
+private fun DetailHistorySection(
+    state: com.sketchbook.featuredetail.ProjectDetailStateHolder.State,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    if (state.history.isEmpty()) return
+    Section("History (${state.history.size})", theme) {
+        androidx.compose.foundation.layout.Column(
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+        ) {
+            for (snap in state.history) {
+                ProvideContentColor(theme.colors.inkSecondary) {
+                    Text(
+                        text = (snap.label ?: "rev ${snap.rev.value}") + " · ${snap.kind.name.lowercase()} · ${snap.fileCount} files",
+                        style = theme.typography.body,
+                    )
+                }
+            }
+        }
     }
-}
-
-private fun isActive(current: NavKey, target: Screen): Boolean = when (target) {
-    Screen.Projects -> current is Screen.Projects || current is Screen.ProjectDetail || current is Screen.Timeline
-    else -> current == target
 }
 
 @Composable
-private fun SidebarItem(label: String, active: Boolean, onClick: () -> Unit) {
-    val color = if (active) AppTheme.colors.accentAction else AppTheme.colors.surfacePanel
-    Surface(
-        color = color,
-        padding = PaddingValues(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm),
-        modifier = Modifier.clickable(onClick = onClick),
+private fun Section(
+    title: String,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    content: @Composable () -> Unit,
+) {
+    androidx.compose.foundation.layout.Column(
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = label,
-            style = if (active) AppTheme.typography.bodyEmphasis else AppTheme.typography.body,
-        )
+        ProvideContentColor(theme.colors.inkSecondary) {
+            Text(
+                text = title.uppercase(),
+                style = theme.typography.mono.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ),
+            )
+        }
+        content()
     }
+}
+
+@Composable
+private fun DetailRow(
+    label: String,
+    value: String,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    mono: Boolean = false,
+) {
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+    ) {
+        ProvideContentColor(theme.colors.inkMuted) {
+            Text(
+                label,
+                style = theme.typography.caption,
+                modifier = Modifier.width(120.dp),
+            )
+        }
+        ProvideContentColor(theme.colors.inkPrimary) {
+            Text(
+                value,
+                style = if (mono) theme.typography.mono.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ) else theme.typography.body,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+private fun parentDirOf(absPath: String): String {
+    val idx = absPath.lastIndexOf('/')
+    return if (idx <= 0) absPath else absPath.substring(0, idx)
+}
+
+private fun siblingAlsFiles(row: com.sketchbook.core.ProjectRow): List<java.io.File> {
+    val parent = java.io.File(row.path.value).parentFile ?: return emptyList()
+    return parent.listFiles { f -> f.isFile && f.name.endsWith(".als", ignoreCase = true) && !f.name.startsWith(".") }
+        ?.sortedByDescending { it.lastModified() }
+        ?: emptyList()
+}
+
+private fun formatBytes(b: Long): String = when {
+    b < 1024 -> "${b}B"
+    b < 1024 * 1024 -> "${b / 1024}K"
+    b < 1024 * 1024 * 1024 -> "${b / (1024 * 1024)}M"
+    else -> "${b / (1024L * 1024 * 1024)}G"
 }
