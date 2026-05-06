@@ -54,6 +54,18 @@ class NeedsAttentionStateHolder(
                 val r = repository.dismissMissingSample(intent.projectId, intent.missingPath)
                 emitEffect(r.isSuccess, intent.projectId.value.toString(), "dismiss")
             }
+            is Intent.ApplyMatch -> scope.launch {
+                val r = repository.applyMissingSampleMatch(
+                    projectId = intent.projectId,
+                    missingPath = intent.missingPath,
+                    candidatePath = intent.candidatePath,
+                )
+                if (r.isSuccess) {
+                    _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
+                } else {
+                    _effects.tryEmit(Effect.Failed(intent.projectId.value.toString(), "apply failed"))
+                }
+            }
         }
     }
 
@@ -73,10 +85,16 @@ class NeedsAttentionStateHolder(
     sealed interface Intent {
         data class AckMacImport(val projectId: ProjectId) : Intent
         data class DismissMissingSample(val projectId: ProjectId, val missingPath: String) : Intent
+        data class ApplyMatch(
+            val projectId: ProjectId,
+            val missingPath: String,
+            val candidatePath: String,
+        ) : Intent
     }
 
     sealed interface Effect {
         data class Acknowledged(val key: String, val kind: String) : Effect
+        data class MatchApplied(val key: String) : Effect
         data class Failed(val key: String, val reason: String) : Effect
     }
 }
