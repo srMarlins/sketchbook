@@ -26,6 +26,8 @@ If you reach for any of these, stop:
 - **Moko-resources** — couples to Android-isms.
 - **`androidx.lifecycle:viewmodel-compose`** — Android-only. The JetBrains KMP fork (`org.jetbrains.androidx.lifecycle:*`) is the only acceptable lifecycle/ViewModel surface. Don't substitute one for the other.
 
+State holders are KMP `ViewModel`s contributed with `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject` and acquired per screen with `metroViewModel<VM>()`. Full DI policy in `docs/architecture/dependency-injection.md`.
+
 If the user explicitly approves an exception, follow it.
 
 ## Cloud + release gotchas

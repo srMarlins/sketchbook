@@ -31,4 +31,4 @@ For pure UI tweaks, behavior tests, or bug fixes that don't change a contract, C
 
 ## Avoided libraries
 
-The repo has actively rejected: MVIKotlin, Decompose, Roborazzi, KAPT, Anvil, Realm Kotlin, Moko-resources, `androidx.lifecycle:viewmodel-compose` (Android-only; the JetBrains KMP fork `org.jetbrains.androidx.lifecycle:*` is the acceptable alternative — don't conflate the two), Koin, Room. Reasons in `docs/ai/CLAUDE.md`. Don't suggest them.
+The repo has actively rejected: MVIKotlin, Decompose, Roborazzi, KAPT, Anvil, Realm Kotlin, Moko-resources, `androidx.lifecycle:viewmodel-compose` (Android-only; the JetBrains KMP fork `org.jetbrains.androidx.lifecycle:*` is the acceptable alternative — don't conflate the two), Koin, Room. Reasons in `docs/ai/CLAUDE.md`. Don't suggest them. State holders are KMP `ViewModel`s acquired via `metroViewModel<VM>()` per screen — see `docs/architecture/dependency-injection.md`.

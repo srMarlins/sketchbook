@@ -37,7 +37,7 @@ The human reviewer is the final gate.
 - No new library without an entry in `gradle/libs.versions.toml` and a one-line justification in the PR body.
 - No backwards-compat hacks. Nothing external consumes our APIs yet. Refactor freely within the PR.
 - No premature abstractions. `expect/actual` only when a second target exists or is imminent. `interface` only when there are ≥2 implementations or a test fake.
-- Explicitly avoided libraries: MVIKotlin, Decompose, Roborazzi, KAPT, Anvil, Realm Kotlin, Moko-resources, `androidx.lifecycle:viewmodel-compose` (Android-only — use the JetBrains KMP fork `org.jetbrains.androidx.lifecycle:*` instead), Koin, Room. Reasons live in `docs/ai/CLAUDE.md`.
+- Explicitly avoided libraries: MVIKotlin, Decompose, Roborazzi, KAPT, Anvil, Realm Kotlin, Moko-resources, `androidx.lifecycle:viewmodel-compose` (Android-only — use the JetBrains KMP fork `org.jetbrains.androidx.lifecycle:*` instead), Koin, Room. Reasons live in `docs/ai/CLAUDE.md`. State holders are KMP `ViewModel`s acquired per screen with `metroViewModel<VM>()`; see `docs/architecture/dependency-injection.md`.
 
 ## Testing
 

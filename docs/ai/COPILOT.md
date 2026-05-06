@@ -18,7 +18,7 @@ You are an inline coauthor in the editor. Lower trust by default. Your suggestio
 
 - Prefer plain Kotlin idioms over framework-y ones: `data class`, `sealed interface`, `value class` for IDs.
 - `commonMain` files: no `java.*` imports. Use `kotlinx-io` for paths, `kotlinx-datetime` for time.
-- State-holders use `MutableStateFlow` + sealed `Intent` + `StateFlow<State>` + `SharedFlow<Effect>` — see any `shared/feature-*/.../*StateHolder.kt` for the canonical shape.
+- State-holders are KMP `ViewModel`s with `MutableStateFlow` + sealed `Intent` + `StateFlow<State>` + `SharedFlow<Effect>` — see any `shared/feature-*/.../*ViewModel.kt` for the canonical shape. Acquire per-screen with `metroViewModel<VM>()`; never hoist all VMs at the root.
 - DI: constructor injection. No `Koin`-style service locators.
 - Tests: `kotlin.test`, Kotest assertions, Turbine. Hand-written fakes — no MockK in `commonTest`.
 
