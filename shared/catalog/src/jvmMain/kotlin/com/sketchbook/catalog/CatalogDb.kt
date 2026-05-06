@@ -127,6 +127,7 @@ object CatalogDb {
                 val detected = when {
                     !columnExists(driver, "sync_state", "updated_at") -> 1L  // before 1.sqm
                     !tableExists(driver, "repair_acks") -> 2L                // before 2.sqm
+                    !tableExists(driver, "journal_entries") -> 3L            // before 3.sqm
                     else -> target
                 }
                 if (detected < target) {
