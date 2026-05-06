@@ -92,13 +92,22 @@ class SwappableSyncQueue(
                 .distinctUntilChanged()
                 .collect { (ready, pair) ->
                     val (credJson, bucket) = pair
-                    if (ready && credJson != null && bucket != null) {
-                        delegate.value = buildGcsQueue(credJson, bucket)
+                    val previous = delegate.value
+                    val next = if (ready && credJson != null && bucket != null) {
+                        buildGcsQueue(credJson, bucket)
                     } else {
-                        delegate.value = fallback
                         currentMaterializer = null
                         _currentCloud.value = null
+                        fallback
                     }
+                    // Stop the outgoing drain *before* publishing the new delegate so we don't
+                    // race two GcsSyncQueue drain loops against the same DB. InMemorySyncQueue
+                    // has no drain, so the cast guard handles that path.
+                    if (previous !== next) {
+                        (previous as? GcsSyncQueue)?.stop()
+                    }
+                    delegate.value = next
+                    (next as? GcsSyncQueue)?.start()
                 }
         }
     }

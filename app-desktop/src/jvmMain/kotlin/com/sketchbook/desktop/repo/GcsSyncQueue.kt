@@ -15,20 +15,27 @@ import com.sketchbook.repo.ProjectSyncState
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 import com.sketchbook.sync.PipelineInput
 import com.sketchbook.sync.SnapshotPipeline
 import com.sketchbook.sync.SnapshotProgress
 import com.sketchbook.syncio.JvmWorkingTree
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.nio.file.Files
 import java.nio.file.Paths
 
 /**
@@ -57,10 +64,27 @@ class GcsSyncQueue(
     private val projects: ProjectRepository,
     private val scope: CoroutineScope,
     private val journal: JournalRepository? = null,
+    private val clock: Clock = Clock.System,
+    /**
+     * Dispatcher for catalog reads + cloud I/O. Defaults to [Dispatchers.IO] in production. The
+     * drain tests inject a [kotlinx.coroutines.test.UnconfinedTestDispatcher] tied to the test
+     * scheduler so virtual time stays in lockstep with the loop's cloud calls.
+     */
+    private val ioDispatcher: kotlin.coroutines.CoroutineContext = Dispatchers.IO,
 ) : SyncQueue {
 
     private val uploading = MutableStateFlow<Set<ProjectUuid>>(emptySet())
     private val conflicts = MutableStateFlow<Set<ProjectUuid>>(emptySet())
+
+    /**
+     * Per-uuid backoff state for transient failures (network blip, cloud 503, etc). Lives in
+     * memory only — by design, restart resets backoff so the user gets a clean retry pass on
+     * launch. CAS conflicts go through [conflicts] instead and stay until the user pulls.
+     *
+     * Mutated only from the single drain coroutine, so no mutex is needed.
+     */
+    private val backoff = mutableMapOf<ProjectUuid, BackoffEntry>()
+    private var drainJob: Job? = null
 
     /** Per-project last conflict message — surfaced inline on the detail panel. */
     private val conflictMessages = MutableStateFlow<Map<ProjectUuid, String>>(emptyMap())
@@ -73,7 +97,7 @@ class GcsSyncQueue(
             syncState.observeVersion().onStart { emit(0L) },
             uploading,
         ) { _, up ->
-            val rows = withContext(Dispatchers.IO) { syncState.all() }
+            val rows = withContext(ioDispatcher) { syncState.all() }
             SyncQueueState(
                 pending = rows.count { it.dirty },
                 uploading = up.size,
@@ -89,12 +113,12 @@ class GcsSyncQueue(
             uploading,
             conflicts,
         ) { _, up, conf ->
-            val uuid = withContext(Dispatchers.IO) { syncState.identityFor(id) }
+            val uuid = withContext(ioDispatcher) { syncState.identityFor(id) }
             when {
                 uuid in up -> ProjectSyncState.Uploading
                 uuid in conf -> ProjectSyncState.Conflict
                 else -> {
-                    val row = withContext(Dispatchers.IO) { syncState.stateOf(uuid) }
+                    val row = withContext(ioDispatcher) { syncState.stateOf(uuid) }
                     when {
                         row == null -> ProjectSyncState.LocalOnly
                         row.dirty -> ProjectSyncState.Pending
@@ -119,7 +143,7 @@ class GcsSyncQueue(
 
     /** Convenience for the desktop UI's "Sync now" button (works in [ProjectId] terms). */
     suspend fun pushNowById(id: ProjectId): Result<Unit> {
-        val uuid = withContext(Dispatchers.IO) { syncState.identityFor(id) }
+        val uuid = withContext(ioDispatcher) { syncState.identityFor(id) }
         return runPipeline(id, uuid)
     }
 
@@ -134,7 +158,7 @@ class GcsSyncQueue(
         conflicts.value = conflicts.value - uuid
         try {
             val tree = JvmWorkingTree(rootDir)
-            val current = withContext(Dispatchers.IO) { syncState.stateOf(uuid) }
+            val current = withContext(ioDispatcher) { syncState.stateOf(uuid) }
             val expectedHead = if (current == null || current.cloudHeadRev == 0L) {
                 Generation.ZERO
             } else {
@@ -154,7 +178,7 @@ class GcsSyncQueue(
             var savedRev: Long? = null
             var savedKind: SnapshotKind? = null
             var failureReason: String? = null
-            withContext(Dispatchers.IO) {
+            withContext(ioDispatcher) {
                 pipeline.run(input).collect { progress ->
                     when (progress) {
                         is SnapshotProgress.Saved -> {
@@ -168,7 +192,7 @@ class GcsSyncQueue(
             }
             val finalRev = savedRev
             return if (finalRev != null) {
-                withContext(Dispatchers.IO) { syncState.markSynced(uuid, finalRev) }
+                withContext(ioDispatcher) { syncState.markSynced(uuid, finalRev) }
                 // A saved branch means our push CAS-failed and we wrote a fork — surface it as
                 // Conflict with an inline message so the user can pull + re-push.
                 if (savedKind == SnapshotKind.Branch) {
@@ -185,7 +209,9 @@ class GcsSyncQueue(
                 Result.failure(IllegalStateException(failureReason ?: "pipeline did not complete"))
             }
         } catch (t: Throwable) {
-            conflicts.value = conflicts.value + uuid
+            // Plain throwable = transient (network, IO, GCS 5xx). Do NOT add to `conflicts` —
+            // that's reserved for CAS-divergence which the user has to resolve. Drain treats
+            // these as backoff candidates and keeps retrying forever per spec.
             return Result.failure(t)
         } finally {
             uploading.value = uploading.value - uuid
@@ -203,6 +229,106 @@ class GcsSyncQueue(
                 ),
             )
         }
+    }
+
+    /**
+     * Start the background drain loop. Idempotent — calling while already running is a no-op.
+     * The drain runs `drainOnce()` immediately (no initial sleep), then loops on
+     * `observeVersion()` bumps with a 60s fallback timer so a quiet system still gets one tick
+     * per minute (covers backoff expiry + clock-driven mtime quiet-period transitions).
+     *
+     * No mutex on [backoff]: it's only mutated from the single coroutine launched here.
+     */
+    fun start() {
+        if (drainJob?.isActive == true) return
+        drainJob = scope.launch { drainLoop() }
+    }
+
+    /** Cancel the drain loop. Safe to call multiple times. In-flight push completes. */
+    fun stop() {
+        drainJob?.cancel()
+        drainJob = null
+    }
+
+    /** Test-only: clear a uuid from the conflict set so the drain picks it up again. */
+    internal fun clearConflict(uuid: ProjectUuid) {
+        conflicts.value = conflicts.value - uuid
+        conflictMessages.value = conflictMessages.value - uuid
+    }
+
+    private suspend fun drainLoop() {
+        while (currentCoroutineContext().isActive) {
+            drainOnce()
+            // Either a sync_state write nudges us (`observeVersion()` re-emits) or we tick on
+            // the 60s fallback. The fallback also covers backoff expiry — without it, a row
+            // backed-off for 30s would sit there until something else bumped the version.
+            withTimeoutOrNull(60_000L) {
+                syncState.observeVersion().drop(1).first()
+            }
+        }
+    }
+
+    private suspend fun drainOnce() {
+        val now = clock.now()
+        val candidates = withContext(ioDispatcher) { syncState.dirtyOldestFirst() }
+            .filterNot { it.uuid in conflicts.value }
+            .filterNot { (backoff[it.uuid]?.nextAttempt ?: now) > now }
+            .filterNot { isInQuietPeriod(it.uuid, now) }
+        val target = candidates.firstOrNull() ?: return
+        val pid = withContext(ioDispatcher) { syncState.projectIdFor(target.uuid) } ?: return
+        val result = runPipeline(pid, target.uuid)
+        if (result.isSuccess) {
+            // Reset backoff on success so the next transient blip starts fresh at 30s rather
+            // than continuing from wherever we left off — the network problem is presumed gone.
+            backoff.remove(target.uuid)
+        } else if (target.uuid !in conflicts.value) {
+            // CAS-divergence path adds to `conflicts` inside runPipeline, and the drain skips
+            // those. Anything reaching here is a transient and earns a backoff bump.
+            bumpBackoff(target.uuid, now)
+        }
+    }
+
+    private fun bumpBackoff(uuid: ProjectUuid, now: Instant) {
+        val current = backoff[uuid]
+        val nextIdx = if (current == null) {
+            0
+        } else {
+            (BACKOFF_INTERVALS_SECONDS.indexOf(current.intervalSeconds).coerceAtLeast(0) + 1)
+                .coerceAtMost(BACKOFF_INTERVALS_SECONDS.lastIndex)
+        }
+        val seconds = BACKOFF_INTERVALS_SECONDS[nextIdx]
+        backoff[uuid] = BackoffEntry(
+            nextAttempt = now + seconds.seconds,
+            intervalSeconds = seconds,
+        )
+    }
+
+    /**
+     * `.als` mtime within the last 30 seconds = Live just saved (atomic tmp+rename), or the
+     * user is actively editing. Either way, defer — uploading mid-save races the rename, and
+     * uploading on every keystroke wastes bandwidth. 30s is short enough that idle work
+     * uploads quickly but long enough to coalesce a working session.
+     */
+    private suspend fun isInQuietPeriod(uuid: ProjectUuid, now: Instant): Boolean {
+        val pid = withContext(ioDispatcher) { syncState.projectIdFor(uuid) } ?: return false
+        val row = projects.observeProject(pid).first() ?: return false
+        val alsPath = row.path.value
+        return runCatching {
+            val mtime = withContext(ioDispatcher) {
+                Instant.fromEpochMilliseconds(
+                    Files.getLastModifiedTime(Paths.get(alsPath)).toMillis(),
+                )
+            }
+            (now - mtime).inWholeSeconds < QUIET_PERIOD_SECONDS
+        }.getOrDefault(false)
+    }
+
+    private data class BackoffEntry(val nextAttempt: Instant, val intervalSeconds: Long)
+
+    private companion object {
+        /** Capped exponential. Last entry is the cap — once reached, all further bumps stay. */
+        private val BACKOFF_INTERVALS_SECONDS = listOf(30L, 60L, 300L, 900L)
+        private const val QUIET_PERIOD_SECONDS = 30L
     }
 
     /**
