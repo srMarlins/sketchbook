@@ -41,7 +41,7 @@ class CatalogDbReactiveInvalidationTest {
                     handle.catalog.transaction {
                         handle.catalog.catalogQueries.insertOrReplaceProject(
                             path = "$tmp/A.als", name = "A", parent_dir = "$tmp",
-                            tempo = null, time_sig_num = null, time_sig_den = null,
+                            tempo = null, time_sig_num = null, time_sig_den = null, key = null,
                             track_count = 0L, audio_tracks = 0L, midi_tracks = 0L, return_tracks = 0L,
                             live_version = null, last_modified = 1.0, last_scanned = 1.0,
                             parse_status = "ok", parse_error = null, mac_paths_count = 0L,
@@ -53,7 +53,7 @@ class CatalogDbReactiveInvalidationTest {
                     handle.catalog.transaction {
                         handle.catalog.catalogQueries.insertOrReplaceProject(
                             path = "$tmp/B.als", name = "B", parent_dir = "$tmp",
-                            tempo = null, time_sig_num = null, time_sig_den = null,
+                            tempo = null, time_sig_num = null, time_sig_den = null, key = null,
                             track_count = 0L, audio_tracks = 0L, midi_tracks = 0L, return_tracks = 0L,
                             live_version = null, last_modified = 2.0, last_scanned = 2.0,
                             parse_status = "ok", parse_error = null, mac_paths_count = 0L,
