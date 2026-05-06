@@ -506,6 +506,33 @@ UPDATE project_samples
 SET sample_path = :old_path, is_missing = 1
 WHERE project_id = :project_id AND sample_path = :new_path;
 
+-- PR-BB: composite library health aggregate. Returns per-signal counts the sidebar chip
+-- divides by `total` to render percentages. Two of four planned signals are computed today:
+--   * synced — sync_state row exists, not dirty, and local_rev matches cloud_head_rev. A
+--     project with no sync_state row (never pushed) is *not* synced; the LEFT JOIN means
+--     `s.dirty` is NULL there, so the predicate fails and it counts as unsynced.
+--   * sample_clean — no missing samples (or no rows in project_samples at all).
+-- The plugin-installed and stage-not-stuck signals come with PR-T and PR-R respectively;
+-- their `SUM(CASE…)` clauses get inserted here when those PRs land. Archived projects are
+-- excluded so the chip reflects the user's *active* library health.
+-- The sync_state PK is `project_uuid`, so the join goes through `project_identity` which
+-- maps projects.id → uuid (sync_state has no `project_id` column directly).
+selectLibraryHealth:
+SELECT
+    COUNT(*) AS total,
+    SUM(CASE WHEN s.dirty IS NOT NULL AND s.dirty = 0 AND s.local_rev = s.cloud_head_rev THEN 1 ELSE 0 END) AS synced,
+    SUM(CASE WHEN ms.missing_count IS NULL OR ms.missing_count = 0 THEN 1 ELSE 0 END) AS sample_clean
+FROM projects p
+LEFT JOIN project_identity pi ON pi.project_id = p.id
+LEFT JOIN sync_state s ON s.project_uuid = pi.uuid
+LEFT JOIN (
+    SELECT project_id, COUNT(*) AS missing_count
+    FROM project_samples
+    WHERE is_missing = 1
+    GROUP BY project_id
+) ms ON ms.project_id = p.id
+WHERE p.is_archived = 0;
+
 -- journal_entries — persistent audit log of every catalog write. Replaces the in-memory
 -- JournalRepository so the desktop journal viewer survives restart and shares entries with
 -- the MCP subprocess (both processes write into the same on-disk catalog).
