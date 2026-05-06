@@ -11,7 +11,12 @@ import kotlin.time.Instant
 class ToSongStripDataTest {
 
     private val now = Instant.parse("2026-05-05T12:00:00Z")
-    private fun row(id: Long, name: String) = ProjectRow(
+    private fun row(
+        id: Long,
+        name: String,
+        stageInferred: com.sketchbook.core.Stage? = null,
+        stageOverride: com.sketchbook.core.Stage? = null,
+    ) = ProjectRow(
         id = ProjectId(id),
         name = name,
         path = ProjectPath("Projects/2026/Song/$name"),
@@ -21,6 +26,8 @@ class ToSongStripDataTest {
         updatedAt = now,
         tags = emptyList(),
         colorTag = null,
+        stageInferred = stageInferred,
+        stageOverride = stageOverride,
     )
 
     private fun group(rep: ProjectRow, variants: List<ProjectRow>) = ProjectGroup(
@@ -39,6 +46,33 @@ class ToSongStripDataTest {
         val data = group(r, listOf(r)).toSongStripDataForTest(sync = null)
         assertEquals("kick.als", data.name)
         assertEquals(1, data.variantCount)
+    }
+
+    @Test
+    fun chipDisplaysOverrideOverInferredStage() {
+        // PR-R: the strip's `stage` field follows ProjectRow.stage, which is override > inferred.
+        val r = row(
+            1,
+            "kick.als",
+            stageInferred = com.sketchbook.core.Stage.Sketch,
+            stageOverride = com.sketchbook.core.Stage.Mixing,
+        )
+        val data = group(r, listOf(r)).toSongStripDataForTest(sync = null)
+        assertEquals(com.sketchbook.uishared.components.SongStripStage.Mixing, data.stage)
+    }
+
+    @Test
+    fun chipFallsBackToInferredStageWhenOverrideIsNull() {
+        val r = row(1, "kick.als", stageInferred = com.sketchbook.core.Stage.Stuck)
+        val data = group(r, listOf(r)).toSongStripDataForTest(sync = null)
+        assertEquals(com.sketchbook.uishared.components.SongStripStage.Stuck, data.stage)
+    }
+
+    @Test
+    fun chipIsNullWhenNeitherInferredNorOverrideSet() {
+        val r = row(1, "kick.als")
+        val data = group(r, listOf(r)).toSongStripDataForTest(sync = null)
+        assertEquals(null, data.stage)
     }
 
     @Test

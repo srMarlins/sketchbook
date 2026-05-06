@@ -26,6 +26,8 @@ class ProjectListStateHolderTest {
         archived: Boolean = false,
         tempo: Double? = 124.0,
         key: String? = null,
+        stageInferred: com.sketchbook.core.Stage? = null,
+        stageOverride: com.sketchbook.core.Stage? = null,
     ) = ProjectRow(
         id = ProjectId(id),
         name = name,
@@ -38,6 +40,8 @@ class ProjectListStateHolderTest {
         colorTag = null,
         archived = archived,
         key = key,
+        stageInferred = stageInferred,
+        stageOverride = stageOverride,
     )
 
     private class FakeRepo(
@@ -140,6 +144,78 @@ class ProjectListStateHolderTest {
                 s = awaitItem()
             }
             assertEquals(listOf("a"), s.rows.map { it.name })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun stageFilterNarrowsToSelectedStages() = runTest {
+        val all = MutableStateFlow(
+            listOf(
+                row(1, "sketchy", stageInferred = com.sketchbook.core.Stage.Sketch),
+                row(2, "stuck-old", stageInferred = com.sketchbook.core.Stage.Stuck),
+                row(3, "no-chip", stageInferred = null),
+                row(4, "active", stageInferred = com.sketchbook.core.Stage.InProgress),
+            ),
+        )
+        val repo = FakeRepo(mapOf("" to all))
+        val holder = ProjectListStateHolder(repo, backgroundScope)
+
+        holder.state.test {
+            var s = awaitItem()
+            while (s.rows.size < 4) s = awaitItem()
+
+            // Filter to just Stuck.
+            holder.dispatch(
+                ProjectListStateHolder.Intent.SetStageFilter(setOf(com.sketchbook.core.Stage.Stuck))
+            )
+            while (s.stageFilter.isEmpty() || s.rows.size != 1) s = awaitItem()
+            assertEquals(listOf("stuck-old"), s.rows.map { it.name })
+
+            // Toggle Sketch in — multi-select.
+            holder.dispatch(
+                ProjectListStateHolder.Intent.ToggleStageFilter(com.sketchbook.core.Stage.Sketch)
+            )
+            while (s.stageFilter.size != 2 || s.rows.size != 2) s = awaitItem()
+            assertEquals(setOf("stuck-old", "sketchy"), s.rows.map { it.name }.toSet())
+
+            // Toggle Stuck off; only Sketch remains.
+            holder.dispatch(
+                ProjectListStateHolder.Intent.ToggleStageFilter(com.sketchbook.core.Stage.Stuck)
+            )
+            while (s.stageFilter != setOf(com.sketchbook.core.Stage.Sketch) || s.rows.size != 1) s = awaitItem()
+            assertEquals(listOf("sketchy"), s.rows.map { it.name })
+
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun stageFilterUsesEffectiveStageWithOverrideWinning() = runTest {
+        // Row 1: inferred=Sketch, override=Stuck → effective stage is Stuck. Filter on Stuck
+        // must include row 1 even though the inferred stage doesn't match.
+        val all = MutableStateFlow(
+            listOf(
+                row(
+                    1, "pinned",
+                    stageInferred = com.sketchbook.core.Stage.Sketch,
+                    stageOverride = com.sketchbook.core.Stage.Stuck,
+                ),
+                row(2, "really-stuck", stageInferred = com.sketchbook.core.Stage.Stuck),
+            ),
+        )
+        val repo = FakeRepo(mapOf("" to all))
+        val holder = ProjectListStateHolder(repo, backgroundScope)
+
+        holder.state.test {
+            var s = awaitItem()
+            while (s.rows.size < 2) s = awaitItem()
+
+            holder.dispatch(
+                ProjectListStateHolder.Intent.SetStageFilter(setOf(com.sketchbook.core.Stage.Stuck))
+            )
+            while (s.stageFilter.isEmpty() || s.rows.size != 2) s = awaitItem()
+            assertEquals(setOf("pinned", "really-stuck"), s.rows.map { it.name }.toSet())
             cancelAndIgnoreRemainingEvents()
         }
     }

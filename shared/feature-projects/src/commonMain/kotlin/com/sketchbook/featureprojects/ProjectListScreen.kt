@@ -165,11 +165,18 @@ fun ProjectListScreen(
                         tempoRange = state.tempoRange,
                         keyFilter = state.keyFilter,
                         distinctKeys = state.distinctKeys,
+                        stageFilter = state.stageFilter,
                         onTempoChange = { range ->
                             dispatch(ProjectListStateHolder.Intent.SetTempoRange(range))
                         },
                         onKeyChange = { key ->
                             dispatch(ProjectListStateHolder.Intent.SetKeyFilter(key))
+                        },
+                        onStageToggle = { stage ->
+                            dispatch(ProjectListStateHolder.Intent.ToggleStageFilter(stage))
+                        },
+                        onStageClear = {
+                            dispatch(ProjectListStateHolder.Intent.SetStageFilter(emptySet()))
                         },
                     )
                     ScanIndicator(
@@ -556,16 +563,26 @@ private fun FilterChipsRow(
     tempoRange: ClosedFloatingPointRange<Double>?,
     keyFilter: String?,
     distinctKeys: List<String>,
+    stageFilter: Set<com.sketchbook.core.Stage>,
     onTempoChange: (ClosedFloatingPointRange<Double>?) -> Unit,
     onKeyChange: (String?) -> Unit,
+    onStageToggle: (com.sketchbook.core.Stage) -> Unit,
+    onStageClear: () -> Unit,
 ) {
     var tempoOpen by remember { mutableStateOf(false) }
     var keyOpen by remember { mutableStateOf(false) }
+    var stageOpen by remember { mutableStateOf(false) }
 
     val tempoLabel = tempoRange?.let { range ->
         "Tempo: ${formatBpm(range.start)}–${formatBpm(range.endInclusive)}"
     } ?: "Tempo: any"
     val keyLabel = "Key: ${keyFilter ?: "any"}"
+    // PR-R: stage chip label mirrors the tempo/key chips' shape — "Stages: X selected" / "any".
+    val stageLabel = if (stageFilter.isEmpty()) "Stages: any" else {
+        // Show the picks in the selection order if there's room, else collapse to a count.
+        val joined = stageFilter.joinToString(", ") { it.label() }
+        if (joined.length <= 28) "Stages: $joined" else "Stages: ${stageFilter.size} picked"
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -615,6 +632,91 @@ private fun FilterChipsRow(
                             onKeyChange(picked)
                             keyOpen = false
                         },
+                    )
+                }
+            }
+        }
+        Box {
+            FilterChip(
+                label = stageLabel,
+                active = stageFilter.isNotEmpty(),
+                onClick = { stageOpen = !stageOpen },
+            )
+            if (stageOpen) {
+                Popup(
+                    onDismissRequest = { stageOpen = false },
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    StageFilterPopup(
+                        current = stageFilter,
+                        onToggle = onStageToggle,
+                        onClear = {
+                            onStageClear()
+                            stageOpen = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun com.sketchbook.core.Stage.label(): String = when (this) {
+    com.sketchbook.core.Stage.Sketch -> "Sketches"
+    com.sketchbook.core.Stage.InProgress -> "In progress"
+    com.sketchbook.core.Stage.Mixing -> "Mixing"
+    com.sketchbook.core.Stage.Done -> "Done"
+    com.sketchbook.core.Stage.Stuck -> "Stuck"
+}
+
+/**
+ * PR-R: stage filter popup — multi-select. Mirrors [KeyFilterPopup] exactly: same surface
+ * tokens, same row geometry, same border radius. The only behavioral diff is multi-select
+ * (each click toggles a single stage rather than picking one and dismissing).
+ *
+ * Stuck/Sketches/Mixing/Done are the four headline filters per the PR-R spec; In progress is
+ * surfaced too so the chip surface matches the row chip taxonomy 1:1.
+ */
+@Composable
+private fun StageFilterPopup(
+    current: Set<com.sketchbook.core.Stage>,
+    onToggle: (com.sketchbook.core.Stage) -> Unit,
+    onClear: () -> Unit,
+) {
+    val colors = AppTheme.colors
+    Column(
+        modifier = Modifier
+            .widthIn(min = 200.dp, max = 260.dp)
+            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+            .background(colors.surfaceCard)
+            .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard)),
+    ) {
+        // "Any" row clears the filter (mirrors KeyFilterPopup's structure).
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (current.isEmpty()) colors.tintCream else colors.surfaceCard)
+                .clickable(onClick = onClear)
+                .padding(horizontal = AppTheme.spacing.md, vertical = 8.dp),
+        ) {
+            ProvideContentColor(if (current.isEmpty()) colors.inkPrimary else colors.inkSecondary) {
+                Text("Any", style = AppTheme.typography.body)
+            }
+        }
+        for (stage in com.sketchbook.core.Stage.entries) {
+            val selected = stage in current
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(if (selected) colors.tintCream else colors.surfaceCard)
+                    .clickable { onToggle(stage) }
+                    .padding(horizontal = AppTheme.spacing.md, vertical = 8.dp),
+            ) {
+                ProvideContentColor(if (selected) colors.inkPrimary else colors.inkSecondary) {
+                    Text(
+                        // Selected rows get a check glyph so multi-select state is visible.
+                        if (selected) "✓ ${stage.label()}" else stage.label(),
+                        style = AppTheme.typography.body,
                     )
                 }
             }
@@ -827,7 +929,19 @@ private fun ProjectGroup.toSongStripData(sync: ProjectSyncState?): SongStripData
         warning = if (missingSampleCount > 0) "$missingSampleCount missing sample${if (missingSampleCount == 1) "" else "s"}" else null,
         sync = sync?.toBadge(),
         variantCount = variantCount,
+        stage = r.stage?.toBadge(),
     )
+}
+
+/** Map domain Stage → strip-local badge. The strip module doesn't depend on `:shared:core` so
+ *  it can't reference [com.sketchbook.core.Stage] directly; this projection lives at the feature
+ *  layer where both modules are visible. */
+private fun com.sketchbook.core.Stage.toBadge(): com.sketchbook.uishared.components.SongStripStage = when (this) {
+    com.sketchbook.core.Stage.Sketch -> com.sketchbook.uishared.components.SongStripStage.Sketch
+    com.sketchbook.core.Stage.InProgress -> com.sketchbook.uishared.components.SongStripStage.InProgress
+    com.sketchbook.core.Stage.Mixing -> com.sketchbook.uishared.components.SongStripStage.Mixing
+    com.sketchbook.core.Stage.Done -> com.sketchbook.uishared.components.SongStripStage.Done
+    com.sketchbook.core.Stage.Stuck -> com.sketchbook.uishared.components.SongStripStage.Stuck
 }
 
 internal fun ProjectGroup.toSongStripDataForTest(sync: ProjectSyncState?): SongStripData =

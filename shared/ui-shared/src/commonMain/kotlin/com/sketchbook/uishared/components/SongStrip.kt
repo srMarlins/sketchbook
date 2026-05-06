@@ -58,7 +58,23 @@ data class SongStripData(
     val sync: SongSyncBadge? = null,
     /** Number of `.als` variants in this project group. 1 = singleton (no version card treatment). */
     val variantCount: Int = 1,
+    /** PR-R: lifecycle classification — auto-inferred OR user-overridden. Null = no chip. */
+    val stage: SongStripStage? = null,
 )
+
+/**
+ * PR-R: stage badges shown inline on the row. The strip composable doesn't depend on
+ * `:shared:core` (it's part of the design-system module), so we mirror the [com.sketchbook.core.Stage]
+ * enum here and let callers map their domain stage to one of these values. Each badge maps to
+ * a single neutral palette token from `feedback_color_restraint`.
+ */
+enum class SongStripStage(val label: String) {
+    Sketch("sketch"),
+    InProgress("in progress"),
+    Mixing("mixing"),
+    Done("done"),
+    Stuck("stuck"),
+}
 
 /**
  * Per-row cloud-sync indicator: small glyph + tone. Mirrors the pip web/'s SongStrip carried
@@ -158,6 +174,10 @@ fun SongStrip(
                     if (data.variantCount > 1) {
                         VersionPill(count = data.variantCount)
                     }
+                    // PR-R: stage chip — same pill geometry as VersionPill / TagChip so the row
+                    // doesn't gain a new visual style. Color comes from a single existing token
+                    // per stage; no rainbow.
+                    data.stage?.let { StageChip(it) }
                     // Mono stat columns
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -296,6 +316,44 @@ private fun VersionPill(count: Int) {
             Text(
                 "v$count",
                 style = AppTheme.typography.mono.copy(fontSize = 11.sp()),
+            )
+        }
+    }
+}
+
+/**
+ * PR-R: stage chip rendered alongside the row's name. Uses the same pill geometry as the
+ * [VersionPill] / [TagChip] siblings — different fill tone, identical shape and text style —
+ * so the row reads as one band of metadata rather than a competing visual layer.
+ *
+ * Tone mapping per spec:
+ *  - Sketch — `tintCream` (the most neutral fill we have; signals "early")
+ *  - InProgress — `accentAction` (the same call-to-action terracotta the run-to-finish CTAs use)
+ *  - Mixing — `accentSecondary` (paper olive — distinct from action without adding a new color)
+ *  - Done — `accentPositive` (sage green — the only "positive completion" tone in the system)
+ *  - Stuck — `accentDanger` (the same red used for missing-sample warnings)
+ */
+@Composable
+private fun StageChip(stage: SongStripStage) {
+    val colors = AppTheme.colors
+    val (bg, fg) = when (stage) {
+        SongStripStage.Sketch -> colors.tintCream to colors.inkSecondary
+        SongStripStage.InProgress -> colors.accentAction to colors.surfaceCard
+        SongStripStage.Mixing -> colors.accentSecondary to colors.surfaceCard
+        SongStripStage.Done -> colors.accentPositive to colors.surfaceCard
+        SongStripStage.Stuck -> colors.accentDanger to colors.surfaceCard
+    }
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(bg)
+            .border(1.dp, colors.ruleLine, RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        ProvideContentColor(fg) {
+            Text(
+                stage.label,
+                style = AppTheme.typography.mono.copy(fontSize = 10.sp()),
             )
         }
     }

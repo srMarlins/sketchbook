@@ -2,6 +2,7 @@ package com.sketchbook.featureprojects
 
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
+import com.sketchbook.core.Stage
 import com.sketchbook.repo.ProjectRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -46,6 +47,9 @@ class ProjectListStateHolder(
     private val searchSelectedIndex = MutableStateFlow(0)
     private val tempoRange = MutableStateFlow<ClosedFloatingPointRange<Double>?>(null)
     private val keyFilter = MutableStateFlow<String?>(null)
+    /** PR-R: multi-select stage filter. Empty = "all stages" (no filtering). Each chip in the
+     *  toolbar toggles membership in this set; the `combine` below narrows `rows` accordingly. */
+    private val stageFilter = MutableStateFlow<Set<Stage>>(emptySet())
 
     private val _effects = MutableSharedFlow<Effect>(
         replay = 0,
@@ -71,6 +75,7 @@ class ProjectListStateHolder(
             tempoRange,
             keyFilter,
             distinctKeysFlow,
+            stageFilter,
         ),
     ) { values ->
         @Suppress("UNCHECKED_CAST")
@@ -88,10 +93,12 @@ class ProjectListStateHolder(
         val key = values[8] as String?
         @Suppress("UNCHECKED_CAST")
         val distinctKeys = values[9] as List<String>
+        @Suppress("UNCHECKED_CAST")
+        val stages = values[10] as Set<Stage>
 
         // Filter happens here, before grouping/bucketing — so the chip selection narrows the
         // visible row set on every shelf. The 1,628-row library does this in microseconds.
-        val rows = applyFilters(rawRows, tempo, key)
+        val rows = applyFilters(rawRows, tempo, key, stages)
         val groups = deriveProjectGroups(rows)
         val archivedGroups = deriveProjectGroups(archivedRows)
         val buckets = bucketize(groups, archivedGroups)
@@ -118,6 +125,7 @@ class ProjectListStateHolder(
             tempoRange = tempo,
             keyFilter = key,
             distinctKeys = distinctKeys,
+            stageFilter = stages,
             loading = false,
         )
     }.stateIn(scope, SharingStarted.Eagerly, State(loading = true))
@@ -126,12 +134,17 @@ class ProjectListStateHolder(
         rows: List<ProjectRow>,
         tempoRange: ClosedFloatingPointRange<Double>?,
         keyFilter: String?,
+        stageFilter: Set<Stage>,
     ): List<ProjectRow> {
-        if (tempoRange == null && keyFilter == null) return rows
+        if (tempoRange == null && keyFilter == null && stageFilter.isEmpty()) return rows
         return rows.filter { row ->
             val tempo = row.tempo
             (tempoRange == null || (tempo != null && tempo in tempoRange)) &&
-                (keyFilter == null || row.key == keyFilter)
+                (keyFilter == null || row.key == keyFilter) &&
+                // PR-R: stage filter consults the *effective* stage (override > inferred). When
+                // the effective stage is null the row never matches a non-empty filter — null
+                // means "no chip" and the user explicitly picked stages they want to see.
+                (stageFilter.isEmpty() || (row.stage != null && row.stage in stageFilter))
         }
     }
 
@@ -166,9 +179,14 @@ class ProjectListStateHolder(
             }
             is Intent.SetTempoRange -> tempoRange.update { intent.range }
             is Intent.SetKeyFilter -> keyFilter.update { intent.key }
+            is Intent.SetStageFilter -> stageFilter.update { intent.stages }
+            is Intent.ToggleStageFilter -> stageFilter.update { current ->
+                if (intent.stage in current) current - intent.stage else current + intent.stage
+            }
             is Intent.ClearFilters -> {
                 tempoRange.update { null }
                 keyFilter.update { null }
+                stageFilter.update { emptySet() }
             }
         }
     }
@@ -192,6 +210,8 @@ class ProjectListStateHolder(
         val keyFilter: String? = null,
         /** Sorted, distinct, non-null keys present in the catalog. Powers the Key chip's popup. */
         val distinctKeys: List<String> = emptyList(),
+        /** PR-R: active stage filter; empty set = "all stages" (no narrowing). */
+        val stageFilter: Set<Stage> = emptySet(),
         val loading: Boolean = true,
     )
 
@@ -219,7 +239,11 @@ class ProjectListStateHolder(
         data class SetTempoRange(val range: ClosedFloatingPointRange<Double>?) : Intent
         /** Set the key filter (e.g. "F# Minor"; `null` clears it). */
         data class SetKeyFilter(val key: String?) : Intent
-        /** Clear both tempo and key filters in one shot. */
+        /** PR-R: replace the entire stage filter set. Empty set clears the filter. */
+        data class SetStageFilter(val stages: Set<Stage>) : Intent
+        /** PR-R: flip a single stage's membership in the filter set (toolbar chip click). */
+        data class ToggleStageFilter(val stage: Stage) : Intent
+        /** Clear all filters (tempo, key, stage) in one shot. */
         data object ClearFilters : Intent
     }
 
