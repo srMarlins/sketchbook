@@ -1,5 +1,6 @@
 plugins {
     id("kmp-test")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {

@@ -18,6 +18,13 @@ data class JournalEntry(
     val action: ActionRecord,
     /** Optional: machine-local sequence id, if persisted. `null` for in-memory entries. */
     val sequence: Long? = null,
+    /**
+     * Who triggered this entry. Persisted into `journal_entries.actor` so the desktop UI and
+     * audit log can distinguish user-driven edits from MCP/agent-driven ones. Defaults to
+     * `"user"` so existing call sites in `SqlProjectRepository` keep compiling; the MCP
+     * subprocess passes `"sketchbook"` (matching `Proposal.actor`).
+     */
+    val actor: String = "user",
 )
 
 /** Action variant + before/after state. New variants land as features add (PR-8). */
