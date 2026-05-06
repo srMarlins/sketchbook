@@ -12,6 +12,10 @@ import kotlin.time.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.security.KeyFactory
 import java.security.PrivateKey
 import java.security.Signature
@@ -43,10 +47,26 @@ class GcsAuth(
     fun signJwt(now: Instant = clock.now(), audience: String = key.tokenUri): String {
         val nowSec = now.epochSeconds
         val expSec = nowSec + 3600
-        val header = """{"alg":"RS256","typ":"JWT","kid":"${escape(key.privateKeyId)}"}"""
-        val claims = """{"iss":"${escape(key.clientEmail)}","scope":"${escape(scope)}","aud":"${escape(audience)}","exp":$expSec,"iat":$nowSec}"""
-
-        val signingInput = "${b64url(header.toByteArray(Charsets.UTF_8))}.${b64url(claims.toByteArray(Charsets.UTF_8))}"
+        // Build header/claims as JsonObjects so kotlinx.serialization handles every escape
+        // (control chars, surrogate pairs, non-BMP) instead of the previous hand-rolled escape
+        // that only covered \" and \\. SA-file inputs are trusted today, but the JWT spec
+        // requires strict JSON and the brittle path is one upstream change away from emitting
+        // invalid tokens that the OAuth endpoint silently rejects.
+        val header: JsonObject = buildJsonObject {
+            put("alg", "RS256")
+            put("typ", "JWT")
+            put("kid", key.privateKeyId)
+        }
+        val claims: JsonObject = buildJsonObject {
+            put("iss", key.clientEmail)
+            put("scope", scope)
+            put("aud", audience)
+            put("exp", JsonPrimitive(expSec))
+            put("iat", JsonPrimitive(nowSec))
+        }
+        val headerBytes = compactJson.encodeToString(JsonObject.serializer(), header).toByteArray(Charsets.UTF_8)
+        val claimsBytes = compactJson.encodeToString(JsonObject.serializer(), claims).toByteArray(Charsets.UTF_8)
+        val signingInput = "${b64url(headerBytes)}.${b64url(claimsBytes)}"
         val signature = sign(signingInput.toByteArray(Charsets.UTF_8))
         return "$signingInput.${b64url(signature)}"
     }
@@ -122,6 +142,4 @@ internal fun decodePkcs8PrivateKey(pem: String): PrivateKey {
     return KeyFactory.getInstance("RSA").generatePrivate(spec)
 }
 
-private fun escape(s: String): String = s
-    .replace("\\", "\\\\")
-    .replace("\"", "\\\"")
+private val compactJson = Json { encodeDefaults = false; prettyPrint = false }

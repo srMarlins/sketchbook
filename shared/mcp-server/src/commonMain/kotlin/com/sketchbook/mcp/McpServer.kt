@@ -53,6 +53,10 @@ class McpServer(
                 "tools/call" -> if (isNotification) null else success(id, callToolResult(params))
                 else -> if (isNotification) null else error(id, code = -32601, message = "method not found: $method")
             }
+        } catch (ce: kotlinx.coroutines.CancellationException) {
+            // Coroutine cancellation is structured-concurrency, not an RPC error; propagate so
+            // the stdio loop can shut down cleanly when the parent scope cancels.
+            throw ce
         } catch (t: Throwable) {
             if (isNotification) null else error(id, code = -32603, message = t.message ?: t::class.simpleName.orEmpty())
         }
