@@ -11,10 +11,7 @@
     <ID>FunctionNaming:NeedsAttentionScreen.kt:@Composable private fun MacImportCard</ID>
     <ID>FunctionNaming:NeedsAttentionScreen.kt:@Composable private fun MissingSampleCard</ID>
     <ID>FunctionSignature:NeedsAttentionScreen.kt:@Composable fun NeedsAttentionScreen</ID>
-    <ID>FunctionSignature:NeedsAttentionScreen.kt:@Composable private fun CandidatePickRow</ID>
+    <ID>FunctionSignature:NeedsAttentionScreen.kt:@Composable private fun MacImportCard</ID>
     <ID>MaxLineLength:NeedsAttentionScreen.kt:val suffix = if (state.missingSamplesTruncated) " (${state.missingSamples.size} of ${state.missingSamplesTotal})" else " (${state.missingSamplesTotal})"</ID>
-    <ID>ViewModelForwarding:NeedsAttentionScreen.kt:CandidatePickRow(f, c, vm)</ID>
-    <ID>ViewModelForwarding:NeedsAttentionScreen.kt:MacImportCard(f, vm)</ID>
-    <ID>ViewModelForwarding:NeedsAttentionScreen.kt:MissingSampleCard(f, vm)</ID>
   </CurrentIssues>
 </SmellBaseline>

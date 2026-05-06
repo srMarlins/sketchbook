@@ -49,7 +49,13 @@ fun ProposalsScreen(
             if (state.pending.isNotEmpty()) {
                 item(key = "header-pending") { Text("Pending", style = AppTheme.typography.bodyEmphasis) }
                 state.pending.forEach { p ->
-                    item(key = "p-${p.proposalId}") { PendingCard(p, vm) }
+                    item(key = "p-${p.proposalId}") {
+                        PendingCard(
+                            p = p,
+                            onApprove = { vm.dispatch(ProposalsViewModel.Intent.Approve(it)) },
+                            onReject = { vm.dispatch(ProposalsViewModel.Intent.Reject(it)) },
+                        )
+                    }
                 }
             }
             if (state.resolved.isNotEmpty()) {
@@ -63,7 +69,11 @@ fun ProposalsScreen(
 }
 
 @Composable
-private fun PendingCard(p: Proposal, vm: ProposalsViewModel) {
+private fun PendingCard(
+    p: Proposal,
+    onApprove: (String) -> Unit,
+    onReject: (String) -> Unit,
+) {
     Surface(color = AppTheme.colors.surfacePanel) {
         Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
             Row(
@@ -78,11 +88,11 @@ private fun PendingCard(p: Proposal, vm: ProposalsViewModel) {
             ActionsList(p)
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
                 Button(
-                    onClick = { vm.dispatch(ProposalsViewModel.Intent.Reject(p.proposalId)) },
+                    onClick = { onReject(p.proposalId) },
                     variant = ButtonVariant.Ghost,
                 ) { Text("Reject") }
                 Button(
-                    onClick = { vm.dispatch(ProposalsViewModel.Intent.Approve(p.proposalId)) },
+                    onClick = { onApprove(p.proposalId) },
                     variant = ButtonVariant.Primary,
                 ) { Text("Approve") }
             }

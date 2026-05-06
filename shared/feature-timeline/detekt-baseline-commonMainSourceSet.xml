@@ -10,10 +10,10 @@
     <ID>FunctionNaming:TimelineScreen.kt:@Composable private fun ProgressLine</ID>
     <ID>FunctionNaming:TimelineScreen.kt:@Composable private fun SnapshotRow</ID>
     <ID>FunctionSignature:TimelineScreen.kt:@Composable fun TimelineScreen</ID>
+    <ID>FunctionSignature:TimelineScreen.kt:@Composable private fun Header</ID>
     <ID>LambdaParameterEventTrailing:TimelineScreen.kt:onCommit: (String) -&gt; Unit</ID>
     <ID>MagicNumber:TimelineScreen.kt:1024</ID>
     <ID>MagicNumber:TimelineScreen.kt:1024L</ID>
     <ID>ModifierWithoutDefault:TimelineScreen.kt:modifier: Modifier</ID>
-    <ID>ViewModelForwarding:TimelineScreen.kt:Header(state, vm)</ID>
   </CurrentIssues>
 </SmellBaseline>

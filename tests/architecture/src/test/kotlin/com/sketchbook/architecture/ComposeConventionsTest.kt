@@ -1,6 +1,7 @@
 package com.sketchbook.architecture
 
-import kotlin.test.Ignore
+import com.lemonappdev.konsist.api.Konsist
+import com.lemonappdev.konsist.api.verify.assertFalse
 import kotlin.test.Test
 
 /**
@@ -34,8 +35,16 @@ class ComposeConventionsTest {
      * ```
      */
     @Test
-    @Ignore
     fun `non-route Composables do not accept ViewModel parameters`() {
-        // See KDoc — this rule is intentionally skipped pending a follow-up refactor.
+        Konsist.scopeFromProject()
+            .functions()
+            .filter { fn -> fn.hasAnnotation { it.name == "Composable" } }
+            .filter { fn ->
+                !fn.name.endsWith("Route") &&
+                    !fn.name.endsWith("RoutePane") &&
+                    !fn.name.endsWith("Screen")
+            }
+            .flatMap { it.parameters }
+            .assertFalse { param -> param.type.name.endsWith("ViewModel") }
     }
 }

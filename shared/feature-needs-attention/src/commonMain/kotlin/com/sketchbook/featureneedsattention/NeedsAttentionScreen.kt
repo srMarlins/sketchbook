@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.SampleCandidate
@@ -55,7 +56,12 @@ fun NeedsAttentionScreen(
                     Text("Mac-imported (${state.macImports.size})", style = AppTheme.typography.bodyEmphasis)
                 }
                 state.macImports.forEach { f ->
-                    item(key = "mac-${f.projectId.value}") { MacImportCard(f, vm) }
+                    item(key = "mac-${f.projectId.value}") {
+                        MacImportCard(
+                            f = f,
+                            onRepairMacPaths = { vm.dispatch(NeedsAttentionViewModel.Intent.RepairMacPaths(it)) },
+                        )
+                    }
                 }
             }
             if (state.missingSamples.isNotEmpty()) {
@@ -65,7 +71,23 @@ fun NeedsAttentionScreen(
                 }
                 state.missingSamples.forEach { f ->
                     item(key = "missing-${f.projectId.value}-${f.missingPath.hashCode()}") {
-                        MissingSampleCard(f, vm)
+                        MissingSampleCard(
+                            f = f,
+                            onApplyMatch = { projectId, missingPath, candidatePath ->
+                                vm.dispatch(
+                                    NeedsAttentionViewModel.Intent.ApplyMatch(
+                                        projectId = projectId,
+                                        missingPath = missingPath,
+                                        candidatePath = candidatePath,
+                                    ),
+                                )
+                            },
+                            onDismissMissingSample = { projectId, missingPath ->
+                                vm.dispatch(
+                                    NeedsAttentionViewModel.Intent.DismissMissingSample(projectId, missingPath),
+                                )
+                            },
+                        )
                     }
                 }
             }
@@ -74,7 +96,10 @@ fun NeedsAttentionScreen(
 }
 
 @Composable
-private fun MacImportCard(f: MacImportFinding, vm: NeedsAttentionViewModel) {
+private fun MacImportCard(
+    f: MacImportFinding,
+    onRepairMacPaths: (ProjectId) -> Unit,
+) {
     Surface(color = AppTheme.colors.surfacePanel) {
         Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
@@ -99,7 +124,7 @@ private fun MacImportCard(f: MacImportFinding, vm: NeedsAttentionViewModel) {
                 // `RepairRepository.acknowledgeMacImport` is preserved for callers that want the
                 // dismiss-without-rewriting path (e.g. MCP tools, future "ignore" flow).
                 Button(
-                    onClick = { vm.dispatch(NeedsAttentionViewModel.Intent.RepairMacPaths(f.projectId)) },
+                    onClick = { onRepairMacPaths(f.projectId) },
                     variant = ButtonVariant.Ghost,
                 ) { Text("Repair paths") }
             }
@@ -108,7 +133,11 @@ private fun MacImportCard(f: MacImportFinding, vm: NeedsAttentionViewModel) {
 }
 
 @Composable
-private fun MissingSampleCard(f: MissingSampleFinding, vm: NeedsAttentionViewModel) {
+private fun MissingSampleCard(
+    f: MissingSampleFinding,
+    onApplyMatch: (projectId: ProjectId, missingPath: String, candidatePath: String) -> Unit,
+    onDismissMissingSample: (projectId: ProjectId, missingPath: String) -> Unit,
+) {
     // Local expand toggle for the "N possible matches" affordance — kept inline (per
     // feedback_layer_dont_redesign) rather than spawning a modal/picker.
     var picking by remember(f.projectId.value, f.missingPath) { mutableStateOf(false) }
@@ -132,13 +161,7 @@ private fun MissingSampleCard(f: MissingSampleFinding, vm: NeedsAttentionViewMod
                     )
                     Button(
                         onClick = {
-                            vm.dispatch(
-                                NeedsAttentionViewModel.Intent.ApplyMatch(
-                                    projectId = f.projectId,
-                                    missingPath = f.missingPath,
-                                    candidatePath = match.path,
-                                ),
-                            )
+                            onApplyMatch(f.projectId, f.missingPath, match.path)
                         },
                         variant = ButtonVariant.Ghost,
                     ) { Text("Apply") }
@@ -164,18 +187,18 @@ private fun MissingSampleCard(f: MissingSampleFinding, vm: NeedsAttentionViewMod
                 if (picking) {
                     Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)) {
                         f.candidates.take(5).forEach { c ->
-                            CandidatePickRow(f, c, vm)
+                            CandidatePickRow(
+                                finding = f,
+                                candidate = c,
+                                onApplyMatch = onApplyMatch,
+                            )
                         }
                     }
                 }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Button(
-                    onClick = {
-                        vm.dispatch(
-                            NeedsAttentionViewModel.Intent.DismissMissingSample(f.projectId, f.missingPath),
-                        )
-                    },
+                    onClick = { onDismissMissingSample(f.projectId, f.missingPath) },
                     variant = ButtonVariant.Ghost,
                 ) { Text("Dismiss") }
             }
@@ -187,7 +210,7 @@ private fun MissingSampleCard(f: MissingSampleFinding, vm: NeedsAttentionViewMod
 private fun CandidatePickRow(
     finding: MissingSampleFinding,
     candidate: SampleCandidate,
-    vm: NeedsAttentionViewModel,
+    onApplyMatch: (projectId: ProjectId, missingPath: String, candidatePath: String) -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -201,13 +224,7 @@ private fun CandidatePickRow(
         )
         Button(
             onClick = {
-                vm.dispatch(
-                    NeedsAttentionViewModel.Intent.ApplyMatch(
-                        projectId = finding.projectId,
-                        missingPath = finding.missingPath,
-                        candidatePath = candidate.path,
-                    ),
-                )
+                onApplyMatch(finding.projectId, finding.missingPath, candidate.path)
             },
             variant = ButtonVariant.Ghost,
         ) { Text("Pick") }

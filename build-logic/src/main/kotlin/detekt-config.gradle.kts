@@ -62,8 +62,9 @@ tasks.named("check") {
 }
 
 // Per-compilation detekt tasks (detektMainJvm, detektTestJvm) double-report without baselines
-// in KMP modules. Disable them — the SourceSet tasks already cover the same code with baselines.
-// (Plain-JVM modules don't register *Jvm-suffixed tasks, so this is a no-op there.)
-tasks.matching { it.name.matches(Regex("^detekt(Main|Test)Jvm$")) }.configureEach {
+// in KMP modules. The unscoped `detekt` umbrella the plugin auto-wires into `check` likewise
+// has no baseline (it's a no-op on KMP source sets but double-reports on plain-JVM modules).
+// Disable both — the SourceSet/Main/Test tasks already cover the same code with baselines.
+tasks.matching { it.name == "detekt" || it.name.matches(Regex("^detekt(Main|Test)Jvm$")) }.configureEach {
     enabled = false
 }

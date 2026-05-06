@@ -57,7 +57,10 @@ fun TimelineScreen(
             .padding(PaddingValues(AppTheme.spacing.md)),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
     ) {
-        Header(state, vm)
+        Header(
+            state = state,
+            onToggleShowAll = { vm.dispatch(TimelineViewModel.Intent.ToggleShowAll) },
+        )
         // visibleGroups does filter+sort+groupBy+sortedMap on every call. The state ticks
         // frequently while a rewind is in progress; recompute only when the inputs that
         // actually feed the result change.
@@ -109,7 +112,10 @@ fun TimelineScreen(
 }
 
 @Composable
-private fun Header(state: TimelineViewModel.State, vm: TimelineViewModel) {
+private fun Header(
+    state: TimelineViewModel.State,
+    onToggleShowAll: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -117,7 +123,7 @@ private fun Header(state: TimelineViewModel.State, vm: TimelineViewModel) {
     ) {
         Text("History", style = AppTheme.typography.title, modifier = Modifier.weight(1f))
         Button(
-            onClick = { vm.dispatch(TimelineViewModel.Intent.ToggleShowAll) },
+            onClick = onToggleShowAll,
             variant = ButtonVariant.Secondary,
         ) {
             Text(if (state.showAll) "Hide auto-saves" else "Show all saves")

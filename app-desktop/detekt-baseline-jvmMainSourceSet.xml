@@ -53,7 +53,7 @@
     <ID>ClassSignature:InMemorySyncQueue.kt:InMemorySyncQueue : SyncQueue</ID>
     <ID>ClassSignature:PreferencesSettingsRepository.kt:PreferencesSettingsRepository : SettingsRepository</ID>
     <ID>CyclomaticComplexMethod:RootContent.kt:@Composable fun RootContent</ID>
-    <ID>CyclomaticComplexMethod:RootContent.kt:@Composable private fun DetailPanelContent</ID>
+    <ID>CyclomaticComplexMethod:RootContent.kt:@Composable private fun DetailPanelRoutePane</ID>
     <ID>EmptyFunctionBlock:LeasedLockRepository.kt:NullCloudBackend${}</ID>
     <ID>FunctionLiteral:DesktopAppGraph.kt:&lt;anonymous&gt;</ID>
     <ID>FunctionLiteral:DesktopAppGraph.kt:DesktopAppGraph$&lt;anonymous&gt;</ID>
@@ -70,7 +70,7 @@
     <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailHistorySection</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailHistoryTab</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailMetaSection</ID>
-    <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailPanelContent</ID>
+    <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailPanelRoutePane</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailPluginsTab</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailQuickVersions</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailRow</ID>
@@ -122,7 +122,7 @@
     <ID>FunctionSignature:SwappableSyncQueue.kt:SwappableSyncQueue$override fun observeProject: Flow&lt;ProjectSyncState&gt;</ID>
     <ID>FunctionSignature:SwappableSyncQueue.kt:SwappableSyncQueue$override suspend fun recordForcedNamed: Result&lt;SnapshotRev&gt;</ID>
     <ID>LongMethod:RootContent.kt:@Composable fun RootContent</ID>
-    <ID>LongMethod:RootContent.kt:@Composable private fun DetailPanelContent</ID>
+    <ID>LongMethod:RootContent.kt:@Composable private fun DetailPanelRoutePane</ID>
     <ID>LongMethod:RootContent.kt:@Composable private fun DetailPluginsTab</ID>
     <ID>LongMethod:RootContent.kt:@Composable private fun PluginPivotPopup</ID>
     <ID>LongMethod:RootContent.kt:@Composable private fun QuickCaptureDialog</ID>

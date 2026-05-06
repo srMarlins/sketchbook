@@ -7,6 +7,6 @@
     <ID>FunctionNaming:ProposalsScreen.kt:@Composable private fun PendingCard</ID>
     <ID>FunctionNaming:ProposalsScreen.kt:@Composable private fun ResolvedCard</ID>
     <ID>FunctionSignature:ProposalsScreen.kt:@Composable fun ProposalsScreen</ID>
-    <ID>ViewModelForwarding:ProposalsScreen.kt:PendingCard(p, vm)</ID>
+    <ID>FunctionSignature:ProposalsScreen.kt:@Composable private fun PendingCard</ID>
   </CurrentIssues>
 </SmellBaseline>

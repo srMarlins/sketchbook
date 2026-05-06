@@ -307,7 +307,7 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                                             }
                                                         }
                                                     }
-                                                    DetailPanelContent(
+                                                    DetailPanelRoutePane(
                                                         vm = detailVm,
                                                         onDismiss = dismiss,
                                                         syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
@@ -591,7 +591,7 @@ private fun screenForId(id: String): Screen = when (id) {
  *    through MCP.
  */
 @Composable
-private fun DetailPanelContent(
+private fun DetailPanelRoutePane(
     vm: ProjectDetailViewModel,
     onDismiss: () -> Unit,
     syncStateFor: ((com.sketchbook.core.ProjectId) -> ProjectSyncState)? = null,

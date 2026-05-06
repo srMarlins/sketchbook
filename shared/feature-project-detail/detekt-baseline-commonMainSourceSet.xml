@@ -13,9 +13,8 @@
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun Tabs</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun TracksTab</ID>
     <ID>FunctionSignature:ProjectDetailScreen.kt:@Composable fun ProjectDetailScreen</ID>
+    <ID>FunctionSignature:ProjectDetailScreen.kt:@Composable private fun Header</ID>
     <ID>NoUnusedImports:ProjectDetailViewModel.kt:com.sketchbook.featuredetail.ProjectDetailViewModel.kt</ID>
     <ID>ReturnCount:ProjectDetailViewModel.kt:ProjectDetailViewModel$fun dispatch</ID>
-    <ID>ViewModelForwarding:ProjectDetailScreen.kt:Header(state, vm)</ID>
-    <ID>ViewModelForwarding:ProjectDetailScreen.kt:LockSlot(state.lockStatus, vm)</ID>
   </CurrentIssues>
 </SmellBaseline>
