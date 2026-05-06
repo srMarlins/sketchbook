@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,10 +25,10 @@ import com.sketchbook.uishared.theme.AppTheme
 
 @Composable
 fun JournalScreen(
-    holder: JournalStateHolder,
+    vm: JournalViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val state by holder.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -50,7 +50,7 @@ fun JournalScreen(
                 key = { entry -> entry.sequence ?: entry.timestamp.toEpochMilliseconds() },
             ) { entry ->
                 EntryRow(entry, onClick = {
-                    holder.dispatch(JournalStateHolder.Intent.OpenProject(entry.projectId))
+                    vm.dispatch(JournalViewModel.Intent.OpenProject(entry.projectId))
                 })
             }
         }

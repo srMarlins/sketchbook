@@ -1,9 +1,12 @@
 package com.sketchbook.featurejournal
 
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
-import kotlinx.coroutines.CoroutineScope
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -14,14 +17,12 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 /**
- * Read-only journal viewer. Reads `JournalRepository.observeRecent` and exposes a single state
- * with a chronological list. Tap a row to navigate to project detail.
+ * Read-only journal viewer. Reads `JournalRepository.observeRecent` and exposes a single state.
  */
-class JournalStateHolder(
+@Inject
+class JournalViewModel(
     private val repository: JournalRepository,
-    private val scope: CoroutineScope,
-    private val limit: Int = 200,
-) {
+) : ViewModel() {
 
     private val _effects = MutableSharedFlow<Effect>(
         replay = 0,
@@ -30,9 +31,9 @@ class JournalStateHolder(
     )
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
-    val state: StateFlow<State> = repository.observeRecent(limit)
+    val state: StateFlow<State> = repository.observeRecent(LIMIT)
         .map { entries -> State(entries = entries, loading = false) }
-        .stateIn(scope, SharingStarted.Eagerly, State(loading = true))
+        .stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
     fun dispatch(intent: Intent) {
         when (intent) {
@@ -40,6 +41,7 @@ class JournalStateHolder(
         }
     }
 
+    @Immutable
     data class State(
         val entries: List<JournalEntry> = emptyList(),
         val loading: Boolean = false,
@@ -51,5 +53,9 @@ class JournalStateHolder(
 
     sealed interface Effect {
         data class NavigateToProject(val projectId: ProjectId) : Effect
+    }
+
+    private companion object {
+        const val LIMIT = 200
     }
 }

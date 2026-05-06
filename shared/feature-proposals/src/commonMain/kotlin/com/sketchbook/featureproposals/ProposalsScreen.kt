@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,10 +26,10 @@ import com.sketchbook.uishared.theme.AppTheme
 
 @Composable
 fun ProposalsScreen(
-    holder: ProposalsStateHolder,
+    vm: ProposalsViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val state by holder.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -49,7 +49,7 @@ fun ProposalsScreen(
             if (state.pending.isNotEmpty()) {
                 item(key = "header-pending") { Text("Pending", style = AppTheme.typography.bodyEmphasis) }
                 state.pending.forEach { p ->
-                    item(key = "p-${p.proposalId}") { PendingCard(p, holder) }
+                    item(key = "p-${p.proposalId}") { PendingCard(p, vm) }
                 }
             }
             if (state.resolved.isNotEmpty()) {
@@ -63,7 +63,7 @@ fun ProposalsScreen(
 }
 
 @Composable
-private fun PendingCard(p: Proposal, holder: ProposalsStateHolder) {
+private fun PendingCard(p: Proposal, vm: ProposalsViewModel) {
     Surface(color = AppTheme.colors.surfacePanel) {
         Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
             Row(
@@ -78,11 +78,11 @@ private fun PendingCard(p: Proposal, holder: ProposalsStateHolder) {
             ActionsList(p)
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
                 Button(
-                    onClick = { holder.dispatch(ProposalsStateHolder.Intent.Reject(p.proposalId)) },
+                    onClick = { vm.dispatch(ProposalsViewModel.Intent.Reject(p.proposalId)) },
                     variant = ButtonVariant.Ghost,
                 ) { Text("Reject") }
                 Button(
-                    onClick = { holder.dispatch(ProposalsStateHolder.Intent.Approve(p.proposalId)) },
+                    onClick = { vm.dispatch(ProposalsViewModel.Intent.Approve(p.proposalId)) },
                     variant = ButtonVariant.Primary,
                 ) { Text("Approve") }
             }

@@ -1,5 +1,6 @@
 package com.sketchbook.featureprojects
 
+import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectPath
@@ -7,16 +8,29 @@ import com.sketchbook.core.ProjectRow
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.ProjectRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlin.time.Instant
+import kotlinx.coroutines.test.setMain
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
-class ProjectListStateHolderTest {
+@OptIn(ExperimentalCoroutinesApi::class)
+class ProjectListViewModelTest {
+
+    private val mainDispatcher = StandardTestDispatcher()
+
+    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
+    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
 
     private val now = Instant.parse("2026-05-05T12:00:00Z")
     private fun row(
@@ -59,14 +73,16 @@ class ProjectListStateHolderTest {
         ))
     }
 
+    private fun newVm(repo: ProjectRepository) =
+        ProjectListViewModel(repo, SavedStateHandle())
+
     @Test
-    fun stateUpdatesWhenRepositoryEmits() = runTest {
+    fun stateUpdatesWhenRepositoryEmits() = runTest(mainDispatcher) {
         val all = MutableStateFlow(listOf(row(1, "kick"), row(2, "snare")))
         val repo = FakeRepo(mapOf("" to all))
-        val holder = ProjectListStateHolder(repo, backgroundScope)
+        val vm = newVm(repo)
 
-        holder.state.test {
-            // Drain until rows populate from the repository flow.
+        vm.state.test {
             var s = awaitItem()
             while (s.rows.isEmpty()) s = awaitItem()
             assertEquals(listOf("kick", "snare"), s.rows.map { it.name })
@@ -76,21 +92,19 @@ class ProjectListStateHolderTest {
     }
 
     @Test
-    fun searchIntentSwitchesObservedQuery() = runTest {
+    fun searchIntentSwitchesObservedQuery() = runTest(mainDispatcher) {
         val all = MutableStateFlow(listOf(row(1, "kick"), row(2, "snare")))
         val matches = MutableStateFlow(listOf(row(1, "kick")))
         val repo = FakeRepo(mapOf("" to all, "kick" to matches))
-        val holder = ProjectListStateHolder(repo, backgroundScope)
+        val vm = newVm(repo)
 
-        holder.state.test {
-            // Drain until initial population.
+        vm.state.test {
             var s = awaitItem()
             while (s.rows.size < 2) s = awaitItem()
             assertEquals(2, s.rows.size)
 
-            holder.dispatch(ProjectListStateHolder.Intent.Search("kick"))
+            vm.dispatch(ProjectListViewModel.Intent.Search("kick"))
 
-            // Drain until the new query's matches arrive.
             while (s.query != "kick" || s.rows.size != 1) s = awaitItem()
             assertEquals("kick", s.query)
             assertEquals(listOf("kick"), s.rows.map { it.name })
@@ -99,13 +113,13 @@ class ProjectListStateHolderTest {
     }
 
     @Test
-    fun archivedRowsExposedSeparatelyFromActiveRows() = runTest {
+    fun archivedRowsExposedSeparatelyFromActiveRows() = runTest(mainDispatcher) {
         val active = MutableStateFlow(listOf(row(1, "kick")))
         val archived = MutableStateFlow(listOf(row(2, "old-snare", archived = true)))
         val repo = FakeRepo(mapOf("" to active), archived)
-        val holder = ProjectListStateHolder(repo, backgroundScope)
+        val vm = newVm(repo)
 
-        holder.state.test {
+        vm.state.test {
             var s = awaitItem()
             while (s.rows.isEmpty() || s.archivedRows.isEmpty()) s = awaitItem()
             assertEquals(listOf("kick"), s.rows.map { it.name })
@@ -116,7 +130,7 @@ class ProjectListStateHolderTest {
     }
 
     @Test
-    fun tempoAndKeyFiltersNarrowTheRowSet() = runTest {
+    fun tempoAndKeyFiltersNarrowTheRowSet() = runTest(mainDispatcher) {
         val all = MutableStateFlow(
             listOf(
                 row(1, "a", tempo = 140.0, key = "F# Minor"),
@@ -125,15 +139,15 @@ class ProjectListStateHolderTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val holder = ProjectListStateHolder(repo, backgroundScope)
+        val vm = newVm(repo)
 
-        holder.state.test {
+        vm.state.test {
             // Drain until rows populate.
             var s = awaitItem()
             while (s.rows.size < 3) s = awaitItem()
 
-            holder.dispatch(ProjectListStateHolder.Intent.SetTempoRange(135.0..145.0))
-            holder.dispatch(ProjectListStateHolder.Intent.SetKeyFilter("F# Minor"))
+            vm.dispatch(ProjectListViewModel.Intent.SetTempoRange(135.0..145.0))
+            vm.dispatch(ProjectListViewModel.Intent.SetKeyFilter("F# Minor"))
 
             s = awaitItem()
             while (s.tempoRange == null || s.keyFilter != "F# Minor" || s.rows.size != 1) {
@@ -145,7 +159,7 @@ class ProjectListStateHolderTest {
     }
 
     @Test
-    fun clearFiltersRestoresFullRowSet() = runTest {
+    fun clearFiltersRestoresFullRowSet() = runTest(mainDispatcher) {
         val all = MutableStateFlow(
             listOf(
                 row(1, "a", tempo = 140.0, key = "F# Minor"),
@@ -154,17 +168,17 @@ class ProjectListStateHolderTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val holder = ProjectListStateHolder(repo, backgroundScope)
+        val vm = newVm(repo)
 
-        holder.state.test {
+        vm.state.test {
             var s = awaitItem()
             while (s.rows.size < 3) s = awaitItem()
 
-            holder.dispatch(ProjectListStateHolder.Intent.SetKeyFilter("F# Minor"))
+            vm.dispatch(ProjectListViewModel.Intent.SetKeyFilter("F# Minor"))
             while (s.keyFilter != "F# Minor" || s.rows.size != 2) s = awaitItem()
             assertEquals(setOf("a", "b"), s.rows.map { it.name }.toSet())
 
-            holder.dispatch(ProjectListStateHolder.Intent.ClearFilters)
+            vm.dispatch(ProjectListViewModel.Intent.ClearFilters)
             while (s.keyFilter != null || s.rows.size != 3) s = awaitItem()
             assertEquals(setOf("a", "b", "c"), s.rows.map { it.name }.toSet())
             cancelAndIgnoreRemainingEvents()
@@ -172,16 +186,37 @@ class ProjectListStateHolderTest {
     }
 
     @Test
-    fun openIntentEmitsNavigateEffectExactlyOnce() = runTest {
+    fun openIntentEmitsNavigateEffectExactlyOnce() = runTest(mainDispatcher) {
         val repo = FakeRepo()
-        val holder = ProjectListStateHolder(repo, backgroundScope)
+        val vm = newVm(repo)
 
-        holder.effects.test {
-            holder.dispatch(ProjectListStateHolder.Intent.Open(ProjectId(7)))
+        vm.effects.test {
+            vm.dispatch(ProjectListViewModel.Intent.Open(ProjectId(7)))
             val effect = awaitItem()
-            assertTrue(effect is ProjectListStateHolder.Effect.Navigate)
+            assertTrue(effect is ProjectListViewModel.Effect.Navigate)
             assertEquals(ProjectId(7), effect.id)
             expectNoEvents()
+        }
+    }
+
+    @Test
+    fun savedStateRestoresQueryOnReconstruction() = runTest(mainDispatcher) {
+        val savedState = SavedStateHandle(
+            mapOf(
+                "ProjectListViewModel.query" to "drum",
+                "ProjectListViewModel.searchIndex" to 0,
+            ),
+        )
+        val matches = MutableStateFlow(listOf(row(1, "drum-loop")))
+        val repo = FakeRepo(mapOf("drum" to matches, "" to MutableStateFlow(emptyList())))
+        val vm = ProjectListViewModel(repo, savedState)
+
+        vm.state.test {
+            var s: ProjectListViewModel.State = awaitItem()
+            while (s.query != "drum" || s.rows.isEmpty()) s = awaitItem()
+            assertEquals("drum", s.query)
+            assertEquals(listOf("drum-loop"), s.rows.map { it.name })
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }

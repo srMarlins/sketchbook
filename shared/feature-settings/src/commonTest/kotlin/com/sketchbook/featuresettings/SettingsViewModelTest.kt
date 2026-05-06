@@ -7,14 +7,27 @@ import com.sketchbook.repo.ExternalKind
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class SettingsStateHolderTest {
+@OptIn(ExperimentalCoroutinesApi::class)
+class SettingsViewModelTest {
+
+    private val mainDispatcher = StandardTestDispatcher()
+
+    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
+    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
 
     private val initial = Settings(
         libraryRoots = listOf(
@@ -61,9 +74,9 @@ class SettingsStateHolderTest {
     }
 
     @Test
-    fun stateMirrorsRepo() = runTest {
-        val holder = SettingsStateHolder(FakeRepo(initial), backgroundScope)
-        holder.state.test {
+    fun stateMirrorsRepo() = runTest(mainDispatcher) {
+        val vm = SettingsViewModel(FakeRepo(initial))
+        vm.state.test {
             var s = awaitItem()
             while (s.libraryRoots.isEmpty()) s = awaitItem()
             assertEquals(2, s.libraryRoots.size)
@@ -73,40 +86,40 @@ class SettingsStateHolderTest {
     }
 
     @Test
-    fun addRootRoutesToRepoAndEmitsSavedEffect() = runTest {
+    fun addRootRoutesToRepoAndEmitsSavedEffect() = runTest(mainDispatcher) {
         val repo = FakeRepo(initial)
-        val holder = SettingsStateHolder(repo, backgroundScope)
+        val vm = SettingsViewModel(repo)
         val newRoot = LibraryRoot.UserSamples("Z:/User/audio/Samples")
-        holder.effects.test {
-            holder.dispatch(SettingsStateHolder.Intent.AddRoot(newRoot))
+        vm.effects.test {
+            vm.dispatch(SettingsViewModel.Intent.AddRoot(newRoot))
             val effect = awaitItem()
-            assertTrue(effect is SettingsStateHolder.Effect.Saved)
+            assertTrue(effect is SettingsViewModel.Effect.Saved)
             assertEquals(newRoot, repo.lastUpsert)
         }
     }
 
     @Test
-    fun setCloudCredentialUpdatesRepoAndEmits() = runTest {
+    fun setCloudCredentialUpdatesRepoAndEmits() = runTest(mainDispatcher) {
         val repo = FakeRepo(initial)
-        val holder = SettingsStateHolder(repo, backgroundScope)
-        holder.effects.test {
-            holder.dispatch(SettingsStateHolder.Intent.SetCloudCredential("{\"type\": \"service_account\"}"))
+        val vm = SettingsViewModel(repo)
+        vm.effects.test {
+            vm.dispatch(SettingsViewModel.Intent.SetCloudCredential("{\"type\": \"service_account\"}"))
             val effect = awaitItem()
-            assertTrue(effect is SettingsStateHolder.Effect.Saved)
+            assertTrue(effect is SettingsViewModel.Effect.Saved)
             assertEquals("cloud", effect.key)
             assertEquals("{\"type\": \"service_account\"}", repo.lastCredential)
         }
     }
 
     @Test
-    fun toggleSelfContainedUpdatesRepoAndEmits() = runTest {
+    fun toggleSelfContainedUpdatesRepoAndEmits() = runTest(mainDispatcher) {
         val repo = FakeRepo(initial)
-        val holder = SettingsStateHolder(repo, backgroundScope)
+        val vm = SettingsViewModel(repo)
         val uuid = ProjectUuid("01H-test")
-        holder.effects.test {
-            holder.dispatch(SettingsStateHolder.Intent.ToggleSelfContained(uuid, true))
+        vm.effects.test {
+            vm.dispatch(SettingsViewModel.Intent.ToggleSelfContained(uuid, true))
             val effect = awaitItem()
-            assertTrue(effect is SettingsStateHolder.Effect.Saved)
+            assertTrue(effect is SettingsViewModel.Effect.Saved)
             assertEquals(uuid to true, repo.lastSelfContained)
         }
     }

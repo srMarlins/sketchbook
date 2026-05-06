@@ -1,10 +1,13 @@
 package com.sketchbook.featureneedsattention
 
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.RepairRepository
-import kotlinx.coroutines.CoroutineScope
+import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -17,13 +20,12 @@ import kotlinx.coroutines.launch
 
 /**
  * Repair surface. Reads `RepairRepository.observeFindings()` and exposes a single state with the
- * mac-import + missing-sample lists plus truncation metadata. Acknowledgements/dismissals fan
- * out through the repo and emit one-shot effects so the UI can show snackbars.
+ * mac-import + missing-sample lists plus truncation metadata.
  */
-class NeedsAttentionStateHolder(
+@Inject
+class NeedsAttentionViewModel(
     private val repository: RepairRepository,
-    private val scope: CoroutineScope,
-) {
+) : ViewModel() {
 
     private val _effects = MutableSharedFlow<Effect>(
         replay = 0,
@@ -42,19 +44,15 @@ class NeedsAttentionStateHolder(
                 loading = false,
             )
         }
-        .stateIn(scope, SharingStarted.Eagerly, State(loading = true))
+        .stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
     fun dispatch(intent: Intent) {
         when (intent) {
-            is Intent.AckMacImport -> scope.launch {
+            is Intent.AckMacImport -> viewModelScope.launch {
                 val r = repository.acknowledgeMacImport(intent.projectId)
                 emitEffect(r.isSuccess, intent.projectId.value.toString(), "ack")
             }
-            is Intent.RepairMacPaths -> scope.launch {
-                // PR-W W5 — same patcher pipe as ApplyMatch. The repository scans the .als,
-                // builds a mac-path → POSIX mapping, calls the patcher, and acks the finding so
-                // it drops out of Needs Attention regardless of the patch outcome (busy/Failed
-                // is recorded in the journal for a future retry pass).
+            is Intent.RepairMacPaths -> viewModelScope.launch {
                 val r = repository.applyMacPathRepair(intent.projectId)
                 if (r.isSuccess) {
                     _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
@@ -62,11 +60,11 @@ class NeedsAttentionStateHolder(
                     _effects.tryEmit(Effect.Failed(intent.projectId.value.toString(), "repair failed"))
                 }
             }
-            is Intent.DismissMissingSample -> scope.launch {
+            is Intent.DismissMissingSample -> viewModelScope.launch {
                 val r = repository.dismissMissingSample(intent.projectId, intent.missingPath)
                 emitEffect(r.isSuccess, intent.projectId.value.toString(), "dismiss")
             }
-            is Intent.ApplyMatch -> scope.launch {
+            is Intent.ApplyMatch -> viewModelScope.launch {
                 val r = repository.applyMissingSampleMatch(
                     projectId = intent.projectId,
                     missingPath = intent.missingPath,
@@ -86,6 +84,7 @@ class NeedsAttentionStateHolder(
         else _effects.tryEmit(Effect.Failed(key, "$kind failed"))
     }
 
+    @Immutable
     data class State(
         val macImports: List<MacImportFinding> = emptyList(),
         val missingSamples: List<MissingSampleFinding> = emptyList(),
