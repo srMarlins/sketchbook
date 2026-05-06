@@ -645,27 +645,48 @@
 
   <script>
     // OS detection — labels the primary CTA and routes to the right asset.
-    // For Mac, Apple Silicon vs Intel can't be distinguished reliably from
-    // UA alone (Apple Silicon Macs report as MacIntel), so the primary CTA
-    // routes through Conveyor's download.html which detects on the server
-    // side. Users who know their arch can use the explicit "or pick" links.
-    (function() {
+    // Mac arch detection: Apple Silicon Macs report as `MacIntel` in the
+    // legacy UA string, so we use User-Agent Client Hints
+    // (navigator.userAgentData) when available — supported in Chromium
+    // browsers on Mac and returns "arm" for Apple Silicon, "x86" for Intel.
+    // Safari doesn't expose UA-CH, so Safari Mac users default to Apple
+    // Silicon (correct for ~95% of Macs in 2026); the Intel Mac long tail
+    // can use the explicit "Intel Mac" link in the picker.
+    (async function() {
+      var BASE = 'https://storage.googleapis.com/sketchbook-releases/';
+      var VERSION = '{{VERSION}}';
       var ua = navigator.userAgent;
       var btn = document.getElementById('primary-download');
       var lbl = document.getElementById('primary-download-label');
       if (!btn || !lbl) return;
+
       var isWin = /Windows NT/i.test(ua);
       var isMac = /Mac OS X|Macintosh/i.test(ua);
+
       if (isWin) {
-        btn.href = 'https://storage.googleapis.com/sketchbook-releases/sketchbook.exe';
+        btn.href = BASE + 'sketchbook.exe';
         lbl.textContent = 'Download for Windows';
-      } else if (isMac) {
-        btn.href = 'https://storage.googleapis.com/sketchbook-releases/download.html';
-        lbl.textContent = 'Download for Mac';
-      } else {
-        btn.href = btn.dataset.platformFallback || 'https://storage.googleapis.com/sketchbook-releases/download.html';
-        lbl.textContent = 'See downloads';
+        return;
       }
+      if (isMac) {
+        var arch = 'arm'; // safe default — most Macs in 2026 are Apple Silicon
+        try {
+          if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+            var hints = await navigator.userAgentData.getHighEntropyValues(['architecture']);
+            if (hints && hints.architecture) arch = hints.architecture;
+          }
+        } catch (_) { /* fall through to default */ }
+        if (arch === 'x86') {
+          btn.href = BASE + 'sketchbook-' + VERSION + '-mac-amd64.zip';
+          lbl.textContent = 'Download for Intel Mac';
+        } else {
+          btn.href = BASE + 'sketchbook-' + VERSION + '-mac-aarch64.zip';
+          lbl.textContent = 'Download for Apple Silicon';
+        }
+        return;
+      }
+      btn.href = btn.dataset.platformFallback || (BASE + 'download.html');
+      lbl.textContent = 'See downloads';
     })();
   </script>
 </body>
