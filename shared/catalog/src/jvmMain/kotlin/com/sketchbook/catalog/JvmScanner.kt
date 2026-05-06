@@ -278,9 +278,15 @@ class JvmScanner(
         // insertOrReplace so the rest of the column set stays driven by the existing
         // generated query — no need to widen its 20-arg signature.
         val hasLocalBounce = probeHasLocalBounce(o.projectDir)
+        // Restrict mastering-detection input to plugins on the "Master" track. Common devices
+        // like Limiter/Maximizer often appear on individual mix buses; filtering avoids false
+        // positives that would mis-classify a still-mixing project as Mixing/Done.
+        val masterPluginNames = o.md.plugins
+            .filter { it.trackName?.equals("Master", ignoreCase = true) == true }
+            .map { it.name }
         val stageInferred = StageInferrer.infer(
             trackCount = o.md.totalTrackCount,
-            pluginNames = o.md.plugins.map { it.name },
+            pluginNames = masterPluginNames,
             hasLocalBounce = hasLocalBounce,
             lastModified = kotlin.time.Instant.fromEpochMilliseconds((o.mtimeSec * 1000).toLong()),
             now = kotlin.time.Instant.fromEpochMilliseconds((now * 1000).toLong()),

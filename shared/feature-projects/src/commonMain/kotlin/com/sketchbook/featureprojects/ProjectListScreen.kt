@@ -682,7 +682,7 @@ private fun StageFilterPopup(
         StageFilterRow(label = "Any", selected = current.isEmpty(), onClick = onAny)
         for (stage in Stage.values()) {
             StageFilterRow(
-                label = stage.name,
+                label = stage.displayName,
                 selected = stage in current,
                 onClick = { onToggle(stage) },
             )
@@ -918,13 +918,7 @@ private fun ProjectGroup.toSongStripData(sync: ProjectSyncState?): SongStripData
 }
 
 private fun Stage.toChip(): SongStageChip = SongStageChip(
-    label = when (this) {
-        Stage.Sketch -> "sketch"
-        Stage.InProgress -> "in progress"
-        Stage.Mixing -> "mixing"
-        Stage.Done -> "done"
-        Stage.Stuck -> "stuck"
-    },
+    label = label,
     tone = when (this) {
         Stage.Sketch -> SongStageTone.Sketch
         Stage.InProgress -> SongStageTone.InProgress

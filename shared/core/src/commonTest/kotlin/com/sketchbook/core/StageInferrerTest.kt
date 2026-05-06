@@ -29,7 +29,7 @@ class StageInferrerTest {
     }
 
     @Test
-    fun classifiesAsMixingWhenMasteringChainAndEditedWithin14Days() {
+    fun classifiesAsMixingWhenMasteringChainAndEditedWithin30Days() {
         val stage = StageInferrer.infer(
             trackCount = 12,
             pluginNames = listOf("Compressor", "Limiter"),
@@ -38,6 +38,36 @@ class StageInferrerTest {
             now = now,
         )
         assertEquals(Stage.Mixing, stage)
+    }
+
+    @Test
+    fun mixingExtendsTo30Days() {
+        // Reviewer-requested case: a mastered project edited 20 days ago previously fell into
+        // the dead zone between Mixing (<=14d) and Done (>30d + bounce). With the cutoff lifted
+        // to 30 days it now classifies as Mixing instead of returning null.
+        val stage = StageInferrer.infer(
+            trackCount = 12,
+            pluginNames = listOf("Pro-L 2"),
+            hasLocalBounce = false,
+            lastModified = now - 20.days,
+            now = now,
+        )
+        assertEquals(Stage.Mixing, stage)
+    }
+
+    @Test
+    fun ottIsNotATreatedAsMasteringNeedle() {
+        // OTT is a popular track-level multiband compressor (synths, drums) — including it in
+        // MASTERING_NEEDLES previously caused false positives. With it removed, an OTT-only
+        // sketch falls through the mastering rules and is classified by track count instead.
+        val stage = StageInferrer.infer(
+            trackCount = 3,
+            pluginNames = listOf("OTT"),
+            hasLocalBounce = false,
+            lastModified = now - 7.days,
+            now = now,
+        )
+        assertEquals(Stage.Sketch, stage)
     }
 
     @Test

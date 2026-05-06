@@ -15,21 +15,21 @@ import kotlin.time.Instant
  * variant `name`. Adding a new variant means writing a migration that's tolerant of values
  * outside the new enum (treat as `null`); see [parseOrNull].
  */
-enum class Stage {
+enum class Stage(val label: String, val displayName: String) {
     /** Track count <5, no mastering, no bounce, edited recently — fresh idea. */
-    Sketch,
+    Sketch(label = "sketch", displayName = "Sketch"),
 
     /** ≥5 tracks, edited within 30d, no mastering yet — actively being developed. */
-    InProgress,
+    InProgress(label = "in progress", displayName = "In Progress"),
 
-    /** Mastering chain present + edited within 14d — final pre-export polish. */
-    Mixing,
+    /** Mastering chain present + edited within 30d — final pre-export polish. */
+    Mixing(label = "mixing", displayName = "Mixing"),
 
     /** Mastering chain present, has a local bounce, edited >30d ago — finished. */
-    Done,
+    Done(label = "done", displayName = "Done"),
 
     /** Many tracks, untouched for >90d, no bounce — abandoned or stalled. */
-    Stuck;
+    Stuck(label = "stuck", displayName = "Stuck");
 
     companion object {
         /**
@@ -53,7 +53,7 @@ enum class Stage {
  *
  * Heuristic rules (rule-ordered):
  * 1. Mastering chain + local bounce + edited >30d ago → `Done`
- * 2. Mastering chain + edited within 14d → `Mixing`
+ * 2. Mastering chain + edited within 30d → `Mixing`
  * 3. ≥10 tracks + edited >90d ago + no bounce → `Stuck`
  * 4. ≥5 tracks + edited within 30d + no mastering → `InProgress`
  * 5. <5 tracks + no mastering + no bounce + edited within 30d → `Sketch`
@@ -61,8 +61,13 @@ enum class Stage {
  */
 object StageInferrer {
 
-    /** Substring matches inside plugin names (case-insensitive) that mark a mastering chain. */
-    private val MASTERING_NEEDLES = listOf("ott", "pro-l", "ozone", "limiter", "maximizer")
+    /**
+     * Substring matches inside plugin names (case-insensitive) that mark a mastering chain.
+     * OTT is intentionally excluded: it's a popular upward/downward compressor used on individual
+     * tracks (synths, drums) far more often than on the master bus, so including it caused false
+     * positives. Callers should also restrict the input to plugins on the "Master" track.
+     */
+    private val MASTERING_NEEDLES = listOf("pro-l", "ozone", "limiter", "maximizer")
 
     /**
      * Classify a project from its scanned signals. All inputs are pre-extracted from the
@@ -92,8 +97,10 @@ object StageInferrer {
         // Rule 1: Done — mastered + bounced + cooled off.
         if (hasMastering && hasLocalBounce && age > 30.days) return Stage.Done
 
-        // Rule 2: Mixing — mastered + actively being polished.
-        if (hasMastering && age <= 14.days) return Stage.Mixing
+        // Rule 2: Mixing — mastered + actively being polished. The 30d cutoff matches Rule 1's
+        // "Done" cool-off threshold so a mastered project edited 14–30d ago doesn't fall into the
+        // dead zone between rules.
+        if (hasMastering && age <= 30.days) return Stage.Mixing
 
         // Rule 3: Stuck — large project that nobody's touched in months.
         if (trackCount >= 10 && age > 90.days && !hasLocalBounce) return Stage.Stuck

@@ -830,7 +830,7 @@ private fun StageOverrideRow(
 ) {
     var open by remember { mutableStateOf(false) }
     val effective = override_ ?: inferred
-    val label = effective?.name?.lowercase() ?: "unset"
+    val label = effective?.label ?: "unset"
     val suffix = if (override_ != null) "  (override)"
         else if (inferred != null) "  (auto)"
         else ""
@@ -901,7 +901,7 @@ private fun StageOverridePopup(
     ) {
         StageOverridePopupRow("Auto", currentOverride == null, theme) { onPick(null) }
         for (stage in com.sketchbook.core.Stage.values()) {
-            StageOverridePopupRow(stage.name, currentOverride == stage, theme) { onPick(stage) }
+            StageOverridePopupRow(stage.displayName, currentOverride == stage, theme) { onPick(stage) }
         }
     }
 }
