@@ -1,5 +1,6 @@
 package com.sketchbook.featuredetail
 
+import com.sketchbook.core.PluginRef
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
@@ -7,6 +8,7 @@ import com.sketchbook.core.Snapshot
 import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.LockStatus
 import com.sketchbook.repo.ProjectRepository
+import com.sketchbook.repo.SampleEntry
 import com.sketchbook.repo.SnapshotRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -56,6 +58,14 @@ class ProjectDetailStateHolder(
         if (id == null) flowOf(null) else projects.observeProject(id)
     }
 
+    private val pluginsFlow: Flow<List<PluginRef>> = selectedId.flatMapLatest { id ->
+        if (id == null) flowOf(emptyList()) else projects.observePlugins(id)
+    }
+
+    private val samplesFlow: Flow<List<SampleEntry>> = selectedId.flatMapLatest { id ->
+        if (id == null) flowOf(emptyList()) else projects.observeSamples(id)
+    }
+
     private val historyFlow: Flow<List<Snapshot>> = selectedId.flatMapLatest { id ->
         if (id == null) flowOf(emptyList()) else flow {
             val uuid = projectUuidLookup(id)
@@ -75,13 +85,32 @@ class ProjectDetailStateHolder(
         }
     }
 
-    val state: StateFlow<State> = combine(rowFlow, historyFlow, tabSelection, lockFlow) { row, history, tab, lock ->
+    val state: StateFlow<State> = combine(
+        rowFlow,
+        historyFlow,
+        tabSelection,
+        lockFlow,
+        pluginsFlow,
+        samplesFlow,
+    ) { values ->
+        @Suppress("UNCHECKED_CAST")
+        val row = values[0] as ProjectRow?
+        @Suppress("UNCHECKED_CAST")
+        val history = values[1] as List<Snapshot>
+        val tab = values[2] as Tab
+        val lock = values[3] as LockStatus
+        @Suppress("UNCHECKED_CAST")
+        val plugins = values[4] as List<PluginRef>
+        @Suppress("UNCHECKED_CAST")
+        val samples = values[5] as List<SampleEntry>
         State(
             row = row,
             history = history,
             tab = tab,
             loading = row == null && selectedId.value != null,
             lockStatus = lock,
+            plugins = plugins,
+            samples = samples,
         )
     }.stateIn(scope, SharingStarted.Eagerly, State())
 
@@ -117,6 +146,8 @@ class ProjectDetailStateHolder(
         val tab: Tab = Tab.Overview,
         val loading: Boolean = false,
         val lockStatus: LockStatus = LockStatus.Free,
+        val plugins: List<PluginRef> = emptyList(),
+        val samples: List<SampleEntry> = emptyList(),
     )
 
     enum class Tab { Overview, Tracks, Samples, Plugins, History }

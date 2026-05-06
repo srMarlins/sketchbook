@@ -25,7 +25,10 @@ class Tools(
 
     suspend fun searchProjects(args: SearchProjectsArgs): SearchResult {
         val rows = repository.observeProjects(args.query.orEmpty()).first()
-        val limited = rows.take(args.limit ?: DEFAULT_LIMIT)
+        // Coerce caller-supplied limits into a sane window. A negative or oversized limit from a
+        // crafted MCP payload shouldn't be able to materialize the whole catalog into a response.
+        val limit = (args.limit ?: DEFAULT_LIMIT).coerceIn(1, MAX_LIMIT)
+        val limited = rows.take(limit)
         return SearchResult(matches = limited.map { it.toRow() })
     }
 
@@ -36,11 +39,25 @@ class Tools(
 
     suspend fun listRecent(args: ListRecentArgs): SearchResult {
         val rows = repository.observeProjects("").first()
-        val limited = rows.take(args.limit ?: DEFAULT_LIMIT)
+        val limit = (args.limit ?: DEFAULT_LIMIT).coerceIn(1, MAX_LIMIT)
+        val limited = rows.take(limit)
         return SearchResult(matches = limited.map { it.toRow() })
     }
 
     suspend fun proposeBatch(args: ProposeBatchArgs): ProposeBatchResult {
+        // Cap proposal size and gate on a closed action-type allowlist. The eventual executor
+        // already validates per-action arg schemas, but we enforce the type allowlist *here* too
+        // so a malicious LLM can't land arbitrary `{"type":"shell","args":{...}}` payloads on
+        // disk for a future executor to interpret. Mirrors the v0.1 Python set.
+        require(args.actions.isNotEmpty()) { "propose_batch requires at least one action" }
+        require(args.actions.size <= MAX_ACTIONS_PER_BATCH) {
+            "propose_batch limit exceeded: ${args.actions.size} > $MAX_ACTIONS_PER_BATCH"
+        }
+        for (a in args.actions) {
+            require(a.type in ALLOWED_ACTION_TYPES) {
+                "propose_batch: unsupported action type '${a.type}' (allowed: ${ALLOWED_ACTION_TYPES.joinToString()})"
+            }
+        }
         val proposalId = proposalsWriter.write(actions = args.actions, rationale = args.rationale)
         return ProposeBatchResult(proposalId = proposalId)
     }
@@ -59,6 +76,23 @@ class Tools(
 
     companion object {
         const val DEFAULT_LIMIT: Int = 50
+        const val MAX_LIMIT: Int = 1000
+        const val MAX_ACTIONS_PER_BATCH: Int = 100
+        /**
+         * Closed allowlist of action types accepted by propose_batch. Names match the v0.1
+         * Python wire format and the [com.sketchbook.actions.ActionRecord] sealed type
+         * SerialNames so a Python proposal file round-trips with a Kotlin one byte-for-byte.
+         */
+        val ALLOWED_ACTION_TYPES: Set<String> = setOf(
+            "MoveProject",
+            "RenameProject",
+            "ArchiveProject",
+            "SetTags",
+            "SetColorTag",
+            "RelinkMissingSamples",
+            "RepairMacPaths",
+            "Undo",
+        )
     }
 }
 

@@ -23,6 +23,17 @@ value class ProjectId(val value: Long) {
 value class ProjectUuid(val value: String) {
     init {
         require(value.isNotBlank()) { "ProjectUuid must not be blank" }
+        // Tenants assemble cloud blob keys as "<userId>/blobs/.../<projectUuid>/...". A "/" or
+        // ".." inside an id would let a poisoned uuid escape its prefix. Constrain to the safe
+        // ULID-shaped charset (alphanumeric + dash); reject anything else at construction.
+        require(value.length <= MAX_LEN) { "ProjectUuid too long: ${value.length} > $MAX_LEN" }
+        require(value.all { it.isSafeIdChar() }) {
+            "ProjectUuid must be alphanumeric or dash, got '$value'"
+        }
+    }
+
+    companion object {
+        const val MAX_LEN: Int = 64
     }
 }
 
@@ -75,9 +86,19 @@ value class SnapshotRev(val value: Long) {
 value class UserId(val value: String) {
     init {
         require(value.isNotBlank()) { "UserId must not be blank" }
+        require(value.length <= MAX_LEN) { "UserId too long: ${value.length} > $MAX_LEN" }
+        // Same reasoning as ProjectUuid: this value is concatenated into bucket object keys.
+        require(value.all { it.isSafeIdChar() }) {
+            "UserId must be alphanumeric or dash, got '$value'"
+        }
     }
 
     companion object {
+        const val MAX_LEN: Int = 64
         val DEFAULT: UserId = UserId("default")
     }
 }
+
+/** Allowed characters for opaque ids that flow into URL paths. */
+private fun Char.isSafeIdChar(): Boolean =
+    this in '0'..'9' || this in 'a'..'z' || this in 'A'..'Z' || this == '-' || this == '_'

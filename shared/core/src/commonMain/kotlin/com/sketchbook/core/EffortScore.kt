@@ -1,7 +1,5 @@
-package com.sketchbook.featureprojects
+package com.sketchbook.core
 
-import com.sketchbook.core.PluginRef
-import com.sketchbook.core.ProjectMetadata
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min

@@ -45,7 +45,7 @@ class SqlProjectRepository(
     override fun observeProjects(query: String): Flow<List<ProjectRow>> {
         val q = query.trim()
         return if (q.isEmpty()) {
-            catalog.catalogQueries.selectAllProjects()
+            catalog.catalogQueries.selectAllProjectsWithMissing()
                 .asFlow()
                 .mapToList(ioDispatcher)
                 .map { rows -> rows.map { it.toDomain() } }
@@ -60,10 +60,46 @@ class SqlProjectRepository(
     }
 
     override fun observeProject(id: ProjectId): Flow<ProjectRow?> =
-        catalog.catalogQueries.selectProjectById(id.value)
+        catalog.catalogQueries.selectProjectByIdWithMissing(id.value)
             .asFlow()
             .mapToOneOrNull(ioDispatcher)
             .map { row -> row?.toDomain() }
+
+    override fun observePlugins(id: ProjectId): Flow<List<com.sketchbook.core.PluginRef>> =
+        catalog.catalogQueries.selectPluginsForProject(id.value)
+            .asFlow()
+            .mapToList(ioDispatcher)
+            .map { rows ->
+                rows.map { r ->
+                    com.sketchbook.core.PluginRef(
+                        name = r.plugin_name,
+                        format = pluginFormatFor(r.plugin_type),
+                        trackName = r.track_name,
+                    )
+                }
+            }
+
+    override fun observeSamples(id: ProjectId): Flow<List<com.sketchbook.repo.SampleEntry>> =
+        catalog.catalogQueries.selectSampleEntriesForProject(id.value)
+            .asFlow()
+            .mapToList(ioDispatcher)
+            .map { rows ->
+                rows.map { r ->
+                    com.sketchbook.repo.SampleEntry(
+                        rawPath = r.sample_path,
+                        isMissing = r.is_missing != 0L,
+                        sizeBytes = r.size_bytes,
+                    )
+                }
+            }
+
+    private fun pluginFormatFor(raw: String): com.sketchbook.core.PluginFormat = when (raw.lowercase()) {
+        "vst2" -> com.sketchbook.core.PluginFormat.Vst2
+        "vst3" -> com.sketchbook.core.PluginFormat.Vst3
+        "au" -> com.sketchbook.core.PluginFormat.Au
+        "abletonnative" -> com.sketchbook.core.PluginFormat.AbletonNative
+        else -> com.sketchbook.core.PluginFormat.Unknown
+    }
 
     override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> =
         mutate(id) { row ->

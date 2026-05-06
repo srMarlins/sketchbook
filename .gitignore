@@ -72,3 +72,4 @@ src-tauri/
 web/
 
 .tmp_screens/
+live-page*.png

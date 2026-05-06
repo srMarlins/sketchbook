@@ -47,7 +47,11 @@ class SqlProjectRepositoryTest {
             last_modified = lastModified,
             last_scanned = lastModified,
             parse_status = "ok",
+            parse_error = null,
             mac_paths_count = 0,
+            effort_score = null,
+            effort_breakdown = null,
+            file_size_bytes = 0L,
         )
         val id = catalog.catalogQueries.selectProjectIdByPath(path).executeAsOne()
         fts.upsert(rowid = id, name = name, parentDir = parent, pluginNames = "", sampleFilenames = "", notes = "")

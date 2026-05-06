@@ -99,10 +99,12 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     val settingsHolder = remember {
         SettingsStateHolder(graph.settingsRepository, graph.appScope)
     }
-    val scanner = remember {
-        LibraryScanner(graph.inMemoryProjectRepository, graph.appScope)
-    }
-    val scanProgress by scanner.progress.collectAsState()
+    val scanner = graph.scanner
+    // The catalog scanner is a cold Flow; we derive a single-state holder here so the UI can
+    // bind to "current scan progress" without re-subscribing per recomposition. Scan kicks off
+    // when a library root appears in settings; see the LaunchedEffect below.
+    val scanProgressState = remember { kotlinx.coroutines.flow.MutableStateFlow<ScanUiState>(ScanUiState.Idle) }
+    val scanProgress by scanProgressState.collectAsState()
     val syncQueue = graph.syncQueue
     val syncState by syncQueue.observe().collectAsState(initial = SyncQueueState())
     // Concrete handle so we can call the desktop-only `seedDeterministic` / `pushNowById`. The
@@ -126,10 +128,17 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     // Kick a scan whenever a library root is added (or the app starts with roots already in
     // settings). Scan progress is exposed to the sidebar via [scanner.progress].
     LaunchedEffect(settingsHolder) {
+        // Track which roots we've already scanned so settings re-emissions (cache toggle, etc.)
+        // don't spam re-scans. The scanner is idempotent (INSERT OR REPLACE) but a re-scan over
+        // 1900+ files is wasteful.
+        val scanned = mutableSetOf<String>()
         settingsHolder.state.collect { settingsState ->
             for (root in settingsState.libraryRoots) {
-                if (root is LibraryRoot.Projects) {
-                    scanner.scan(root.path)
+                if (root is LibraryRoot.Projects && root.path !in scanned) {
+                    scanned += root.path
+                    graph.appScope.launch {
+                        runScan(scanner, root.path, scanProgressState)
+                    }
                     break // one root at a time at v1
                 }
             }
@@ -143,10 +152,10 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     // Sidebar caption priority: scan first (most acute, time-bounded), then sync (slower
     // background activity), then offline marker, else nothing.
     val scanCaption = when (val p = scanProgress) {
-        LibraryScanner.Progress.Idle -> null
-        is LibraryScanner.Progress.Scanning -> "Scanning… ${p.filesVisited} files"
-        is LibraryScanner.Progress.Done -> "Indexed ${p.rowsAdded} projects"
-        is LibraryScanner.Progress.Failed -> "Scan failed: ${p.message}"
+        ScanUiState.Idle -> null
+        is ScanUiState.Scanning -> "Scanning… ${p.done}/${p.total}"
+        is ScanUiState.Done -> "Indexed ${p.indexed} projects" + if (p.failed > 0) " (${p.failed} failed)" else ""
+        is ScanUiState.Failed -> "Scan failed: ${p.message}"
     }
     val syncCaption: String? = when {
         !syncState.online -> "Cloud: offline"
@@ -158,19 +167,18 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     // Drive the animated indicator on both Scanning *and* Done so the ribbon doesn't disappear
     // the instant the walk finishes — Done lingers ~3.5s before the scanner flips to Idle.
     val scanIndicatorLabel = when (val p = scanProgress) {
-        is LibraryScanner.Progress.Scanning -> "Scanning your library — ${p.filesVisited} files, ${p.projectsFound} projects"
-        is LibraryScanner.Progress.Done -> "Indexed ${p.rowsAdded} projects"
+        is ScanUiState.Scanning -> "Parsing your library — ${p.done}/${p.total} projects"
+        is ScanUiState.Done -> "Indexed ${p.indexed} projects" + if (p.failed > 0) " · ${p.failed} failed" else ""
         else -> null
     }
     // Show the inline ribbon during both Scanning and Done so the success state has time to
     // register; idle hides it. The persistent ActivityBar at the top of the pane covers the
     // "always-on" affordance.
-    val scanIndicatorActive = scanProgress is LibraryScanner.Progress.Scanning ||
-        scanProgress is LibraryScanner.Progress.Done
+    val scanIndicatorActive = scanProgress is ScanUiState.Scanning || scanProgress is ScanUiState.Done
     val activityState = when {
         // Scan wins precedence — it's the louder, time-bounded activity. Sync is steady-state
         // background work, surfaced once the scan ribbon clears.
-        scanProgress is LibraryScanner.Progress.Scanning -> ActivityState.Scanning
+        scanProgress is ScanUiState.Scanning -> ActivityState.Scanning
         syncState.uploading > 0 || syncState.pending > 0 -> ActivityState.Syncing
         else -> ActivityState.Idle
     }
@@ -182,6 +190,13 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
                 items = items,
                 onSelect = { item ->
                     val target = screenForId(item.id)
+                    // Sidebar→Projects is the user's "go home" gesture. The list holder retains
+                    // the last query across navigations, so without this reset the dashboard
+                    // never reappears once a search has been typed — the screen keeps rendering
+                    // SearchResults because state.query is still non-blank.
+                    if (target == Screen.Projects) {
+                        projectListHolder.dispatch(ProjectListStateHolder.Intent.Search(""))
+                    }
                     backStack.clear()
                     backStack.add(target)
                 },
@@ -444,21 +459,9 @@ private fun DetailPanelContent(
                             DetailQuickVersions(row, state, theme)
                         }
                         DetailTab.Versions -> DetailVersionsTab(row, state, theme)
-                        DetailTab.Tracks -> PlaceholderTab(
-                            "Tracks",
-                            "Per-track listing with audio/MIDI/return/group counts arrives once the `.als` parser is wired into the indexer. Today the scanner only sees the file path, not the contents.",
-                            theme,
-                        )
-                        DetailTab.Samples -> PlaceholderTab(
-                            "Samples",
-                            "Sample-reference list (rawPath, missing-file flag, mac-path detection) lives behind the parser too. Until then, broken-sample repair runs on a per-folder heuristic — see Needs Attention.",
-                            theme,
-                        )
-                        DetailTab.Plugins -> PlaceholderTab(
-                            "Plugins",
-                            "Plugin chain extraction (VST2/VST3/AU/Ableton-native) requires walking the device tree in the `.als` XML. Stub for now.",
-                            theme,
-                        )
+                        DetailTab.Tracks -> DetailTracksTab(row, theme)
+                        DetailTab.Samples -> DetailSamplesTab(state.samples, theme)
+                        DetailTab.Plugins -> DetailPluginsTab(state.plugins, theme)
                         DetailTab.History -> DetailHistoryTab(state, theme)
                     }
                 }
@@ -878,4 +881,172 @@ private fun formatBytes(b: Long): String = when {
     b < 1024 * 1024 -> "${b / 1024}K"
     b < 1024 * 1024 * 1024 -> "${b / (1024 * 1024)}M"
     else -> "${b / (1024L * 1024 * 1024)}G"
+}
+
+@Composable
+private fun DetailTracksTab(
+    row: com.sketchbook.core.ProjectRow,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    Section("Tracks", theme) {
+        if (row.trackCount <= 0) {
+            ProvideContentColor(theme.colors.inkMuted) {
+                Text(
+                    "Track counts populate after the parser runs over this `.als`. The home dashboard's scan ribbon shows progress.",
+                    style = theme.typography.body,
+                )
+            }
+        } else {
+            DetailRow("Total tracks", row.trackCount.toString(), theme)
+            row.tempo?.let { DetailRow("Tempo", "${it.toInt()} bpm", theme) }
+            row.lastSavedLiveVersion?.let { DetailRow("Last saved with", it, theme) }
+            ProvideContentColor(theme.colors.inkMuted) {
+                Text(
+                    "Per-track names + audio/MIDI/return/group breakdown will surface once the parser exposes them through the repository (planned).",
+                    style = theme.typography.caption,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailSamplesTab(
+    samples: List<com.sketchbook.repo.SampleEntry>,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    val missing = samples.count { it.isMissing }
+    Section("Samples (${samples.size})", theme) {
+        if (samples.isEmpty()) {
+            ProvideContentColor(theme.colors.inkMuted) {
+                Text(
+                    "No sample references on this project — either it's a synth-only sketch or the parser hasn't run yet.",
+                    style = theme.typography.body,
+                )
+            }
+            return@Section
+        }
+        if (missing > 0) {
+            ProvideContentColor(theme.colors.accentDanger) {
+                Text(
+                    "$missing sample${if (missing == 1) "" else "s"} missing from disk. Visit Needs Attention to repair.",
+                    style = theme.typography.bodyEmphasis,
+                )
+            }
+        }
+        androidx.compose.foundation.layout.Column(
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
+        ) {
+            for (s in samples) {
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                ) {
+                    val (badgeBg, badgeFg, label) = if (s.isMissing) {
+                        Triple(theme.colors.tintRose, theme.colors.inkPrimary, "MISSING")
+                    } else {
+                        Triple(theme.colors.tintSage, theme.colors.inkPrimary, "FOUND")
+                    }
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .background(badgeBg, androidx.compose.foundation.shape.RoundedCornerShape(50))
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    ) {
+                        ProvideContentColor(badgeFg) {
+                            Text(
+                                label,
+                                style = theme.typography.mono.copy(
+                                    fontSize = androidx.compose.ui.unit.TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                ),
+                            )
+                        }
+                    }
+                    ProvideContentColor(theme.colors.inkPrimary) {
+                        Text(
+                            s.displayName,
+                            style = theme.typography.body,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    ProvideContentColor(theme.colors.inkMuted) {
+                        Text(
+                            s.rawPath,
+                            style = theme.typography.mono.copy(
+                                fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            ),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.width(320.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailPluginsTab(
+    plugins: List<com.sketchbook.core.PluginRef>,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    Section("Plugins (${plugins.size})", theme) {
+        if (plugins.isEmpty()) {
+            ProvideContentColor(theme.colors.inkMuted) {
+                Text(
+                    "No plugins detected — either the project is plugin-free or the parser hasn't run yet.",
+                    style = theme.typography.body,
+                )
+            }
+            return@Section
+        }
+        // Group by track so the user reads "kick → drum bus → master" at a glance.
+        val byTrack = plugins.groupBy { it.trackName ?: "(master)" }
+        for ((track, list) in byTrack) {
+            ProvideContentColor(theme.colors.inkSecondary) {
+                Text(
+                    track,
+                    style = theme.typography.mono.copy(
+                        fontSize = androidx.compose.ui.unit.TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
+                )
+            }
+            for (p in list) {
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp, horizontal = 4.dp),
+                ) {
+                    val (badgeBg, badgeFg, label) = when (p.format) {
+                        com.sketchbook.core.PluginFormat.Vst3 -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "VST3")
+                        com.sketchbook.core.PluginFormat.Vst2 -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "VST")
+                        com.sketchbook.core.PluginFormat.Au -> Triple(theme.colors.tintRose, theme.colors.inkPrimary, "AU")
+                        com.sketchbook.core.PluginFormat.AbletonNative -> Triple(theme.colors.tintCream, theme.colors.inkPrimary, "LIVE")
+                        com.sketchbook.core.PluginFormat.Unknown -> Triple(theme.colors.surfaceSunken, theme.colors.inkMuted, "?")
+                    }
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .background(badgeBg, androidx.compose.foundation.shape.RoundedCornerShape(50))
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    ) {
+                        ProvideContentColor(badgeFg) {
+                            Text(
+                                label,
+                                style = theme.typography.mono.copy(
+                                    fontSize = androidx.compose.ui.unit.TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                ),
+                            )
+                        }
+                    }
+                    ProvideContentColor(theme.colors.inkPrimary) {
+                        Text(p.name, style = theme.typography.body, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
 }

@@ -10,6 +10,7 @@ import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.GZIPInputStream
+import javax.xml.XMLConstants
 import javax.xml.namespace.QName
 import javax.xml.stream.XMLEventReader
 import javax.xml.stream.XMLInputFactory
@@ -33,7 +34,10 @@ object AlsParser {
         setProperty(XMLInputFactory.SUPPORT_DTD, false)
         setProperty("javax.xml.stream.isSupportingExternalEntities", false)
         setProperty(XMLInputFactory.IS_REPLACING_ENTITY_REFERENCES, false)
-        setProperty(XMLInputFactory.IS_COALESCING, true)
+        // Caps entity expansion regardless of DTD settings; defense-in-depth on user-supplied .als.
+        runCatching { setProperty(XMLConstants.FEATURE_SECURE_PROCESSING, true) }
+        // .als never uses CDATA for bulk data and the Driver ignores Characters events anyway.
+        setProperty(XMLInputFactory.IS_COALESCING, false)
     }
 
     private val creatorRegex = Regex("""Ableton Live\s+([\d.]+)""")
@@ -65,12 +69,15 @@ object AlsParser {
 
     /** Parse a gzipped `.als` byte stream. Caller owns the stream lifecycle. */
     fun parse(gzipped: InputStream): ProjectMetadata {
-        val gz = GZIPInputStream(BufferedInputStream(gzipped))
-        val reader = factory.createXMLEventReader(gz)
-        try {
-            return Driver(reader).run()
-        } finally {
-            reader.close()
+        // XMLEventReader.close() does NOT close its underlying stream; close gz ourselves so
+        // native zlib handles aren't leaked across a bulk scan.
+        GZIPInputStream(BufferedInputStream(gzipped)).use { gz ->
+            val reader = factory.createXMLEventReader(gz)
+            try {
+                return Driver(reader).run()
+            } finally {
+                reader.close()
+            }
         }
     }
 

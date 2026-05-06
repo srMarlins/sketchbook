@@ -42,7 +42,11 @@ class JvmFirstRunMigrationTest {
             last_modified = 0.0,
             last_scanned = 0.0,
             parse_status = "ok",
+            parse_error = null,
             mac_paths_count = 0,
+            effort_score = null,
+            effort_breakdown = null,
+            file_size_bytes = 0L,
         )
         return catalog.catalogQueries.selectProjectIdByPath(alsPath).executeAsOne()
     }
