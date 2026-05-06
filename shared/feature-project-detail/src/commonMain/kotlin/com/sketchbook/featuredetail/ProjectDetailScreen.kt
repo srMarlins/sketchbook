@@ -15,7 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import com.sketchbook.core.PluginFormat
+import com.sketchbook.core.PluginRef
 import com.sketchbook.repo.LockStatus
+import com.sketchbook.repo.SampleEntry
+import com.sketchbook.uishared.components.Badge
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.EmptyState
@@ -47,13 +51,9 @@ fun ProjectDetailScreen(
         Tabs(state.tab, onSelect = { holder.dispatch(ProjectDetailStateHolder.Intent.SelectTab(it)) })
         when (state.tab) {
             ProjectDetailStateHolder.Tab.Overview -> OverviewTab(state)
-            ProjectDetailStateHolder.Tab.Tracks,
-            ProjectDetailStateHolder.Tab.Samples,
-            ProjectDetailStateHolder.Tab.Plugins,
-            -> EmptyState(
-                title = "Populated at index time",
-                hint = "Wire up via repository in PR-18.",
-            )
+            ProjectDetailStateHolder.Tab.Tracks -> TracksTab(state)
+            ProjectDetailStateHolder.Tab.Samples -> SamplesTab(state.samples)
+            ProjectDetailStateHolder.Tab.Plugins -> PluginsTab(state.plugins)
             ProjectDetailStateHolder.Tab.History -> HistoryTab(state)
         }
     }
@@ -145,6 +145,91 @@ private fun OverviewTab(state: ProjectDetailStateHolder.State) {
             }
         }
     }
+}
+
+@Composable
+private fun TracksTab(state: ProjectDetailStateHolder.State) {
+    val row = state.row
+    if (row == null || row.trackCount <= 0) {
+        EmptyState(
+            title = "No tracks parsed",
+            hint = "Track counts populate after the parser runs over this `.als`.",
+        )
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
+        Text("Total tracks: ${row.trackCount}", style = AppTheme.typography.body)
+        row.tempo?.let { Text("Tempo: ${it.toInt()} bpm", style = AppTheme.typography.body) }
+        row.lastSavedLiveVersion?.let { Text("Last saved with: $it", style = AppTheme.typography.body) }
+    }
+}
+
+@Composable
+private fun SamplesTab(samples: List<SampleEntry>) {
+    if (samples.isEmpty()) {
+        EmptyState(
+            title = "No samples referenced",
+            hint = "Either this project is synth-only or the parser hasn't run yet.",
+        )
+        return
+    }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)) {
+        items(samples, key = { it.rawPath }) { s ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+            ) {
+                Badge(color = if (s.isMissing) AppTheme.colors.accentSecondary else AppTheme.colors.pinGreen) {
+                    Text(if (s.isMissing) "missing" else "found", style = AppTheme.typography.caption)
+                }
+                RowItem(
+                    modifier = Modifier.weight(1f),
+                    title = s.displayName,
+                    subtitle = s.rawPath,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PluginsTab(plugins: List<PluginRef>) {
+    if (plugins.isEmpty()) {
+        EmptyState(
+            title = "No plugins detected",
+            hint = "Either the project is plugin-free or the parser hasn't run yet.",
+        )
+        return
+    }
+    val byTrack = plugins.groupBy { it.trackName ?: "(master)" }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
+        byTrack.forEach { (track, list) ->
+            item(key = "track-$track") {
+                Text(track, style = AppTheme.typography.bodyEmphasis)
+            }
+            items(list, key = { "${track}-${it.name}-${it.format}" }) { p ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+                ) {
+                    Badge(color = AppTheme.colors.accentAction) {
+                        Text(pluginFormatLabel(p.format), style = AppTheme.typography.caption)
+                    }
+                    Text(p.name, style = AppTheme.typography.body)
+                }
+            }
+        }
+    }
+}
+
+private fun pluginFormatLabel(format: PluginFormat): String = when (format) {
+    PluginFormat.Vst3 -> "VST3"
+    PluginFormat.Vst2 -> "VST"
+    PluginFormat.Au -> "AU"
+    PluginFormat.AbletonNative -> "LIVE"
+    PluginFormat.Unknown -> "?"
 }
 
 @Composable
