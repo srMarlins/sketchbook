@@ -25,6 +25,7 @@ kotlin {
 
 // Resolve detekt rule packs from the version catalog.
 val libsCatalog = the<org.gradle.api.artifacts.VersionCatalogsExtension>().named("libs")
+
 fun lib(name: String) = libsCatalog.findLibrary(name).get()
 
 // detekt 2.x: every property on DetektExtension is a Gradle `Property<T>` /
@@ -62,6 +63,17 @@ tasks.withType<Detekt>().configureEach {
 }
 
 // Wire detekt into `check` so the local build is the gate.
+//
+// detekt 2.x's KMP integration registers two families of tasks:
+//   1. detekt<SourceSet>SourceSet — KMP-aware, consume per-source-set baselines (detekt-baseline-*.xml)
+//   2. detekt<Compilation>        — per-compilation, do NOT consume the per-source-set baselines
+// We gate `check` on (1) only — the (2) family double-reports without baselines.
 tasks.named("check") {
-    dependsOn(tasks.withType<Detekt>())
+    dependsOn(tasks.withType<Detekt>().matching { it.name.endsWith("SourceSet") })
+}
+
+// Per-compilation detekt tasks (detektMainJvm, detektTestJvm) double-report without baselines.
+// Disable them — the SourceSet tasks already cover the same code with baselines.
+tasks.matching { it.name.matches(Regex("^detekt(Main|Test)Jvm$")) }.configureEach {
+    enabled = false
 }
