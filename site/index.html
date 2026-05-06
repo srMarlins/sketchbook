@@ -230,56 +230,89 @@
     .marker { font-family: 'Permanent Marker', cursive; letter-spacing: 0.3px; }
     .data { font-family: 'Space Mono', monospace; }
 
-    /* Margin doodles — small handwritten marks in the left margin and corners.
-       Absolute-positioned, pointer-events:none, opacity tuned to read as faint
-       pencil/pen ink rather than UI. Hidden on small screens to avoid clutter. */
-    .doodle { position: absolute; pointer-events: none; opacity: 0.55; }
+    /* Margin doodles — handwritten ink marks placed alongside content. Bigger and
+       more visible than small margin glyphs; meant to read as someone's notes
+       in the margin, not invisible decoration. */
+    .doodle { position: absolute; pointer-events: none; mix-blend-mode: multiply; }
     @media (max-width: 640px) { .doodle { display: none; } }
-    .doodle-star  { top: 80px; left: 12px; transform: rotate(-12deg); color: #c2802a; }
-    .doodle-arrow { top: 260px; left: 8px;  transform: rotate(8deg);   color: #4a6b8c; }
-    .doodle-check { top: 470px; left: 14px; transform: rotate(-4deg);  color: #6a8a4e; }
-    .doodle-dots  { bottom: 90px; left: 14px; opacity: 0.4;             color: #5a534d; }
 
-    /* Coffee ring — faint brown stain, off to the side. The double ring (outer
-       darker than inner) is the classic capillary deposit pattern. */
+    /* Annotations next to actual content (arrows, circles, "yes" notes). */
+    .annot {
+      position: absolute;
+      pointer-events: none;
+      font-family: 'Gloria Hallelujah', cursive;
+      color: #b34a3a;
+      mix-blend-mode: multiply;
+    }
+
+    /* Coffee ring — actually visible. Sepia/umber double ring sitting on top
+       of the page, not blended into oblivion. */
     .coffee-ring {
       position: absolute;
-      right: 60px; top: 220px;
-      width: 110px; height: 110px;
       pointer-events: none;
-      opacity: 0.32;
+      width: 130px; height: 130px;
       background:
         radial-gradient(circle at 50% 50%,
-          transparent 0,
-          transparent 38%,
-          rgba(120, 70, 30, 0.55) 41%,
-          rgba(140, 85, 40, 0.35) 44%,
-          transparent 48%,
-          transparent 52%,
-          rgba(120, 70, 30, 0.25) 54%,
-          transparent 58%);
-      transform: rotate(8deg);
-      filter: blur(0.4px);
+          transparent 0%,
+          transparent 36%,
+          rgba(110, 65, 25, 0.62) 38%,
+          rgba(140, 85, 40, 0.45) 42%,
+          rgba(120, 75, 35, 0.18) 46%,
+          transparent 49%,
+          transparent 54%,
+          rgba(120, 70, 30, 0.32) 56%,
+          rgba(140, 85, 40, 0.18) 60%,
+          transparent 63%);
+      transform: rotate(12deg);
       mix-blend-mode: multiply;
+      filter: blur(0.3px);
     }
     .coffee-ring::after {
       content: '';
-      position: absolute;
-      inset: 0;
-      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='110' height='110'><filter id='c'><feTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 0.45  0 0 0 0 0.25  0 0 0 0 0.10  0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23c)'/></svg>");
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='130' height='130'><filter id='c'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 0.42  0 0 0 0 0.22  0 0 0 0 0.08  0 0 0 0.7 0'/></filter><rect width='100%25' height='100%25' filter='url(%23c)'/></svg>");
       mix-blend-mode: multiply;
-      mask: radial-gradient(circle at 50% 50%, transparent 38%, black 41%, black 58%, transparent 60%);
-      -webkit-mask: radial-gradient(circle at 50% 50%, transparent 38%, black 41%, black 58%, transparent 60%);
+      mask: radial-gradient(circle at 50% 50%, transparent 36%, black 39%, black 62%, transparent 64%);
+      -webkit-mask: radial-gradient(circle at 50% 50%, transparent 36%, black 39%, black 62%, transparent 64%);
     }
 
-    /* Pencil scribble — a thin, slightly transparent stroke that looks like
-       someone tested a pencil tip in the corner. */
-    .pencil-mark {
+    /* Hand-drawn underline beneath a phrase (instead of <u>). */
+    .hand-underline {
+      position: relative;
+      display: inline;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 12' preserveAspectRatio='none'><path d='M2 7 Q 30 3 60 7 T 120 8 T 198 6' stroke='%23c93535' stroke-width='2' fill='none' stroke-linecap='round' opacity='0.7'/></svg>");
+      background-repeat: no-repeat;
+      background-position: 0 100%;
+      background-size: 100% 10px;
+      padding-bottom: 8px;
+    }
+
+    /* Hand-drawn circle wrapped around a word — uses an SVG ellipse with stroke. */
+    .hand-circle {
+      position: relative;
+      display: inline-block;
+      padding: 2px 10px;
+    }
+    .hand-circle::before {
+      content: '';
+      position: absolute; inset: -4px -2px -2px -2px;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' preserveAspectRatio='none'><path d='M100 4 Q 180 6 192 30 Q 188 54 100 56 Q 14 56 8 30 Q 12 6 100 4' stroke='%23c93535' stroke-width='2' fill='none' opacity='0.72' stroke-linecap='round'/></svg>") no-repeat center / 100% 100%;
+      pointer-events: none;
+    }
+
+    /* Faint smudge / fingerprint on the desk OR page corner */
+    .smudge {
       position: absolute;
       pointer-events: none;
-      opacity: 0.5;
+      width: 90px; height: 60px;
+      background: radial-gradient(ellipse 60% 50% at 40% 50%, rgba(40, 25, 12, 0.18), transparent 70%);
       mix-blend-mode: multiply;
+      filter: blur(2px);
     }
+
+    /* Loose paperclip + pencil graphics that sit on the desk near the page,
+       so the page doesn't read as floating in a void. */
+    .desk-prop { position: absolute; pointer-events: none; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.35)); }
 
     /* Reduced-motion contract from design doc §6 */
     @media (prefers-reduced-motion: reduce) {
@@ -292,8 +325,33 @@
 
 <body>
   <!-- Wooden desk full-bleed; notebook page floats on top -->
-  <main class="min-h-screen flex items-start justify-center px-4 sm:px-8 py-10">
-    <div class="w-full max-w-4xl">
+  <main class="min-h-screen flex items-start justify-center px-4 sm:px-8 py-10 relative">
+    <!-- Pencil resting on the desk, off to the right of the page -->
+    <svg class="desk-prop hidden lg:block" style="top: 180px; right: 40px; transform: rotate(64deg);" width="22" height="220" viewBox="0 0 22 220" aria-hidden="true">
+      <defs>
+        <linearGradient id="pencilBody" x1="0" x2="1">
+          <stop offset="0" stop-color="#d8a64a"/>
+          <stop offset="0.5" stop-color="#f5c463"/>
+          <stop offset="1" stop-color="#a87a2c"/>
+        </linearGradient>
+      </defs>
+      <!-- ferrule + eraser -->
+      <rect x="3" y="2" width="16" height="16" fill="#e26b6b" rx="2"/>
+      <rect x="3" y="16" width="16" height="6" fill="#a8a8a8"/>
+      <!-- body -->
+      <rect x="3" y="22" width="16" height="160" fill="url(#pencilBody)"/>
+      <line x1="11" y1="22" x2="11" y2="182" stroke="rgba(80,50,10,0.4)" stroke-width="0.5"/>
+      <!-- wood tip -->
+      <polygon points="3,182 19,182 14,206 8,206" fill="#e8c79a"/>
+      <!-- graphite tip -->
+      <polygon points="8,206 14,206 11,218" fill="#2a2622"/>
+    </svg>
+    <!-- Brass paperclip on the desk lower-left -->
+    <svg class="desk-prop hidden lg:block" style="bottom: 90px; left: 80px; transform: rotate(-22deg);" width="56" height="86" viewBox="0 0 56 86" aria-hidden="true" stroke="#c8b88a" fill="none" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 6 L14 64 Q 14 76 26 76 Q 38 76 38 64 L 38 18 Q 38 10 30 10 Q 22 10 22 18 L 22 58 Q 22 64 28 64 Q 34 64 34 58 L 34 24" />
+    </svg>
+
+    <div class="w-full max-w-4xl relative">
       <!-- Brand row -->
       <div class="flex items-end justify-between mb-6 px-4">
         <div class="wordmark" role="img" aria-label="Sketchbook">
@@ -309,32 +367,35 @@
         <!-- Spiral binding -->
         <div class="spiral-binding absolute left-0 top-0 bottom-0 w-7" aria-hidden="true"></div>
 
-        <!-- Margin doodles (decorative; aria-hidden) -->
-        <svg class="doodle doodle-star" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 3 L13.6 9.4 L20 10 L15 14.2 L16.5 20.4 L12 17 L7.5 20.4 L9 14.2 L4 10 L10.4 9.4 Z" />
+        <!-- Coffee ring (upper-right of page, big enough to actually read) -->
+        <div class="coffee-ring" style="top: 36px; right: 50px;" aria-hidden="true"></div>
+
+        <!-- Margin doodles next to section starts. Bigger, hand-inked. -->
+        <svg class="doodle" style="top: 60px; left: 18px; transform: rotate(-14deg);" width="38" height="38" viewBox="0 0 40 40" aria-hidden="true" stroke="#c2802a" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 4 L23 16 L36 17 L26 25 L29 37 L20 30 L11 37 L14 25 L4 17 L17 16 Z" />
         </svg>
-        <svg class="doodle doodle-arrow" width="36" height="20" viewBox="0 0 36 20" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M2 11 Q 12 4 24 12 L 30 8 M 24 12 L 28 17" />
+        <svg class="doodle" style="top: 308px; left: 14px; transform: rotate(8deg);" width="46" height="28" viewBox="0 0 46 28" aria-hidden="true" stroke="#3a5d8a" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 16 Q 14 6 26 16 Q 34 22 42 12 M 36 11 L 42 12 L 41 18" />
         </svg>
-        <svg class="doodle doodle-check" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 13 Q 7 14 9 16 Q 13 9 21 5" />
+        <svg class="doodle" style="top: 600px; left: 18px; transform: rotate(-6deg);" width="38" height="38" viewBox="0 0 40 40" aria-hidden="true" stroke="#5a8240" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 22 Q 10 24 14 28 Q 22 14 36 6" />
         </svg>
-        <svg class="doodle doodle-dots" width="14" height="40" viewBox="0 0 14 40" aria-hidden="true" fill="currentColor" aria-label="">
-          <circle cx="7" cy="6"  r="1.4"/>
-          <circle cx="7" cy="14" r="1.2"/>
-          <circle cx="7" cy="22" r="1.4"/>
-          <circle cx="7" cy="30" r="1.1"/>
-          <circle cx="7" cy="37" r="1.3"/>
+        <svg class="doodle" style="bottom: 80px; left: 18px;" width="22" height="58" viewBox="0 0 22 60" aria-hidden="true" fill="#5a534d" opacity="0.55">
+          <circle cx="11" cy="6"  r="2.4"/>
+          <circle cx="11" cy="18" r="2.0"/>
+          <circle cx="11" cy="30" r="2.4"/>
+          <circle cx="11" cy="42" r="1.8"/>
+          <circle cx="11" cy="54" r="2.2"/>
         </svg>
 
-        <!-- Faint coffee ring stain -->
-        <div class="coffee-ring" aria-hidden="true"></div>
-
-        <!-- Pencil test scribble in lower-right corner -->
-        <svg class="pencil-mark" style="right: 28px; bottom: 24px;" width="64" height="20" viewBox="0 0 64 20" aria-hidden="true" stroke="#3a342e" fill="none" stroke-width="0.8" stroke-linecap="round">
-          <path d="M2 14 Q 8 6 14 12 T 26 10 T 38 12 T 50 9 T 62 11" />
-          <path d="M3 17 Q 10 13 18 16 T 34 14 T 50 16" opacity="0.6"/>
+        <!-- Pencil scribble — test mark in lower-right corner -->
+        <svg class="doodle" style="right: 28px; bottom: 22px;" width="86" height="28" viewBox="0 0 86 28" aria-hidden="true" stroke="#3a342e" fill="none" stroke-width="1" stroke-linecap="round" opacity="0.55">
+          <path d="M2 18 Q 10 8 18 16 T 34 14 T 50 16 T 66 14 T 82 16" />
+          <path d="M4 22 Q 12 18 22 21 T 42 19 T 62 21 T 80 19" opacity="0.7"/>
         </svg>
+
+        <!-- Faint smudge near upper-left, like a thumbprint at the binding -->
+        <div class="smudge" style="top: 110px; left: 56px;" aria-hidden="true"></div>
 
         <!-- Hero copy -->
         <header class="mb-10">
@@ -353,7 +414,7 @@
             <div class="washi-tape" aria-hidden="true"></div>
             <div class="flex items-baseline justify-between gap-6">
               <span class="text-lg" style="color: rgba(0,0,0,0.78);">2026-04-Kyoto-trap-sketch.als</span>
-              <span class="text-sm" style="color: rgba(0,0,0,0.55);">v 47 · auto</span>
+              <span class="text-sm hand-circle" style="color: rgba(0,0,0,0.78);">v 47 · auto</span>
             </div>
             <div class="flex items-baseline gap-5 mt-2 text-sm" style="color: rgba(0,0,0,0.7);">
               <span>140 bpm</span>
@@ -366,7 +427,11 @@
         </div>
 
         <!-- Download row -->
-        <section class="mb-10">
+        <section class="mb-10 relative">
+          <!-- Hand-drawn arrow + "this one" pointing at the CTA -->
+          <div class="annot hidden sm:flex" style="top: -28px; left: 14px; align-items: center; gap: 6px; transform: rotate(-6deg); font-size: 22px; color: #c93535;" aria-hidden="true">
+            <span style="font-family:'Permanent Marker', cursive;">this one ↓</span>
+          </div>
           <div class="flex flex-wrap items-center gap-x-8 gap-y-4">
             <a id="primary-download" class="btn-rough" href="#" data-platform-fallback="https://storage.googleapis.com/sketchbook-releases/download.html">
               <span aria-hidden="true">↓</span>
@@ -395,10 +460,11 @@
             </svg>
             <h3 class="marker mt-3 text-xl" style="color: var(--ink-graphite-700);">Snapshots</h3>
             <p class="handwritten mt-1 text-base" style="color: var(--ink-graphite-500);">
-              Every save becomes a content-addressed snapshot. Rewind any project to any moment.
+              Every save becomes a <span class="hand-underline">content-addressed</span> snapshot. Rewind any project to any moment.
             </p>
           </div>
-          <div>
+          <div class="relative">
+            <span class="annot" style="top: -22px; right: 8px; transform: rotate(6deg); font-size: 18px;" aria-hidden="true">← yes</span>
             <svg viewBox="0 0 64 64" width="48" height="48" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-graphite-700);">
               <rect x="6" y="14" width="22" height="36" rx="2" />
               <rect x="36" y="14" width="22" height="36" rx="2" />
