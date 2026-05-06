@@ -1,16 +1,17 @@
 package com.sketchbook.desktop.inbox
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -24,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.featurejournal.JournalDetailPane
 import com.sketchbook.featurejournal.JournalFilterBar
@@ -41,27 +43,24 @@ import com.sketchbook.featureproposals.proposalsItems
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.uishared.components.Badge
-import com.sketchbook.uishared.components.Button
-import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
 
 /**
- * Unified Inbox surface. Single scrollable page with three accordion sections (Proposals,
- * Needs Attention, Journal). Each section header is sticky as you scroll inside it, so the
- * count + bulk action stay reachable. Sections delegate to per-feature `*Items` LazyListScope
- * extensions for content, so the whole page is one virtualized [LazyColumn] — even with 100+
- * mac-import rows the scroll stays cheap.
+ * Unified Inbox surface — all three queues visible at once. Vertical layout: each expanded
+ * section takes equal share of the available height (`weight(1f)`) with its own internal
+ * scroll, so the user sees Proposals, Needs Attention, and Journal simultaneously without
+ * digging. Collapsed sections shrink to just their header bar; the freed vertical space
+ * redistributes to the remaining expanded sections.
  *
- * Default state: Proposals + Needs Attention expanded (queues to act on); Journal collapsed
- * (historical reference). User can flip any.
+ * Each section's header always shows title + count + collapse toggle, so even when collapsed
+ * the user sees what's in each queue at a glance.
  *
- * `initialTab` deep-links a section to be expanded — used by File-menu items and external nav
- * to land the user on the right section without clobbering their other expansion choices.
+ * `initialTab` deep-links from File-menu / external nav: that tab is forced expanded on entry,
+ * other tabs keep their default state.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InboxScreen(
     proposalsVm: ProposalsViewModel,
@@ -74,15 +73,15 @@ fun InboxScreen(
     val attentionState by needsAttentionVm.state.collectAsStateWithLifecycle()
     val journalState by journalVm.state.collectAsStateWithLifecycle()
 
+    // All three default expanded so the user sees all queues at once. `initialTab` is honored
+    // by forcing that section open even if it would have defaulted closed in the future.
     val sectionExpanded = remember {
         mutableStateMapOf(
-            InboxTab.Proposals to (initialTab == InboxTab.Proposals || initialTab == InboxTab.NeedsAttention),
-            InboxTab.NeedsAttention to (initialTab != InboxTab.Journal),
-            InboxTab.Journal to (initialTab == InboxTab.Journal),
-        )
+            InboxTab.Proposals to true,
+            InboxTab.NeedsAttention to true,
+            InboxTab.Journal to true,
+        ).also { it[initialTab] = true }
     }
-    // Inner-card / day expansion state lives at the inbox level so toggling a section
-    // collapsed and back doesn't reset the user's deeper expansion choices.
     val proposalGroupExpanded = remember {
         mutableStateMapOf<ProposalsViewModel.ProposalCategory, Boolean>()
     }
@@ -92,7 +91,6 @@ fun InboxScreen(
 
     var detail by remember { mutableStateOf<InboxDetailTarget?>(null) }
 
-    // Stable lambdas — hoisted out so the LazyColumn item lambdas don't reallocate per recomp.
     val onApprove: (String) -> Unit = remember(proposalsVm) {
         { id -> proposalsVm.dispatch(ProposalsViewModel.Intent.Approve(id)) }
     }
@@ -164,90 +162,78 @@ fun InboxScreen(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .background(AppTheme.colors.surfacePage),
+                .background(AppTheme.colors.surfacePage)
+                .padding(PaddingValues(AppTheme.spacing.md)),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
         ) {
-            PageHeader(
-                title = "Inbox",
-                modifier = Modifier.padding(
-                    start = AppTheme.spacing.md,
-                    end = AppTheme.spacing.md,
-                    top = AppTheme.spacing.md,
-                ),
-            )
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(PaddingValues(AppTheme.spacing.md)),
-                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-            ) {
-                section(
-                    tab = InboxTab.Proposals,
-                    title = "Proposals",
-                    count = pendingProposals,
-                    sectionExpanded = sectionExpanded,
-                    filterBar = {
-                        ProposalsFilterBar(
-                            state = proposalsState,
-                            onSourceFilter = onSourceFilter,
-                            onSearch = onProposalsSearch,
-                        )
-                    },
-                ) {
-                    proposalsItems(
+            PageHeader(title = "Inbox")
+            Section(
+                tab = InboxTab.Proposals,
+                title = "Proposals",
+                count = pendingProposals,
+                sectionExpanded = sectionExpanded,
+                filterBar = {
+                    ProposalsFilterBar(
                         state = proposalsState,
-                        groupExpanded = proposalGroupExpanded,
-                        resolvedExpanded = resolvedExpanded,
-                        onResolvedToggle = onResolvedToggle,
-                        vm = proposalsVm,
-                        onOpen = onOpenProposal,
-                        onApprove = onApprove,
-                        onReject = onReject,
+                        onSourceFilter = onSourceFilter,
+                        onSearch = onProposalsSearch,
                     )
-                }
-                section(
-                    tab = InboxTab.NeedsAttention,
-                    title = "Needs Attention",
-                    count = pendingAttention,
-                    sectionExpanded = sectionExpanded,
-                    filterBar = {
-                        NeedsAttentionFilterBar(
-                            state = attentionState,
-                            onSearch = onAttentionSearch,
-                        )
-                    },
-                ) {
-                    needsAttentionItems(
+                },
+            ) {
+                proposalsItems(
+                    state = proposalsState,
+                    groupExpanded = proposalGroupExpanded,
+                    resolvedExpanded = resolvedExpanded,
+                    onResolvedToggle = onResolvedToggle,
+                    vm = proposalsVm,
+                    onOpen = onOpenProposal,
+                    onApprove = onApprove,
+                    onReject = onReject,
+                )
+            }
+            Section(
+                tab = InboxTab.NeedsAttention,
+                title = "Needs Attention",
+                count = pendingAttention,
+                sectionExpanded = sectionExpanded,
+                filterBar = {
+                    NeedsAttentionFilterBar(
                         state = attentionState,
-                        cardExpanded = attentionCardExpanded,
-                        onOpen = onOpenAttention,
-                        onRepair = onRepair,
-                        onBulkRepair = onBulkRepair,
-                        onBulkApply = onBulkApply,
-                        onBulkDismiss = onBulkDismiss,
+                        onSearch = onAttentionSearch,
                     )
-                }
-                section(
-                    tab = InboxTab.Journal,
-                    title = "Journal",
-                    count = journalCount,
-                    sectionExpanded = sectionExpanded,
-                    filterBar = {
-                        JournalFilterBar(
-                            state = journalState,
-                            onSearch = onJournalSearch,
-                            onActionFilter = onActionFilter,
-                            onDateRange = onDateRange,
-                        )
-                    },
-                ) {
-                    journalItems(
+                },
+            ) {
+                needsAttentionItems(
+                    state = attentionState,
+                    cardExpanded = attentionCardExpanded,
+                    onOpen = onOpenAttention,
+                    onRepair = onRepair,
+                    onBulkRepair = onBulkRepair,
+                    onBulkApply = onBulkApply,
+                    onBulkDismiss = onBulkDismiss,
+                )
+            }
+            Section(
+                tab = InboxTab.Journal,
+                title = "Journal",
+                count = journalCount,
+                sectionExpanded = sectionExpanded,
+                filterBar = {
+                    JournalFilterBar(
                         state = journalState,
-                        dayExpanded = journalDayExpanded,
-                        onOpen = onOpenJournal,
-                        onUndo = onUndoOne,
-                        onBulkUndo = onBulkUndo,
+                        onSearch = onJournalSearch,
+                        onActionFilter = onActionFilter,
+                        onDateRange = onDateRange,
                     )
-                }
+                },
+            ) {
+                journalItems(
+                    state = journalState,
+                    dayExpanded = journalDayExpanded,
+                    onOpen = onOpenJournal,
+                    onUndo = onUndoOne,
+                    onBulkUndo = onBulkUndo,
+                )
             }
         }
         when (val d = detail) {
@@ -273,13 +259,14 @@ fun InboxScreen(
 }
 
 /**
- * Section block: sticky header (title + count + collapse toggle), optional filter bar inside
- * the expanded body, then the per-feature content items. Header stays pinned to the top of the
- * viewport while the user scrolls within the section, so the count + collapse toggle stay
- * reachable on long lists.
+ * One queue section. Header is always visible with title + count + collapse toggle. When
+ * expanded, the section claims `weight(1f)` of the parent Column so all expanded sections share
+ * the available vertical space evenly; the body has its own internal LazyColumn for scrolling.
+ * When collapsed, the section is just the header bar — no weight, no body — and other expanded
+ * sections grow to fill the freed space.
  */
-@OptIn(ExperimentalFoundationApi::class)
-private fun LazyListScope.section(
+@Composable
+private fun ColumnScope.Section(
     tab: InboxTab,
     title: String,
     count: Int,
@@ -288,21 +275,35 @@ private fun LazyListScope.section(
     content: LazyListScope.() -> Unit,
 ) {
     val expanded = sectionExpanded[tab] ?: true
-    stickyHeader(key = "section-header-$tab") {
+    val onToggle: () -> Unit = { sectionExpanded[tab] = !expanded }
+    if (expanded) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+        ) {
+            SectionHeader(
+                title = title,
+                count = count,
+                expanded = true,
+                onToggle = onToggle,
+            )
+            filterBar()
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+            ) {
+                content()
+            }
+        }
+    } else {
         SectionHeader(
             title = title,
             count = count,
-            expanded = expanded,
-            onToggle = { sectionExpanded[tab] = !expanded },
+            expanded = false,
+            onToggle = onToggle,
         )
-    }
-    if (expanded) {
-        item(key = "section-filter-$tab") {
-            Box(modifier = Modifier.padding(top = AppTheme.spacing.xs)) {
-                filterBar()
-            }
-        }
-        content()
     }
 }
 
@@ -316,43 +317,32 @@ private fun SectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppTheme.colors.surfacePage)
-            .padding(vertical = AppTheme.spacing.xs),
+            .background(AppTheme.colors.tintCream)
+            .clickable(onClick = onToggle)
+            .padding(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .weight(1f)
-                .clickable(onClick = onToggle)
-                .padding(vertical = AppTheme.spacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-        ) {
-            ProvideContentColor(AppTheme.colors.inkSecondary) {
-                Text(if (expanded) "▾" else "▸", style = AppTheme.typography.mono)
-            }
-            ProvideContentColor(AppTheme.colors.inkPrimary) {
-                Text(title, style = AppTheme.typography.title)
-            }
-            if (count > 0) {
-                Badge(color = AppTheme.colors.tintCream) {
-                    ProvideContentColor(AppTheme.colors.inkSecondary) {
-                        Text(count.toString(), style = AppTheme.typography.caption)
-                    }
+                .height(18.dp)
+                .background(AppTheme.colors.ruleMargin)
+                .padding(horizontal = 1.dp),
+        )
+        ProvideContentColor(AppTheme.colors.inkSecondary) {
+            Text(if (expanded) "▾" else "▸", style = AppTheme.typography.mono)
+        }
+        ProvideContentColor(AppTheme.colors.inkPrimary) {
+            Text(title, style = AppTheme.typography.bodyEmphasis)
+        }
+        if (count > 0) {
+            Badge(color = AppTheme.colors.surfaceCard) {
+                ProvideContentColor(AppTheme.colors.inkSecondary) {
+                    Text(count.toString(), style = AppTheme.typography.caption)
                 }
             }
         }
     }
-}
-
-/** Sticky-header helper alias so callers don't need the experimental opt-in at every site. */
-@OptIn(ExperimentalFoundationApi::class)
-private fun LazyListScope.stickyHeader(
-    key: Any,
-    content: @Composable () -> Unit,
-) {
-    stickyHeader(key = key, contentType = null) { content() }
 }
 
 enum class InboxTab { Proposals, NeedsAttention, Journal }
