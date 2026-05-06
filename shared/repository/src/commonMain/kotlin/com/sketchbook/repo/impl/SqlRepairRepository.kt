@@ -4,6 +4,7 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.ProjectId
+import com.sketchbook.core.SampleRefEdit
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.AlsPatchService
 import com.sketchbook.repo.JournalEntry
@@ -18,6 +19,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
+import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import javax.xml.stream.XMLInputFactory
 import javax.xml.stream.XMLStreamConstants
@@ -188,7 +190,14 @@ class SqlRepairRepository(
                     if (snapshotResult.isFailure) {
                         AlsPatchService.Outcome.Failed
                     } else {
-                        runCatching { patcher.patch(alsPath, mapping) }
+                        // Project Mac → POSIX mapping into rich edits with `newOriginalCrc=0L`.
+                        // Path change invalidates the CRC (Live recomputes on next save). We don't
+                        // have a candidate file to stat in the Mac-path repair case, so size /
+                        // mtime / RelativePathType are left untouched.
+                        val edits = mapping.map { (mac, posix) ->
+                            SampleRefEdit(oldPath = mac, newPath = posix, newOriginalCrc = 0L)
+                        }
+                        runCatching { patcher.patch(alsPath, edits) }
                             .getOrElse { AlsPatchService.Outcome.Failed }
                     }
                 }
@@ -267,6 +276,28 @@ class SqlRepairRepository(
                 )
             }
 
+            // Build a rich [SampleRefEdit]. Stat the candidate so the patched .als carries
+            // accurate `OriginalFileSize` + `LastModDate` for the *new* file (Live uses these
+            // to short-circuit re-validation on next open). `OriginalCrc=0L` because the path
+            // changed → the existing CRC is by definition stale; Live recomputes on next save.
+            // `RelativePathType=1` (absolute) since we're writing an absolute candidate path.
+            // `runCatching` on the stat calls so a vanished candidate doesn't blow up the apply.
+            val candidateStat = runCatching {
+                val p = Paths.get(candidatePath)
+                Pair(
+                    Files.size(p),
+                    Files.getLastModifiedTime(p).to(TimeUnit.SECONDS),
+                )
+            }.getOrNull()
+            val edit = SampleRefEdit(
+                oldPath = missingPath,
+                newPath = candidatePath,
+                newRelativePathType = 1,
+                newOriginalFileSize = candidateStat?.first,
+                newOriginalCrc = 0L,
+                newLastModDate = candidateStat?.second,
+            )
+
             // Rewrite the .als; the catalog flip is a tiny in-memory transaction and the patch
             // is the slow + failure-prone step. If the patch raises, we honor the user's pick
             // anyway (catalog still flips below) — the journal records the outcome so a later
@@ -275,7 +306,7 @@ class SqlRepairRepository(
                 AlsPatchService.Outcome.Failed
             } else {
                 runCatching {
-                    patcher.patch(alsPath, mapOf(missingPath to candidatePath))
+                    patcher.patch(alsPath, listOf(edit))
                 }.getOrElse { AlsPatchService.Outcome.Failed }
             }
 

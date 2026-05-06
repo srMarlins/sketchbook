@@ -1,5 +1,7 @@
 package com.sketchbook.syncio
 
+import com.sketchbook.als.AlsParser
+import com.sketchbook.core.SampleRefEdit
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
@@ -197,5 +199,95 @@ class AlsPatcherTest {
         val outcome = patcher.restore(als, byteArrayOf(0x42))
         assertEquals(AlsPatcher.Outcome.SkippedBusy, outcome)
         assertTrue(before.contentEquals(Files.readAllBytes(als)), "busy file untouched")
+    }
+
+    /**
+     * Fixture with primary FileRef + OriginalFileRef sibling, all path-bearing fields populated
+     * so the [SampleRefEdit] overload can demonstrably rewrite Path / OriginalFileSize / OriginalCrc
+     * end-to-end through the on-disk patcher.
+     */
+    private val sampleRefWithSiblingXml = """<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="12" MinorVersion="12.0" Creator="Ableton Live 12.0.5">
+  <LiveSet>
+    <Tracks>
+      <AudioTrack>
+        <DeviceChain>
+          <MainSequencer>
+            <ClipSlotList>
+              <AudioClip>
+                <SampleRef>
+                  <FileRef>
+                    <Name Value="kick.wav"/>
+                    <Path Value="/old/kick.wav"/>
+                    <RelativePath Value="rel/kick.wav"/>
+                    <OriginalFileSize Value="9999"/>
+                    <OriginalCrc Value="42"/>
+                  </FileRef>
+                  <SourceContext>
+                    <SourceContext>
+                      <OriginalFileRef>
+                        <FileRef>
+                          <Name Value="kick.wav"/>
+                          <Path Value="/old/kick.wav"/>
+                          <RelativePath Value="rel/kick.wav"/>
+                          <OriginalFileSize Value="9999"/>
+                          <OriginalCrc Value="42"/>
+                        </FileRef>
+                      </OriginalFileRef>
+                    </SourceContext>
+                  </SourceContext>
+                  <LastModDate Value="100"/>
+                </SampleRef>
+              </AudioClip>
+            </ClipSlotList>
+          </MainSequencer>
+        </DeviceChain>
+      </AudioTrack>
+    </Tracks>
+  </LiveSet>
+</Ableton>
+""".toByteArray(Charsets.UTF_8)
+
+    private fun gzipSiblingFixture(): ByteArray {
+        val out = ByteArrayOutputStream(sampleRefWithSiblingXml.size + 64)
+        GZIPOutputStream(out).use { it.write(sampleRefWithSiblingXml) }
+        return out.toByteArray()
+    }
+
+    @Test
+    fun `patch with SampleRefEdit list rewrites Path OriginalFileSize and OriginalCrc end-to-end`() {
+        val tmpDir = createTempDirectory("patcher-edits")
+        val als = tmpDir.resolve("Sibling.als").also { Files.write(it, gzipSiblingFixture()) }
+        val edit = SampleRefEdit(
+            oldPath = "/old/kick.wav",
+            newPath = "/new/kick.wav",
+            newOriginalFileSize = 12345L,
+            newOriginalCrc = 0L,
+        )
+        val outcome = AlsPatcher().patch(als, listOf(edit))
+        assertEquals(AlsPatcher.Outcome.Patched, outcome)
+        // Re-parse the patched on-disk file via the canonical AlsParser; both the primary FileRef
+        // and the OriginalFileRef sibling were updated, so the parser sees the new path/size/crc.
+        val md = Files.newInputStream(als).use { AlsParser.parse(it) }
+        assertEquals(1, md.sampleRefs.size)
+        val s = md.sampleRefs.first()
+        assertEquals("/new/kick.wav", s.rawPath)
+        assertEquals(12345L, s.originalFileSize)
+        assertEquals(0L, s.originalCrc)
+        assertTrue(s.hasOriginalFileRefSibling, "fixture has the sibling")
+        // No leftover temp files.
+        val tempCount = Files.list(tmpDir).use { stream ->
+            stream.filter { it.fileName.toString().contains(".patcher-tmp") }.count()
+        }
+        assertEquals(0, tempCount)
+    }
+
+    @Test
+    fun `patch with empty SampleRefEdit list returns NoChange`() {
+        val tmpDir = createTempDirectory("patcher-edits-empty")
+        val als = tmpDir.resolve("Empty.als").also { Files.write(it, gzipSiblingFixture()) }
+        val before = Files.readAllBytes(als)
+        assertEquals(AlsPatcher.Outcome.NoChange, AlsPatcher().patch(als, emptyList<SampleRefEdit>()))
+        assertTrue(before.contentEquals(Files.readAllBytes(als)), "file untouched on NoChange")
     }
 }

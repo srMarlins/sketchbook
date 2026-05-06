@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.ProjectId
+import com.sketchbook.core.SampleRefEdit
 import com.sketchbook.als.AlsRewriter
 import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
@@ -18,6 +19,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -120,6 +122,62 @@ class SqlRepairRepositoryAlsRewriteTest {
         return out.toByteArray()
     }
 
+    /**
+     * Live 11/12 fixture that *also* carries the `OriginalFileSize`+`OriginalCrc` metadata in both
+     * the primary FileRef and the OriginalFileRef sibling. Required for tests that assert the
+     * apply path zeros the CRC and stamps the candidate's file size — the rewriter only updates
+     * fields that are physically present in the document.
+     */
+    private val sampleRefWithMetaSiblingXml = """<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="12" MinorVersion="12.0" Creator="Ableton Live 12.0.5">
+  <LiveSet>
+    <Tracks>
+      <AudioTrack>
+        <DeviceChain>
+          <MainSequencer>
+            <ClipSlotList>
+              <AudioClip>
+                <SampleRef>
+                  <FileRef>
+                    <Name Value="missing.wav"/>
+                    <Path Value="/old/missing.wav"/>
+                    <RelativePath Value="rel/missing.wav"/>
+                    <RelativePathType Value="3"/>
+                    <OriginalFileSize Value="9999"/>
+                    <OriginalCrc Value="42"/>
+                  </FileRef>
+                  <SourceContext>
+                    <SourceContext>
+                      <OriginalFileRef>
+                        <FileRef>
+                          <Name Value="missing.wav"/>
+                          <Path Value="/old/missing.wav"/>
+                          <RelativePath Value="rel/missing.wav"/>
+                          <RelativePathType Value="3"/>
+                          <OriginalFileSize Value="9999"/>
+                          <OriginalCrc Value="42"/>
+                        </FileRef>
+                      </OriginalFileRef>
+                    </SourceContext>
+                  </SourceContext>
+                  <LastModDate Value="100"/>
+                </SampleRef>
+              </AudioClip>
+            </ClipSlotList>
+          </MainSequencer>
+        </DeviceChain>
+      </AudioTrack>
+    </Tracks>
+  </LiveSet>
+</Ableton>
+""".toByteArray(Charsets.UTF_8)
+
+    private fun gzipBytesWithMetaSibling(): ByteArray {
+        val out = ByteArrayOutputStream(sampleRefWithMetaSiblingXml.size + 64)
+        GZIPOutputStream(out).use { it.write(sampleRefWithMetaSiblingXml) }
+        return out.toByteArray()
+    }
+
     private fun ungzipToString(gzipped: ByteArray): String =
         GZIPInputStream(ByteArrayInputStream(gzipped)).use { it.readBytes().toString(Charsets.UTF_8) }
 
@@ -140,6 +198,8 @@ class SqlRepairRepositoryAlsRewriteTest {
             private set
         var lastMapping: Map<String, String>? = null
             private set
+        var lastEdits: List<SampleRefEdit>? = null
+            private set
         var restoreCalls: Int = 0
             private set
         var lastRestorePath: String? = null
@@ -147,10 +207,7 @@ class SqlRepairRepositoryAlsRewriteTest {
         var lastRestoreBytes: ByteArray? = null
             private set
 
-        override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
-            calls++
-            lastPath = alsPath
-            lastMapping = mapping
+        private fun rewriteMapping(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
             if (forcedOutcome != null) return forcedOutcome
             // Round-trip rewrite: ungzip → string-replace each mapping → re-gzip.
             val path = Path.of(alsPath)
@@ -169,6 +226,23 @@ class SqlRepairRepositoryAlsRewriteTest {
             GZIPOutputStream(out).use { it.write(text.toByteArray(Charsets.UTF_8)) }
             Files.write(path, out.toByteArray())
             return AlsPatchService.Outcome.Patched
+        }
+
+        override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
+            calls++
+            lastPath = alsPath
+            lastMapping = mapping
+            return rewriteMapping(alsPath, mapping)
+        }
+
+        override suspend fun patch(alsPath: String, edits: List<SampleRefEdit>): AlsPatchService.Outcome {
+            calls++
+            lastPath = alsPath
+            lastEdits = edits
+            // Reuse the substring rewrite by projecting edits to oldPath -> newPath. Good enough
+            // for catalog↔journal↔patch sequencing assertions; richer rewrites are covered by the
+            // real AlsRewriter end-to-end tests via [RealRewriterPatchService].
+            return rewriteMapping(alsPath, edits.associate { it.oldPath to it.newPath })
         }
 
         override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome {
@@ -248,7 +322,14 @@ class SqlRepairRepositoryAlsRewriteTest {
         assertTrue(result.isSuccess, "applyMissingSampleMatch should succeed; was $result")
         assertEquals(1, patcher.calls, "patcher should be invoked exactly once")
         assertEquals(als.toString(), patcher.lastPath)
-        assertEquals(mapOf("/old/missing.wav" to "/new/found.wav"), patcher.lastMapping)
+        // applyMissingSampleMatch routes through the rich SampleRefEdit overload now (PR follow-up
+        // to PR #102). Assert the edit carries the expected old/new pair plus the path-changed
+        // CRC-zeroing contract.
+        val edits = assertNotNull(patcher.lastEdits, "edits-based patch should have been called")
+        assertEquals(1, edits.size)
+        assertEquals("/old/missing.wav", edits.first().oldPath)
+        assertEquals("/new/found.wav", edits.first().newPath)
+        assertEquals(0L, edits.first().newOriginalCrc, "CRC must be zeroed when path changes")
 
         // The `.als` on disk was rewritten through the patch service.
         val text = ungzipToString(Files.readAllBytes(als))
@@ -473,6 +554,15 @@ class SqlRepairRepositoryAlsRewriteTest {
             return AlsPatchService.Outcome.Patched
         }
 
+        override suspend fun patch(alsPath: String, edits: List<SampleRefEdit>): AlsPatchService.Outcome {
+            val path = Path.of(alsPath)
+            val original = Files.readAllBytes(path)
+            val rewritten = AlsRewriter.rewriteSampleRefs(original, edits)
+            if (rewritten.contentEquals(original)) return AlsPatchService.Outcome.NoChange
+            Files.write(path, rewritten)
+            return AlsPatchService.Outcome.Patched
+        }
+
         override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome {
             Files.write(Path.of(alsPath), bytes)
             return AlsPatchService.Outcome.Patched
@@ -503,5 +593,41 @@ class SqlRepairRepositoryAlsRewriteTest {
         assertTrue(pathOccurrences.all { it == "/new/found.wav" },
             "both Path values must be the candidate; was $pathOccurrences")
         assertTrue("/old/missing.wav" !in xml, "old path must be gone from both FileRefs")
+    }
+
+    @Test
+    fun `applyMissingSampleMatch writes OriginalCrc zero and candidate size`() = runTest {
+        // Stat the candidate file and assert that after apply, the .als now carries that exact
+        // file size in its OriginalFileSize attribute (and OriginalCrc=0 — path changed, so the
+        // CRC must be invalidated; Live recomputes on its next save).
+        val tmp = createTempDirectory("repo-rewrite-meta")
+        val als = tmp.resolve("Meta.als").also { Files.write(it, gzipBytesWithMetaSibling()) }
+        val candidate = tmp.resolve("found.wav")
+        // Write a deterministic size — different from the fixture's 9999, so we can prove the
+        // apply path actually stat'd the candidate rather than echoing the original.
+        val candidateBytes = ByteArray(7777) { (it and 0xFF).toByte() }
+        Files.write(candidate, candidateBytes)
+        val candidateSize = Files.size(candidate)
+        check(candidateSize == 7777L)
+
+        val patcher = RealRewriterPatchService()
+        val (catalog, _, repo) = setup(patcher)
+        val pid = seedProjectWithMissingSample(catalog, als, missingPath = "/old/missing.wav")
+
+        repo.applyMissingSampleMatch(
+            projectId = pid,
+            missingPath = "/old/missing.wav",
+            candidatePath = candidate.toString(),
+        ).getOrThrow()
+
+        // Re-parse via the canonical AlsParser to read structured metadata.
+        val md = Files.newInputStream(als).use { com.sketchbook.als.AlsParser.parse(it) }
+        assertEquals(1, md.sampleRefs.size)
+        val s = md.sampleRefs.first()
+        assertEquals(candidate.toString(), s.rawPath, "primary path now points at the candidate")
+        assertEquals(0L, s.originalCrc, "CRC must be zeroed when path changes")
+        assertEquals(candidateSize, s.originalFileSize, "OriginalFileSize must match the candidate's size")
+        // RelativePathType=1 means absolute — we wrote an absolute candidate path.
+        assertEquals(1, s.relativePathType)
     }
 }

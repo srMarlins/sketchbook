@@ -373,6 +373,24 @@ class AlsParserTest {
     }
 
     @Test
+    fun extractsLive10SampleRefMetadataViaSearchHintFallback() {
+        // Live ≤10 stores per-sample metadata in `<FileRef><SearchHint><FileSize/><Crc/></SearchHint></FileRef>`
+        // — not the flat `OriginalFileSize`/`OriginalCrc` fields Live 11+ writes. Verify the parser
+        // falls back to the SearchHint nested form when the flat fields are absent.
+        val md = javaClass.getResourceAsStream("/live10-sampleref.xml.gz")!!.use {
+            AlsParser.parse(it)
+        }
+        assertEquals("10.1.30", md.lastSavedLiveVersion)
+        assertEquals(1, md.sampleRefs.size)
+        val s = md.sampleRefs[0]
+        assertEquals(58394528L, s.originalFileSize)
+        assertEquals(7866L, s.originalCrc)
+        assertEquals(1694844696L, s.lastModDate)
+        assertEquals("Samples/Imported/kick.wav", s.rawPath)
+        assertEquals(3, s.relativePathType)
+    }
+
+    @Test
     fun parserBoundedMemoryAgainstLargeSyntheticInput() {
         // Build a synthetic .als with one project shell + N huge inert <Clip> blobs that the
         // parser must skip. Verifies no DOM accumulation: heap stays well under 256 MB even

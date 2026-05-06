@@ -24,6 +24,22 @@ interface AlsPatchService {
     suspend fun patch(alsPath: String, mapping: Map<String, String>): Outcome
 
     /**
+     * Rich-edit overload. Each [com.sketchbook.core.SampleRefEdit] is matched on the SampleRef's
+     * primary `<Path>` (or `<RelativePath>`); on match, **both** the primary FileRef and its
+     * `SourceContext/SourceContext/OriginalFileRef/FileRef` sibling are updated atomically — Live
+     * re-derives paths from the sibling under some operations, so patching only the primary
+     * causes silent reverts. Beyond paths, the edit can rewrite `OriginalFileSize`, `OriginalCrc`,
+     * `RelativePathType`, and `LastModDate`; null fields are left untouched.
+     *
+     * Implementations honor atomicity and busy detection identically to [patch] above. An empty
+     * [edits] list is a no-op that returns [Outcome.NoChange].
+     *
+     * @param alsPath absolute path to the `.als` file. Stringly-typed because `commonMain` can't
+     *   reference `java.nio.file.Path`.
+     */
+    suspend fun patch(alsPath: String, edits: List<com.sketchbook.core.SampleRefEdit>): Outcome
+
+    /**
      * Atomically replace the contents of [alsPath] with the supplied [bytes]. Used by PR-W W4's
      * Undo path: the repository captures the pre-patch bytes via a sidecar before calling
      * [patch]; on Undo it reads the sidecar back and feeds the bytes to this method.

@@ -1,5 +1,6 @@
 package com.sketchbook.als
 
+import com.sketchbook.core.SampleRefEdit
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPInputStream

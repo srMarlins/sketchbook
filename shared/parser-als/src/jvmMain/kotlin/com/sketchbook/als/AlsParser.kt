@@ -273,6 +273,24 @@ object AlsParser {
                         "OriginalCrc" -> start.attr("Value")?.toLongOrNull()?.let { samp.originalCrc = it }
                     }
                 }
+                // Live ≤10 fallback: per-sample metadata lives in a nested
+                // `<FileRef><SearchHint><FileSize Value=…/><Crc Value=…/></SearchHint></FileRef>`
+                // schema instead of the flat `OriginalFileSize`/`OriginalCrc` Live 11+ uses. Only
+                // populate when the explicit Original* fields haven't already filled the slots —
+                // some Live 11+ projects ship a SearchHint stub with zero values that would
+                // overwrite a real value on the way out.
+                if (samp.insidePrimaryFileRef && parentTag() == "SearchHint" &&
+                    grandparentTag() == "FileRef"
+                ) {
+                    when (tag) {
+                        "FileSize" -> if (samp.originalFileSize == null) {
+                            start.attr("Value")?.toLongOrNull()?.let { samp.originalFileSize = it }
+                        }
+                        "Crc" -> if (samp.originalCrc == null) {
+                            start.attr("Value")?.toLongOrNull()?.let { samp.originalCrc = it }
+                        }
+                    }
+                }
                 if (tag == "RelativePathElement" && grandparentTag() == "FileRef") {
                     val greatGrand = pathStack.elementAtOrNull(pathStack.size - 4)
                     if (greatGrand == "SampleRef") {
