@@ -525,7 +525,7 @@ private fun ProjectGroup.toSongStripData(sync: ProjectSyncState?): SongStripData
     val r = representative
     return SongStripData(
         id = r.id.value,
-        name = r.name + (if (variantCount > 1) "  +${variantCount - 1}" else ""),
+        name = r.name,
         parentDir = id,
         tempo = r.tempo,
         timeSigNum = null,
@@ -538,8 +538,12 @@ private fun ProjectGroup.toSongStripData(sync: ProjectSyncState?): SongStripData
         tags = r.tags,
         warning = if (missingSampleCount > 0) "$missingSampleCount missing sample${if (missingSampleCount == 1) "" else "s"}" else null,
         sync = sync?.toBadge(),
+        variantCount = variantCount,
     )
 }
+
+internal fun ProjectGroup.toSongStripDataForTest(sync: ProjectSyncState?): SongStripData =
+    toSongStripData(sync)
 
 private fun ProjectSyncState.toBadge(): SongSyncBadge = when (this) {
     ProjectSyncState.Synced -> SongSyncBadge.Synced

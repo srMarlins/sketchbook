@@ -54,6 +54,8 @@ data class SongStripData(
     val tags: List<String>,
     val warning: String? = null,
     val sync: SongSyncBadge? = null,
+    /** Number of `.als` variants in this project group. 1 = singleton (no version card treatment). */
+    val variantCount: Int = 1,
 )
 
 /**
