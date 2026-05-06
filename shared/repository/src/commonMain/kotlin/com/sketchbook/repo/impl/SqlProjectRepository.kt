@@ -233,6 +233,42 @@ class SqlProjectRepository(
             ActionRecord.Archive(wasArchived = wasArchived, isArchived = archived)
         }
 
+    override suspend fun setStageOverride(
+        id: ProjectId,
+        stage: com.sketchbook.core.Stage?,
+    ): Result<JournalEntry> {
+        return withContext(ioDispatcher) {
+            val row = catalog.catalogQueries.selectProjectById(id.value).executeAsOneOrNull()
+                ?: return@withContext Result.failure<JournalEntry>(
+                    SketchbookError.NotFound("project $id not found"),
+                )
+            // Effective stage before = override > inferred (mirrors ProjectRow.stage).
+            val before = row.stage_override?.let { com.sketchbook.core.Stage.fromName(it) }
+                ?: row.stage_inferred?.let { com.sketchbook.core.Stage.fromName(it) }
+            // After applying the new override, the effective stage is the override (if any)
+            // else the inferred — same precedence rule.
+            val after = stage
+                ?: row.stage_inferred?.let { com.sketchbook.core.Stage.fromName(it) }
+            catalog.transaction {
+                catalog.catalogQueries.updateStageOverride(
+                    stage_override = stage?.name,
+                    id = id.value,
+                )
+            }
+            ftsTrigger.update { it + 1 }
+            journal.append(
+                JournalEntry(
+                    timestamp = clock.now(),
+                    projectId = id,
+                    action = ActionRecord.StageOverridden(
+                        stageBefore = before?.name,
+                        stageAfter = after?.name,
+                    ),
+                ),
+            )
+        }
+    }
+
     override suspend fun setTags(id: ProjectId, tags: List<String>): Result<JournalEntry> {
         return withContext(ioDispatcher) {
             val row = catalog.catalogQueries.selectProjectById(id.value).executeAsOneOrNull()

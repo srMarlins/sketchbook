@@ -825,6 +825,9 @@ private fun DetailPanelContent(
                                 row = row,
                                 theme = theme,
                                 onTagsChange = { holder.dispatch(com.sketchbook.featuredetail.ProjectDetailStateHolder.Intent.SetTags(it)) },
+                                onSetStageOverride = { stage ->
+                                    holder.dispatch(com.sketchbook.featuredetail.ProjectDetailStateHolder.Intent.SetStageOverride(stage))
+                                },
                             )
                             DetailQuickVersions(row, state, theme)
                         }
@@ -890,6 +893,7 @@ private fun DetailMetaSection(
     row: com.sketchbook.core.ProjectRow,
     theme: com.sketchbook.uishared.theme.AppTheme,
     onTagsChange: (List<String>) -> Unit,
+    onSetStageOverride: (com.sketchbook.core.Stage?) -> Unit,
 ) {
     Section("Overview", theme) {
         DetailRow("Project root", com.sketchbook.featureprojects.projectRootDir(row.path.value), theme, mono = true)
@@ -898,12 +902,187 @@ private fun DetailMetaSection(
         row.tempo?.let { DetailRow("Tempo", "${it.toInt()} bpm", theme) }
         if (row.trackCount > 0) DetailRow("Tracks", row.trackCount.toString(), theme)
         row.lastSavedLiveVersion?.let { DetailRow("Last saved with", it, theme) }
+        // PR-R: stage chip + override picker. Always shown so the producer can pin a stage on
+        // a project that doesn't currently match any heuristic (the most useful case for the
+        // override — "I know this is a Sketch even though there's no chip").
+        StageOverrideRow(row = row, theme = theme, onSetOverride = onSetStageOverride)
         TagsEditorRow(
             tags = row.tags,
             theme = theme,
             onChange = onTagsChange,
         )
     }
+}
+
+/**
+ * PR-R: stage chip + override picker on the detail panel's Overview tab. Click the chip (or
+ * the "..." affordance) to open a small popup that lets the user pin one of the five stages
+ * or clear the override. Mirrors PR-X's filter chip popup styling.
+ *
+ * Right-click is wired via Compose's `onClick` only because Compose Multiplatform Desktop's
+ * `pointerInput` API for distinguishing primary/secondary clicks is verbose and not worth
+ * the maintenance cost for a single-purpose menu — a left-click on the chip opens the same
+ * popup, which is the discoverable affordance the spec calls for.
+ */
+@Composable
+private fun StageOverrideRow(
+    row: com.sketchbook.core.ProjectRow,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    onSetOverride: (com.sketchbook.core.Stage?) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    val effective = row.stage
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+    ) {
+        ProvideContentColor(theme.colors.inkMuted) {
+            Text(
+                "Stage",
+                style = theme.typography.mono.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ),
+                modifier = Modifier.width(120.dp),
+            )
+        }
+        Box {
+            DetailStageChip(stage = effective, theme = theme, onClick = { open = !open })
+            if (open) {
+                androidx.compose.ui.window.Popup(
+                    onDismissRequest = { open = false },
+                    properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+                ) {
+                    StageOverridePopup(
+                        current = row.stageOverride,
+                        inferred = row.stageInferred,
+                        theme = theme,
+                        onPick = { stage ->
+                            onSetOverride(stage)
+                            open = false
+                        },
+                    )
+                }
+            }
+        }
+        if (row.stageOverride != null) {
+            ProvideContentColor(theme.colors.inkMuted) {
+                Text("(pinned)", style = theme.typography.caption)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailStageChip(
+    stage: com.sketchbook.core.Stage?,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    onClick: () -> Unit,
+) {
+    val colors = theme.colors
+    val (bg, fg, label) = when (stage) {
+        com.sketchbook.core.Stage.Sketch -> Triple(colors.tintCream, colors.inkSecondary, "sketch")
+        com.sketchbook.core.Stage.InProgress -> Triple(colors.accentAction, colors.surfaceCard, "in progress")
+        com.sketchbook.core.Stage.Mixing -> Triple(colors.accentSecondary, colors.surfaceCard, "mixing")
+        com.sketchbook.core.Stage.Done -> Triple(colors.accentPositive, colors.surfaceCard, "done")
+        com.sketchbook.core.Stage.Stuck -> Triple(colors.accentDanger, colors.surfaceCard, "stuck")
+        null -> Triple(colors.surfaceCard, colors.inkMuted, "(none) — set stage")
+    }
+    Box(
+        modifier = Modifier
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+            .background(bg)
+            .border(1.dp, colors.ruleLine, androidx.compose.foundation.shape.RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        ProvideContentColor(fg) {
+            Text(
+                label,
+                style = theme.typography.mono.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun StageOverridePopup(
+    current: com.sketchbook.core.Stage?,
+    inferred: com.sketchbook.core.Stage?,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    onPick: (com.sketchbook.core.Stage?) -> Unit,
+) {
+    val colors = theme.colors
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier
+            .widthIn(min = 220.dp, max = 280.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+            .background(colors.surfaceCard)
+            .border(1.dp, colors.ruleLineStrong, androidx.compose.foundation.shape.RoundedCornerShape(8.dp)),
+    ) {
+        // Header explains what "Use inferred" does — the producer's first instinct on seeing
+        // "Use inferred (Mixing)" is "ah, that's the auto-detected value, picking it is the same
+        // as not having an override". Keeps the popup self-documenting.
+        ProvideContentColor(colors.inkMuted) {
+            Text(
+                "Override stage",
+                style = theme.typography.mono.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        }
+        // "Use inferred" clears the override (ProjectRepository.setStageOverride(null)) so the
+        // chip falls back to whatever the heuristic produced.
+        StageOverrideRow(
+            label = if (inferred != null) "Use inferred (${inferred.label()})" else "Use inferred (none)",
+            selected = current == null,
+            theme = theme,
+            onClick = { onPick(null) },
+        )
+        for (stage in com.sketchbook.core.Stage.entries) {
+            StageOverrideRow(
+                label = stage.label(),
+                selected = current == stage,
+                theme = theme,
+                onClick = { onPick(stage) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun StageOverrideRow(
+    label: String,
+    selected: Boolean,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    onClick: () -> Unit,
+) {
+    val colors = theme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (selected) colors.tintCream else colors.surfaceCard)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        ProvideContentColor(if (selected) colors.inkPrimary else colors.inkSecondary) {
+            Text(
+                if (selected) "✓ $label" else label,
+                style = theme.typography.body,
+            )
+        }
+    }
+}
+
+private fun com.sketchbook.core.Stage.label(): String = when (this) {
+    com.sketchbook.core.Stage.Sketch -> "Sketch"
+    com.sketchbook.core.Stage.InProgress -> "In progress"
+    com.sketchbook.core.Stage.Mixing -> "Mixing"
+    com.sketchbook.core.Stage.Done -> "Done"
+    com.sketchbook.core.Stage.Stuck -> "Stuck"
 }
 
 @Composable

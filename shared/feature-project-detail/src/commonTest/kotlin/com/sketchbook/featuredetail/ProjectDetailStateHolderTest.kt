@@ -68,6 +68,14 @@ class ProjectDetailStateHolderTest {
             return Result.success(stub())
         }
         override suspend fun setTags(id: ProjectId, tags: List<String>) = Result.success(stub())
+        var lastStageOverride: Pair<ProjectId, com.sketchbook.core.Stage?>? = null
+        override suspend fun setStageOverride(
+            id: ProjectId,
+            stage: com.sketchbook.core.Stage?,
+        ): Result<JournalEntry> {
+            lastStageOverride = id to stage
+            return Result.success(stub())
+        }
         private fun stub() = JournalEntry(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.Archive(false, true))
     }
 
@@ -136,6 +144,22 @@ class ProjectDetailStateHolderTest {
         holder.dispatch(ProjectDetailStateHolder.Intent.Move("/new/parent"))
         advanceUntilIdle()
         assertEquals(ProjectId(7) to "/new/parent", projects.lastMove)
+    }
+
+    @Test
+    fun setStageOverrideForwardsToRepository() = runTest(UnconfinedTestDispatcher()) {
+        val projects = FakeProjects(sampleRow)
+        val snaps = FakeSnapshots(MutableStateFlow(emptyList()))
+        val holder = ProjectDetailStateHolder(projects, snaps, backgroundScope, projectUuidLookup = { uuid })
+        holder.load(ProjectId(7))
+        advanceUntilIdle()
+        holder.dispatch(ProjectDetailStateHolder.Intent.SetStageOverride(com.sketchbook.core.Stage.Mixing))
+        advanceUntilIdle()
+        assertEquals(ProjectId(7) to com.sketchbook.core.Stage.Mixing, projects.lastStageOverride)
+
+        holder.dispatch(ProjectDetailStateHolder.Intent.SetStageOverride(null))
+        advanceUntilIdle()
+        assertEquals(ProjectId(7) to null, projects.lastStageOverride)
     }
 
     @Test

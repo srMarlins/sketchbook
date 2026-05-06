@@ -299,4 +299,43 @@ class SqlProjectRepositoryTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    @Test
+    fun setStageOverridePersistsAndJournalsTransition() = runTest {
+        val (catalog, fts, repo) = setup()
+        val id = ProjectId(seed(catalog, fts, "foo", "/lib"))
+        // Seed an inferred stage so the transition is visible in the journal entry.
+        catalog.catalogQueries.updateStageInference(
+            stage_inferred = "InProgress",
+            has_local_bounce = 0L,
+            path = "/lib/foo.als",
+        )
+
+        // Apply override.
+        val entry = repo.setStageOverride(id, com.sketchbook.core.Stage.Mixing).getOrThrow()
+        val action = entry.action as ActionRecord.StageOverridden
+        assertEquals("InProgress", action.stageBefore)
+        assertEquals("Mixing", action.stageAfter)
+        assertEquals(id, entry.projectId)
+
+        // The override is persisted; reads via observeProject return the override.
+        val row = catalog.catalogQueries.selectProjectById(id.value).executeAsOne()
+        assertEquals("Mixing", row.stage_override)
+        assertEquals("InProgress", row.stage_inferred)
+
+        // Clearing the override flips back to inferred.
+        val cleared = repo.setStageOverride(id, null).getOrThrow()
+        val clearAction = cleared.action as ActionRecord.StageOverridden
+        assertEquals("Mixing", clearAction.stageBefore)
+        assertEquals("InProgress", clearAction.stageAfter)
+        val cleared2 = catalog.catalogQueries.selectProjectById(id.value).executeAsOne()
+        assertNull(cleared2.stage_override)
+    }
+
+    @Test
+    fun setStageOverrideOnUnknownProjectReturnsNotFound() = runTest {
+        val (_, _, repo) = setup()
+        val r = repo.setStageOverride(ProjectId(99_999L), com.sketchbook.core.Stage.Done)
+        assertTrue(r.isFailure)
+    }
 }

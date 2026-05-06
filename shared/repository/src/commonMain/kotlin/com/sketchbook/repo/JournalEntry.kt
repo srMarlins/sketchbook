@@ -170,6 +170,27 @@ sealed interface ActionRecord {
      * preserved. Repository callers should pass `""` for cleared and `null` only when they
      * genuinely don't have a value.
      */
+    /**
+     * PR-R: user overrode (or cleared) the auto-inferred stage on a project. [stageBefore] /
+     * [stageAfter] are the *effective* stages on either side — what the chip displayed before
+     * and after — so the audit log reads "Mixing → Done" rather than "(null override) → Done"
+     * which loses the inferred-vs-override distinction the user actually saw.
+     *
+     * Persisted via the `Stage.name` enum string (or null for "no chip"). The journal viewer
+     * formats the action label via [com.sketchbook.featurejournal.actionType].
+     */
+    @Serializable
+    data class StageOverridden(
+        /** Effective stage before the override (override > inferred); null = no chip. */
+        val stageBefore: String?,
+        /** Effective stage after the override; null when the user cleared the override and the
+         *  inferred value happens to also be null (or simply "back to inferred-null"). */
+        val stageAfter: String?,
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "StageOverridden" }
+    }
+
     @Serializable
     data class SnapshotRelabeled(
         val rev: Long,

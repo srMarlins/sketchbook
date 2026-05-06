@@ -83,6 +83,17 @@ interface ProjectRepository {
 
     /** Replace the project's tag set (creates missing tags as a side effect). */
     suspend fun setTags(id: ProjectId, tags: List<String>): Result<JournalEntry>
+
+    /**
+     * PR-R: pin a manual override for the project's lifecycle stage. Pass `null` to clear the
+     * override (the chip then reverts to whatever the scanner's heuristic produced). Journals a
+     * [ActionRecord.StageOverridden] with the *effective* stage on either side — what the chip
+     * actually showed before vs after — so the audit log reads naturally.
+     */
+    suspend fun setStageOverride(
+        id: ProjectId,
+        stage: com.sketchbook.core.Stage?,
+    ): Result<JournalEntry> = Result.failure(NotImplementedError("setStageOverride not implemented"))
 }
 
 /**

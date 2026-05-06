@@ -152,6 +152,10 @@ class ProjectDetailStateHolder(
                 val row = state.value.row ?: return
                 scope.launch { projects.archive(row.id, !row.archived) }
             }
+            is Intent.SetStageOverride -> {
+                val id = selectedId.value ?: return
+                scope.launch { projects.setStageOverride(id, intent.stage) }
+            }
         }
     }
 
@@ -192,6 +196,9 @@ class ProjectDetailStateHolder(
         data class SetTags(val tags: List<String>) : Intent
         data class Move(val newParentDir: String) : Intent
         data object ToggleArchive : Intent
+        /** PR-R: pin a manual stage override on the project. `null` clears the override and the
+         *  chip reverts to whatever the scanner's heuristic produced. */
+        data class SetStageOverride(val stage: com.sketchbook.core.Stage?) : Intent
     }
 
     sealed interface Effect {
