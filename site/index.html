@@ -557,6 +557,13 @@
             </a>
             <div class="handwritten text-base flex flex-wrap items-center gap-x-5 gap-y-1" style="color: var(--ink-graphite-500);">
               <span>or pick:</span>
+              <!--
+                Filenames here MUST match what Conveyor emits in `output/`. The
+                verify step in .github/workflows/release.yml asserts these exist
+                before uploading the bucket — it'll fail the release loudly if
+                conveyor.conf is changed without updating this list (and vice
+                versa). Update both files in lockstep.
+              -->
               <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook-{{VERSION}}-mac-aarch64.zip">Apple Silicon</a>
               <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook-{{VERSION}}-mac-amd64.zip">Intel Mac</a>
               <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook.exe">Windows</a>

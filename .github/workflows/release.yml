@@ -80,6 +80,35 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f  # v2
 
+      # site/index.html links to specific artifact filenames; if Conveyor's emitted
+      # names ever drift from those links the bucket upload silently succeeds and
+      # the landing-page download buttons silently 404. Assert the canonical names
+      # exist in `output/` BEFORE the upload step. Update this list AND
+      # site/index.html in lockstep when changing Conveyor config.
+      - name: Verify Conveyor output matches site/index.html download links
+        env:
+          VERSION: ${{ env.ORG_GRADLE_PROJECT_version }}
+        run: |
+          ls -lh output/
+          missing=()
+          # Self-update + portable archives the JS in site/index.html links to.
+          for f in \
+              "sketchbook-${VERSION}-mac-aarch64.zip" \
+              "sketchbook-${VERSION}-mac-amd64.zip" \
+              "sketchbook.exe" \
+              "metadata.properties"; do
+            if [ ! -e "output/$f" ]; then
+              missing+=("$f")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Conveyor output is missing files referenced by site/index.html:"
+            printf '  - %s\n' "${missing[@]}"
+            echo "Either update conveyor.conf to emit these names OR update site/index.html"
+            echo "and the verify list above to match what Conveyor actually emits."
+            exit 1
+          fi
+
       # Cache-Control split: versioned binaries (e.g. Sketchbook-1.2.3-windows-amd64.msi)
       # are immutable - clients caching them forever is correct. The auto-update
       # manifest (`metadata.properties`) is mutable; cap it at 5 minutes so installed

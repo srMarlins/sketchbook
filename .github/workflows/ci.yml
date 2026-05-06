@@ -10,9 +10,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: ci
-    runs-on: ubuntu-latest
+  # OS matrix on Gradle check. Conveyor cross-builds installers on a single
+  # host, but the JVM/Compose Desktop test surface still has OS-specific
+  # gotchas (font fallback, file-watcher events, path separators) that only
+  # show up on the target OS. Catching them here is cheaper than a
+  # post-tag firefight.
+  check:
+    name: check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
@@ -25,3 +34,27 @@ jobs:
 
       - name: Gradle check
         run: ./gradlew --no-daemon check
+
+  # Release-pipeline smoke test: build the app-desktop bundle that Conveyor
+  # consumes. This catches Compose Desktop wiring breakage at PR time
+  # instead of at tag-push time (where the cost is "the release is busted
+  # and we have to rev a new tag"). Doesn't run Conveyor itself - that
+  # needs the signing key and is exercised by release.yml on tags.
+  release-dryrun:
+    name: release dryrun (build app-desktop)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e  # v6
+
+      - name: Build :app-desktop (the bundle Conveyor packages)
+        run: ./gradlew --no-daemon :app-desktop:build
+
+      - name: Print conveyor config (catches printConveyorConfig regressions)
+        run: ./gradlew -q :app-desktop:printConveyorConfig
