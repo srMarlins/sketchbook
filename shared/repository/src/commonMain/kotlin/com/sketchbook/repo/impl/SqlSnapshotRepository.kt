@@ -16,18 +16,19 @@ import kotlin.time.Instant
 
 /**
  * SQLDelight-backed [SnapshotRepository]. Reads from the catalog's `snapshots` table; writes
- * one row per `recordSnapshot`. Materialization is still a stub — the real laydown lives in
- * the sync engine (PR-22) and will swap this impl's [materializeAt] when it lands.
+ * one row per `recordSnapshot`. Materialization delegates to a function passed at
+ * construction so commonMain stays free of any sync-engine dep — the desktop graph wires in
+ * `ManifestMaterializer::materialize`.
  *
- * Why this exists in PR-C: the Timeline screen needs real history per project, and the
- * `SnapshotPipeline` (PR-B) writes manifests but doesn't persist a domain `Snapshot` row
- * itself. The desktop's pipeline integration calls [recordSnapshot] from `GcsSyncQueue` after
- * a successful CAS — that path lands as a follow-up; for v1 the table is populated by the
- * scanner's first-run migration when sidecar files exist.
+ * On a successful rewind, a synthetic snapshot row is inserted (`kind = "auto"`, label
+ * `"rewind to rev N"`, `parent_rev = rev`, `rev = currentMax + 1`) so the Timeline shows the
+ * rewind itself as a new entry.
  */
 class SqlSnapshotRepository(
     private val catalog: Catalog,
     private val ioDispatcher: CoroutineDispatcher,
+    private val materialize: suspend (ProjectUuid, SnapshotRev) -> Result<Unit> =
+        { _, _ -> Result.success(Unit) },
 ) : SnapshotRepository {
 
     override fun observeHistory(uuid: ProjectUuid): Flow<List<Snapshot>> =
@@ -61,8 +62,32 @@ class SqlSnapshotRepository(
         }
     }
 
-    override suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> =
-        Result.success(Unit) // Real impl lands with the sync engine's Materializer (PR-22).
+    override suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> {
+        val r = materialize(uuid, rev)
+        if (r.isFailure) return r
+        // Record the rewind itself as a synthetic snapshot row so the Timeline reflects it.
+        withContext(ioDispatcher) {
+            catalog.transaction {
+                val existing = catalog.catalogQueries.selectSnapshotsForProject(uuid.value).executeAsList()
+                val nextRev = (existing.maxOfOrNull { it.rev } ?: 0L) + 1L
+                catalog.catalogQueries.insertSnapshot(
+                    project_uuid = uuid.value,
+                    rev = nextRev,
+                    parent_rev = rev.value,
+                    timestamp = kotlin.time.Clock.System.now().toString(),
+                    host_id = "local",
+                    kind = "auto",
+                    label = "rewind to rev ${rev.value}",
+                    manifest_path = "",
+                    manifest_hash = "",
+                    file_count = 0L,
+                    total_bytes = 0L,
+                    new_bytes = 0L,
+                )
+            }
+        }
+        return Result.success(Unit)
+    }
 }
 
 private fun SnapshotKind.dbName(): String = when (this) {

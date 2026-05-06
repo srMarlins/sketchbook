@@ -117,8 +117,24 @@ interface DesktopAppGraph {
     )
 
     @Provides @SingleIn(AppScope::class)
-    fun provideSnapshotRepository(catalog: Catalog): SnapshotRepository =
-        SqlSnapshotRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
+    fun provideSnapshotRepository(
+        catalog: Catalog,
+        syncQueue: SyncQueue,
+    ): SnapshotRepository = SqlSnapshotRepository(
+        catalog = catalog,
+        ioDispatcher = Dispatchers.IO,
+        materialize = { uuid, rev ->
+            // Delegates to the SwappableSyncQueue's currently-active materializer (built when
+            // cloud creds land). Returns a friendly failure when cloud is unconfigured so the
+            // Timeline rewind UI doesn't crash on first launch.
+            val swap = syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue
+            val mat = swap?.currentMaterializer
+                ?: return@SqlSnapshotRepository Result.failure(
+                    IllegalStateException("Configure cloud credentials in Settings before rewinding."),
+                )
+            mat.materialize(uuid, rev)
+        },
+    )
 
     @Provides @SingleIn(AppScope::class)
     fun provideProposalsRepository(catalog: Catalog): ProposalsRepository =
@@ -146,11 +162,14 @@ interface DesktopAppGraph {
         settings: SettingsRepository,
         projects: ProjectRepository,
         store: SyncStateStore,
+        catalog: Catalog,
         scope: CoroutineScope,
     ): SyncQueue = SwappableSyncQueue(
         settings = settings,
         projects = projects,
         syncStateStore = store,
+        catalog = catalog,
+        blobCacheRoot = catalogDbPath().parent.resolve("blob-cache"),
         scope = scope,
         hostId = hostIdentity().id,
         hostName = hostIdentity().name,
