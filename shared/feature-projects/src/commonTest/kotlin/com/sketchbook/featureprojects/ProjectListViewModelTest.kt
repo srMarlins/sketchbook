@@ -42,6 +42,7 @@ class ProjectListViewModelTest {
         key: String? = null,
         stageInferred: Stage? = null,
         stageOverride: Stage? = null,
+        missingSampleCount: Int = 0,
     ) = ProjectRow(
         id = ProjectId(id),
         name = name,
@@ -56,6 +57,7 @@ class ProjectListViewModelTest {
         key = key,
         stageInferred = stageInferred,
         stageOverride = stageOverride,
+        missingSampleCount = missingSampleCount,
     )
 
     private class FakeRepo(
@@ -212,6 +214,64 @@ class ProjectListViewModelTest {
             s = awaitItem()
             while (s.stageFilter != setOf(Stage.Mixing) || s.rows.size != 2) s = awaitItem()
             assertEquals(setOf("a", "b"), s.rows.map { it.name }.toSet())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun healthFilterOnlyStuckNarrowsToInferredStuckRows() = runTest(mainDispatcher) {
+        // PR-CC: a, b have stage_inferred=Stuck. c has Mixing override but inferred=Sketch
+        // (override wins for the per-row chip but does NOT count as Stuck for the health filter
+        // because the health filter reads stage_inferred to mirror the SQL aggregate). d's
+        // override is Stuck but inferred is null — also filtered out.
+        val all = MutableStateFlow(
+            listOf(
+                row(1, "a", stageInferred = Stage.Stuck),
+                row(2, "b", stageInferred = Stage.Stuck),
+                row(3, "c", stageInferred = Stage.Sketch, stageOverride = Stage.Mixing),
+                row(4, "d", stageOverride = Stage.Stuck),
+            ),
+        )
+        val repo = FakeRepo(mapOf("" to all))
+        val vm = ProjectListViewModel(repo)
+
+        vm.state.test {
+            var s = awaitItem()
+            while (s.rows.size < 4) s = awaitItem()
+
+            vm.dispatch(ProjectListViewModel.Intent.SetHealthFilter(HealthFilter.OnlyStuck))
+
+            s = awaitItem()
+            while (s.healthFilter !is HealthFilter.OnlyStuck || s.rows.size != 2) s = awaitItem()
+            assertEquals(setOf("a", "b"), s.rows.map { it.name }.toSet())
+
+            // Clearing via null restores the full set without touching tempo/key/stage filters.
+            vm.dispatch(ProjectListViewModel.Intent.SetHealthFilter(null))
+            while (s.healthFilter != null || s.rows.size != 4) s = awaitItem()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun healthFilterOnlyMissingSamplesNarrowsToProjectsWithMissingSampleCount() = runTest(mainDispatcher) {
+        val all = MutableStateFlow(
+            listOf(
+                row(1, "clean", missingSampleCount = 0),
+                row(2, "broken", missingSampleCount = 3),
+                row(3, "also-broken", missingSampleCount = 1),
+            ),
+        )
+        val repo = FakeRepo(mapOf("" to all))
+        val vm = ProjectListViewModel(repo)
+
+        vm.state.test {
+            var s = awaitItem()
+            while (s.rows.size < 3) s = awaitItem()
+
+            vm.dispatch(ProjectListViewModel.Intent.SetHealthFilter(HealthFilter.OnlyMissingSamples))
+            s = awaitItem()
+            while (s.healthFilter !is HealthFilter.OnlyMissingSamples || s.rows.size != 2) s = awaitItem()
+            assertEquals(setOf("broken", "also-broken"), s.rows.map { it.name }.toSet())
             cancelAndIgnoreRemainingEvents()
         }
     }

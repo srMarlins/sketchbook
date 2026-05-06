@@ -216,7 +216,19 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                             summary = missingPluginSummary,
                             coverage = missingPluginCoverage,
                         )
-                        HealthChip(health = libraryHealth)
+                        HealthChip(
+                            health = libraryHealth,
+                            onRowFilter = { filter ->
+                                // PR-CC: stash the filter on the chrome VM, then jump to Browse.
+                                // The Projects NavEntry's LaunchedEffect picks the pending filter
+                                // up and dispatches it onto the per-entry ProjectListViewModel.
+                                chrome.publishHealthFilter(filter)
+                                if (current != Screen.Projects) {
+                                    backStack.clear()
+                                    backStack.add(Screen.Projects)
+                                }
+                            },
+                        )
                     }
                 },
             )
@@ -257,6 +269,13 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                     // fresh-VM-per-entry behavior automatically.
                                     LaunchedEffect(Unit) {
                                         vm.dispatch(ProjectListViewModel.Intent.Search(""))
+                                        // PR-CC: pick up any pending Health-chip filter the user
+                                        // staged before navigating. Consume it so a re-entry
+                                        // without another chip click doesn't re-apply the filter.
+                                        chrome.pendingHealthFilter.value?.let { pending ->
+                                            vm.dispatch(ProjectListViewModel.Intent.SetHealthFilter(pending))
+                                            chrome.consumePendingHealthFilter()
+                                        }
                                     }
                                     ProjectListScreen(
                                         vm = vm,
