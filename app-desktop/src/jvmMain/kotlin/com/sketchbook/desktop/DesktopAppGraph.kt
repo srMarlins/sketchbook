@@ -7,10 +7,7 @@ import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.desktop.repo.InMemoryLockRepository
-import com.sketchbook.desktop.repo.InMemoryProposalsRepository
-import com.sketchbook.desktop.repo.InMemoryRepairRepository
 import com.sketchbook.desktop.repo.InMemorySettingsRepository
-import com.sketchbook.desktop.repo.InMemorySnapshotRepository
 import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
@@ -22,6 +19,9 @@ import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlProjectRepository
+import com.sketchbook.repo.impl.SqlProposalsRepository
+import com.sketchbook.repo.impl.SqlRepairRepository
+import com.sketchbook.repo.impl.SqlSnapshotRepository
 import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
@@ -46,11 +46,11 @@ import java.nio.file.Paths
  * If a future binding is genuinely stateless (a pure mapper, a per-call factory) it should be
  * left unscoped so callers don't pin live references unnecessarily.
  *
- * **Catalog (SQLite).** PR-A swaps the project repo from `InMemoryProjectRepository` to the
- * SQLDelight-backed [SqlProjectRepository]. The DB lives at
- * `~/.local/share/sketchbook/catalog.db` (Linux/Mac) or `%APPDATA%\Sketchbook\catalog.db`
- * (Windows). One handle per app instance. Snapshot/proposals/repair/lock/sync repositories
- * are still in-memory until their respective phases land — they don't have SQL impls yet.
+ * **Catalog (SQLite).** Project / Snapshot / Proposals / Repair are SQLDelight-backed; the
+ * DB lives at `~/.local/share/sketchbook/catalog.db` (Linux/Mac) or
+ * `%APPDATA%\Sketchbook\catalog.db` (Windows). One handle per app instance. Lock + Settings
+ * remain in-memory: locks belong to the sync engine (PR-22) and settings still ride on
+ * `java.util.prefs.Preferences` until the keychain rotation in v1.1.
  */
 @DependencyGraph(scope = AppScope::class)
 interface DesktopAppGraph {
@@ -108,13 +108,16 @@ interface DesktopAppGraph {
     )
 
     @Provides @SingleIn(AppScope::class)
-    fun provideSnapshotRepository(): SnapshotRepository = InMemorySnapshotRepository()
+    fun provideSnapshotRepository(catalog: Catalog): SnapshotRepository =
+        SqlSnapshotRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
 
     @Provides @SingleIn(AppScope::class)
-    fun provideProposalsRepository(): ProposalsRepository = InMemoryProposalsRepository()
+    fun provideProposalsRepository(catalog: Catalog): ProposalsRepository =
+        SqlProposalsRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
 
     @Provides @SingleIn(AppScope::class)
-    fun provideRepairRepository(): RepairRepository = InMemoryRepairRepository()
+    fun provideRepairRepository(catalog: Catalog): RepairRepository =
+        SqlRepairRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
 
     @Provides @SingleIn(AppScope::class)
     fun provideSettingsRepository(): SettingsRepository = InMemorySettingsRepository()
