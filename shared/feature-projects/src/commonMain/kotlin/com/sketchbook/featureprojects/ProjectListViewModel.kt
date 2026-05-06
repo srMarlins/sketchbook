@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
+import com.sketchbook.core.Stage
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.core.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
@@ -54,6 +55,7 @@ class ProjectListViewModel(
     private val searchSelectedIndex = MutableStateFlow(0)
     private val tempoRange = MutableStateFlow<ClosedFloatingPointRange<Double>?>(null)
     private val keyFilter = MutableStateFlow<String?>(null)
+    private val stageFilter = MutableStateFlow<Set<Stage>>(emptySet())
 
     private val _effects = MutableSharedFlow<Effect>(
         replay = 0,
@@ -79,6 +81,7 @@ class ProjectListViewModel(
             tempoRange,
             keyFilter,
             distinctKeysFlow,
+            stageFilter,
         ),
     ) { values ->
         @Suppress("UNCHECKED_CAST") val q = values[0] as String
@@ -93,10 +96,12 @@ class ProjectListViewModel(
         val key = values[8] as String?
         @Suppress("UNCHECKED_CAST")
         val distinctKeys = values[9] as List<String>
+        @Suppress("UNCHECKED_CAST")
+        val stages = values[10] as Set<Stage>
 
         // Filter happens here, before grouping/bucketing — so the chip selection narrows the
         // visible row set on every shelf. The 1,628-row library does this in microseconds.
-        val rows = applyFilters(rawRows, tempo, key)
+        val rows = applyFilters(rawRows, tempo, key, stages)
         val groups = deriveProjectGroups(rows)
         val archivedGroups = deriveProjectGroups(archivedRows)
         val buckets = bucketize(groups, archivedGroups)
@@ -122,6 +127,7 @@ class ProjectListViewModel(
             openDetailId = openId,
             tempoRange = tempo,
             keyFilter = key,
+            stageFilter = stages,
             distinctKeys = distinctKeys,
             loading = false,
         )
@@ -131,12 +137,16 @@ class ProjectListViewModel(
         rows: List<ProjectRow>,
         tempoRange: ClosedFloatingPointRange<Double>?,
         keyFilter: String?,
+        stageFilter: Set<Stage>,
     ): List<ProjectRow> {
-        if (tempoRange == null && keyFilter == null) return rows
+        if (tempoRange == null && keyFilter == null && stageFilter.isEmpty()) return rows
         return rows.filter { row ->
             val tempo = row.tempo
             (tempoRange == null || (tempo != null && tempo in tempoRange)) &&
-                (keyFilter == null || row.key == keyFilter)
+                (keyFilter == null || row.key == keyFilter) &&
+                // Stage filter narrows on the *effective* stage so a user override wins over the
+                // inferred classification — same rule the chip uses for rendering.
+                (stageFilter.isEmpty() || row.effectiveStage in stageFilter)
         }
     }
 
@@ -171,9 +181,11 @@ class ProjectListViewModel(
             }
             is Intent.SetTempoRange -> tempoRange.update { intent.range }
             is Intent.SetKeyFilter -> keyFilter.update { intent.key }
+            is Intent.SetStageFilter -> stageFilter.update { intent.stages }
             is Intent.ClearFilters -> {
                 tempoRange.update { null }
                 keyFilter.update { null }
+                stageFilter.update { emptySet() }
             }
         }
     }
@@ -196,6 +208,9 @@ class ProjectListViewModel(
         val tempoRange: ClosedFloatingPointRange<Double>? = null,
         /** Active key filter (e.g. "F# Minor"); null = "Key: any". */
         val keyFilter: String? = null,
+        /** Active stage filter; empty = "Stage: any". Multi-select via the toolbar chip popup;
+         *  the row passes when its [com.sketchbook.core.ProjectRow.effectiveStage] is in the set. */
+        val stageFilter: Set<Stage> = emptySet(),
         /** Sorted, distinct, non-null keys present in the catalog. Powers the Key chip's popup. */
         val distinctKeys: List<String> = emptyList(),
         val loading: Boolean = true,
@@ -215,7 +230,10 @@ class ProjectListViewModel(
         data class SetTempoRange(val range: ClosedFloatingPointRange<Double>?) : Intent
         /** Set the key filter (e.g. "F# Minor"; `null` clears it). */
         data class SetKeyFilter(val key: String?) : Intent
-        /** Clear both tempo and key filters in one shot. */
+        /** Replace the stage filter set; empty clears it. Multi-select toolbar chip dispatches
+         *  this as the user toggles each Stage. */
+        data class SetStageFilter(val stages: Set<Stage>) : Intent
+        /** Clear all three filters (tempo / key / stage) in one shot. */
         data object ClearFilters : Intent
     }
 

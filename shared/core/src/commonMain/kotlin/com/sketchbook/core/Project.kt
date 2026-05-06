@@ -30,7 +30,17 @@ data class ProjectRow(
     /** Project root key + scale (e.g. "D Minor", "F# Major"); null when the .als has no
      *  ScaleInformation block or the parser hasn't run. Source: [ProjectMetadata.keySignature]. */
     val key: String? = null,
-)
+    /** PR-R: stage automatically inferred by [StageInferrer] on the last successful scan. Null
+     *  when no rule matched the project's signals. */
+    val stageInferred: Stage? = null,
+    /** PR-R: user override of [stageInferred]. Set via the per-row chip popup; persists across
+     *  rescans. Null = "use the inferred value". */
+    val stageOverride: Stage? = null,
+) {
+    /** Effective stage rendered on the chip + used by toolbar filtering: override wins over the
+     *  inferred value. Null when neither is set. */
+    val effectiveStage: Stage? get() = stageOverride ?: stageInferred
+}
 
 enum class ParseStatus { Pending, Ok, Failed }
 
