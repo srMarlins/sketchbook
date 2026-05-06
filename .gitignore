@@ -22,6 +22,7 @@ Thumbs.db
 
 # git worktrees (isolated workspaces for parallel development)
 .worktrees/
+.claude/worktrees/
 
 # Claude Code per-user settings
 .claude/settings.local.json
