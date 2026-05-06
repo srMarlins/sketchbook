@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +62,20 @@ fun TextField(
     val isFocused by interaction.collectIsFocusedAsState()
     val focusRequester = remember { FocusRequester() }
     val rowInteraction = remember { MutableInteractionSource() }
+    // Local buffer that absorbs keystrokes synchronously. The legacy BasicTextField(value:String)
+    // overload "snaps back" to the value parameter on every recomposition; when onChange routes
+    // through a StateFlow + flatMapLatest the value parameter lags the IME, and fast typing
+    // produces reordered or eaten characters. Buffering locally and only adopting external
+    // changes when the upstream diverges from what we last emitted fixes both directions
+    // (typing keeps order, programmatic clears still take effect).
+    var local by remember { mutableStateOf(value) }
+    var lastEmitted by remember { mutableStateOf(value) }
+    LaunchedEffect(value) {
+        if (value != lastEmitted) {
+            local = value
+            lastEmitted = value
+        }
+    }
     val innerShadow = if (colors.isDark) Color(0x66000000) else Color(0x18281C12)
     val highlight = if (colors.isDark) Color(0x10F5ECD8) else Color(0x55FFFAEE)
     Row(
@@ -109,8 +126,12 @@ fun TextField(
         if (leading != null) ProvideContentColor(colors.inkMuted) { leading() }
         Box(modifier = Modifier.weight(1f)) {
             BasicTextField(
-                value = value,
-                onValueChange = onChange,
+                value = local,
+                onValueChange = { next ->
+                    local = next
+                    lastEmitted = next
+                    onChange(next)
+                },
                 singleLine = true,
                 interactionSource = interaction,
                 textStyle = AppTheme.typography.body.copy(color = colors.inkPrimary),
@@ -119,7 +140,7 @@ fun TextField(
                     .fillMaxWidth()
                     .focusRequester(focusRequester),
             )
-            if (value.isEmpty() && placeholder != null) {
+            if (local.isEmpty() && placeholder != null) {
                 ProvideContentColor(colors.inkMuted) {
                     Text(text = placeholder)
                 }

@@ -35,7 +35,11 @@ class CatalogFtsTest {
                 last_modified = idx.toDouble(),
                 last_scanned = idx.toDouble(),
                 parse_status = "ok",
+                parse_error = null,
                 mac_paths_count = 0,
+                effort_score = null,
+                effort_breakdown = null,
+                file_size_bytes = 0L,
             )
             val id = catalog.catalogQueries.selectProjectIdByPath("/lib/$name.als").executeAsOne()
             fts.upsert(

@@ -18,7 +18,18 @@ import kotlinx.coroutines.launch
  * once, and renders the main window. Menu items reset the stack to the chosen destination
  * rather than spawning new windows.
  */
-fun main() = application {
+fun main() {
+    // Diagnostics (rolling log + uncaught-exception → crash file) MUST be the first thing the
+    // app does, before Compose initializes — otherwise a Compose-runtime exception during
+    // startup leaves the user with no log to attach to a bug report.
+    Diagnostics.init(
+        dataDir = Diagnostics.resolveDataDir(),
+        appVersion = System.getProperty("sketchbook.version") ?: "dev",
+    )
+    runApp()
+}
+
+private fun runApp() = application {
     val graph = remember { buildDesktopAppGraph() }
     // Dev convenience: if SKETCHBOOK_DEFAULT_ROOT is set and Settings has no roots, seed it
     // once at launch so the iteration loop (build → run → screenshot) doesn't require clicking

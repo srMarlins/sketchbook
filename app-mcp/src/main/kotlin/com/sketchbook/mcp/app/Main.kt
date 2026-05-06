@@ -1,14 +1,75 @@
 package com.sketchbook.mcp.app
 
+import com.sketchbook.catalog.CatalogDb
+import com.sketchbook.catalog.CatalogFts
+import com.sketchbook.mcp.FileProposalsWriter
+import com.sketchbook.mcp.McpServer
+import com.sketchbook.mcp.Tools
+import com.sketchbook.mcp.runStdio
+import com.sketchbook.repo.impl.InMemoryJournalRepository
+import com.sketchbook.repo.impl.SqlProjectRepository
+import kotlinx.coroutines.Dispatchers
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+
 /**
- * Stdio MCP entry point. Wired to a real `ProjectRepository` + `FileProposalsWriter` in PR-18
- * once Metro graph composition lands. For now `main` parses the system properties (`AUDIO_ROOT`)
- * and logs that wiring is pending — keeps the module compiling and `gradle :app-mcp:run`
- * exercising the entry path end-to-end.
+ * Stdio MCP entry point. Composes the same SQLite-backed catalog the desktop app uses (read-only
+ * from this process — writes are mediated through `propose_batch` which lands JSON files under
+ * `<dataDir>/proposals/` for the desktop UI to surface and execute).
+ *
+ * The catalog DB path is shared with the desktop app:
+ *  - Windows: `%APPDATA%\Sketchbook\catalog.db`
+ *  - macOS:   `~/Library/Application Support/Sketchbook/catalog.db`
+ *  - Linux:   `~/.local/share/sketchbook/catalog.db`
+ *
+ * Override with `SKETCHBOOK_DB_PATH` (test/CI). Proposals override is `SKETCHBOOK_PROPOSALS_DIR`.
  */
 fun main() {
-    val root = System.getenv("AUDIO_ROOT")?.takeIf { it.isNotBlank() }
-        ?: System.getProperty("user.dir")
-    System.err.println("sketchbook MCP server: AUDIO_ROOT=$root")
-    System.err.println("(repository wiring lands in PR-18 — server is reachable but read-only stub for now)")
+    val dbPath = catalogDbPath()
+    val proposalsDir = proposalsDir()
+    Files.createDirectories(proposalsDir)
+
+    System.err.println("sketchbook MCP server: db=$dbPath proposals=$proposalsDir")
+
+    val handle = CatalogDb.openOnDisk(dbPath)
+    val fts = CatalogFts(handle.driver)
+    val journal = InMemoryJournalRepository()
+    val repository = SqlProjectRepository(
+        catalog = handle.catalog,
+        ioDispatcher = Dispatchers.IO,
+        journal = journal,
+        ftsSearch = { query -> fts.search(query) },
+    )
+    val proposalsWriter = FileProposalsWriter(root = proposalsDir)
+    val tools = Tools(repository = repository, proposalsWriter = proposalsWriter)
+    val server = McpServer(tools = tools)
+
+    runStdio(server)
+}
+
+private fun catalogDbPath(): Path {
+    System.getenv("SKETCHBOOK_DB_PATH")?.let { override ->
+        val p = Paths.get(override)
+        Files.createDirectories(p.parent ?: p)
+        return p
+    }
+    return dataDir().resolve("catalog.db")
+}
+
+private fun proposalsDir(): Path {
+    System.getenv("SKETCHBOOK_PROPOSALS_DIR")?.let { return Paths.get(it) }
+    return dataDir().resolve("proposals")
+}
+
+private fun dataDir(): Path {
+    val os = System.getProperty("os.name").orEmpty().lowercase()
+    val home = Paths.get(System.getProperty("user.home"))
+    val dir = when {
+        os.contains("win") -> Paths.get(System.getenv("APPDATA") ?: home.toString()).resolve("Sketchbook")
+        os.contains("mac") -> home.resolve("Library/Application Support/Sketchbook")
+        else -> home.resolve(".local/share/sketchbook")
+    }
+    Files.createDirectories(dir)
+    return dir
 }

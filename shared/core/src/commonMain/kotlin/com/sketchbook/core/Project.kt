@@ -16,8 +16,8 @@ data class ProjectRow(
     val updatedAt: Instant,
     val tags: List<String>,
     val colorTag: Int?,
-    /** 0..100 effort score per [com.sketchbook.featureprojects.EffortScore]. Null until the
-     *  streaming `.als` parser fills [ProjectMetadata]. */
+    /** 0..100 effort score per [EffortScore]. Null until the streaming `.als` parser fills
+     *  [ProjectMetadata]. */
     val effortScore: Int? = null,
     /** Parser outcome. `Pending` = scanner saw the file but parser hasn't run yet. */
     val parseStatus: ParseStatus = ParseStatus.Pending,

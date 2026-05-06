@@ -155,6 +155,21 @@ CREATE TABLE pending_uploads (
 selectAllProjects:
 SELECT * FROM projects WHERE is_archived = 0 ORDER BY last_modified DESC;
 
+selectAllProjectsWithMissing:
+SELECT p.*,
+       COALESCE((SELECT COUNT(*) FROM project_samples ps
+                 WHERE ps.project_id = p.id AND ps.is_missing = 1), 0) AS missing_sample_count
+FROM projects p
+WHERE p.is_archived = 0
+ORDER BY p.last_modified DESC;
+
+selectProjectByIdWithMissing:
+SELECT p.*,
+       COALESCE((SELECT COUNT(*) FROM project_samples ps
+                 WHERE ps.project_id = p.id AND ps.is_missing = 1), 0) AS missing_sample_count
+FROM projects p
+WHERE p.id = :id;
+
 selectProjectById:
 SELECT * FROM projects WHERE id = :id;
 
@@ -162,8 +177,14 @@ selectProjectByPath:
 SELECT * FROM projects WHERE path = :path;
 
 insertOrReplaceProject:
-INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, mac_paths_count)
-VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :mac_paths_count);
+INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes)
+VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :parse_error, :mac_paths_count, :effort_score, :effort_breakdown, :file_size_bytes);
+
+insertProjectSampleWithMissing:
+INSERT INTO project_samples (project_id, sample_path, is_missing) VALUES (:project_id, :sample_path, :is_missing);
+
+countMissingSamplesForProject:
+SELECT COUNT(*) FROM project_samples WHERE project_id = :project_id AND is_missing = 1;
 
 selectProjectIdByPath:
 SELECT id FROM projects WHERE path = :path;
@@ -218,6 +239,9 @@ SELECT plugin_name, plugin_type, track_name FROM project_plugins WHERE project_i
 
 selectSamplesForProject:
 SELECT sample_path FROM project_samples WHERE project_id = :project_id;
+
+selectSampleEntriesForProject:
+SELECT sample_path, is_missing, size_bytes FROM project_samples WHERE project_id = :project_id;
 
 -- FTS5: SQLDelight 2.1 cannot statically type-check the `MATCH` operator or `bm25()` function
 -- on virtual tables (StackOverflow / "Failed to compile" in the typer). FTS reads/writes are

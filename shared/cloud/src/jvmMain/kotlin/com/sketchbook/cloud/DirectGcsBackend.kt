@@ -201,7 +201,8 @@ class DirectGcsBackend(
                     parameter("alt", "media")
                 }
                 val existingLock = json.decodeFromString(LeaseLock.serializer(), existing.bodyAsText())
-                val gen = existing.headers["x-goog-generation"]!!
+                val gen = existing.headers["x-goog-generation"]
+                    ?: throw SketchbookError.IntegrityError("missing x-goog-generation on held lock read")
                 LeaseAcquireResult.Held(existingLock, Generation(gen))
             }
             else -> throw remoteFailure(resp, "PUT $path")

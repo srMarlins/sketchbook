@@ -34,7 +34,10 @@ object Hasher {
         while (true) {
             val read = stream.read(buffer)
             if (read <= 0) break
-            hasher.update(buffer.copyOf(read))
+            // Blake3.update takes the full array, so a partial read forces a copy. The full-buffer
+            // case dominates a 543 MB scan (8,500 chunks); skipping the copy there avoids
+            // 543 MB of throwaway garbage per file.
+            if (read == buffer.size) hasher.update(buffer) else hasher.update(buffer.copyOf(read))
         }
         // 32 bytes = 64 hex chars.
         return BlobHash("b3:" + hasher.hexdigest())

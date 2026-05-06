@@ -75,8 +75,13 @@ class JvmScannerTest {
             assertTrue(finished.durationMillis >= 0)
 
             val rows = catalog.catalogQueries.selectAllProjects().executeAsList()
-            assertEquals(2, rows.size)
-            assertEquals(setOf("Foo", "Bar"), rows.map { it.name }.toSet())
+            // Three rows: two ok + one parse_status='failed' for Broken (so it surfaces on the
+            // Broken shelf with the parse error captured in `parse_error`).
+            assertEquals(3, rows.size)
+            assertEquals(setOf("Foo", "Bar", "Broken"), rows.map { it.name }.toSet())
+            val brokenRow = rows.first { it.name == "Broken" }
+            assertEquals("failed", brokenRow.parse_status)
+            assertTrue(brokenRow.parse_error?.isNotBlank() == true)
 
             // Plugins from Foo: one native Eq8.
             val fooId = rows.first { it.name == "Foo" }.id

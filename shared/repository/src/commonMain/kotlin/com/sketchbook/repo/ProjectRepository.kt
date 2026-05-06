@@ -1,7 +1,9 @@
 package com.sketchbook.repo
 
+import com.sketchbook.core.PluginRef
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
+import com.sketchbook.core.SampleRef
 import com.sketchbook.core.SketchbookError
 import kotlinx.coroutines.flow.Flow
 
@@ -26,6 +28,12 @@ interface ProjectRepository {
     /** Live single-project view by local PK. Emits new state whenever the row mutates. */
     fun observeProject(id: ProjectId): Flow<ProjectRow?>
 
+    /** Plugins extracted by the parser for [id]. Empty when the project hasn't parsed yet. */
+    fun observePlugins(id: ProjectId): Flow<List<PluginRef>> = kotlinx.coroutines.flow.flowOf(emptyList())
+
+    /** Sample refs the parser found, with their resolved missing/found status. */
+    fun observeSamples(id: ProjectId): Flow<List<SampleEntry>> = kotlinx.coroutines.flow.flowOf(emptyList())
+
     /** Move the project's working tree to a new parent directory. Path-rename only; no FS I/O. */
     suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry>
 
@@ -37,6 +45,21 @@ interface ProjectRepository {
 
     /** Replace the project's tag set (creates missing tags as a side effect). */
     suspend fun setTags(id: ProjectId, tags: List<String>): Result<JournalEntry>
+}
+
+/**
+ * Per-project sample entry as the UI sees it. The parser writes raw paths plus a missing flag
+ * to `project_samples`; this is a typed view over those rows. Distinct from [SampleRef] so the
+ * domain `SampleRef` (which lives on `ProjectMetadata`) doesn't have to carry resolution state.
+ */
+data class SampleEntry(
+    val rawPath: String,
+    val isMissing: Boolean,
+    val sizeBytes: Long?,
+) {
+    /** Last path component — what the user sees in the Samples tab. */
+    val displayName: String
+        get() = rawPath.substringAfterLast('/').substringAfterLast('\\').ifEmpty { rawPath }
 }
 
 /** Convenience: report a [SketchbookError] as a `Result.failure`. */

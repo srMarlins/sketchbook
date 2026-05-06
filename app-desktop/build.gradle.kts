@@ -22,6 +22,8 @@ kotlin {
     sourceSets {
         jvmMain.dependencies {
             implementation(project(":shared:core"))
+            implementation(project(":shared:catalog"))
+            implementation(project(":shared:parser-als"))
             implementation(project(":shared:repository"))
             implementation(project(":shared:ui-shared"))
             implementation(project(":shared:feature-projects"))

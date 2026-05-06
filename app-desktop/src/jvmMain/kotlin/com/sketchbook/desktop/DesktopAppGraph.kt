@@ -1,12 +1,17 @@
 package com.sketchbook.desktop
 
+import com.sketchbook.catalog.CatalogDb
+import com.sketchbook.catalog.CatalogFts
+import com.sketchbook.catalog.CatalogHandle
+import com.sketchbook.catalog.JvmScanner
+import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.desktop.repo.InMemoryLockRepository
-import com.sketchbook.desktop.repo.InMemoryProjectRepository
 import com.sketchbook.desktop.repo.InMemoryProposalsRepository
 import com.sketchbook.desktop.repo.InMemoryRepairRepository
 import com.sketchbook.desktop.repo.InMemorySettingsRepository
 import com.sketchbook.desktop.repo.InMemorySnapshotRepository
 import com.sketchbook.desktop.repo.InMemorySyncQueue
+import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProposalsRepository
@@ -14,6 +19,8 @@ import com.sketchbook.repo.RepairRepository
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.SyncQueue
+import com.sketchbook.repo.impl.InMemoryJournalRepository
+import com.sketchbook.repo.impl.SqlProjectRepository
 import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
@@ -21,6 +28,9 @@ import dev.zacsweers.metro.createGraph
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
  * Composition root for the Compose Desktop shell. Metro generates the synthetic graph impl at
@@ -34,19 +44,23 @@ import kotlinx.coroutines.SupervisorJob
  *
  * If a future binding is genuinely stateless (a pure mapper, a per-call factory) it should be
  * left unscoped so callers don't pin live references unnecessarily.
+ *
+ * **Catalog (SQLite).** PR-A swaps the project repo from `InMemoryProjectRepository` to the
+ * SQLDelight-backed [SqlProjectRepository]. The DB lives at
+ * `~/.local/share/sketchbook/catalog.db` (Linux/Mac) or `%APPDATA%\Sketchbook\catalog.db`
+ * (Windows). One handle per app instance. Snapshot/proposals/repair/lock/sync repositories
+ * are still in-memory until their respective phases land — they don't have SQL impls yet.
  */
 @DependencyGraph(scope = AppScope::class)
 interface DesktopAppGraph {
 
     val appScope: CoroutineScope
+    val catalogHandle: CatalogHandle
+    val catalog: Catalog
+    val catalogFts: CatalogFts
+    val scanner: JvmScanner
     val projectRepository: ProjectRepository
-    /**
-     * Concrete in-memory project repo. The scanner needs the concrete type so it can call
-     * `addRows`, which is intentionally outside the public `ProjectRepository` API at v1
-     * (the eventual SqlDelight-backed repo will scan internally and never expose batch insert
-     * to UI code). Until then the desktop shell wires the scanner through this accessor.
-     */
-    val inMemoryProjectRepository: InMemoryProjectRepository
+    val journalRepository: JournalRepository
     val snapshotRepository: SnapshotRepository
     val proposalsRepository: ProposalsRepository
     val repairRepository: RepairRepository
@@ -60,15 +74,33 @@ interface DesktopAppGraph {
     fun provideAppScope(): CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    // The in-memory repos hold their state in `MutableStateFlow`s, so two consumers observing
-    // the same repository must see the same instance. Drop @SingleIn and the project list +
-    // project detail would observe independent flows.
+    @Provides @SingleIn(AppScope::class)
+    fun provideCatalogHandle(): CatalogHandle = CatalogDb.openOnDisk(catalogDbPath())
 
     @Provides @SingleIn(AppScope::class)
-    fun provideInMemoryProjectRepository(): InMemoryProjectRepository = InMemoryProjectRepository()
+    fun provideCatalog(handle: CatalogHandle): Catalog = handle.catalog
 
     @Provides @SingleIn(AppScope::class)
-    fun provideProjectRepository(impl: InMemoryProjectRepository): ProjectRepository = impl
+    fun provideCatalogFts(handle: CatalogHandle): CatalogFts = CatalogFts(handle.driver)
+
+    @Provides @SingleIn(AppScope::class)
+    fun provideJvmScanner(catalog: Catalog, fts: CatalogFts): JvmScanner =
+        JvmScanner(catalog = catalog, fts = fts)
+
+    @Provides @SingleIn(AppScope::class)
+    fun provideJournalRepository(): JournalRepository = InMemoryJournalRepository()
+
+    @Provides @SingleIn(AppScope::class)
+    fun provideProjectRepository(
+        catalog: Catalog,
+        fts: CatalogFts,
+        journal: JournalRepository,
+    ): ProjectRepository = SqlProjectRepository(
+        catalog = catalog,
+        ioDispatcher = Dispatchers.IO,
+        journal = journal,
+        ftsSearch = { query -> fts.search(query) },
+    )
 
     @Provides @SingleIn(AppScope::class)
     fun provideSnapshotRepository(): SnapshotRepository = InMemorySnapshotRepository()
@@ -97,3 +129,24 @@ abstract class AppScope private constructor()
 
 /** Builds the graph at runtime — Metro generates the impl class. */
 fun buildDesktopAppGraph(): DesktopAppGraph = createGraph<DesktopAppGraph>()
+
+/**
+ * Resolve the on-disk catalog DB path. Honors `SKETCHBOOK_DB_PATH` for tests and
+ * isolated runs; otherwise picks a per-OS data directory.
+ */
+private fun catalogDbPath(): Path {
+    System.getenv("SKETCHBOOK_DB_PATH")?.let { override ->
+        val p = Paths.get(override)
+        Files.createDirectories(p.parent ?: p)
+        return p
+    }
+    val os = System.getProperty("os.name").orEmpty().lowercase()
+    val home = Paths.get(System.getProperty("user.home"))
+    val dir = when {
+        os.contains("win") -> Paths.get(System.getenv("APPDATA") ?: home.toString()).resolve("Sketchbook")
+        os.contains("mac") -> home.resolve("Library/Application Support/Sketchbook")
+        else -> home.resolve(".local/share/sketchbook")
+    }
+    Files.createDirectories(dir)
+    return dir.resolve("catalog.db")
+}

@@ -19,6 +19,8 @@ sealed interface ScanProgress {
         val projectId: Long,
         val path: String,
         val name: String,
+        val missingSampleCount: Int = 0,
+        val effortScore: Int? = null,
     ) : ScanProgress
 
     data class ProjectFailed(
