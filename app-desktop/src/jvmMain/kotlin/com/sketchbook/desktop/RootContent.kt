@@ -24,16 +24,31 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.ui.NavDisplay
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import com.sketchbook.featuredetail.ProjectDetailScreen
 import com.sketchbook.featuredetail.ProjectDetailStateHolder
@@ -415,11 +430,20 @@ private fun DetailPanelContent(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
                 ) {
-                    ProvideContentColor(theme.colors.inkPrimary) {
-                        Text(
-                            text = state.row?.name ?: if (state.loading) "Loading" else "Project not found",
-                            style = theme.typography.title,
+                    val row = state.row
+                    if (row != null) {
+                        EditableTitle(
+                            name = row.name,
+                            onCommit = { holder.dispatch(com.sketchbook.featuredetail.ProjectDetailStateHolder.Intent.Rename(it)) },
+                            theme = theme,
                         )
+                    } else {
+                        ProvideContentColor(theme.colors.inkPrimary) {
+                            Text(
+                                text = if (state.loading) "Loading" else "Project not found",
+                                style = theme.typography.title,
+                            )
+                        }
                     }
                     if (state.loading) InkLoading()
                 }
@@ -533,7 +557,11 @@ private fun DetailPanelContent(
                 ) {
                     when (tab) {
                         DetailTab.Overview -> {
-                            DetailMetaSection(row, theme)
+                            DetailMetaSection(
+                                row = row,
+                                theme = theme,
+                                onTagsChange = { holder.dispatch(com.sketchbook.featuredetail.ProjectDetailStateHolder.Intent.SetTags(it)) },
+                            )
                             DetailQuickVersions(row, state, theme)
                         }
                         DetailTab.Versions -> DetailVersionsTab(row, state, theme)
@@ -583,7 +611,11 @@ private fun DetailTabButton(
 
 
 @Composable
-private fun DetailMetaSection(row: com.sketchbook.core.ProjectRow, theme: com.sketchbook.uishared.theme.AppTheme) {
+private fun DetailMetaSection(
+    row: com.sketchbook.core.ProjectRow,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    onTagsChange: (List<String>) -> Unit,
+) {
     Section("Overview", theme) {
         DetailRow("Project root", com.sketchbook.featureprojects.projectRootDir(row.path.value), theme, mono = true)
         DetailRow("Active variant", java.io.File(row.path.value).name, theme, mono = true)
@@ -591,7 +623,11 @@ private fun DetailMetaSection(row: com.sketchbook.core.ProjectRow, theme: com.sk
         row.tempo?.let { DetailRow("Tempo", "${it.toInt()} bpm", theme) }
         if (row.trackCount > 0) DetailRow("Tracks", row.trackCount.toString(), theme)
         row.lastSavedLiveVersion?.let { DetailRow("Last saved with", it, theme) }
-        if (row.tags.isNotEmpty()) DetailRow("Tags", row.tags.joinToString(", "), theme)
+        TagsEditorRow(
+            tags = row.tags,
+            theme = theme,
+            onChange = onTagsChange,
+        )
     }
 }
 
@@ -917,6 +953,218 @@ private fun DetailRow(
                 ) else theme.typography.body,
                 modifier = Modifier.weight(1f),
             )
+        }
+    }
+}
+
+@Composable
+private fun EditableTitle(
+    name: String,
+    onCommit: (String) -> Unit,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    var editing by remember(name) { mutableStateOf(false) }
+    var draft by remember(name) { mutableStateOf(name) }
+    val focusRequester = remember { FocusRequester() }
+
+    if (editing) {
+        BasicTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            singleLine = true,
+            textStyle = theme.typography.title.copy(color = theme.colors.inkPrimary),
+            cursorBrush = SolidColor(theme.colors.inkPrimary),
+            modifier = Modifier
+                .focusRequester(focusRequester)
+                .onFocusChanged { focus ->
+                    if (!focus.isFocused && editing) {
+                        if (draft.trim().isNotEmpty() && draft != name) onCommit(draft)
+                        editing = false
+                    }
+                }
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Enter, Key.NumPadEnter -> {
+                            if (draft.trim().isNotEmpty() && draft != name) onCommit(draft)
+                            editing = false
+                            true
+                        }
+                        Key.Escape -> {
+                            draft = name
+                            editing = false
+                            true
+                        }
+                        else -> false
+                    }
+                },
+        )
+        LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    } else {
+        ProvideContentColor(theme.colors.inkPrimary) {
+            Text(
+                text = name,
+                style = theme.typography.title,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = { draft = name; editing = true },
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TagsEditorRow(
+    tags: List<String>,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    onChange: (List<String>) -> Unit,
+) {
+    var addingTag by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.Top,
+    ) {
+        ProvideContentColor(theme.colors.inkMuted) {
+            Text(
+                "Tags",
+                style = theme.typography.caption,
+                modifier = Modifier.width(120.dp),
+            )
+        }
+        androidx.compose.foundation.layout.FlowRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+        ) {
+            for (tag in tags) {
+                EditableTagChip(
+                    label = tag,
+                    onRemove = { onChange(tags.filterNot { it == tag }) },
+                    theme = theme,
+                )
+            }
+            if (addingTag) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(theme.colors.tintCream)
+                        .border(1.dp, theme.colors.ruleLineStrong, RoundedCornerShape(50))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .widthIn(min = 60.dp),
+                ) {
+                    BasicTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        singleLine = true,
+                        textStyle = theme.typography.mono.copy(
+                            fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            color = theme.colors.inkSecondary,
+                        ),
+                        cursorBrush = SolidColor(theme.colors.inkPrimary),
+                        modifier = Modifier
+                            .focusRequester(focusRequester)
+                            .onFocusChanged { focus ->
+                                if (!focus.isFocused && addingTag) {
+                                    val t = draft.trim()
+                                    if (t.isNotEmpty() && t !in tags) onChange(tags + t)
+                                    draft = ""
+                                    addingTag = false
+                                }
+                            }
+                            .onPreviewKeyEvent { event ->
+                                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                when (event.key) {
+                                    Key.Enter, Key.NumPadEnter -> {
+                                        val t = draft.trim()
+                                        if (t.isNotEmpty() && t !in tags) onChange(tags + t)
+                                        draft = ""
+                                        addingTag = false
+                                        true
+                                    }
+                                    Key.Escape -> {
+                                        draft = ""
+                                        addingTag = false
+                                        true
+                                    }
+                                    else -> false
+                                }
+                            },
+                    )
+                }
+                LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .border(1.dp, theme.colors.ruleLine, RoundedCornerShape(50))
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                            onClick = { addingTag = true },
+                        )
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    ProvideContentColor(theme.colors.inkMuted) {
+                        Text(
+                            "+ add",
+                            style = theme.typography.mono.copy(
+                                fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditableTagChip(
+    label: String,
+    onRemove: () -> Unit,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(theme.colors.tintBlue)
+            .border(1.dp, theme.colors.ruleLine, RoundedCornerShape(50))
+            .padding(start = 8.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+    ) {
+        ProvideContentColor(theme.colors.inkSecondary) {
+            Text(
+                label,
+                style = theme.typography.mono.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = onRemove,
+                )
+                .padding(horizontal = 4.dp),
+        ) {
+            ProvideContentColor(theme.colors.inkMuted) {
+                Text(
+                    "×",
+                    style = theme.typography.mono.copy(
+                        fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
+                )
+            }
         }
     }
 }
