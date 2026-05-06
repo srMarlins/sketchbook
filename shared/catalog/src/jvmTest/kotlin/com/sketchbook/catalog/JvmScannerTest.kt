@@ -5,10 +5,13 @@ import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 import java.util.zip.GZIPOutputStream
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class JvmScannerTest {
@@ -148,6 +151,97 @@ class JvmScannerTest {
             parameters = 0,
         )
         assertTrue("idx_projects_key" in out, "missing idx_projects_key — got $out")
+    }
+
+    // ------------------------------------------------------------------------
+    // PR-R R1: stage inference + override preservation
+    // ------------------------------------------------------------------------
+
+    @Test
+    fun persistsStageInferredFromHeuristic() = runTest {
+        val root = createTempDirectory("scanner-stage-")
+        try {
+            // Mixing rule: mastering chain plug-in + edited within 14d. Pro-L 2 in plugin
+            // names triggers the "pro-l" mastering needle.
+            val alsPath = root.resolve("Projects/Mixed/Mixed.als")
+            writeAls(
+                alsPath,
+                """<?xml version="1.0"?>
+                <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
+                  <Tracks><AudioTrack>
+                    <Name><EffectiveName Value="Master"/></Name>
+                    <DeviceChain><Devices>
+                      <PluginDevice><PluginDesc><Vst3PluginInfo>
+                        <Name Value="Pro-L 2"/>
+                      </Vst3PluginInfo></PluginDesc></PluginDevice>
+                    </Devices></DeviceChain>
+                  </AudioTrack></Tracks>
+                </LiveSet></Ableton>"""
+            )
+            // mtime = now - 1 day → comfortably inside the 14d Mixing window. Live mtime in
+            // seconds; FileTime accepts millis.
+            val recent = System.currentTimeMillis() - 24L * 60 * 60 * 1000
+            Files.setLastModifiedTime(alsPath, FileTime.fromMillis(recent))
+
+            val handle = CatalogDb.openInMemory()
+            val catalog = handle.catalog
+            val scanner = JvmScanner(catalog, CatalogFts(handle.driver), ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)
+            scanner.scan(root).toList()
+
+            val row = catalog.catalogQueries.selectAllProjects().executeAsList().single()
+            assertEquals("Mixing", row.stage_inferred)
+            // No bounce dropped beside the project file.
+            assertEquals(0L, row.has_local_bounce)
+            // No prior override.
+            assertNull(row.stage_override)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun preservesStageOverrideAcrossRescan() = runTest {
+        val root = createTempDirectory("scanner-override-")
+        try {
+            val alsPath = root.resolve("Projects/User/User.als")
+            writeAls(
+                alsPath,
+                """<?xml version="1.0"?>
+                <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
+                  <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="120"/></Tempo></Mixer></DeviceChain></MainTrack>
+                </LiveSet></Ableton>"""
+            )
+
+            val handle = CatalogDb.openInMemory()
+            val catalog = handle.catalog
+            val scanner = JvmScanner(catalog, CatalogFts(handle.driver), ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)
+
+            // First scan populates the row.
+            scanner.scan(root).toList()
+            val firstRow = catalog.catalogQueries.selectAllProjects().executeAsList().single()
+            assertNull(firstRow.stage_override)
+
+            // User clicks the chip and overrides to "Done".
+            catalog.catalogQueries.updateStageOverride(
+                stage_override = "Done",
+                id = firstRow.id,
+            )
+            assertEquals("Done", catalog.catalogQueries.selectProjectById(firstRow.id).executeAsOne().stage_override)
+
+            // Bump the .als mtime so the incremental-skip optimization re-parses (otherwise the
+            // scanner takes the Skipped path and never goes through persistOk).
+            Files.setLastModifiedTime(alsPath, FileTime.fromMillis(System.currentTimeMillis() + 5_000))
+
+            scanner.scan(root).toList()
+            val rescanned = catalog.catalogQueries.selectAllProjects().executeAsList().single()
+            // Override survived the INSERT OR REPLACE round-trip.
+            assertEquals("Done", rescanned.stage_override)
+            // Inferred is whatever the heuristic computed (may be null for this minimal .als);
+            // important assertion is that the override write wasn't clobbered.
+            assertNotNull(rescanned)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
     }
 
     @Test

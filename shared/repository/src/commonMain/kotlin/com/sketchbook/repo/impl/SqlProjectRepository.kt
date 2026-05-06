@@ -8,6 +8,7 @@ import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.SketchbookError
+import com.sketchbook.core.Stage
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
@@ -239,6 +240,23 @@ class SqlProjectRepository(
             }
             ActionRecord.Archive(wasArchived = wasArchived, isArchived = archived)
         }
+
+    override suspend fun setStageOverride(
+        id: ProjectId,
+        stage: Stage?,
+    ): Result<JournalEntry> = mutate(id) { row ->
+        val before = row.stage_override
+        val inferred = row.stage_inferred
+        catalog.catalogQueries.updateStageOverride(
+            stage_override = stage?.name,
+            id = id.value,
+        )
+        ActionRecord.StageOverridden(
+            stageInferred = inferred,
+            stageBefore = before,
+            stageAfter = stage?.name,
+        )
+    }
 
     override suspend fun setTags(id: ProjectId, tags: List<String>): Result<JournalEntry> {
         return withContext(ioDispatcher) {

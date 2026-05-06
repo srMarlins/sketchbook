@@ -58,7 +58,23 @@ data class SongStripData(
     val sync: SongSyncBadge? = null,
     /** Number of `.als` variants in this project group. 1 = singleton (no version card treatment). */
     val variantCount: Int = 1,
+    /** PR-R: Stage classification rendered as a small inline chip. The label comes from the
+     *  override-or-inferred stage; null = no chip drawn (no rule matched). */
+    val stage: SongStageChip? = null,
 )
+
+/**
+ * PR-R: stage-classification chip rendered next to the project name. The five stages map to
+ * five existing palette tokens (no new colors). Carrying both the label and the tone here keeps
+ * the chip rendering pure — the upstream feature module decides override-vs-inferred and just
+ * passes the rendered shape through.
+ */
+data class SongStageChip(
+    val label: String,
+    val tone: SongStageTone,
+)
+
+enum class SongStageTone { Sketch, InProgress, Mixing, Done, Stuck }
 
 /**
  * Per-row cloud-sync indicator: small glyph + tone. Mirrors the pip web/'s SongStrip carried
@@ -154,6 +170,9 @@ fun SongStrip(
                                 Text("⚠", style = AppTheme.typography.caption)
                             }
                         }
+                    }
+                    if (data.stage != null) {
+                        StageChip(data.stage)
                     }
                     if (data.variantCount > 1) {
                         VersionPill(count = data.variantCount)
@@ -277,6 +296,45 @@ private fun SyncPip(badge: SongSyncBadge) {
             Text(
                 badge.glyph,
                 style = AppTheme.typography.mono.copy(fontSize = 13.sp()),
+            )
+        }
+    }
+}
+
+/**
+ * PR-R: stage classification chip. Same pill geometry as [VersionPill] (50% rounded, 1dp ruleLine
+ * border, mono caption type) so the chip family stays visually coherent on the row. The five
+ * stages map to existing palette tokens — no new colors introduced.
+ */
+@Composable
+private fun StageChip(chip: SongStageChip) {
+    val colors = AppTheme.colors
+    val tint = when (chip.tone) {
+        SongStageTone.Sketch -> colors.tintCream
+        SongStageTone.InProgress -> colors.accentAction
+        SongStageTone.Mixing -> colors.accentSecondary
+        SongStageTone.Done -> colors.accentPositive
+        SongStageTone.Stuck -> colors.accentDanger
+    }
+    // Sketch is the only "tint" tone (already light); the four accent tones are saturated, so
+    // ink-on-tint readability flips to the kraft-cream surface for legibility. ruleLine border
+    // stays uniform across both modes per `feedback_color_restraint`.
+    val isLight = chip.tone == SongStageTone.Sketch
+    val fg = if (isLight) colors.inkSecondary else colors.surfaceCard
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(tint)
+            .border(1.dp, colors.ruleLine, RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        ProvideContentColor(fg) {
+            Text(
+                chip.label,
+                style = AppTheme.typography.mono.copy(
+                    fontSize = 10.sp(),
+                    letterSpacing = 0.5.sp(),
+                ),
             )
         }
     }

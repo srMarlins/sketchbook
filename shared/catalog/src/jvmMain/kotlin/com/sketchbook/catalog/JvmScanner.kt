@@ -5,6 +5,8 @@ import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.EffortScore
 import com.sketchbook.core.PluginFormat
 import com.sketchbook.core.ProjectMetadata
+import com.sketchbook.core.Stage
+import com.sketchbook.core.StageInferrer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -239,6 +241,15 @@ class JvmScanner(
         val effortBreakdown = o.effort?.breakdown?.entries?.joinToString(",") {
             "${it.key}:${it.value}"
         }
+        // PR-R R1: capture the user's stage override (if any) BEFORE the insertOrReplaceProject
+        // wipes it. The INSERT OR REPLACE flow doesn't bind `stage_override`, so without the
+        // read-then-restore the user's manual classification would be reset on every rescan.
+        val priorIdForPath: Long? =
+            catalog.catalogQueries.selectProjectIdByPath(path = o.abs).executeAsOneOrNull()
+        val priorStageOverride: String? =
+            priorIdForPath?.let { id ->
+                catalog.catalogQueries.selectStageOverrideById(id).executeAsOneOrNull()?.stage_override
+            }
         catalog.catalogQueries.insertOrReplaceProject(
             path = o.abs,
             name = o.name,
@@ -262,6 +273,35 @@ class JvmScanner(
             file_size_bytes = o.sizeBytes,
         )
         val id = catalog.catalogQueries.selectProjectIdByPath(path = o.abs).executeAsOne()
+        // PR-R R1: write the inferred stage (+ cached bounce-probe result) and restore the
+        // pre-existing override if one was present. Done as two UPDATEs on top of the
+        // insertOrReplace so the rest of the column set stays driven by the existing
+        // generated query — no need to widen its 20-arg signature.
+        val hasLocalBounce = probeHasLocalBounce(o.projectDir)
+        // Restrict mastering-detection input to plugins on the "Master" track. Common devices
+        // like Limiter/Maximizer often appear on individual mix buses; filtering avoids false
+        // positives that would mis-classify a still-mixing project as Mixing/Done.
+        val masterPluginNames = o.md.plugins
+            .filter { it.trackName?.equals("Master", ignoreCase = true) == true }
+            .map { it.name }
+        val stageInferred = StageInferrer.infer(
+            trackCount = o.md.totalTrackCount,
+            pluginNames = masterPluginNames,
+            hasLocalBounce = hasLocalBounce,
+            lastModified = kotlin.time.Instant.fromEpochMilliseconds((o.mtimeSec * 1000).toLong()),
+            now = kotlin.time.Instant.fromEpochMilliseconds((now * 1000).toLong()),
+        )
+        catalog.catalogQueries.updateStageInferred(
+            stage_inferred = stageInferred?.name,
+            has_local_bounce = if (hasLocalBounce) 1L else 0L,
+            id = id,
+        )
+        if (priorStageOverride != null) {
+            catalog.catalogQueries.updateStageOverride(
+                stage_override = priorStageOverride,
+                id = id,
+            )
+        }
         catalog.catalogQueries.deletePluginsForProject(project_id = id)
         for (p in o.md.plugins) {
             catalog.catalogQueries.insertProjectPlugin(
@@ -330,9 +370,34 @@ class JvmScanner(
         )
     }
 
+    /**
+     * PR-R R1: best-effort filesystem probe for a local mixdown ("bounce") next to the project.
+     * Walks the project directory one level deep and returns true if any audio file matching the
+     * conventional bounce extensions exists. Failures (permission denied, transient I/O) collapse
+     * to `false` rather than throwing — a missed bounce is benign (worst case: stage stays
+     * "Mixing" instead of "Done"); a thrown exception would fail the entire scan.
+     *
+     * The Live-managed `Samples/` subtree is intentionally excluded — its contents are
+     * project assets, not exports — and so is `Backup/` (older project copies). Anything else
+     * inside the project root is fair game.
+     */
+    private fun probeHasLocalBounce(projectDir: Path): Boolean = runCatching {
+        Files.list(projectDir).use { stream ->
+            stream.asSequence().any { p ->
+                val name = p.fileName?.toString() ?: return@any false
+                val isFile = runCatching { Files.isRegularFile(p) }.getOrDefault(false)
+                isFile && BOUNCE_EXTS.any { ext -> name.endsWith(ext, ignoreCase = true) }
+            }
+        }
+    }.getOrDefault(false)
+
     private companion object {
         // Subtrees Live auto-generates that we never want to walk into.
         val SKIP_DIRS = setOf("Backup", "Samples", "Ableton Project Info")
+
+        // Audio extensions that count as a "bounce" / mixdown. Conservative: the reference impl
+        // checks just these three. Adding `.flac` etc. would risk classifying stems as bounces.
+        val BOUNCE_EXTS = listOf(".wav", ".mp3", ".aiff")
 
         // Bounded — Live's gunzip/StAX scales modestly past 4 cores; beyond that we starve the
         // disk read queue and pay JIT/cache thrash without speedup.

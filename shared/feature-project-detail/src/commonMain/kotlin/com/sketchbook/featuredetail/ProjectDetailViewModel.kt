@@ -8,6 +8,7 @@ import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
+import com.sketchbook.core.Stage
 import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.LockStatus
 import com.sketchbook.repo.ProjectRepository
@@ -152,6 +153,10 @@ class ProjectDetailViewModel(
                 val row = state.value.row ?: return
                 viewModelScope.launch { projects.archive(row.id, !row.archived) }
             }
+            is Intent.SetStageOverride -> {
+                val id = selectedId.value ?: return
+                viewModelScope.launch { projects.setStageOverride(id, intent.stage) }
+            }
         }
     }
 
@@ -182,6 +187,9 @@ class ProjectDetailViewModel(
         data class SetTags(val tags: List<String>) : Intent
         data class Move(val newParentDir: String) : Intent
         data object ToggleArchive : Intent
+        /** PR-R: Set or clear the per-project stage override. Null = clear (chip falls back to
+         *  the inferred classification). Round-trips through the repository to journal the change. */
+        data class SetStageOverride(val stage: Stage?) : Intent
     }
 
     sealed interface Effect {

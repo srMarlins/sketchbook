@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectPath
 import com.sketchbook.core.ProjectRow
+import com.sketchbook.core.Stage
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.ProjectRepository
@@ -39,6 +40,8 @@ class ProjectListViewModelTest {
         archived: Boolean = false,
         tempo: Double? = 124.0,
         key: String? = null,
+        stageInferred: Stage? = null,
+        stageOverride: Stage? = null,
     ) = ProjectRow(
         id = ProjectId(id),
         name = name,
@@ -51,6 +54,8 @@ class ProjectListViewModelTest {
         colorTag = null,
         archived = archived,
         key = key,
+        stageInferred = stageInferred,
+        stageOverride = stageOverride,
     )
 
     private class FakeRepo(
@@ -177,6 +182,36 @@ class ProjectListViewModelTest {
             vm.dispatch(ProjectListViewModel.Intent.ClearFilters)
             while (s.keyFilter != null || s.rows.size != 3) s = awaitItem()
             assertEquals(setOf("a", "b", "c"), s.rows.map { it.name }.toSet())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun stageFilterUsesEffectiveStageWithOverrideWinning() = runTest(mainDispatcher) {
+        // a → inferred=Mixing, no override → effective=Mixing (passes filter)
+        // b → inferred=InProgress, override=Mixing → effective=Mixing (passes filter)
+        // c → inferred=Mixing, override=Sketch → effective=Sketch (filtered out)
+        // d → inferred=null, no override → effective=null (filtered out)
+        val all = MutableStateFlow(
+            listOf(
+                row(1, "a", stageInferred = Stage.Mixing),
+                row(2, "b", stageInferred = Stage.InProgress, stageOverride = Stage.Mixing),
+                row(3, "c", stageInferred = Stage.Mixing, stageOverride = Stage.Sketch),
+                row(4, "d"),
+            ),
+        )
+        val repo = FakeRepo(mapOf("" to all))
+        val vm = ProjectListViewModel(repo)
+
+        vm.state.test {
+            var s = awaitItem()
+            while (s.rows.size < 4) s = awaitItem()
+
+            vm.dispatch(ProjectListViewModel.Intent.SetStageFilter(setOf(Stage.Mixing)))
+
+            s = awaitItem()
+            while (s.stageFilter != setOf(Stage.Mixing) || s.rows.size != 2) s = awaitItem()
+            assertEquals(setOf("a", "b"), s.rows.map { it.name }.toSet())
             cancelAndIgnoreRemainingEvents()
         }
     }

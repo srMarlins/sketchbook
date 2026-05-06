@@ -8,6 +8,7 @@ import com.sketchbook.core.ParseStatus
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectPath
 import com.sketchbook.core.ProjectRow
+import com.sketchbook.core.Stage
 import kotlin.time.Instant
 
 /**
@@ -37,6 +38,8 @@ internal fun Projects.toDomain(
     missingSampleCount = missingSampleCount,
     archived = is_archived != 0L,
     key = key,
+    stageInferred = stage_inferred,
+    stageOverride = stage_override,
 )
 
 internal fun SelectAllProjectsWithMissing.toDomain(
@@ -57,6 +60,8 @@ internal fun SelectAllProjectsWithMissing.toDomain(
     missingSampleCount = missing_sample_count.toInt(),
     archived = is_archived != 0L,
     key = key,
+    stageInferred = stage_inferred,
+    stageOverride = stage_override,
 )
 
 internal fun SelectArchivedProjectsWithMissing.toDomain(
@@ -77,6 +82,8 @@ internal fun SelectArchivedProjectsWithMissing.toDomain(
     missingSampleCount = missing_sample_count.toInt(),
     archived = is_archived != 0L,
     key = key,
+    stageInferred = stage_inferred,
+    stageOverride = stage_override,
 )
 
 internal fun SelectProjectByIdWithMissing.toDomain(
@@ -97,6 +104,8 @@ internal fun SelectProjectByIdWithMissing.toDomain(
     missingSampleCount = missing_sample_count.toInt(),
     archived = is_archived != 0L,
     key = key,
+    stageInferred = stage_inferred,
+    stageOverride = stage_override,
 )
 
 @Suppress("LongParameterList")
@@ -116,6 +125,8 @@ private fun build(
     missingSampleCount: Int,
     archived: Boolean,
     key: String?,
+    stageInferred: String?,
+    stageOverride: String?,
 ): ProjectRow = ProjectRow(
     id = ProjectId(id),
     name = name,
@@ -132,6 +143,8 @@ private fun build(
     fileSizeBytes = fileSizeBytes ?: 0L,
     archived = archived,
     key = key,
+    stageInferred = Stage.parseOrNull(stageInferred),
+    stageOverride = Stage.parseOrNull(stageOverride),
 )
 
 private fun parseStatusFor(raw: String?): ParseStatus = when (raw) {
