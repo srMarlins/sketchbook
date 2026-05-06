@@ -3,9 +3,13 @@ name: pages
 # Deploys site/ to GitHub Pages. Trigger on:
 #   - any change to site/ on main (so iteration is instant)
 #   - manual dispatch (so we can re-deploy without a content change)
-#   - successful release runs (so the version tag in the page can update from
-#     the new bucket metadata.properties on next visit — Pages is static, so
-#     this is just a rebuild trigger; index.html fetches the live version)
+#   - successful release runs (so direct-download links in index.html get
+#     rewritten to the new versioned bucket filenames after each release)
+#
+# Build step: index.html contains `{{VERSION}}` placeholders for per-platform
+# direct-download links. Before upload, we curl the bucket's
+# metadata.properties (server-side, no CORS), extract app.version, and
+# substitute. This avoids the runtime CORS-blocked fetch we used to do.
 on:
   push:
     branches: [main]
@@ -33,6 +37,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Substitute live version into index.html
+        run: |
+          set -euo pipefail
+          # Pull the latest released version from the bucket. If the fetch
+          # fails (e.g. before the first release), fall back to "0.0.0".
+          VERSION="$(curl -fsSL https://storage.googleapis.com/sketchbook-releases/metadata.properties \
+            | grep -E '^app\.version=' \
+            | head -1 \
+            | cut -d= -f2 \
+            | tr -d '[:space:]' || true)"
+          if [ -z "${VERSION:-}" ]; then VERSION="0.0.0"; fi
+          echo "Substituting VERSION=$VERSION"
+          sed -i "s|{{VERSION}}|${VERSION}|g" site/index.html
 
       - uses: actions/configure-pages@v5
 

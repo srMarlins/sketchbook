@@ -10,6 +10,8 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://srmarlins.github.io/sketchbook/" />
 
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Gloria+Hallelujah&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" />
@@ -555,8 +557,8 @@
             </a>
             <div class="handwritten text-base flex flex-wrap items-center gap-x-5 gap-y-1" style="color: var(--ink-graphite-500);">
               <span>or pick:</span>
-              <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook-mac-aarch64.zip">Apple Silicon</a>
-              <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook-mac-amd64.zip">Intel Mac</a>
+              <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook-{{VERSION}}-mac-aarch64.zip">Apple Silicon</a>
+              <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook-{{VERSION}}-mac-amd64.zip">Intel Mac</a>
               <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook.exe">Windows</a>
             </div>
           </div>
@@ -620,7 +622,7 @@
             <span>·</span>
             <a href="https://github.com/srMarlins/sketchbook" class="underline hover:text-current" style="color: var(--ink-graphite-500);">srMarlins/sketchbook</a>
             <span>·</span>
-            <span id="version-tag">v0.0.x</span>
+            <span>v{{VERSION}}</span>
           </div>
           <a href="https://hydraulic.dev" class="data inline-flex items-center gap-2 px-3 py-1 rounded" style="background: var(--paper-cream-200); color: var(--ink-graphite-500);" aria-label="Packaged with Conveyor">
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><path d="M3 7h18v2H3zm2 4h14v2H5zm-2 4h18v2H3z"/></svg>
@@ -642,8 +644,11 @@
   </main>
 
   <script>
-    // OS detection — only used to label the primary CTA. Three platforms; fall
-    // back to the Conveyor download.html which auto-detects on the server side.
+    // OS detection — labels the primary CTA and routes to the right asset.
+    // For Mac, Apple Silicon vs Intel can't be distinguished reliably from
+    // UA alone (Apple Silicon Macs report as MacIntel), so the primary CTA
+    // routes through Conveyor's download.html which detects on the server
+    // side. Users who know their arch can use the explicit "or pick" links.
     (function() {
       var ua = navigator.userAgent;
       var btn = document.getElementById('primary-download');
@@ -651,33 +656,16 @@
       if (!btn || !lbl) return;
       var isWin = /Windows NT/i.test(ua);
       var isMac = /Mac OS X|Macintosh/i.test(ua);
-      var isAppleSilicon = isMac && /Mac OS X 10_15|Mac OS X 11|Mac OS X 12|Mac OS X 13|Mac OS X 14|Mac OS X 15/i.test(ua) && (window.navigator.platform === 'MacIntel' && (navigator.maxTouchPoints > 1 || /arm/i.test(ua)));
-      // Apple silicon detection is unreliable from UA alone (Apple lies); offer both Mac links and let the user pick.
       if (isWin) {
         btn.href = 'https://storage.googleapis.com/sketchbook-releases/sketchbook.exe';
         lbl.textContent = 'Download for Windows';
       } else if (isMac) {
-        // Default to download.html which lets Conveyor route to the right Mac variant.
         btn.href = 'https://storage.googleapis.com/sketchbook-releases/download.html';
         lbl.textContent = 'Download for Mac';
       } else {
         btn.href = btn.dataset.platformFallback || 'https://storage.googleapis.com/sketchbook-releases/download.html';
         lbl.textContent = 'See downloads';
       }
-    })();
-
-    // Live version tag — fetches the bucket's metadata.properties to display the
-    // current shipped version. Best-effort; failures stay silent.
-    (function() {
-      fetch('https://storage.googleapis.com/sketchbook-releases/metadata.properties', { cache: 'no-cache' })
-        .then(function(r) { return r.ok ? r.text() : null; })
-        .then(function(t) {
-          if (!t) return;
-          var m = t.match(/^app\.version\s*=\s*([^\s]+)/m);
-          var el = document.getElementById('version-tag');
-          if (m && el) el.textContent = 'v' + m[1];
-        })
-        .catch(function() { /* silent */ });
     })();
   </script>
 </body>
