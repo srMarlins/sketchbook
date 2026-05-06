@@ -10,9 +10,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-class MaterializerTest {
+class BlobInstallerTest {
 
-    private val root = createTempDirectory("materializer-test-")
+    private val root = createTempDirectory("blob-installer-test-")
 
     @AfterTest fun cleanup() { root.toFile().deleteRecursively() }
 
@@ -21,22 +21,22 @@ class MaterializerTest {
         val blob = root.resolve("blob.bin").also { it.writeBytes("hello".toByteArray()) }
         val target = root.resolve("project/Samples/k.wav")
 
-        val outcome = Materializer.materialize(blob, target)
+        val outcome = BlobInstaller.install(blob, target)
 
-        assertEquals(Materializer.Outcome.Hardlinked, outcome)
+        assertEquals(BlobInstaller.Outcome.Hardlinked, outcome)
         assertTrue(Files.exists(target))
         assertEquals("hello", Files.readString(target))
-        assertTrue(Materializer.sameInode(blob, target))
+        assertTrue(BlobInstaller.sameInode(blob, target))
     }
 
     @Test
     fun idempotentReturnsAlreadyPresent() {
         val blob = root.resolve("blob.bin").also { it.writeBytes("hello".toByteArray()) }
         val target = root.resolve("project/Samples/k.wav")
-        Materializer.materialize(blob, target)
+        BlobInstaller.install(blob, target)
 
-        val again = Materializer.materialize(blob, target)
-        assertEquals(Materializer.Outcome.AlreadyPresent, again)
+        val again = BlobInstaller.install(blob, target)
+        assertEquals(BlobInstaller.Outcome.AlreadyPresent, again)
     }
 
     @Test
@@ -47,7 +47,7 @@ class MaterializerTest {
             it.writeBytes("other content".toByteArray())
         }
         assertFailsWith<FileAlreadyExistsException> {
-            Materializer.materialize(blob, target)
+            BlobInstaller.install(blob, target)
         }
     }
 
@@ -56,7 +56,7 @@ class MaterializerTest {
         val blob = root.resolve("nope.bin")
         val target = root.resolve("project/Samples/k.wav")
         assertFailsWith<IllegalArgumentException> {
-            Materializer.materialize(blob, target)
+            BlobInstaller.install(blob, target)
         }
     }
 }

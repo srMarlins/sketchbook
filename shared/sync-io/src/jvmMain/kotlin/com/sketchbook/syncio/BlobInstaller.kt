@@ -6,18 +6,21 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
 /**
- * Places a content-addressed blob at a project-relative path on disk. Uses hardlinks within a
- * volume (the common case — blob cache shares a drive with the project tree), falls back to
- * copy across volumes.
+ * Places a content-addressed blob at a target path on disk. Hardlinks within a volume (the
+ * common case — blob cache shares a drive with the project tree), falls back to copy across
+ * volumes.
  *
  * **Idempotent.** If [target] already points to the same content as [blob], do nothing.
+ *
+ * Renamed from `Materializer` in PR-F: `Materializer` now refers to the higher-level
+ * manifest-orchestration class in [ManifestMaterializer]; this is the per-blob primitive.
  */
-object Materializer {
+object BlobInstaller {
 
-    /** Outcome of a single [materialize] call. */
+    /** Outcome of a single [install] call. */
     enum class Outcome { Hardlinked, Copied, AlreadyPresent }
 
-    fun materialize(blob: Path, target: Path): Outcome {
+    fun install(blob: Path, target: Path): Outcome {
         require(Files.isRegularFile(blob)) { "blob $blob is not a regular file" }
 
         if (Files.exists(target)) {

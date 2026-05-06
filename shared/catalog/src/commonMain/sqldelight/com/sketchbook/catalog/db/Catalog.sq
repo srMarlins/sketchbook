@@ -317,6 +317,32 @@ SELECT * FROM sync_state;
 selectIdentityByUuid:
 SELECT * FROM project_identity WHERE uuid = :uuid;
 
+-- sync_state — PR-F: PullPoller-driven cloud_head_rev advance.
+markSyncStateCloudHead:
+INSERT INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained)
+VALUES (:project_uuid, 0, :cloud_head_rev, 0, 0)
+ON CONFLICT(project_uuid) DO UPDATE SET cloud_head_rev = :cloud_head_rev;
+
+-- blob_cache — PR-F: JvmBlobCache LRU bookkeeping.
+insertBlobCache:
+INSERT OR REPLACE INTO blob_cache (hash, size, last_used, pinned)
+VALUES (:hash, :size, :last_used, :pinned);
+
+selectBlob:
+SELECT * FROM blob_cache WHERE hash = :hash;
+
+touchBlob:
+UPDATE blob_cache SET last_used = :last_used WHERE hash = :hash;
+
+deleteBlob:
+DELETE FROM blob_cache WHERE hash = :hash;
+
+selectAllBlobsByLruThenSize:
+SELECT * FROM blob_cache WHERE pinned = 0 ORDER BY last_used ASC, size DESC;
+
+sumBlobCacheBytes:
+SELECT COALESCE(SUM(size), 0) AS total FROM blob_cache;
+
 -- Repair findings: mac-imported projects.
 selectMacImportProjects:
 SELECT id, path, name, parent_dir, mac_paths_count, has_project_info
