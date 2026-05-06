@@ -724,6 +724,9 @@ private fun DetailPanelContent(
                                 row = row,
                                 theme = theme,
                                 onTagsChange = { vm.dispatch(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.SetTags(it)) },
+                                onStageOverrideChange = { stage ->
+                                    vm.dispatch(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.SetStageOverride(stage))
+                                },
                             )
                             DetailQuickVersions(row, state, theme)
                         }
@@ -789,6 +792,7 @@ private fun DetailMetaSection(
     row: com.sketchbook.core.ProjectRow,
     theme: com.sketchbook.uishared.theme.AppTheme,
     onTagsChange: (List<String>) -> Unit,
+    onStageOverrideChange: (com.sketchbook.core.Stage?) -> Unit,
 ) {
     Section("Overview", theme) {
         DetailRow("Project root", com.sketchbook.featureprojects.projectRootDir(row.path.value), theme, mono = true)
@@ -797,11 +801,128 @@ private fun DetailMetaSection(
         row.tempo?.let { DetailRow("Tempo", "${it.toInt()} bpm", theme) }
         if (row.trackCount > 0) DetailRow("Tracks", row.trackCount.toString(), theme)
         row.lastSavedLiveVersion?.let { DetailRow("Last saved with", it, theme) }
+        StageOverrideRow(
+            inferred = row.stageInferred,
+            override_ = row.stageOverride,
+            theme = theme,
+            onChange = onStageOverrideChange,
+        )
         TagsEditorRow(
             tags = row.tags,
             theme = theme,
             onChange = onTagsChange,
         )
+    }
+}
+
+/**
+ * PR-R: per-project stage override editor on the Overview tab. Shows the effective stage as a
+ * clickable chip; clicking opens a small Popup with "Auto" + each [com.sketchbook.core.Stage]
+ * option. Click-to-popup (not right-click) keeps the gesture surface consistent with PR-X's
+ * tempo/key chip popups. Picking "Auto" clears the override (null); picking a Stage sets it.
+ */
+@Composable
+private fun StageOverrideRow(
+    inferred: com.sketchbook.core.Stage?,
+    override_: com.sketchbook.core.Stage?,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    onChange: (com.sketchbook.core.Stage?) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    val effective = override_ ?: inferred
+    val label = effective?.name?.lowercase() ?: "unset"
+    val suffix = if (override_ != null) "  (override)"
+        else if (inferred != null) "  (auto)"
+        else ""
+
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        ProvideContentColor(theme.colors.inkMuted) {
+            Text(
+                "Stage",
+                style = theme.typography.caption,
+                modifier = Modifier.width(120.dp),
+            )
+        }
+        androidx.compose.foundation.layout.Box {
+            androidx.compose.foundation.layout.Row(
+                modifier = Modifier
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .background(if (override_ != null) theme.colors.tintCream else theme.colors.surfaceCard)
+                    .border(1.dp, theme.colors.ruleLineStrong, androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .clickable { open = !open }
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                ProvideContentColor(theme.colors.inkPrimary) {
+                    Text(
+                        (label + suffix).uppercase(),
+                        style = theme.typography.mono.copy(
+                            fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        ),
+                    )
+                }
+            }
+            if (open) {
+                androidx.compose.ui.window.Popup(
+                    onDismissRequest = { open = false },
+                    properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+                ) {
+                    StageOverridePopup(
+                        currentOverride = override_,
+                        theme = theme,
+                        onPick = { picked ->
+                            onChange(picked)
+                            open = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StageOverridePopup(
+    currentOverride: com.sketchbook.core.Stage?,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    onPick: (com.sketchbook.core.Stage?) -> Unit,
+) {
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier
+            .widthIn(min = 200.dp, max = 260.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(theme.spacing.cornerCard))
+            .background(theme.colors.surfaceCard)
+            .border(1.dp, theme.colors.ruleLineStrong, androidx.compose.foundation.shape.RoundedCornerShape(theme.spacing.cornerCard)),
+    ) {
+        StageOverridePopupRow("Auto", currentOverride == null, theme) { onPick(null) }
+        for (stage in com.sketchbook.core.Stage.values()) {
+            StageOverridePopupRow(stage.name, currentOverride == stage, theme) { onPick(stage) }
+        }
+    }
+}
+
+@Composable
+private fun StageOverridePopupRow(
+    label: String,
+    selected: Boolean,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+    onClick: () -> Unit,
+) {
+    androidx.compose.foundation.layout.Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (selected) theme.colors.tintCream else theme.colors.surfaceCard)
+            .clickable(onClick = onClick)
+            .padding(horizontal = theme.spacing.md, vertical = 8.dp),
+    ) {
+        ProvideContentColor(if (selected) theme.colors.inkPrimary else theme.colors.inkSecondary) {
+            Text(label, style = theme.typography.body)
+        }
     }
 }
 

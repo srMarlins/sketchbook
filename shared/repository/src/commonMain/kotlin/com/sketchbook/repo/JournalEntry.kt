@@ -182,4 +182,21 @@ sealed interface ActionRecord {
         override val typeKey: String get() = TYPE_KEY
         companion object { const val TYPE_KEY: String = "SnapshotRelabeled" }
     }
+
+    /**
+     * PR-R: user changed the per-project stage override via the chip popup. Carries [stageInferred]
+     * (the heuristic's classification at the time of the override), [stageBefore] (the prior
+     * override, if any), and [stageAfter] (the new override; null = "back to Auto"). All three
+     * are persisted as the [com.sketchbook.core.Stage] enum's `name` so the journal stays
+     * tolerant of future Stage variants.
+     */
+    @Serializable
+    data class StageOverridden(
+        val stageInferred: String?,
+        val stageBefore: String?,
+        val stageAfter: String?,
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "StageOverridden" }
+    }
 }

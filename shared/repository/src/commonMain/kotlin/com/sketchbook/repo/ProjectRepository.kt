@@ -83,6 +83,19 @@ interface ProjectRepository {
 
     /** Replace the project's tag set (creates missing tags as a side effect). */
     suspend fun setTags(id: ProjectId, tags: List<String>): Result<JournalEntry>
+
+    /**
+     * PR-R: set or clear the per-project stage override. `null` clears it (chip falls back to the
+     * inferred stage). Writes a `StageOverridden` journal entry; the entry carries the inferred
+     * stage at the time of the override so the audit log can reconstruct user intent (e.g. "user
+     * promoted Mixing → Done" vs "user re-tagged null → Sketch").
+     */
+    suspend fun setStageOverride(
+        id: ProjectId,
+        stage: com.sketchbook.core.Stage?,
+    ): Result<JournalEntry> = Result.failure(
+        com.sketchbook.core.SketchbookError.NotFound("setStageOverride not implemented"),
+    )
 }
 
 /**

@@ -284,6 +284,41 @@ class SqlProjectRepositoryTest {
         }
     }
 
+    // ------------------------------------------------------------------------
+    // PR-R R3: stage override + journal
+    // ------------------------------------------------------------------------
+
+    @Test
+    fun setStageOverridePersistsAndJournals() = runTest {
+        val (catalog, fts, repo) = setup()
+        val id = ProjectId(seed(catalog, fts, "song", "/lib"))
+        // Pre-populate stage_inferred so the journal entry can capture it. The scanner does this
+        // on real installs; the seed helper doesn't, so we hand-write the column here.
+        catalog.catalogQueries.updateStageInferred(
+            stage_inferred = "Mixing",
+            has_local_bounce = 0L,
+            id = id.value,
+        )
+
+        val entry = repo.setStageOverride(id, com.sketchbook.core.Stage.Done).getOrThrow()
+        val action = entry.action as ActionRecord.StageOverridden
+        assertEquals("Mixing", action.stageInferred)
+        assertNull(action.stageBefore)
+        assertEquals("Done", action.stageAfter)
+        assertEquals(id, entry.projectId)
+
+        val saved = catalog.catalogQueries.selectProjectById(id.value).executeAsOne()
+        assertEquals("Done", saved.stage_override)
+
+        // Clearing back to Auto journals the prior override as `stageBefore`.
+        val cleared = repo.setStageOverride(id, null).getOrThrow()
+        val clearAction = cleared.action as ActionRecord.StageOverridden
+        assertEquals("Done", clearAction.stageBefore)
+        assertNull(clearAction.stageAfter)
+        val clearedRow = catalog.catalogQueries.selectProjectById(id.value).executeAsOne()
+        assertNull(clearedRow.stage_override)
+    }
+
     @Test
     fun observeProjectsUsingEmptyWhenNoMatch() = runTest {
         val (catalog, fts, repo) = setup()
