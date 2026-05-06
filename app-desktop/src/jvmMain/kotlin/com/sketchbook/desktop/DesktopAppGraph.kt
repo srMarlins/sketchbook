@@ -11,6 +11,7 @@ import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.desktop.repo.LeasedLockRepository
 import com.sketchbook.desktop.repo.PreferencesSettingsRepository
 import com.sketchbook.desktop.repo.SwappableSyncQueue
+import com.sketchbook.repo.AlsPatchService
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.ProjectRepository
@@ -23,6 +24,7 @@ import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlProjectRepository
 import com.sketchbook.repo.impl.SqlProposalsRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
+import com.sketchbook.syncio.AlsPatcher
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.impl.SqlSnapshotRepository
@@ -157,8 +159,19 @@ interface DesktopAppGraph {
         ProposalActionExecutor(projects)
 
     @Provides @SingleIn(AppScope::class)
-    fun provideRepairRepository(catalog: Catalog): RepairRepository =
-        SqlRepairRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
+    fun provideAlsPatchService(): AlsPatchService = AlsPatcher()
+
+    @Provides @SingleIn(AppScope::class)
+    fun provideRepairRepository(
+        catalog: Catalog,
+        journal: JournalRepository,
+        patcher: AlsPatchService,
+    ): RepairRepository = SqlRepairRepository(
+        catalog = catalog,
+        ioDispatcher = Dispatchers.IO,
+        journal = journal,
+        patcher = patcher,
+    )
 
     @Provides @SingleIn(AppScope::class)
     fun provideSettingsRepository(): SettingsRepository = PreferencesSettingsRepository(

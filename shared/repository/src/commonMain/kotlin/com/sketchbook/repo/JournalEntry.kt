@@ -64,4 +64,18 @@ sealed interface ActionRecord {
         val ourRev: Long,
         val theirRev: Long,
     ) : ActionRecord
+
+    /**
+     * User mapped a missing sample reference to a concrete file on disk. The catalog is updated
+     * unconditionally; [alsOutcome] records what happened to the `.als` file itself (Patched on
+     * the happy path, SkippedBusy when Live has the file open, Failed on I/O error). PR-W W4
+     * uses this entry as the breadcrumb for "Undo to disk".
+     */
+    @Serializable
+    data class MissingSampleMapped(
+        val missingPath: String,
+        val candidatePath: String,
+        /** One of `AlsPatchService.Outcome` names: `Patched` | `NoChange` | `SkippedBusy` | `Failed`. */
+        val alsOutcome: String,
+    ) : ActionRecord
 }

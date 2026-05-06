@@ -1,9 +1,11 @@
 package com.sketchbook.syncio
 
 import com.sketchbook.als.AlsRewriter
+import com.sketchbook.repo.AlsPatchService
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 
@@ -18,7 +20,7 @@ import java.nio.file.StandardOpenOption
  */
 class AlsPatcher(
     private val busyDetector: (Path) -> Boolean = ::isFileLockedByAnotherProcess,
-) {
+) : AlsPatchService {
     sealed interface Outcome {
         object Patched : Outcome
         object NoChange : Outcome
@@ -39,6 +41,19 @@ class AlsPatcher(
             Outcome.Patched as Outcome
         }.getOrElse { Outcome.Failed(it) }
     }
+
+    /**
+     * [AlsPatchService] adapter — bridges the stringly-typed repository surface to the typed
+     * `Path`-based core. Repository code in `commonMain` can't reference `java.nio.file.Path`,
+     * so the path round-trips through `String`.
+     */
+    override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome =
+        when (val o = patch(Paths.get(alsPath), mapping)) {
+            Outcome.Patched -> AlsPatchService.Outcome.Patched
+            Outcome.NoChange -> AlsPatchService.Outcome.NoChange
+            Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
+            is Outcome.Failed -> AlsPatchService.Outcome.Failed
+        }
 }
 
 /**

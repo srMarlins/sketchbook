@@ -4,6 +4,10 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.ProjectId
+import com.sketchbook.repo.ActionRecord
+import com.sketchbook.repo.AlsPatchService
+import com.sketchbook.repo.JournalEntry
+import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.RepairFindings
@@ -41,6 +45,8 @@ import kotlin.time.Clock
 class SqlRepairRepository(
     private val catalog: Catalog,
     private val ioDispatcher: CoroutineDispatcher,
+    private val journal: JournalRepository,
+    private val patcher: AlsPatchService,
 ) : RepairRepository {
 
     /**
@@ -152,6 +158,22 @@ class SqlRepairRepository(
         candidatePath: String,
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
+            // Resolve the on-disk .als path before any catalog mutation so the patcher and the
+            // journal entry agree on which file the user actually edited (a concurrent rename
+            // would otherwise split the audit trail).
+            val alsPath = catalog.catalogQueries
+                .selectProjectById(projectId.value)
+                .executeAsOne()
+                .path
+
+            // Rewrite the .als first; the catalog flip is a tiny in-memory transaction and the
+            // patch is the slow + failure-prone step. If the patch raises, we honor the user's
+            // pick anyway (catalog still flips below) — the journal records the outcome so a
+            // later retry pass / Undo (PR-W W4) can act on un-rewritten files.
+            val outcome = runCatching {
+                patcher.patch(alsPath, mapOf(missingPath to candidatePath))
+            }.getOrElse { AlsPatchService.Outcome.Failed }
+
             catalog.transaction {
                 catalog.catalogQueries.applyMissingSampleMatch(
                     new_path = candidatePath,
@@ -164,6 +186,19 @@ class SqlRepairRepository(
             // tick here keeps the timing tight (no relying on whether the asFlow() observer has
             // landed yet).
             ackTick.value = ackTick.value + 1
+
+            journal.append(
+                JournalEntry(
+                    timestamp = Clock.System.now(),
+                    projectId = projectId,
+                    action = ActionRecord.MissingSampleMapped(
+                        missingPath = missingPath,
+                        candidatePath = candidatePath,
+                        alsOutcome = outcome.name,
+                    ),
+                ),
+            )
+            Unit
         }
     }
 
