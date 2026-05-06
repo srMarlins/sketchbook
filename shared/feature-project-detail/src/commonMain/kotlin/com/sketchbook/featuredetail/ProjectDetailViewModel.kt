@@ -167,6 +167,7 @@ class ProjectDetailViewModel(
                 val row = state.value.row ?: return
                 viewModelScope.launch { projects.archive(row.id, !row.archived) }
             }
+
             is Intent.SetStageOverride -> {
                 val id = selectedId.value ?: return
                 viewModelScope.launch { projects.setStageOverride(id, intent.stage) }
@@ -201,6 +202,7 @@ class ProjectDetailViewModel(
         data class SetTags(val tags: List<String>) : Intent
         data class Move(val newParentDir: String) : Intent
         data object ToggleArchive : Intent
+
         /** PR-R: Set or clear the per-project stage override. Null = clear (chip falls back to
          *  the inferred classification). Round-trips through the repository to journal the change. */
         data class SetStageOverride(val stage: Stage?) : Intent

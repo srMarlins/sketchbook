@@ -3,11 +3,11 @@ package com.sketchbook.featureprojects
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.Stage
 import com.sketchbook.repo.ProjectRepository
-import com.sketchbook.core.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
@@ -57,6 +57,7 @@ class ProjectListViewModel(
     private val tempoRange = MutableStateFlow<ClosedFloatingPointRange<Double>?>(null)
     private val keyFilter = MutableStateFlow<String?>(null)
     private val stageFilter = MutableStateFlow<Set<Stage>>(emptySet())
+
     // PR-CC: row-click filter from the sidebar Health chip. Narrows the visible row set to the
     // failing subset (e.g. only stuck projects, only projects with missing samples). `null` =
     // no health-chip narrowing. Lives alongside the existing tempo/key/stage filters and is
@@ -96,18 +97,26 @@ class ProjectListViewModel(
             healthFilter,
         ),
     ) { values ->
-        @Suppress("UNCHECKED_CAST") val q = values[0] as String
-        @Suppress("UNCHECKED_CAST") val rawRows = values[1] as List<ProjectRow>
-        @Suppress("UNCHECKED_CAST") val archivedRows = values[2] as List<ProjectRow>
+        @Suppress("UNCHECKED_CAST")
+        val q = values[0] as String
+
+        @Suppress("UNCHECKED_CAST")
+        val rawRows = values[1] as List<ProjectRow>
+
+        @Suppress("UNCHECKED_CAST")
+        val archivedRows = values[2] as List<ProjectRow>
         val seed = values[3] as Int
         val zoom = values[4] as ShelfId?
         val openId = values[5] as ProjectId?
         val selectedIdx = values[6] as Int
+
         @Suppress("UNCHECKED_CAST")
         val tempo = values[7] as ClosedFloatingPointRange<Double>?
         val key = values[8] as String?
+
         @Suppress("UNCHECKED_CAST")
         val distinctKeys = values[9] as List<String>
+
         @Suppress("UNCHECKED_CAST")
         val stages = values[10] as Set<Stage>
         val health = values[11] as HealthFilter?
@@ -176,33 +185,46 @@ class ProjectListViewModel(
                 query.update { intent.query }
                 searchSelectedIndex.update { 0 }
             }
+
             is Intent.Open -> _effects.tryEmit(Effect.Navigate(intent.id))
+
             is Intent.ZoomShelf -> zoomShelf.update { intent.shelf }
+
             is Intent.ShuffleGems -> gemsShuffleSeed.update { (it + 1).coerceAtLeast(1) }
+
             is Intent.OpenDetail -> openDetailId.update { intent.id }
+
             is Intent.CloseDetail -> openDetailId.update { null }
+
             is Intent.NavigateSearchNext -> {
                 val size = state.value.searchResults.size
                 if (size > 0) {
                     searchSelectedIndex.update { (it + 1).coerceAtMost(size - 1) }
                 }
             }
+
             is Intent.NavigateSearchPrev -> {
                 val size = state.value.searchResults.size
                 if (size > 0) {
                     searchSelectedIndex.update { (it - 1).coerceAtLeast(0) }
                 }
             }
+
             is Intent.OpenSelectedSearch -> {
                 val s = state.value
                 s.searchResults.getOrNull(s.searchSelectedIndex)?.let { group ->
                     openDetailId.update { group.representative.id }
                 }
             }
+
             is Intent.SetTempoRange -> tempoRange.update { intent.range }
+
             is Intent.SetKeyFilter -> keyFilter.update { intent.key }
+
             is Intent.SetStageFilter -> stageFilter.update { intent.stages }
+
             is Intent.SetHealthFilter -> filterCoordinator.setFilter(intent.filter)
+
             is Intent.ClearFilters -> {
                 tempoRange.update { null }
                 keyFilter.update { null }
@@ -252,17 +274,22 @@ class ProjectListViewModel(
         data object NavigateSearchNext : Intent
         data object NavigateSearchPrev : Intent
         data object OpenSelectedSearch : Intent
+
         /** Set the tempo range filter (`null` clears it). Applies to the row set before bucketing. */
         data class SetTempoRange(val range: ClosedFloatingPointRange<Double>?) : Intent
+
         /** Set the key filter (e.g. "F# Minor"; `null` clears it). */
         data class SetKeyFilter(val key: String?) : Intent
+
         /** Replace the stage filter set; empty clears it. Multi-select toolbar chip dispatches
          *  this as the user toggles each Stage. */
         data class SetStageFilter(val stages: Set<Stage>) : Intent
+
         /** PR-CC: set or clear the sidebar Health-chip row filter. `null` clears the filter so
          *  the user can fall back to the unfiltered library without going through ClearFilters
          *  (which would also wipe their active tempo/key/stage selections). */
         data class SetHealthFilter(val filter: HealthFilter?) : Intent
+
         /** Clear all four filters (tempo / key / stage / health) in one shot. */
         data object ClearFilters : Intent
     }

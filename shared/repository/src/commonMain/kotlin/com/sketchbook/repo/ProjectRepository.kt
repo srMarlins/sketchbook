@@ -77,16 +77,14 @@ interface ProjectRepository {
      * Home coverage chip popup. Empty list when nothing is missing — caller hides the chip in
      * that case.
      */
-    fun observeMissingPluginCoverage(): Flow<List<MissingPluginRow>> =
-        kotlinx.coroutines.flow.flowOf(emptyList())
+    fun observeMissingPluginCoverage(): Flow<List<MissingPluginRow>> = kotlinx.coroutines.flow.flowOf(emptyList())
 
     /**
      * PR-T: scalar summary that drives the chip's label ("N plugins missing affecting M projects").
      * `null` while loading — caller renders nothing for that initial frame so a flash of "0
      * missing" doesn't appear before the SQL lands.
      */
-    fun observeMissingPluginSummary(): Flow<MissingPluginSummary?> =
-        kotlinx.coroutines.flow.flowOf(null)
+    fun observeMissingPluginSummary(): Flow<MissingPluginSummary?> = kotlinx.coroutines.flow.flowOf(null)
 
     /** Move the project's working tree to a new parent directory. Path-rename only; no FS I/O. */
     suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry>

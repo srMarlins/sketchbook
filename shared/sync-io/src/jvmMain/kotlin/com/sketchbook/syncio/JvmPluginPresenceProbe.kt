@@ -135,14 +135,13 @@ class JvmPluginPresenceProbe(
         // without exercising the full probe pipeline.
         internal fun normalizeForTest(name: String): String = normalize(name)
 
-        private fun normalize(name: String): String =
-            name.lowercase()
-                .replace(PARENS_REGEX, "")           // strip "(3.4.0)" etc.
-                .replace(NON_ALPHANUM_REGEX, "")
-                .replace(TRAILING_DIGITS_REGEX, "")  // trailing version digits
+        private fun normalize(name: String): String = name.lowercase()
+            .replace(PARENS_REGEX, "") // strip "(3.4.0)" etc.
+            .replace(NON_ALPHANUM_REGEX, "")
+            .replace(TRAILING_DIGITS_REGEX, "") // trailing version digits
 
         private fun isInstalledFor(catalogToken: String, installedSet: Set<String>): Boolean {
-            if (catalogToken.isEmpty()) return true   // unknown — assume installed
+            if (catalogToken.isEmpty()) return true // unknown — assume installed
             return installedSet.any { it.startsWith(catalogToken) || catalogToken.startsWith(it) }
         }
 
@@ -160,11 +159,13 @@ class JvmPluginPresenceProbe(
                         Paths.get(cpf, "Steinberg", "VstPlugins"),
                     )
                 }
+
                 os.contains("mac") -> listOf(
                     Paths.get("/Library/Audio/Plug-Ins/VST3"),
                     Paths.get("/Library/Audio/Plug-Ins/VST"),
                     Paths.get("/Library/Audio/Plug-Ins/Components"),
                 )
+
                 // Linux producers overwhelmingly use Wine + Windows VSTs; we'd need to walk the
                 // wineprefix to find plugin DLLs and that's a separate feature. Skip for V1 — the
                 // probe still runs but with an empty installed-set, marking everything missing.

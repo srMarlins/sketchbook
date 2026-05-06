@@ -176,7 +176,7 @@ class JvmScannerTest {
                       </Vst3PluginInfo></PluginDesc></PluginDevice>
                     </Devices></DeviceChain>
                   </AudioTrack></Tracks>
-                </LiveSet></Ableton>"""
+                </LiveSet></Ableton>""",
             )
             // mtime = now - 1 day → comfortably inside the 14d Mixing window. Live mtime in
             // seconds; FileTime accepts millis.
@@ -209,7 +209,7 @@ class JvmScannerTest {
                 """<?xml version="1.0"?>
                 <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
                   <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="120"/></Tempo></Mixer></DeviceChain></MainTrack>
-                </LiveSet></Ableton>"""
+                </LiveSet></Ableton>""",
             )
 
             val handle = CatalogDb.openInMemory()

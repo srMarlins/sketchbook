@@ -33,13 +33,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +46,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.Stage
 import com.sketchbook.repo.ProjectSyncState
@@ -137,11 +137,13 @@ fun ProjectListScreen(
                     PageHeader(
                         title = state.zoomShelf?.title() ?: "Projects",
                         subtitle = state.zoomShelf?.subtitle()
-                            ?: "Your Ableton catalog — ${state.groups.size} project${if (state.groups.size == 1) "" else "s"}, "
-                            + "${state.rows.size} `.als` file${if (state.rows.size == 1) "" else "s"}.",
+                            ?: "Your Ableton catalog — ${state.groups.size} project${if (state.groups.size == 1) "" else "s"}, " +
+                            "${state.rows.size} `.als` file${if (state.rows.size == 1) "" else "s"}.",
                         actions = if (state.zoomShelf != null) {
                             { BackToOverview(onClick = { onZoomShelf(null) }) }
-                        } else null,
+                        } else {
+                            null
+                        },
                     )
                     TextField(
                         value = state.query,
@@ -162,7 +164,9 @@ fun ProjectListScreen(
                                     Text("×", style = AppTheme.typography.body)
                                 }
                             }
-                        } else null,
+                        } else {
+                            null
+                        },
                     )
                     FilterChipsRow(
                         tempoRange = state.tempoRange,
@@ -279,18 +283,22 @@ private fun handleSearchKey(
             dispatch(ProjectListViewModel.Intent.Search(""))
             true
         }
+
         state.query.isNotBlank() && state.searchResults.isNotEmpty() && key == Key.DirectionDown -> {
             dispatch(ProjectListViewModel.Intent.NavigateSearchNext)
             true
         }
+
         state.query.isNotBlank() && state.searchResults.isNotEmpty() && key == Key.DirectionUp -> {
             dispatch(ProjectListViewModel.Intent.NavigateSearchPrev)
             true
         }
+
         state.query.isNotBlank() && state.searchResults.isNotEmpty() && (key == Key.Enter || key == Key.NumPadEnter) -> {
             dispatch(ProjectListViewModel.Intent.OpenSelectedSearch)
             true
         }
+
         else -> false
     }
 }
@@ -576,8 +584,11 @@ private fun FilterChipsRow(
         "Tempo: ${formatBpm(range.start)}–${formatBpm(range.endInclusive)}"
     } ?: "Tempo: any"
     val keyLabel = "Key: ${keyFilter ?: "any"}"
-    val stageLabel = if (stageFilter.isEmpty()) "Stage: any"
-        else "Stage: " + stageFilter.sortedBy { it.ordinal }.joinToString(", ") { it.name.lowercase() }
+    val stageLabel = if (stageFilter.isEmpty()) {
+        "Stage: any"
+    } else {
+        "Stage: " + stageFilter.sortedBy { it.ordinal }.joinToString(", ") { it.name.lowercase() }
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -928,18 +939,23 @@ private fun Stage.toChip(): SongStageChip = SongStageChip(
     },
 )
 
-internal fun ProjectGroup.toSongStripDataForTest(sync: ProjectSyncState?): SongStripData =
-    toSongStripData(sync)
+internal fun ProjectGroup.toSongStripDataForTest(sync: ProjectSyncState?): SongStripData = toSongStripData(sync)
 
 private fun ProjectSyncState.toBadge(): SongSyncBadge = when (this) {
     ProjectSyncState.Synced -> SongSyncBadge.Synced
+
     ProjectSyncState.Pending -> SongSyncBadge.Pending
+
     ProjectSyncState.Uploading -> SongSyncBadge.Uploading
+
     ProjectSyncState.Conflict -> SongSyncBadge.Conflict
+
     // Remote ahead is "we owe a pull" — surface it as Pending in the song-strip badge so the
     // user reads "this row needs sync attention" without introducing a new badge variant.
     ProjectSyncState.RemoteAhead -> SongSyncBadge.Pending
+
     ProjectSyncState.LocalOnly -> SongSyncBadge.LocalOnly
+
     ProjectSyncState.Unknown -> SongSyncBadge.Unknown
 }
 

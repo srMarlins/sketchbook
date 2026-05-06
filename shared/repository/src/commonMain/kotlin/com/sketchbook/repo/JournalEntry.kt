@@ -217,6 +217,8 @@ sealed interface ActionRecord {
         val stageAfter: String?,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "StageOverridden" }
+        companion object {
+            const val TYPE_KEY: String = "StageOverridden"
+        }
     }
 }

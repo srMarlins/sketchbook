@@ -96,11 +96,12 @@ class ProjectListViewModelTest {
     private class FakeProjectFilterCoordinator : ProjectFilterCoordinator {
         private val _filter = MutableStateFlow<HealthFilter?>(null)
         override val filter: StateFlow<HealthFilter?> = _filter.asStateFlow()
-        override fun setFilter(filter: HealthFilter?) { _filter.value = filter }
+        override fun setFilter(filter: HealthFilter?) {
+            _filter.value = filter
+        }
     }
 
-    private fun newVm(repo: ProjectRepository) =
-        ProjectListViewModel(repo, FakeProjectFilterCoordinator())
+    private fun newVm(repo: ProjectRepository) = ProjectListViewModel(repo, FakeProjectFilterCoordinator())
 
     @Test
     fun stateUpdatesWhenRepositoryEmits() = runTest(mainDispatcher) {
