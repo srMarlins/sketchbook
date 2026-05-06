@@ -112,6 +112,11 @@ class JvmPluginPresenceProbe(
         private val PLUGIN_EXTS = setOf("vst3", "vst", "dll", "component")
         private val BUNDLE_EXTS = setOf("vst3", "vst", "component")
 
+        // Pre-compiled — `normalize` runs once per catalog plugin row, hot path during a probe.
+        private val PARENS_REGEX = Regex("\\s*\\([^)]*\\)\\s*")
+        private val NON_ALPHANUM_REGEX = Regex("[^a-z0-9]")
+        private val TRAILING_DIGITS_REGEX = Regex("\\d+$")
+
         /**
          * Test seam: build a probe with custom plugin dirs + dispatcher. Doesn't go through DI,
          * doesn't bypass the contract — production code path runs the same `probe()` logic, only
@@ -132,9 +137,9 @@ class JvmPluginPresenceProbe(
 
         private fun normalize(name: String): String =
             name.lowercase()
-                .replace(Regex("\\s*\\([^)]*\\)\\s*"), "") // strip "(3.4.0)" etc.
-                .replace(Regex("[^a-z0-9]"), "")
-                .replace(Regex("\\d+$"), "")               // trailing version digits
+                .replace(PARENS_REGEX, "")           // strip "(3.4.0)" etc.
+                .replace(NON_ALPHANUM_REGEX, "")
+                .replace(TRAILING_DIGITS_REGEX, "")  // trailing version digits
 
         private fun isInstalledFor(catalogToken: String, installedSet: Set<String>): Boolean {
             if (catalogToken.isEmpty()) return true   // unknown — assume installed
