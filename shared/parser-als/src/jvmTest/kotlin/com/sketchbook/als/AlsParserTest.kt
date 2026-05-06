@@ -262,6 +262,72 @@ class AlsParserTest {
     }
 
     @Test
+    fun parsesScaleInformationIntoKeySignatureString() {
+        // Live's encoding: RootNote is semitones-from-C (0=C, 2=D), Name is "Major"|"Minor"|modal name.
+        val md = parse(
+            """<?xml version="1.0"?>
+            <Ableton><LiveSet>
+              <ScaleInformation>
+                <RootNote Value="2"/>
+                <Name Value="Minor"/>
+              </ScaleInformation>
+            </LiveSet></Ableton>"""
+        )
+        assertEquals("D Minor", md.keySignature)
+    }
+
+    @Test
+    fun parsesFsharpMajorIntoKeySignatureString() {
+        val md = parse(
+            """<?xml version="1.0"?>
+            <Ableton><LiveSet>
+              <ScaleInformation>
+                <RootNote Value="6"/>
+                <Name Value="Major"/>
+              </ScaleInformation>
+            </LiveSet></Ableton>"""
+        )
+        assertEquals("F# Major", md.keySignature)
+    }
+
+    @Test
+    fun returnsNullKeySignatureWhenScaleInformationAbsent() {
+        val md = parse(
+            """<?xml version="1.0"?>
+            <Ableton><LiveSet>
+              <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="120"/></Tempo></Mixer></DeviceChain></MainTrack>
+            </LiveSet></Ableton>"""
+        )
+        assertNull(md.keySignature)
+    }
+
+    @Test
+    fun returnsNullKeySignatureWhenOnlyRootNoteIsPresent() {
+        val md = parse(
+            """<?xml version="1.0"?>
+            <Ableton><LiveSet>
+              <ScaleInformation>
+                <RootNote Value="5"/>
+              </ScaleInformation>
+            </LiveSet></Ableton>"""
+        )
+        assertNull(md.keySignature)
+    }
+
+    @Test
+    fun ignoresNameOutsideScaleInformation() {
+        // A <Name Value="Minor"/> in some unrelated subtree must not be picked up as the scale name.
+        val md = parse(
+            """<?xml version="1.0"?>
+            <Ableton><LiveSet><Tracks><AudioTrack>
+              <Name><EffectiveName Value="Minor"/></Name>
+              <DeviceChain/>
+            </AudioTrack></Tracks></LiveSet></Ableton>"""
+        )
+        assertNull(md.keySignature)
+    }
+
+    @Test
     fun handlesEmptyProject() {
         val md = parse(
             """<?xml version="1.0"?><Ableton Creator="Ableton Live 12.0.0"><LiveSet/></Ableton>"""

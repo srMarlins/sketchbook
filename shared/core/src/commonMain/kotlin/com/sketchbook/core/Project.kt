@@ -55,6 +55,11 @@ data class ProjectMetadata(
     val lastSavedLiveVersion: String?,
     /** Count of `FileRef/Path` values starting with a Mac-only prefix (`/Volumes/`, `/Users/`, etc.). */
     val macPathsCount: Int,
+    /**
+     * Project root key + scale, derived from `<ScaleInformation>` (e.g. "D Minor", "F# Major").
+     * `null` when the project has no key set or only a partial `ScaleInformation` block.
+     */
+    val keySignature: String? = null,
 ) {
     val totalTrackCount: Int get() = audioTrackCount + midiTrackCount + returnTrackCount + groupTrackCount
 }
