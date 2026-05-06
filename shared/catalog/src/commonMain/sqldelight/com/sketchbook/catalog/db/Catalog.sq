@@ -35,7 +35,14 @@ CREATE TABLE projects (
   has_project_info INTEGER,
   file_size_bytes INTEGER,
   is_missing      INTEGER NOT NULL DEFAULT 0,
-  last_seen       REAL
+  last_seen       REAL,
+  -- PR-R: stage classification. `stage_inferred` is rewritten on every successful scan from
+  -- StageInferrer.infer; `stage_override` is user-set via the per-row chip popup and wins on
+  -- read. `has_local_bounce` is the scan-time bounce-probe result, cached so PR-CC's library
+  -- health aggregate doesn't have to walk the filesystem.
+  stage_inferred  TEXT,
+  stage_override  TEXT,
+  has_local_bounce INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_projects_parent_dir ON projects(parent_dir);
@@ -240,6 +247,19 @@ SELECT id FROM projects WHERE parent_dir = :parent_dir;
 
 deleteAllProjects:
 DELETE FROM projects;
+
+-- PR-R R1: per-row stage column writes. The scanner uses these inside a transaction that wraps
+-- the existing insertOrReplaceProject + plugin/sample upserts so the inferred stage and the
+-- preserved override land atomically with the rest of the row.
+selectStageOverrideById:
+SELECT stage_override FROM projects WHERE id = :id;
+
+updateStageInferred:
+UPDATE projects SET stage_inferred = :stage_inferred, has_local_bounce = :has_local_bounce
+WHERE id = :id;
+
+updateStageOverride:
+UPDATE projects SET stage_override = :stage_override WHERE id = :id;
 
 selectProjectsByIds:
 SELECT * FROM projects WHERE id IN :ids ORDER BY last_modified DESC;
