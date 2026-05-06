@@ -46,7 +46,6 @@ class LeasedLockRepository(
     private val scope: CoroutineScope,
     private val journal: JournalRepository? = null,
     private val clock: Clock = Clock.System,
-    private val heartbeatInterval: kotlin.time.Duration = 1.minutes,
 ) : LockRepository {
 
     private data class PerUuid(
@@ -67,7 +66,6 @@ class LeasedLockRepository(
                     hostId = hostId,
                     hostName = hostName,
                     clock = clock,
-                    heartbeatInterval = heartbeatInterval,
                 ),
                 flow = MutableStateFlow<LockStatus>(LockStatus.Free),
             )
