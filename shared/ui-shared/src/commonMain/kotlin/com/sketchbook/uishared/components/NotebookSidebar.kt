@@ -44,6 +44,10 @@ fun NotebookSidebar(
     modifier: Modifier = Modifier,
     width: Dp = 204.dp,
     statusText: String? = null,
+    // PR-BB: optional bottom slot for the library-health chip. Sits below the status caption so
+    // the existing scan/sync line keeps top billing and the chip reads as a secondary detail.
+    // ui-shared stays repository-agnostic — the caller (RootContent) wires the actual chip.
+    footerSlot: (@Composable () -> Unit)? = null,
 ) {
     val colors = AppTheme.colors
     val density = LocalDensity.current
@@ -140,6 +144,11 @@ fun NotebookSidebar(
                             ),
                         )
                     }
+                }
+            }
+            if (footerSlot != null) {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    footerSlot()
                 }
             }
         }

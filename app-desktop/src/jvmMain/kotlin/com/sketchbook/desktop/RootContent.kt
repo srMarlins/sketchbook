@@ -176,6 +176,11 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     }
     val projectListState by projectListHolder.state.collectAsState()
     val projectDetailState by projectDetailHolder.state.collectAsState()
+    // PR-BB: library health stream → chip at the bottom of the sidebar. The repo combines the
+    // SQL aggregate flow with the journal tail so any catalog mutation (archive, sync, scan)
+    // flows back into a fresh percentage without manual invalidation.
+    val libraryHealth by graph.projectRepository.observeLibraryHealth()
+        .collectAsState(initial = com.sketchbook.repo.LibraryHealth.EMPTY)
 
     // Journal row taps navigate to project detail. Push onto the stack so the back gesture
     // returns to the journal list.
@@ -337,6 +342,7 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
                     backStack.add(target)
                 },
                 statusText = statusText,
+                footerSlot = { HealthChip(health = libraryHealth) },
             )
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxHeight().fillMaxWidth()) {
