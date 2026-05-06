@@ -15,6 +15,8 @@ import com.sketchbook.repo.SnapshotRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.time.Instant
 import kotlin.test.Test
@@ -52,11 +54,19 @@ class ProjectDetailStateHolderTest {
     )
 
     private class FakeProjects(private val row: ProjectRow?) : ProjectRepository {
+        var lastMove: Pair<ProjectId, String>? = null
+        var lastArchive: Pair<ProjectId, Boolean>? = null
         override fun observeProjects(query: String): Flow<List<ProjectRow>> = flowOf(emptyList())
         override fun observeProject(id: ProjectId): Flow<ProjectRow?> = flowOf(row)
-        override suspend fun move(id: ProjectId, newParentDir: String) = Result.success(stub())
+        override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> {
+            lastMove = id to newParentDir
+            return Result.success(stub())
+        }
         override suspend fun rename(id: ProjectId, newName: String) = Result.success(stub())
-        override suspend fun archive(id: ProjectId, archived: Boolean) = Result.success(stub())
+        override suspend fun archive(id: ProjectId, archived: Boolean): Result<JournalEntry> {
+            lastArchive = id to archived
+            return Result.success(stub())
+        }
         override suspend fun setTags(id: ProjectId, tags: List<String>) = Result.success(stub())
         private fun stub() = JournalEntry(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.Archive(false, true))
     }
@@ -98,6 +108,32 @@ class ProjectDetailStateHolderTest {
             while (awaitItem().tab != ProjectDetailStateHolder.Tab.History) { /* keep draining */ }
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun toggleArchiveCallsRepositoryWithFlippedFlag() = runTest(UnconfinedTestDispatcher()) {
+        val projects = FakeProjects(sampleRow)
+        val snaps = FakeSnapshots(MutableStateFlow(emptyList()))
+        val holder = ProjectDetailStateHolder(projects, snaps, backgroundScope, projectUuidLookup = { uuid })
+        holder.load(ProjectId(7))
+        advanceUntilIdle()
+        assertEquals("kick", holder.state.value.row?.name)
+        holder.dispatch(ProjectDetailStateHolder.Intent.ToggleArchive)
+        advanceUntilIdle()
+        assertEquals(ProjectId(7) to true, projects.lastArchive)
+    }
+
+    @Test
+    fun moveIntentDispatchesRepositoryMove() = runTest(UnconfinedTestDispatcher()) {
+        val projects = FakeProjects(sampleRow)
+        val snaps = FakeSnapshots(MutableStateFlow(emptyList()))
+        val holder = ProjectDetailStateHolder(projects, snaps, backgroundScope, projectUuidLookup = { uuid })
+        holder.load(ProjectId(7))
+        advanceUntilIdle()
+        assertEquals("kick", holder.state.value.row?.name)
+        holder.dispatch(ProjectDetailStateHolder.Intent.Move("/new/parent"))
+        advanceUntilIdle()
+        assertEquals(ProjectId(7) to "/new/parent", projects.lastMove)
     }
 
     @Test

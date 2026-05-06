@@ -337,6 +337,7 @@ private fun HomeDashboard(
                 HighlightChip(ShelfId.HasPotential.id, "Has potential", buckets.hasPotential.size, colors.pinPurple, colors.tintRose),
                 HighlightChip(ShelfId.Untriaged.id, "Untriaged", buckets.untriaged.size, colors.inkMuted, colors.surfaceCard),
                 HighlightChip(ShelfId.Broken.id, "Broken", buckets.broken.size, colors.accentDanger, colors.tintRose),
+                HighlightChip(ShelfId.Archived.id, "Archived", buckets.archived.size, colors.inkMuted, colors.surfaceCard),
             ),
             onSelect = { id -> ShelfId.fromId(id)?.let(onZoomShelf) },
             modifier = Modifier.fillMaxWidth(),

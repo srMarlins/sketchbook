@@ -26,6 +26,7 @@ data class ProjectRow(
     /** `.als` file size in bytes. Filled by the scanner via `Files.size`; useful as a proxy
      *  signal for the effort score until the streaming parser lands. */
     val fileSizeBytes: Long = 0L,
+    val archived: Boolean = false,
 )
 
 enum class ParseStatus { Pending, Ok, Failed }

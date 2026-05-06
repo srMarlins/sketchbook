@@ -54,8 +54,12 @@ import com.sketchbook.featuredetail.ProjectDetailScreen
 import com.sketchbook.featuredetail.ProjectDetailStateHolder
 import com.sketchbook.featurejournal.JournalScreen
 import com.sketchbook.featurejournal.JournalStateHolder
+import com.sketchbook.uishared.components.Button
+import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.Text
+import java.io.File
+import javax.swing.JFileChooser
 import com.sketchbook.featureneedsattention.NeedsAttentionScreen
 import com.sketchbook.featureneedsattention.NeedsAttentionStateHolder
 import com.sketchbook.featureprojects.ProjectListScreen
@@ -518,6 +522,19 @@ private fun DetailPanelContent(
                         onClick = { Os.openInLive(parentDirOf(row.path.value)) },
                         variant = com.sketchbook.uishared.components.ButtonVariant.Secondary,
                     ) { Text("Reveal folder") }
+                    Button(
+                        onClick = {
+                            val current = parentDirOf(row.path.value)
+                            openMoveDialog(current) { picked ->
+                                holder.dispatch(ProjectDetailStateHolder.Intent.Move(picked))
+                            }
+                        },
+                        variant = ButtonVariant.Secondary,
+                    ) { Text("Move…") }
+                    Button(
+                        onClick = { holder.dispatch(ProjectDetailStateHolder.Intent.ToggleArchive) },
+                        variant = ButtonVariant.Secondary,
+                    ) { Text(if (row.archived) "Unarchive" else "Archive") }
                 }
             }
             androidx.compose.foundation.layout.Box(
@@ -1194,6 +1211,19 @@ private fun EditableTagChip(
 private fun parentDirOf(absPath: String): String {
     val idx = absPath.lastIndexOf('/')
     return if (idx <= 0) absPath else absPath.substring(0, idx)
+}
+
+private fun openMoveDialog(currentParentDir: String, onPick: (String) -> Unit) {
+    val chooser = JFileChooser().apply {
+        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+        dialogTitle = "Move project to…"
+        val start = File(currentParentDir)
+        if (start.isDirectory) currentDirectory = start
+    }
+    if (chooser.showDialog(null, "Move here") == JFileChooser.APPROVE_OPTION) {
+        val picked = chooser.selectedFile?.absolutePath ?: return
+        if (picked.replace('\\', '/') != currentParentDir.replace('\\', '/')) onPick(picked)
+    }
 }
 
 private fun siblingAlsFiles(row: com.sketchbook.core.ProjectRow): List<java.io.File> {

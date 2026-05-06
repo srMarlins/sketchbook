@@ -140,7 +140,25 @@ class ProjectDetailStateHolder(
                     .distinct()
                 scope.launch { projects.setTags(id, cleaned) }
             }
+            is Intent.Move -> {
+                val id = selectedId.value ?: return
+                val current = state.value.row?.path?.value ?: return
+                val target = intent.newParentDir.trim()
+                if (target.isEmpty()) return
+                if (target.replace('\\', '/') == parentDirOfPath(current)) return
+                scope.launch { projects.move(id, target) }
+            }
+            is Intent.ToggleArchive -> {
+                val row = state.value.row ?: return
+                scope.launch { projects.archive(row.id, !row.archived) }
+            }
         }
+    }
+
+    private fun parentDirOfPath(absPath: String): String {
+        val normalized = absPath.replace('\\', '/')
+        val idx = normalized.lastIndexOf('/')
+        return if (idx <= 0) normalized else normalized.substring(0, idx)
     }
 
     private fun forceTake() {
@@ -172,6 +190,8 @@ class ProjectDetailStateHolder(
         data object ForceTakeLock : Intent
         data class Rename(val name: String) : Intent
         data class SetTags(val tags: List<String>) : Intent
+        data class Move(val newParentDir: String) : Intent
+        data object ToggleArchive : Intent
     }
 
     sealed interface Effect {
