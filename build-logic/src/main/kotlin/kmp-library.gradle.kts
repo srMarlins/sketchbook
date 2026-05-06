@@ -7,7 +7,12 @@ plugins {
 }
 
 private val libsCatalog = the<org.gradle.api.artifacts.VersionCatalogsExtension>().named("libs")
-private val jvmToolchainVersion = libsCatalog.findVersion("jvm-toolchain").get().requiredVersion.toInt()
+private val jvmToolchainVersion =
+    libsCatalog
+        .findVersion("jvm-toolchain")
+        .get()
+        .requiredVersion
+        .toInt()
 
 kotlin {
     jvm()
