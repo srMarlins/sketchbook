@@ -21,17 +21,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +43,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
-import com.sketchbook.core.ParseStatus
 import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.ProjectSyncState
 import com.sketchbook.uishared.components.EmptyState
@@ -86,147 +87,187 @@ fun ProjectListScreen(
     detailPanel: (@Composable (ProjectId, () -> Unit) -> Unit)? = null,
 ) {
     val state by holder.state.collectAsState()
-    val scroll = rememberScrollState()
+    val dispatch = holder::dispatch
+    val listState = rememberLazyListState()
 
-    val groups = remember(state.rows) { deriveProjectGroups(state.rows) }
-    val buckets = remember(groups) { bucketize(groups) }
-    var openDetailId: ProjectId? by remember { mutableStateOf(null) }
-    var zoomShelf: ShelfId? by remember { mutableStateOf(null) }
-    // Forgotten-gems shuffle: seed=0 means "show top-effort" (default order); incrementing
-    // re-rolls a random sample from the qualifying set. Mirrors `_shelf_gems_sample` in
-    // packages/web/audio_web/home.py — random rotation across distinct project roots.
-    var gemsShuffleSeed by remember { mutableStateOf(0) }
-    val gemsView = remember(buckets.forgottenGems, gemsShuffleSeed) {
-        if (gemsShuffleSeed == 0) buckets.forgottenGems
-        else buckets.forgottenGems.shuffled(kotlin.random.Random(gemsShuffleSeed.toLong() * 7919L))
+    // When search activates, scroll the page to the top so the search field — and the overlay
+    // panel anchored at the top of the content area — are visible. Without this, typing while
+    // scrolled deep into the dashboard would render the overlay above where the user is looking.
+    LaunchedEffect(state.query.isNotBlank()) {
+        if (state.query.isNotBlank()) listState.scrollToItem(0)
     }
+
+    // Stable callbacks: hoisted so children passed `dispatch(...)` lambdas don't churn each
+    // recomposition. With the LazyColumn below, only on-screen items recompose anyway, but
+    // stable callbacks let `key`-bounded items skip even when `state` updates.
+    val onOpenDetail: (ProjectId) -> Unit = remember(holder) { { id -> dispatch(ProjectListStateHolder.Intent.OpenDetail(id)) } }
+    val onZoomShelf: (ShelfId?) -> Unit = remember(holder) { { shelf -> dispatch(ProjectListStateHolder.Intent.ZoomShelf(shelf)) } }
+    val onShuffleGems: () -> Unit = remember(holder) { { dispatch(ProjectListStateHolder.Intent.ShuffleGems) } }
+    val onCloseDetail: () -> Unit = remember(holder) { { dispatch(ProjectListStateHolder.Intent.CloseDetail) } }
+    val onClearSearch: () -> Unit = remember(holder) { { dispatch(ProjectListStateHolder.Intent.Search("")) } }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isWide = maxWidth.value >= WIDE_THRESHOLD_DP
+        val viewportMaxHeight = maxHeight
 
-        Column(
+        LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(scroll)
                 .padding(PaddingValues(horizontal = AppTheme.spacing.xl, vertical = AppTheme.spacing.lg)),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg),
         ) {
-            Column(
-                modifier = Modifier.widthIn(max = 1240.dp).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-            ) {
-                PageHeader(
-                    title = zoomShelf?.title() ?: "Projects",
-                    subtitle = zoomShelf?.subtitle()
-                        ?: "Your Ableton catalog — ${groups.size} project${if (groups.size == 1) "" else "s"}, "
-                        + "${state.rows.size} `.als` file${if (state.rows.size == 1) "" else "s"}.",
-                    actions = if (zoomShelf != null) {
-                        { BackToOverview(onClick = { zoomShelf = null }) }
-                    } else null,
-                )
-                TextField(
-                    value = state.query,
-                    onChange = { holder.dispatch(ProjectListStateHolder.Intent.Search(it)) },
-                    placeholder = "Search projects, plugins, samples…",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown && event.key == Key.Escape && state.query.isNotBlank()) {
-                                holder.dispatch(ProjectListStateHolder.Intent.Search(""))
-                                true
-                            } else {
-                                false
-                            }
-                        },
-                    trailing = if (state.query.isNotBlank()) {
-                        {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable { holder.dispatch(ProjectListStateHolder.Intent.Search("")) }
-                                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                            ) {
-                                Text("×", style = AppTheme.typography.body)
-                            }
-                        }
-                    } else null,
-                )
-                ScanIndicator(
-                    active = scanActive,
-                    label = scanLabel,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            Box(modifier = Modifier.widthIn(max = 1240.dp).fillMaxWidth()) {
-                // Base layer — always rendered so it stays visible (dimmed) behind the overlay.
-                if (zoomShelf != null) {
-                    ShelfFlat(
-                        groups = zoomShelf!!.bucket(buckets),
-                        onOpen = { openDetailId = it.representative.id },
-                        syncStateFor = syncStateFor,
+            // Header — single item; the inner Column holds the page title + search field +
+            // scan ribbon and never changes its child count.
+            item(key = "header") {
+                Column(
+                    modifier = Modifier.widthIn(max = 1240.dp).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+                ) {
+                    PageHeader(
+                        title = state.zoomShelf?.title() ?: "Projects",
+                        subtitle = state.zoomShelf?.subtitle()
+                            ?: "Your Ableton catalog — ${state.groups.size} project${if (state.groups.size == 1) "" else "s"}, "
+                            + "${state.rows.size} `.als` file${if (state.rows.size == 1) "" else "s"}.",
+                        actions = if (state.zoomShelf != null) {
+                            { BackToOverview(onClick = { onZoomShelf(null) }) }
+                        } else null,
                     )
-                } else {
-                    HomeDashboard(
-                        buckets = buckets,
-                        gemsView = gemsView,
-                        isWide = isWide,
-                        onOpen = { openDetailId = it.representative.id },
-                        onSeeAll = { zoomShelf = it },
-                        onChip = { zoomShelf = it },
-                        onShuffleGems = { gemsShuffleSeed = (gemsShuffleSeed + 1).coerceAtLeast(1) },
-                        syncStateFor = syncStateFor,
-                    )
-                }
-
-                // Search overlay — scrim + results panel anchored under the search field.
-                if (state.query.isNotBlank()) {
-                    // Scrim: paper-fog over the base layer; click anywhere to clear the query.
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(AppTheme.colors.surfaceSunken.copy(alpha = 0.85f))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { holder.dispatch(ProjectListStateHolder.Intent.Search("")) },
-                            ),
-                    )
-                    Box(
+                    TextField(
+                        value = state.query,
+                        onChange = { dispatch(ProjectListStateHolder.Intent.Search(it)) },
+                        placeholder = "Search projects, plugins, samples…",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .align(Alignment.TopCenter)
-                            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
-                            .background(AppTheme.colors.surfaceCard)
-                            .border(1.dp, AppTheme.colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard))
-                            .padding(8.dp),
-                    ) {
-                        SearchResults(
-                            groups = groups.filter { matchesQuery(it, state.query) },
-                            onOpen = { openDetailId = it.representative.id },
-                            syncStateFor = syncStateFor,
-                        )
-                    }
+                            .onPreviewKeyEvent { event -> handleSearchKey(event, state, dispatch) },
+                        leading = { Text("⌕", style = AppTheme.typography.body) },
+                        trailing = if (state.query.isNotBlank()) {
+                            {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable(onClick = onClearSearch)
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                                ) {
+                                    Text("×", style = AppTheme.typography.body)
+                                }
+                            }
+                        } else null,
+                    )
+                    ScanIndicator(
+                        active = scanActive,
+                        label = scanLabel,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+
+            // Body — branch by zoom mode. Zoomed = flat list of rows (the perf win); unzoomed
+            // = dashboard with capped shelves rendered as a single item (each shelf's row count
+            // is bounded by SHELF_LIMIT, so a non-lazy Column is fine inside).
+            val zoom = state.zoomShelf
+            if (zoom != null) {
+                items(
+                    items = zoom.bucket(state.buckets),
+                    key = { group -> group.representative.id.value },
+                ) { group ->
+                    SongStripRow(
+                        group = group,
+                        sync = syncStateFor?.invoke(group.representative.id),
+                        onOpen = onOpenDetail,
+                        modifier = Modifier.widthIn(max = 1240.dp).fillMaxWidth(),
+                    )
+                }
+            } else {
+                item(key = "dashboard") {
+                    HomeDashboard(
+                        buckets = state.buckets,
+                        gemsView = state.gemsView,
+                        isWide = isWide,
+                        onOpen = onOpenDetail,
+                        onZoomShelf = onZoomShelf,
+                        onShuffleGems = onShuffleGems,
+                        syncStateFor = syncStateFor,
+                    )
                 }
             }
         }
 
+        // Search overlay — scrim covers the whole content area; panel is anchored to the top
+        // (under the search field, since search activation scrolls the LazyColumn back to top).
+        if (state.query.isNotBlank()) {
+            // Scrim: paper-fog over the base layer; click anywhere to clear the query.
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(AppTheme.colors.surfaceSunken.copy(alpha = 0.85f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onClearSearch,
+                    ),
+            )
+            // Anchor the panel just under the search field. The header item's height is roughly
+            // the page padding (lg) + page title + search field + scan ribbon + spacing —
+            // approximated as 200dp so the panel reads as "below the field".
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 200.dp, start = AppTheme.spacing.xl, end = AppTheme.spacing.xl)
+                    .widthIn(max = 1240.dp + AppTheme.spacing.xl.value.dp * 2)
+                    .align(Alignment.TopCenter)
+                    .heightIn(max = (viewportMaxHeight - 220.dp).coerceAtLeast(200.dp))
+                    .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+                    .background(AppTheme.colors.surfaceCard)
+                    .border(1.dp, AppTheme.colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard)),
+            ) {
+                SearchOverlayPanel(
+                    groups = state.searchResults,
+                    selectedIndex = state.searchSelectedIndex,
+                    syncStateFor = syncStateFor,
+                    onOpen = onOpenDetail,
+                )
+            }
+        }
+
         DetailPanel(
-            openId = openDetailId,
-            onDismiss = { openDetailId = null },
+            openId = state.openDetailId,
+            onDismiss = onCloseDetail,
             content = detailPanel,
         )
     }
 }
 
-private fun matchesQuery(group: ProjectGroup, q: String): Boolean {
-    val needle = q.trim()
-    if (needle.isEmpty()) return true
-    if (group.id.contains(needle, ignoreCase = true)) return true
-    return group.variants.any { v ->
-        v.name.contains(needle, ignoreCase = true) ||
-            v.tags.any { it.contains(needle, ignoreCase = true) }
+/**
+ * Pure key-event reducer for the search field. Returns `true` if the event was consumed.
+ * Lives outside the composable so the keyboard contract is testable without Compose.
+ */
+private fun handleSearchKey(
+    event: androidx.compose.ui.input.key.KeyEvent,
+    state: ProjectListStateHolder.State,
+    dispatch: (ProjectListStateHolder.Intent) -> Unit,
+): Boolean {
+    if (event.type != KeyEventType.KeyDown) return false
+    val key = event.key
+    return when {
+        key == Key.Escape && state.query.isNotBlank() -> {
+            dispatch(ProjectListStateHolder.Intent.Search(""))
+            true
+        }
+        state.query.isNotBlank() && state.searchResults.isNotEmpty() && key == Key.DirectionDown -> {
+            dispatch(ProjectListStateHolder.Intent.NavigateSearchNext)
+            true
+        }
+        state.query.isNotBlank() && state.searchResults.isNotEmpty() && key == Key.DirectionUp -> {
+            dispatch(ProjectListStateHolder.Intent.NavigateSearchPrev)
+            true
+        }
+        state.query.isNotBlank() && state.searchResults.isNotEmpty() && (key == Key.Enter || key == Key.NumPadEnter) -> {
+            dispatch(ProjectListStateHolder.Intent.OpenSelectedSearch)
+            true
+        }
+        else -> false
     }
 }
 
@@ -252,14 +293,32 @@ private fun BackToOverview(onClick: () -> Unit) {
     }
 }
 
+/**
+ * Single shelf row item. Pulled out so it's the same composable in zoomed-list `items()` and
+ * search-overlay `items()` blocks — equal `key` slot identity across modes lets the slot table
+ * reuse layout when the same project appears in both.
+ */
+@Composable
+private fun SongStripRow(
+    group: ProjectGroup,
+    sync: ProjectSyncState?,
+    onOpen: (ProjectId) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SongStrip(
+        data = group.toSongStripData(sync),
+        onOpen = { onOpen(group.representative.id) },
+        modifier = modifier,
+    )
+}
+
 @Composable
 private fun HomeDashboard(
     buckets: Buckets,
     gemsView: List<ProjectGroup>,
     isWide: Boolean,
-    onOpen: (ProjectGroup) -> Unit,
-    onSeeAll: (ShelfId) -> Unit,
-    onChip: (ShelfId) -> Unit,
+    onOpen: (ProjectId) -> Unit,
+    onZoomShelf: (ShelfId?) -> Unit,
     onShuffleGems: () -> Unit,
     syncStateFor: ((ProjectId) -> ProjectSyncState)?,
 ) {
@@ -279,7 +338,7 @@ private fun HomeDashboard(
                 HighlightChip(ShelfId.Untriaged.id, "Untriaged", buckets.untriaged.size, colors.inkMuted, colors.surfaceCard),
                 HighlightChip(ShelfId.Broken.id, "Broken", buckets.broken.size, colors.accentDanger, colors.tintRose),
             ),
-            onSelect = { id -> ShelfId.fromId(id)?.let(onChip) },
+            onSelect = { id -> ShelfId.fromId(id)?.let(onZoomShelf) },
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -301,7 +360,7 @@ private fun HomeDashboard(
                         subtitle = "Active sketches — blue color tag or touched in the last 6 months. ${buckets.currentlyWorking.size} total.",
                         groups = buckets.currentlyWorking.take(SHELF_LIMIT),
                         onOpen = onOpen,
-                        onSeeAll = { onSeeAll(ShelfId.CurrentlyWorking) },
+                        onSeeAll = { onZoomShelf(ShelfId.CurrentlyWorking) },
                         syncStateFor = syncStateFor,
                     )
                 }
@@ -311,7 +370,7 @@ private fun HomeDashboard(
                         subtitle = "High-effort sketches buried in the catalog. ${buckets.forgottenGems.size} total.",
                         groups = gemsView.take(SHELF_LIMIT),
                         onOpen = onOpen,
-                        onSeeAll = { onSeeAll(ShelfId.ForgottenGems) },
+                        onSeeAll = { onZoomShelf(ShelfId.ForgottenGems) },
                         onShuffle = if (buckets.forgottenGems.size > SHELF_LIMIT) onShuffleGems else null,
                         syncStateFor = syncStateFor,
                     )
@@ -323,7 +382,7 @@ private fun HomeDashboard(
                 subtitle = "Active sketches — blue color tag or touched recently.",
                 groups = buckets.currentlyWorking.take(SHELF_LIMIT),
                 onOpen = onOpen,
-                onSeeAll = { onSeeAll(ShelfId.CurrentlyWorking) },
+                onSeeAll = { onZoomShelf(ShelfId.CurrentlyWorking) },
                 syncStateFor = syncStateFor,
             )
             Shelf(
@@ -331,7 +390,7 @@ private fun HomeDashboard(
                 subtitle = "High-effort sketches buried in the catalog.",
                 groups = gemsView.take(SHELF_LIMIT),
                 onOpen = onOpen,
-                onSeeAll = { onSeeAll(ShelfId.ForgottenGems) },
+                onSeeAll = { onZoomShelf(ShelfId.ForgottenGems) },
                 onShuffle = if (buckets.forgottenGems.size > SHELF_LIMIT) onShuffleGems else null,
                 syncStateFor = syncStateFor,
             )
@@ -339,12 +398,18 @@ private fun HomeDashboard(
     }
 }
 
+/**
+ * Single shelf — header + up to [SHELF_LIMIT] rows. Row count is bounded so the non-lazy
+ * `Column` is fine; converting to `LazyColumn` here would conflict with the parent
+ * `LazyColumn`'s scroll measurement. Rows are keyed via the surrounding `key()` block to keep
+ * slot identity stable when the bucket changes.
+ */
 @Composable
 private fun Shelf(
     title: String,
     subtitle: String,
     groups: List<ProjectGroup>,
-    onOpen: (ProjectGroup) -> Unit,
+    onOpen: (ProjectId) -> Unit,
     onSeeAll: () -> Unit,
     syncStateFor: ((ProjectId) -> ProjectSyncState)?,
     onShuffle: (() -> Unit)? = null,
@@ -363,62 +428,57 @@ private fun Shelf(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (group in groups) {
-                    SongStrip(
-                        data = group.toSongStripData(syncStateFor?.invoke(group.representative.id)),
-                        onOpen = { onOpen(group) },
-                    )
+                    androidx.compose.runtime.key(group.representative.id.value) {
+                        SongStripRow(
+                            group = group,
+                            sync = syncStateFor?.invoke(group.representative.id),
+                            onOpen = onOpen,
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * Search results inside the overlay panel. Uses a [LazyColumn] so a 100-result query doesn't
+ * compose 100 rows when only a handful are visible. Selection is rendered as an outer accent
+ * border on the highlighted row.
+ */
 @Composable
-private fun ShelfFlat(
+private fun SearchOverlayPanel(
     groups: List<ProjectGroup>,
-    onOpen: (ProjectGroup) -> Unit,
+    selectedIndex: Int,
     syncStateFor: ((ProjectId) -> ProjectSyncState)?,
-) {
-    Column(
-        modifier = Modifier.widthIn(max = 1240.dp).fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        if (groups.isEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
-                EmptyState(title = "Nothing here yet")
-            }
-        } else {
-            for (group in groups) {
-                SongStrip(
-                    data = group.toSongStripData(syncStateFor?.invoke(group.representative.id)),
-                    onOpen = { onOpen(group) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SearchResults(
-    groups: List<ProjectGroup>,
-    onOpen: (ProjectGroup) -> Unit,
-    syncStateFor: ((ProjectId) -> ProjectSyncState)?,
+    onOpen: (ProjectId) -> Unit,
 ) {
     if (groups.isEmpty()) {
-        Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             EmptyState(title = "No matches", hint = "Try a different query.")
         }
-    } else {
-        Column(
-            modifier = Modifier.widthIn(max = 1240.dp).fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            for (group in groups) {
-                SongStrip(
-                    data = group.toSongStripData(syncStateFor?.invoke(group.representative.id)),
-                    onOpen = { onOpen(group) },
-                )
-            }
+        return
+    }
+    val accent = AppTheme.colors.accentAction
+    val cardShape = RoundedCornerShape(AppTheme.spacing.cornerCard)
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth().padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        itemsIndexed(
+            items = groups,
+            key = { _, group -> group.representative.id.value },
+        ) { index, group ->
+            val rowMod = if (index == selectedIndex) Modifier.border(2.dp, accent, cardShape) else Modifier
+            SongStripRow(
+                group = group,
+                sync = syncStateFor?.invoke(group.representative.id),
+                onOpen = onOpen,
+                modifier = rowMod,
+            )
         }
     }
 }
@@ -465,123 +525,6 @@ private fun BoxScope.DetailPanel(
             }
         }
     }
-}
-
-private enum class ShelfId(val id: String) {
-    CurrentlyWorking("currently-working"),
-    ForgottenGems("forgotten-gems"),
-    AlmostDone("almost-done"),
-    HasPotential("has-potential"),
-    Untriaged("untriaged"),
-    Broken("broken");
-
-    fun title(): String = when (this) {
-        CurrentlyWorking -> "Currently working on"
-        ForgottenGems -> "Forgotten gems"
-        AlmostDone -> "Almost done"
-        HasPotential -> "Has potential"
-        Untriaged -> "Untriaged"
-        Broken -> "Broken"
-    }
-
-    fun subtitle(): String = when (this) {
-        CurrentlyWorking -> "Blue color tag or modified within 6 months."
-        ForgottenGems -> "Effort score >=60 and quiet for 2+ years."
-        AlmostDone -> "Warm color tags (orange / yellow) — close to a release."
-        HasPotential -> "Purple-tagged sketches marked for revisit."
-        Untriaged -> "No color tag yet — needs a glance."
-        Broken -> "Failed to parse, or referencing missing samples."
-    }
-
-    fun bucket(b: Buckets): List<ProjectGroup> = when (this) {
-        CurrentlyWorking -> b.currentlyWorking
-        ForgottenGems -> b.forgottenGems
-        AlmostDone -> b.almostDone
-        HasPotential -> b.hasPotential
-        Untriaged -> b.untriaged
-        Broken -> b.broken
-    }
-
-    companion object {
-        fun fromId(id: String): ShelfId? = entries.firstOrNull { it.id == id }
-    }
-}
-
-private data class Buckets(
-    val currentlyWorking: List<ProjectGroup>,
-    val forgottenGems: List<ProjectGroup>,
-    val almostDone: List<ProjectGroup>,
-    val hasPotential: List<ProjectGroup>,
-    val untriaged: List<ProjectGroup>,
-    val broken: List<ProjectGroup>,
-    val all: List<ProjectGroup>,
-)
-
-private const val FOURTEEN_DAYS_MS = 14L * 24 * 60 * 60 * 1000
-private const val FORGOTTEN_GEM_THRESHOLD = 65
-
-// Ableton palette indices (the real ones our scanner will emit, matching the
-// `AbletonPalette` map in :ui-shared and the mocks the user iterated against).
-// Python `home.py` used a provisional 1..6 mapping with a comment noting it would
-// change once real scan data arrived — we use the canonical Ableton indices here.
-private val WARM_COLORS = setOf(1, 2, 3) // pink / orange / yellow
-private const val BLUE = 10
-private const val PURPLE = 12
-// Forgotten-gems excludes "shipped" / "killed" tags so the gem shelf is genuinely
-// forgotten, not just old.
-private val GEM_EXCLUDE_COLORS = setOf(6, 7) // green-ish (shipped), red-ish (killed)
-
-/**
- * Faithful port of the production server impl in
- * `packages/web/audio_web/home.py::_shelf_*`. Notably:
- *
- *  - `currently-working`: blue OR mtime within **14 days** (server says 14d, not 6mo).
- *  - `forgotten-gems`: effort_score >= **65** AND mtime older than **180 days** AND color tag
- *    NOT in (green, red). The earlier 2-year gate was from the JS mock (test-only data) —
- *    the production rule is 6 months.
- *  - `almost-done`: warm color tags (orange/yellow) — server uses orange+yellow specifically.
- *  - `has-potential`: purple color tag.
- *  - `untriaged`: no color tag.
- *  - `broken`: parse failed OR missing_sample_count > 0.
- *
- * A group can appear in multiple shelves; chip counts and shelves are computed independently.
- *
- * Note: until the streaming `.als` parser fills [ProjectGroup.effortScore] / `colorTag`, only
- * `currently-working` (mtime branch), `untriaged`, and `broken` will populate. Forgotten gems,
- * almost-done, has-potential need parser data. [EffortScore] now degrades to a file-size-only
- * proxy when meta is null so `forgotten-gems` has *something* to surface in the meantime.
- */
-private fun bucketize(all: List<ProjectGroup>): Buckets {
-    val nowMs = kotlin.time.Clock.System.now().toEpochMilliseconds()
-    val currentlyWorking = all.filter { g ->
-        g.representative.colorTag == BLUE || (nowMs - g.updatedAtMs) < FOURTEEN_DAYS_MS
-    }
-    // No recency gate — "forgotten" is meant to surface effort, not just age. Old projects
-    // sort earlier as a tiebreaker (oldest first) so the shelf prefers buried things, but a
-    // recent high-effort sketch can still show up. Shuffle re-rolls a random sample from this
-    // set when the user clicks the Shuffle button on the shelf header.
-    val forgottenGems = all.asSequence()
-        .filter { g ->
-            (g.effortScore ?: 0) >= FORGOTTEN_GEM_THRESHOLD &&
-                g.representative.colorTag !in GEM_EXCLUDE_COLORS
-        }
-        .sortedWith(compareByDescending<ProjectGroup> { it.effortScore ?: 0 }.thenBy { it.updatedAtMs })
-        .toList()
-    val almostDone = all.filter { g -> g.representative.colorTag in WARM_COLORS }
-    val hasPotential = all.filter { g -> g.representative.colorTag == PURPLE }
-    val untriaged = all.filter { g -> g.representative.colorTag == null }
-    val broken = all.filter { g ->
-        g.parseStatusBest == ParseStatus.Failed || g.missingSampleCount > 0
-    }
-    return Buckets(
-        currentlyWorking = currentlyWorking,
-        forgottenGems = forgottenGems,
-        almostDone = almostDone,
-        hasPotential = hasPotential,
-        untriaged = untriaged,
-        broken = broken,
-        all = all,
-    )
 }
 
 private fun ProjectGroup.toSongStripData(sync: ProjectSyncState?): SongStripData {
