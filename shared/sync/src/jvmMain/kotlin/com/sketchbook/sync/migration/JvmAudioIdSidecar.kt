@@ -42,7 +42,7 @@ class JvmAudioIdSidecar : AudioIdSidecar {
 
     private fun parseUuid(raw: String): ProjectUuid? {
         val trimmed = raw
-            .removePrefix("") // strip UTF-8 BOM if present
+            .removePrefix("﻿") // strip UTF-8 BOM if present
             .lineSequence()
             .map { it.trim() }
             .firstOrNull { it.isNotEmpty() && !it.startsWith("#") }

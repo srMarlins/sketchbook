@@ -59,10 +59,16 @@ dependencyAnalysis {
                     // Multiplatform Compose runtime/foundation/ui artifacts; in JVM target
                     // they resolve to the *-desktop variants, so DA sees the declared KMP
                     // artifact as "unused" and the desktop variant as "used transitively".
+                    // List all supported desktop platforms so the build doesn't fail on a
+                    // host other than the one this exclusion was first written on.
                     "org.jetbrains.compose.runtime:runtime",
                     "org.jetbrains.compose.foundation:foundation",
                     "org.jetbrains.compose.ui:ui",
                     "org.jetbrains.compose.desktop:desktop-jvm-windows-x64",
+                    "org.jetbrains.compose.desktop:desktop-jvm-macos-x64",
+                    "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64",
+                    "org.jetbrains.compose.desktop:desktop-jvm-linux-x64",
+                    "org.jetbrains.compose.desktop:desktop-jvm-linux-arm64",
                     "org.jetbrains.compose.hot-reload:hot-reload-runtime-api",
                     // JetBrains KMP fork of androidx.lifecycle: same declared-vs-resolved
                     // KMP variant mismatch — `androidx.lifecycle.ViewModel` /

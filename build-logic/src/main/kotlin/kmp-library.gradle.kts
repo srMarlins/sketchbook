@@ -53,7 +53,7 @@ dependencies {
 // `checkstyle` (replaces 1.x `xml`) and `markdown` (replaces 1.x `md`); the
 // 1.x `txt` report no longer exists. `jvmTarget` is a `Property<String>`.
 tasks.withType<Detekt>().configureEach {
-    jvmTarget.set("21")
+    jvmTarget.set(libsCatalog.findVersion("jvm-toolchain").get().requiredVersion)
     reports {
         html.required.set(true)
         checkstyle.required.set(true)
