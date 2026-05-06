@@ -6,14 +6,27 @@ import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.RepairFindings
 import com.sketchbook.repo.RepairRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class NeedsAttentionStateHolderTest {
+@OptIn(ExperimentalCoroutinesApi::class)
+class NeedsAttentionViewModelTest {
+
+    private val mainDispatcher = StandardTestDispatcher()
+
+    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
+    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
 
     private val macFinding = MacImportFinding(
         projectId = ProjectId(1),
@@ -67,15 +80,15 @@ class NeedsAttentionStateHolderTest {
     }
 
     @Test
-    fun stateMirrorsRepoFindings() = runTest {
+    fun stateMirrorsRepoFindings() = runTest(mainDispatcher) {
         val findings = RepairFindings(
             macImports = listOf(macFinding),
             missingSamples = listOf(missingFinding),
             missingSamplesTotal = 4200,
             missingSamplesTruncated = true,
         )
-        val holder = NeedsAttentionStateHolder(FakeRepo(findings), backgroundScope)
-        holder.state.test {
+        val vm = NeedsAttentionViewModel(FakeRepo(findings))
+        vm.state.test {
             var s = awaitItem()
             while (s.macImports.isEmpty()) s = awaitItem()
             assertEquals(1, s.macImports.size)
@@ -87,46 +100,42 @@ class NeedsAttentionStateHolderTest {
     }
 
     @Test
-    fun ackIntentRoutesToRepoAndEmitsEffect() = runTest {
+    fun ackIntentRoutesToRepoAndEmitsEffect() = runTest(mainDispatcher) {
         val repo = FakeRepo(RepairFindings(listOf(macFinding), emptyList(), 0, false))
-        val holder = NeedsAttentionStateHolder(repo, backgroundScope)
-        holder.effects.test {
-            holder.dispatch(NeedsAttentionStateHolder.Intent.AckMacImport(macFinding.projectId))
+        val vm = NeedsAttentionViewModel(repo)
+        vm.effects.test {
+            vm.dispatch(NeedsAttentionViewModel.Intent.AckMacImport(macFinding.projectId))
             val effect = awaitItem()
-            assertTrue(effect is NeedsAttentionStateHolder.Effect.Acknowledged)
+            assertTrue(effect is NeedsAttentionViewModel.Effect.Acknowledged)
             assertEquals("ack", effect.kind)
             assertEquals(macFinding.projectId, repo.ackedProjectId)
         }
     }
 
     @Test
-    fun repairMacPathsIntentRoutesToRepoAndEmitsEffect() = runTest {
-        // PR-W W5 — the "Repair paths" button on a mac-import card dispatches RepairMacPaths,
-        // which fans out through `applyMacPathRepair` and emits a MatchApplied effect. The legacy
-        // AckMacImport intent stays around for callers that want the dismiss-without-rewriting
-        // path (MCP tooling, future "ignore" flow).
+    fun repairMacPathsIntentRoutesToRepoAndEmitsEffect() = runTest(mainDispatcher) {
         val repo = FakeRepo(RepairFindings(listOf(macFinding), emptyList(), 0, false))
-        val holder = NeedsAttentionStateHolder(repo, backgroundScope)
-        holder.effects.test {
-            holder.dispatch(NeedsAttentionStateHolder.Intent.RepairMacPaths(macFinding.projectId))
+        val vm = NeedsAttentionViewModel(repo)
+        vm.effects.test {
+            vm.dispatch(NeedsAttentionViewModel.Intent.RepairMacPaths(macFinding.projectId))
             val effect = awaitItem()
-            assertTrue(effect is NeedsAttentionStateHolder.Effect.MatchApplied)
+            assertTrue(effect is NeedsAttentionViewModel.Effect.MatchApplied)
             assertEquals(macFinding.projectId, repo.repairedProjectId)
         }
     }
 
     @Test
-    fun applyMatchIntentRoutesToRepoAndEmitsEffect() = runTest {
+    fun applyMatchIntentRoutesToRepoAndEmitsEffect() = runTest(mainDispatcher) {
         val repo = FakeRepo(RepairFindings(emptyList(), listOf(missingFinding), 1, false))
-        val holder = NeedsAttentionStateHolder(repo, backgroundScope)
-        holder.effects.test {
-            holder.dispatch(NeedsAttentionStateHolder.Intent.ApplyMatch(
+        val vm = NeedsAttentionViewModel(repo)
+        vm.effects.test {
+            vm.dispatch(NeedsAttentionViewModel.Intent.ApplyMatch(
                 projectId = missingFinding.projectId,
                 missingPath = missingFinding.missingPath,
                 candidatePath = "/Volumes/Library/Samples/k.wav",
             ))
             val effect = awaitItem()
-            assertTrue(effect is NeedsAttentionStateHolder.Effect.MatchApplied)
+            assertTrue(effect is NeedsAttentionViewModel.Effect.MatchApplied)
             assertEquals(
                 Triple(missingFinding.projectId, missingFinding.missingPath, "/Volumes/Library/Samples/k.wav"),
                 repo.appliedMatch,
@@ -135,15 +144,15 @@ class NeedsAttentionStateHolderTest {
     }
 
     @Test
-    fun dismissIntentRoutesToRepoAndEmitsEffect() = runTest {
+    fun dismissIntentRoutesToRepoAndEmitsEffect() = runTest(mainDispatcher) {
         val repo = FakeRepo(RepairFindings(emptyList(), listOf(missingFinding), 1, false))
-        val holder = NeedsAttentionStateHolder(repo, backgroundScope)
-        holder.effects.test {
-            holder.dispatch(NeedsAttentionStateHolder.Intent.DismissMissingSample(
+        val vm = NeedsAttentionViewModel(repo)
+        vm.effects.test {
+            vm.dispatch(NeedsAttentionViewModel.Intent.DismissMissingSample(
                 missingFinding.projectId, missingFinding.missingPath,
             ))
             val effect = awaitItem()
-            assertTrue(effect is NeedsAttentionStateHolder.Effect.Acknowledged)
+            assertTrue(effect is NeedsAttentionViewModel.Effect.Acknowledged)
             assertEquals("dismiss", effect.kind)
             assertEquals(missingFinding.projectId to missingFinding.missingPath, repo.dismissedKey)
         }

@@ -6,19 +6,30 @@ import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.SnapshotRepository
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-class TimelineStateHolderTest {
+@OptIn(ExperimentalCoroutinesApi::class)
+class TimelineViewModelTest {
+
+    private val mainDispatcher = StandardTestDispatcher()
+
+    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
+    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
 
     private val uuid = ProjectUuid("01H-tl")
 
@@ -73,7 +84,7 @@ class TimelineStateHolderTest {
     }
 
     @Test
-    fun defaultViewHidesAutosAndShowsNamedBranchNewestFirst() = runTest {
+    fun defaultViewHidesAutosAndShowsNamedBranchNewestFirst() = runTest(mainDispatcher) {
         val history = listOf(
             snap(1, SnapshotKind.Auto, "2026-05-04T10:00:00Z"),
             snap(2, SnapshotKind.Named, "2026-05-04T11:00:00Z", label = "checkpoint"),
@@ -81,71 +92,65 @@ class TimelineStateHolderTest {
             snap(4, SnapshotKind.Branch, "2026-05-05T09:30:00Z", label = "auto-fork"),
         )
         val flow = MutableStateFlow(history)
-        val holder = TimelineStateHolder(Repo(flow), backgroundScope, zone = TimeZone.UTC)
-        holder.load(uuid)
-        holder.state.test {
+        val vm = TimelineViewModel(Repo(flow), zone = TimeZone.UTC)
+        vm.load(uuid)
+        vm.state.test {
             while (awaitItem().history.isEmpty()) { /* drain */ }
             cancelAndIgnoreRemainingEvents()
         }
-        val groups = holder.visibleGroups()
+        val groups = vm.visibleGroups()
         assertEquals(2, groups.size)
         assertEquals(2026, groups[0].date.year)
         assertEquals(5, groups[0].date.day)
-        // Within the newest day: branch (rev 4) only — auto rev 3 hidden.
         assertEquals(listOf(SnapshotRev(4)), groups[0].snapshots.map { it.rev })
-        // Older day: named (rev 2) only — auto rev 1 hidden.
         assertEquals(listOf(SnapshotRev(2)), groups[1].snapshots.map { it.rev })
     }
 
     @Test
-    fun toggleShowAllRevealsAutos() = runTest {
+    fun toggleShowAllRevealsAutos() = runTest(mainDispatcher) {
         val history = listOf(
             snap(1, SnapshotKind.Auto, "2026-05-05T10:00:00Z"),
             snap(2, SnapshotKind.Named, "2026-05-05T11:00:00Z", label = "x"),
         )
-        val holder = TimelineStateHolder(Repo(MutableStateFlow(history)), backgroundScope, zone = TimeZone.UTC)
-        holder.load(uuid)
-        holder.state.test {
+        val vm = TimelineViewModel(Repo(MutableStateFlow(history)), zone = TimeZone.UTC)
+        vm.load(uuid)
+        vm.state.test {
             while (awaitItem().history.isEmpty()) { /* drain */ }
             cancelAndIgnoreRemainingEvents()
         }
-        assertEquals(1, holder.visibleGroups().single().snapshots.size)
-        holder.dispatch(TimelineStateHolder.Intent.ToggleShowAll)
-        // Wait for combine to forward the showAll change.
-        holder.state.test {
+        assertEquals(1, vm.visibleGroups().single().snapshots.size)
+        vm.dispatch(TimelineViewModel.Intent.ToggleShowAll)
+        vm.state.test {
             while (!awaitItem().showAll) { /* drain */ }
             cancelAndIgnoreRemainingEvents()
         }
-        assertEquals(2, holder.visibleGroups().single().snapshots.size)
+        assertEquals(2, vm.visibleGroups().single().snapshots.size)
     }
 
     @Test
-    fun confirmRewindCallsMaterializeAndEmitsCompletion() = runTest {
+    fun confirmRewindCallsMaterializeAndEmitsCompletion() = runTest(mainDispatcher) {
         val repo = Repo(MutableStateFlow(emptyList()))
-        val holder = TimelineStateHolder(repo, backgroundScope)
-        holder.load(uuid)
-        holder.effects.test {
-            holder.dispatch(TimelineStateHolder.Intent.ConfirmRewind(SnapshotRev(5)))
+        val vm = TimelineViewModel(repo)
+        vm.load(uuid)
+        vm.effects.test {
+            vm.dispatch(TimelineViewModel.Intent.ConfirmRewind(SnapshotRev(5)))
             val started = awaitItem()
-            assertTrue(started is TimelineStateHolder.Effect.RewindStarted)
+            assertTrue(started is TimelineViewModel.Effect.RewindStarted)
             val done = awaitItem()
-            assertTrue(done is TimelineStateHolder.Effect.RewindCompleted)
+            assertTrue(done is TimelineViewModel.Effect.RewindCompleted)
             assertEquals(SnapshotRev(5), repo.rewoundTo)
         }
     }
 
     @Test
-    fun relabelSnapshotForwardsToRepositoryWithCleanedLabel() = runTest {
+    fun relabelSnapshotForwardsToRepositoryWithCleanedLabel() = runTest(mainDispatcher) {
         val repo = Repo(MutableStateFlow(emptyList()))
-        // UnconfinedTestDispatcher so the coroutine launched inside dispatch() runs eagerly to
-        // its first suspension point — the recording stub Repo.setSnapshotLabel doesn't actually
-        // suspend, so the Triple lands before assertNotNull(...) reads it. backgroundScope uses
-        // StandardTestDispatcher (queue-based) which is the wrong shape for this assertion.
-        val unconfined = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val holder = TimelineStateHolder(repo, unconfined)
-        holder.load(uuid)
+        val vm = TimelineViewModel(repo)
+        vm.load(uuid)
 
-        holder.dispatch(TimelineStateHolder.Intent.RelabelSnapshot(SnapshotRev(7), "  demo  "))
+        vm.dispatch(TimelineViewModel.Intent.RelabelSnapshot(SnapshotRev(7), "  demo  "))
+        // viewModelScope launches on Main; drain so the coroutine reaches setSnapshotLabel.
+        testScheduler.advanceUntilIdle()
         val (recordedUuid, recordedRev, recordedLabel) = assertNotNull(repo.lastRelabel)
         assertEquals(uuid, recordedUuid)
         assertEquals(SnapshotRev(7), recordedRev)
@@ -153,27 +158,27 @@ class TimelineStateHolderTest {
     }
 
     @Test
-    fun relabelSnapshotWithBlankPassesNullToClear() = runTest {
+    fun relabelSnapshotWithBlankPassesNullToClear() = runTest(mainDispatcher) {
         val repo = Repo(MutableStateFlow(emptyList()))
-        val unconfined = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val holder = TimelineStateHolder(repo, unconfined)
-        holder.load(uuid)
+        val vm = TimelineViewModel(repo)
+        vm.load(uuid)
 
-        holder.dispatch(TimelineStateHolder.Intent.RelabelSnapshot(SnapshotRev(2), "   "))
+        vm.dispatch(TimelineViewModel.Intent.RelabelSnapshot(SnapshotRev(2), "   "))
+        testScheduler.advanceUntilIdle()
         val (_, _, recordedLabel) = assertNotNull(repo.lastRelabel)
         kotlin.test.assertNull(recordedLabel)
     }
 
     @Test
-    fun rewindFailureEmitsRewindFailed() = runTest {
+    fun rewindFailureEmitsRewindFailed() = runTest(mainDispatcher) {
         val repo = Repo(MutableStateFlow(emptyList())).also { it.failNext = true }
-        val holder = TimelineStateHolder(repo, backgroundScope)
-        holder.load(uuid)
-        holder.effects.test {
-            holder.dispatch(TimelineStateHolder.Intent.ConfirmRewind(SnapshotRev(2)))
+        val vm = TimelineViewModel(repo)
+        vm.load(uuid)
+        vm.effects.test {
+            vm.dispatch(TimelineViewModel.Intent.ConfirmRewind(SnapshotRev(2)))
             awaitItem() // RewindStarted
             val failed = awaitItem()
-            assertTrue(failed is TimelineStateHolder.Effect.RewindFailed)
+            assertTrue(failed is TimelineViewModel.Effect.RewindFailed)
             assertEquals("disk full", failed.reason)
         }
     }

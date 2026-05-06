@@ -1,10 +1,16 @@
 package com.sketchbook.featureproposals
 
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.sketchbook.actions.ProposalActionExecutor
 import com.sketchbook.repo.Proposal
 import com.sketchbook.repo.ProposalStatus
 import com.sketchbook.repo.ProposalsRepository
-import kotlinx.coroutines.CoroutineScope
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -20,16 +26,13 @@ import kotlinx.coroutines.launch
  * back through the repo. The publish path is a single `stateIn` over the repo flow — no manual
  * `Job` cancel / re-launch.
  */
-class ProposalsStateHolder(
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
+@Inject
+class ProposalsViewModel(
     private val repository: ProposalsRepository,
-    private val scope: CoroutineScope,
-    /**
-     * Optional — when present, approving a proposal first applies its actions through the
-     * executor (which mutates the catalog), and only on success does the repository record the
-     * Approved status. Tests that don't care about side-effects can leave it `null`.
-     */
     private val executor: ProposalActionExecutor? = null,
-) {
+) : ViewModel() {
 
     private val _effects = MutableSharedFlow<Effect>(
         replay = 0,
@@ -46,11 +49,11 @@ class ProposalsStateHolder(
                 loading = false,
             )
         }
-        .stateIn(scope, SharingStarted.Eagerly, State(loading = true))
+        .stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
     fun dispatch(intent: Intent) {
         when (intent) {
-            is Intent.Approve -> scope.launch {
+            is Intent.Approve -> viewModelScope.launch {
                 val proposal = state.value.pending.firstOrNull { it.proposalId == intent.proposalId }
                     ?: state.value.resolved.firstOrNull { it.proposalId == intent.proposalId }
                 if (proposal == null) {
@@ -71,7 +74,7 @@ class ProposalsStateHolder(
                 if (r.isSuccess) _effects.tryEmit(Effect.Approved(intent.proposalId))
                 else _effects.tryEmit(Effect.Failed(intent.proposalId, r.exceptionOrNull()?.message ?: "approve failed"))
             }
-            is Intent.Reject -> scope.launch {
+            is Intent.Reject -> viewModelScope.launch {
                 val r = repository.reject(intent.proposalId)
                 if (r.isSuccess) _effects.tryEmit(Effect.Rejected(intent.proposalId))
                 else _effects.tryEmit(Effect.Failed(intent.proposalId, r.exceptionOrNull()?.message ?: "reject failed"))
@@ -79,6 +82,7 @@ class ProposalsStateHolder(
         }
     }
 
+    @Immutable
     data class State(
         val pending: List<Proposal> = emptyList(),
         val resolved: List<Proposal> = emptyList(),

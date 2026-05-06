@@ -16,7 +16,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,10 +46,10 @@ import com.sketchbook.uishared.theme.AppTheme
 
 @Composable
 fun TimelineScreen(
-    holder: TimelineStateHolder,
+    vm: TimelineViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val state by holder.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -57,11 +57,11 @@ fun TimelineScreen(
             .padding(PaddingValues(AppTheme.spacing.md)),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
     ) {
-        Header(state, holder)
+        Header(state, vm)
         // visibleGroups does filter+sort+groupBy+sortedMap on every call. The state ticks
         // frequently while a rewind is in progress; recompute only when the inputs that
         // actually feed the result change.
-        val groups = remember(state.history, state.showAll) { holder.visibleGroups(state) }
+        val groups = remember(state.history, state.showAll) { vm.visibleGroups(state) }
         if (groups.isEmpty()) {
             EmptyState(
                 title = if (state.loading) "Loading…" else "No snapshots yet",
@@ -87,9 +87,9 @@ fun TimelineScreen(
                                 files = snap.fileCount,
                                 bytes = snap.totalBytes,
                                 newBytes = snap.newBytes,
-                                onRewind = { holder.dispatch(TimelineStateHolder.Intent.RequestRewind(snap.rev)) },
+                                onRewind = { vm.dispatch(TimelineViewModel.Intent.RequestRewind(snap.rev)) },
                                 onCommitLabel = { newLabel ->
-                                    holder.dispatch(TimelineStateHolder.Intent.RelabelSnapshot(snap.rev, newLabel))
+                                    vm.dispatch(TimelineViewModel.Intent.RelabelSnapshot(snap.rev, newLabel))
                                 },
                             )
                         }
@@ -101,15 +101,15 @@ fun TimelineScreen(
             ConfirmRewindDialog(
                 rev = rev,
                 progress = state.rewindProgress,
-                onCancel = { holder.dispatch(TimelineStateHolder.Intent.CancelRewind) },
-                onConfirm = { holder.dispatch(TimelineStateHolder.Intent.ConfirmRewind(rev)) },
+                onCancel = { vm.dispatch(TimelineViewModel.Intent.CancelRewind) },
+                onConfirm = { vm.dispatch(TimelineViewModel.Intent.ConfirmRewind(rev)) },
             )
         }
     }
 }
 
 @Composable
-private fun Header(state: TimelineStateHolder.State, holder: TimelineStateHolder) {
+private fun Header(state: TimelineViewModel.State, vm: TimelineViewModel) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -117,7 +117,7 @@ private fun Header(state: TimelineStateHolder.State, holder: TimelineStateHolder
     ) {
         Text("History", style = AppTheme.typography.title, modifier = Modifier.weight(1f))
         Button(
-            onClick = { holder.dispatch(TimelineStateHolder.Intent.ToggleShowAll) },
+            onClick = { vm.dispatch(TimelineViewModel.Intent.ToggleShowAll) },
             variant = ButtonVariant.Secondary,
         ) {
             Text(if (state.showAll) "Hide auto-saves" else "Show all saves")

@@ -33,7 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,15 +85,15 @@ private const val WIDE_THRESHOLD_DP = 920
  */
 @Composable
 fun ProjectListScreen(
-    holder: ProjectListStateHolder,
+    vm: ProjectListViewModel,
     modifier: Modifier = Modifier,
     scanLabel: String? = null,
     scanActive: Boolean = false,
     syncStateFor: ((ProjectId) -> ProjectSyncState)? = null,
     detailPanel: (@Composable (ProjectId, () -> Unit) -> Unit)? = null,
 ) {
-    val state by holder.state.collectAsState()
-    val dispatch = holder::dispatch
+    val state by vm.state.collectAsStateWithLifecycle()
+    val dispatch = vm::dispatch
     val listState = rememberLazyListState()
 
     // When search activates, scroll the page to the top so the search field — and the overlay
@@ -106,11 +106,11 @@ fun ProjectListScreen(
     // Stable callbacks: hoisted so children passed `dispatch(...)` lambdas don't churn each
     // recomposition. With the LazyColumn below, only on-screen items recompose anyway, but
     // stable callbacks let `key`-bounded items skip even when `state` updates.
-    val onOpenDetail: (ProjectId) -> Unit = remember(holder) { { id -> dispatch(ProjectListStateHolder.Intent.OpenDetail(id)) } }
-    val onZoomShelf: (ShelfId?) -> Unit = remember(holder) { { shelf -> dispatch(ProjectListStateHolder.Intent.ZoomShelf(shelf)) } }
-    val onShuffleGems: () -> Unit = remember(holder) { { dispatch(ProjectListStateHolder.Intent.ShuffleGems) } }
-    val onCloseDetail: () -> Unit = remember(holder) { { dispatch(ProjectListStateHolder.Intent.CloseDetail) } }
-    val onClearSearch: () -> Unit = remember(holder) { { dispatch(ProjectListStateHolder.Intent.Search("")) } }
+    val onOpenDetail: (ProjectId) -> Unit = remember(vm) { { id -> dispatch(ProjectListViewModel.Intent.OpenDetail(id)) } }
+    val onZoomShelf: (ShelfId?) -> Unit = remember(vm) { { shelf -> dispatch(ProjectListViewModel.Intent.ZoomShelf(shelf)) } }
+    val onShuffleGems: () -> Unit = remember(vm) { { dispatch(ProjectListViewModel.Intent.ShuffleGems) } }
+    val onCloseDetail: () -> Unit = remember(vm) { { dispatch(ProjectListViewModel.Intent.CloseDetail) } }
+    val onClearSearch: () -> Unit = remember(vm) { { dispatch(ProjectListViewModel.Intent.Search("")) } }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isWide = maxWidth.value >= WIDE_THRESHOLD_DP
@@ -142,7 +142,7 @@ fun ProjectListScreen(
                     )
                     TextField(
                         value = state.query,
-                        onChange = { dispatch(ProjectListStateHolder.Intent.Search(it)) },
+                        onChange = { dispatch(ProjectListViewModel.Intent.Search(it)) },
                         placeholder = "Search projects, plugins, samples…",
                         modifier = Modifier
                             .fillMaxWidth()
@@ -166,10 +166,10 @@ fun ProjectListScreen(
                         keyFilter = state.keyFilter,
                         distinctKeys = state.distinctKeys,
                         onTempoChange = { range ->
-                            dispatch(ProjectListStateHolder.Intent.SetTempoRange(range))
+                            dispatch(ProjectListViewModel.Intent.SetTempoRange(range))
                         },
                         onKeyChange = { key ->
-                            dispatch(ProjectListStateHolder.Intent.SetKeyFilter(key))
+                            dispatch(ProjectListViewModel.Intent.SetKeyFilter(key))
                         },
                     )
                     ScanIndicator(
@@ -262,26 +262,26 @@ fun ProjectListScreen(
  */
 private fun handleSearchKey(
     event: androidx.compose.ui.input.key.KeyEvent,
-    state: ProjectListStateHolder.State,
-    dispatch: (ProjectListStateHolder.Intent) -> Unit,
+    state: ProjectListViewModel.State,
+    dispatch: (ProjectListViewModel.Intent) -> Unit,
 ): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
     val key = event.key
     return when {
         key == Key.Escape && state.query.isNotBlank() -> {
-            dispatch(ProjectListStateHolder.Intent.Search(""))
+            dispatch(ProjectListViewModel.Intent.Search(""))
             true
         }
         state.query.isNotBlank() && state.searchResults.isNotEmpty() && key == Key.DirectionDown -> {
-            dispatch(ProjectListStateHolder.Intent.NavigateSearchNext)
+            dispatch(ProjectListViewModel.Intent.NavigateSearchNext)
             true
         }
         state.query.isNotBlank() && state.searchResults.isNotEmpty() && key == Key.DirectionUp -> {
-            dispatch(ProjectListStateHolder.Intent.NavigateSearchPrev)
+            dispatch(ProjectListViewModel.Intent.NavigateSearchPrev)
             true
         }
         state.query.isNotBlank() && state.searchResults.isNotEmpty() && (key == Key.Enter || key == Key.NumPadEnter) -> {
-            dispatch(ProjectListStateHolder.Intent.OpenSelectedSearch)
+            dispatch(ProjectListViewModel.Intent.OpenSelectedSearch)
             true
         }
         else -> false

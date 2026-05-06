@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.sketchbook.core.PluginFormat
@@ -36,10 +36,10 @@ import com.sketchbook.uishared.theme.AppTheme
  */
 @Composable
 fun ProjectDetailScreen(
-    holder: ProjectDetailStateHolder,
+    vm: ProjectDetailViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val state by holder.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -47,20 +47,20 @@ fun ProjectDetailScreen(
             .padding(PaddingValues(AppTheme.spacing.md)),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
     ) {
-        Header(state, holder)
-        Tabs(state.tab, onSelect = { holder.dispatch(ProjectDetailStateHolder.Intent.SelectTab(it)) })
+        Header(state, vm)
+        Tabs(state.tab, onSelect = { vm.dispatch(ProjectDetailViewModel.Intent.SelectTab(it)) })
         when (state.tab) {
-            ProjectDetailStateHolder.Tab.Overview -> OverviewTab(state)
-            ProjectDetailStateHolder.Tab.Tracks -> TracksTab(state)
-            ProjectDetailStateHolder.Tab.Samples -> SamplesTab(state.samples)
-            ProjectDetailStateHolder.Tab.Plugins -> PluginsTab(state.plugins)
-            ProjectDetailStateHolder.Tab.History -> HistoryTab(state)
+            ProjectDetailViewModel.Tab.Overview -> OverviewTab(state)
+            ProjectDetailViewModel.Tab.Tracks -> TracksTab(state)
+            ProjectDetailViewModel.Tab.Samples -> SamplesTab(state.samples)
+            ProjectDetailViewModel.Tab.Plugins -> PluginsTab(state.plugins)
+            ProjectDetailViewModel.Tab.History -> HistoryTab(state)
         }
     }
 }
 
 @Composable
-private fun Header(state: ProjectDetailStateHolder.State, holder: ProjectDetailStateHolder) {
+private fun Header(state: ProjectDetailViewModel.State, vm: ProjectDetailViewModel) {
     val row = state.row
     if (row == null) {
         Text(if (state.loading) "Loading…" else "Project not found", style = AppTheme.typography.title)
@@ -76,16 +76,16 @@ private fun Header(state: ProjectDetailStateHolder.State, holder: ProjectDetailS
             Text(row.name, style = AppTheme.typography.display)
             Text(row.path.value, style = AppTheme.typography.caption)
         }
-        LockSlot(state.lockStatus, holder)
+        LockSlot(state.lockStatus, vm)
         Button(
-            onClick = { holder.dispatch(ProjectDetailStateHolder.Intent.OpenInLive) },
+            onClick = { vm.dispatch(ProjectDetailViewModel.Intent.OpenInLive) },
             variant = ButtonVariant.Primary,
         ) { Text("Open in Live") }
     }
 }
 
 @Composable
-private fun LockSlot(status: LockStatus, holder: ProjectDetailStateHolder) {
+private fun LockSlot(status: LockStatus, vm: ProjectDetailViewModel) {
     when (status) {
         LockStatus.Free -> Unit // chrome stays clean when there's nothing to say
         is LockStatus.Ours -> LockBadge(
@@ -97,25 +97,25 @@ private fun LockSlot(status: LockStatus, holder: ProjectDetailStateHolder) {
             color = AppTheme.colors.accentSecondary,
             detail = status.ownerHostName,
             actionLabel = "Force-take",
-            onAction = { holder.dispatch(ProjectDetailStateHolder.Intent.ForceTakeLock) },
+            onAction = { vm.dispatch(ProjectDetailViewModel.Intent.ForceTakeLock) },
         )
         is LockStatus.Stale -> LockBadge(
             label = "stale lock",
             color = AppTheme.colors.pinOrange,
             detail = status.ownerHostName,
             actionLabel = "Take",
-            onAction = { holder.dispatch(ProjectDetailStateHolder.Intent.ForceTakeLock) },
+            onAction = { vm.dispatch(ProjectDetailViewModel.Intent.ForceTakeLock) },
         )
     }
 }
 
 @Composable
-private fun Tabs(current: ProjectDetailStateHolder.Tab, onSelect: (ProjectDetailStateHolder.Tab) -> Unit) {
+private fun Tabs(current: ProjectDetailViewModel.Tab, onSelect: (ProjectDetailViewModel.Tab) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
-        ProjectDetailStateHolder.Tab.values().forEach { tab ->
+        ProjectDetailViewModel.Tab.values().forEach { tab ->
             val active = tab == current
             val color = if (active) AppTheme.colors.accentAction else AppTheme.colors.surfacePanel
             Surface(
@@ -133,7 +133,7 @@ private fun Tabs(current: ProjectDetailStateHolder.Tab, onSelect: (ProjectDetail
 }
 
 @Composable
-private fun OverviewTab(state: ProjectDetailStateHolder.State) {
+private fun OverviewTab(state: ProjectDetailViewModel.State) {
     val row = state.row ?: return
     Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
         row.tempo?.let { Text("Tempo: ${it.toInt()} bpm") }
@@ -148,7 +148,7 @@ private fun OverviewTab(state: ProjectDetailStateHolder.State) {
 }
 
 @Composable
-private fun TracksTab(state: ProjectDetailStateHolder.State) {
+private fun TracksTab(state: ProjectDetailViewModel.State) {
     val row = state.row
     if (row == null || row.trackCount <= 0) {
         EmptyState(
@@ -233,7 +233,7 @@ private fun pluginFormatLabel(format: PluginFormat): String = when (format) {
 }
 
 @Composable
-private fun HistoryTab(state: ProjectDetailStateHolder.State) {
+private fun HistoryTab(state: ProjectDetailViewModel.State) {
     if (state.history.isEmpty()) {
         EmptyState(title = "No snapshots yet", hint = "Save the project in Live to start the history.")
         return

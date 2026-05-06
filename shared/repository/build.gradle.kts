@@ -1,6 +1,7 @@
 plugins {
     id("kmp-test")
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.metro)
 }
 
 kotlin {
@@ -13,6 +14,7 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines.extensions)
+            implementation(libs.metro.runtime)
         }
         commonTest.dependencies {
             implementation(libs.turbine)

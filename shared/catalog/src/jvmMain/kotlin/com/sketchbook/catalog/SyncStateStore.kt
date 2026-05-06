@@ -1,8 +1,11 @@
 package com.sketchbook.catalog
 
 import com.sketchbook.catalog.db.Catalog
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +25,8 @@ import kotlin.time.Clock
  * pushes; writes flip [bumpVersion] which the queue mirrors into a `MutableStateFlow` for
  * cheap downstream observation.
  */
+@SingleIn(AppScope::class)
+@Inject
 class SyncStateStore(private val catalog: Catalog) {
 
     /** Bumped on every write. Consumers can debounce reads by collecting this. */

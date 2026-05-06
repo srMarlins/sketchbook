@@ -1,5 +1,6 @@
 package com.sketchbook.desktop
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -11,6 +12,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.uishared.theme.AppTheme
 import com.sketchbook.uishared.theme.AppTypography
+import dev.zacsweers.metrox.viewmodel.LocalMetroViewModelFactory
 import kotlinx.coroutines.launch
 
 /**
@@ -34,6 +36,7 @@ private fun runApp() = application {
         buildDesktopAppGraph().also {
             startBackgroundPull(it)
             startWatcher(it)
+            it.libraryScanCoordinator.start()
         }
     }
     // Dev convenience: if SKETCHBOOK_DEFAULT_ROOT is set and Settings has no roots, seed it
@@ -77,7 +80,12 @@ private fun runApp() = application {
             }
         }
         AppTheme(typography = typography) {
-            RootContent(graph = graph, backStack = backStack)
+            // Install the Metro VM factory once at the window root so every Composable below —
+            // including the chrome and per-NavEntry VMs — can call `metroViewModel<X>()` without
+            // seeing the graph.
+            CompositionLocalProvider(LocalMetroViewModelFactory provides graph.metroViewModelFactory) {
+                RootContent(backStack = backStack)
+            }
         }
     }
 }

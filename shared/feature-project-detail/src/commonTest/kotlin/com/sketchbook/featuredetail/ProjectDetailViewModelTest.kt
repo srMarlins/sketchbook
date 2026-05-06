@@ -12,18 +12,31 @@ import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.SnapshotRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlin.time.Instant
+import kotlinx.coroutines.test.setMain
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
-class ProjectDetailStateHolderTest {
+@OptIn(ExperimentalCoroutinesApi::class)
+class ProjectDetailViewModelTest {
+
+    private val mainDispatcher = StandardTestDispatcher()
+
+    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
+    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
 
     private val now = Instant.parse("2026-05-05T12:00:00Z")
     private val sampleRow = ProjectRow(
@@ -36,21 +49,6 @@ class ProjectDetailStateHolderTest {
         updatedAt = now,
         tags = emptyList(),
         colorTag = null,
-    )
-    private val uuid = ProjectUuid("01H-test")
-
-    private fun snapshot(rev: Long, kind: SnapshotKind = SnapshotKind.Auto) = Snapshot(
-        projectUuid = uuid,
-        rev = SnapshotRev(rev),
-        parentRev = null,
-        timestamp = now,
-        hostId = "host-a",
-        hostName = "DesktopA",
-        kind = kind,
-        label = null,
-        selfContained = false,
-        fileCount = 1,
-        totalBytes = 100,
     )
 
     private class FakeProjects(private val row: ProjectRow?) : ProjectRepository {
@@ -80,34 +78,30 @@ class ProjectDetailStateHolderTest {
     }
 
     @Test
-    fun loadPopulatesRowAndHistory() = runTest {
+    fun loadPopulatesRow() = runTest(mainDispatcher) {
         val projects = FakeProjects(sampleRow)
-        val history = MutableStateFlow(listOf(snapshot(1), snapshot(2, SnapshotKind.Named)))
-        val snaps = FakeSnapshots(history)
-        val holder = ProjectDetailStateHolder(projects, snaps, backgroundScope, projectUuidLookup = { uuid })
+        val snaps = FakeSnapshots(MutableStateFlow(emptyList()))
+        val vm = ProjectDetailViewModel(projects, snaps)
 
-        holder.load(ProjectId(7))
+        vm.load(ProjectId(7))
 
-        holder.state.test {
-            // Drain emissions until both row and history populated.
+        vm.state.test {
             var saw = awaitItem()
-            while (saw.row == null || saw.history.isEmpty()) saw = awaitItem()
+            while (saw.row == null) saw = awaitItem()
             assertEquals("kick", saw.row?.name)
-            assertEquals(2, saw.history.size)
             cancelAndIgnoreRemainingEvents()
         }
     }
 
     @Test
-    fun selectTabUpdatesState() = runTest {
+    fun selectTabUpdatesState() = runTest(mainDispatcher) {
         val projects = FakeProjects(sampleRow)
         val snaps = FakeSnapshots(MutableStateFlow(emptyList()))
-        val holder = ProjectDetailStateHolder(projects, snaps, backgroundScope, projectUuidLookup = { uuid })
-        holder.load(ProjectId(7))
-        holder.dispatch(ProjectDetailStateHolder.Intent.SelectTab(ProjectDetailStateHolder.Tab.History))
-        holder.state.test {
-            // Drain until combine forwards the new tab selection.
-            while (awaitItem().tab != ProjectDetailStateHolder.Tab.History) { /* keep draining */ }
+        val vm = ProjectDetailViewModel(projects, snaps)
+        vm.load(ProjectId(7))
+        vm.dispatch(ProjectDetailViewModel.Intent.SelectTab(ProjectDetailViewModel.Tab.History))
+        vm.state.test {
+            while (awaitItem().tab != ProjectDetailViewModel.Tab.History) { /* keep draining */ }
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -116,11 +110,11 @@ class ProjectDetailStateHolderTest {
     fun toggleArchiveCallsRepositoryWithFlippedFlag() = runTest(UnconfinedTestDispatcher()) {
         val projects = FakeProjects(sampleRow)
         val snaps = FakeSnapshots(MutableStateFlow(emptyList()))
-        val holder = ProjectDetailStateHolder(projects, snaps, backgroundScope, projectUuidLookup = { uuid })
-        holder.load(ProjectId(7))
+        val vm = ProjectDetailViewModel(projects, snaps)
+        vm.load(ProjectId(7))
         advanceUntilIdle()
-        assertEquals("kick", holder.state.value.row?.name)
-        holder.dispatch(ProjectDetailStateHolder.Intent.ToggleArchive)
+        assertEquals("kick", vm.state.value.row?.name)
+        vm.dispatch(ProjectDetailViewModel.Intent.ToggleArchive)
         advanceUntilIdle()
         assertEquals(ProjectId(7) to true, projects.lastArchive)
     }
@@ -129,31 +123,30 @@ class ProjectDetailStateHolderTest {
     fun moveIntentDispatchesRepositoryMove() = runTest(UnconfinedTestDispatcher()) {
         val projects = FakeProjects(sampleRow)
         val snaps = FakeSnapshots(MutableStateFlow(emptyList()))
-        val holder = ProjectDetailStateHolder(projects, snaps, backgroundScope, projectUuidLookup = { uuid })
-        holder.load(ProjectId(7))
+        val vm = ProjectDetailViewModel(projects, snaps)
+        vm.load(ProjectId(7))
         advanceUntilIdle()
-        assertEquals("kick", holder.state.value.row?.name)
-        holder.dispatch(ProjectDetailStateHolder.Intent.Move("/new/parent"))
+        assertEquals("kick", vm.state.value.row?.name)
+        vm.dispatch(ProjectDetailViewModel.Intent.Move("/new/parent"))
         advanceUntilIdle()
         assertEquals(ProjectId(7) to "/new/parent", projects.lastMove)
     }
 
     @Test
-    fun openInLiveEmitsLaunchEffectWithProjectPath() = runTest {
+    fun openInLiveEmitsLaunchEffectWithProjectPath() = runTest(mainDispatcher) {
         val projects = FakeProjects(sampleRow)
         val snaps = FakeSnapshots(MutableStateFlow(emptyList()))
-        val holder = ProjectDetailStateHolder(projects, snaps, backgroundScope, projectUuidLookup = { uuid })
-        holder.load(ProjectId(7))
+        val vm = ProjectDetailViewModel(projects, snaps)
+        vm.load(ProjectId(7))
 
-        // Wait for row to populate, then dispatch.
-        holder.state.test {
+        vm.state.test {
             while (awaitItem().row == null) { /* keep draining */ }
             cancelAndIgnoreRemainingEvents()
         }
-        holder.effects.test {
-            holder.dispatch(ProjectDetailStateHolder.Intent.OpenInLive)
+        vm.effects.test {
+            vm.dispatch(ProjectDetailViewModel.Intent.OpenInLive)
             val effect = awaitItem()
-            assertTrue(effect is ProjectDetailStateHolder.Effect.LaunchLive)
+            assertTrue(effect is ProjectDetailViewModel.Effect.LaunchLive)
             assertEquals("Projects/2026/kick/Project.als", effect.projectPath)
         }
     }

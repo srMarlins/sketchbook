@@ -1,11 +1,16 @@
 package com.sketchbook.featuresettings
 
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.LibraryRoot
-import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
-import kotlinx.coroutines.CoroutineScope
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -17,16 +22,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * Settings pane. Reads `SettingsRepository.observe()` and routes user intents
- * (add/remove root, set cloud credential, toggle self-contained) back through the repo.
- *
- * Side-effect intents (file picker / credential dialog) come from the desktop shell (PR-18) —
- * by the time those reach `dispatch`, the user has already committed a path string or JSON blob.
+ * Settings pane. Reads `SettingsRepository.observe()` and routes user intents back through the repo.
  */
-class SettingsStateHolder(
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
+@Inject
+class SettingsViewModel(
     private val repository: SettingsRepository,
-    private val scope: CoroutineScope,
-) {
+) : ViewModel() {
 
     private val _effects = MutableSharedFlow<Effect>(
         replay = 0,
@@ -47,7 +50,7 @@ class SettingsStateHolder(
                 loading = false,
             )
         }
-        .stateIn(scope, SharingStarted.Eagerly, State(loading = true))
+        .stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
     fun dispatch(intent: Intent) {
         when (intent) {
@@ -77,13 +80,14 @@ class SettingsStateHolder(
     }
 
     private inline fun launchWithEffect(key: String, crossinline block: suspend () -> Result<*>) {
-        scope.launch {
+        viewModelScope.launch {
             val r = block()
             if (r.isSuccess) _effects.tryEmit(Effect.Saved(key))
             else _effects.tryEmit(Effect.Failed(key, r.exceptionOrNull()?.message ?: "save failed"))
         }
     }
 
+    @Immutable
     data class State(
         val libraryRoots: List<LibraryRoot> = emptyList(),
         val cloudConfigured: Boolean = false,

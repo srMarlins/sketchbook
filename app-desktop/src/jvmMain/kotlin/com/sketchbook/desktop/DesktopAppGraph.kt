@@ -7,6 +7,7 @@ import com.sketchbook.catalog.JvmSampleScanner
 import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.actions.ProposalActionExecutor
+import com.sketchbook.core.AppScope
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.desktop.repo.LeasedLockRepository
 import com.sketchbook.desktop.repo.PreferencesSettingsRepository
@@ -14,16 +15,13 @@ import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.repo.AlsPatchService
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
+import com.sketchbook.repo.ProjectFtsSearcher
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProposalsRepository
 import com.sketchbook.repo.RepairRepository
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.SyncQueue
-import com.sketchbook.repo.impl.SqlJournalRepository
-import com.sketchbook.repo.impl.SqlProjectRepository
-import com.sketchbook.repo.impl.SqlProposalsRepository
-import com.sketchbook.repo.impl.SqlRepairRepository
 import com.sketchbook.syncio.AlsPatcher
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
@@ -36,6 +34,8 @@ import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.createGraph
+import dev.zacsweers.metrox.viewmodel.ViewModelGraph
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -71,7 +71,7 @@ import java.util.prefs.Preferences
  * `%APPDATA%\Sketchbook\catalog.db` (Windows). One handle per app instance.
  */
 @DependencyGraph(scope = AppScope::class)
-interface DesktopAppGraph {
+interface DesktopAppGraph : ViewModelGraph {
 
     val appScope: CoroutineScope
     val catalogHandle: CatalogHandle
@@ -89,12 +89,27 @@ interface DesktopAppGraph {
     val settingsRepository: SettingsRepository
     val lockRepository: LockRepository
     val syncQueue: SyncQueue
+    val libraryScanCoordinator: LibraryScanCoordinator
+
+    // `metroViewModelFactory` is inherited from [ViewModelGraph] — the contributed
+    // `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject` ViewModel map is plumbed
+    // through `InjectedViewModelFactory` (below), then exposed via the inherited accessor and
+    // installed into Compose with `LocalMetroViewModelFactory` in `RootContent`.
 
     // ---- App lifetime: shared mutable state ---------------------------------------------------
 
     @Provides @SingleIn(AppScope::class)
     fun provideAppScope(): CoroutineScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * Single `CoroutineDispatcher` binding used by repositories that need to leave Compose's
+     * stateIn dispatcher for blocking JDBC. `JvmScanner`/`JvmSampleScanner` keep their own
+     * defaults — they need both an IO and a Default dispatcher and would require a qualifier
+     * if injected through the graph.
+     */
+    @Provides @SingleIn(AppScope::class)
+    fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
 
     @Provides @SingleIn(AppScope::class)
     fun provideCatalogHandle(): CatalogHandle = CatalogDb.openOnDisk(catalogDbPath())
@@ -105,6 +120,14 @@ interface DesktopAppGraph {
     @Provides @SingleIn(AppScope::class)
     fun provideCatalogFts(handle: CatalogHandle): CatalogFts = CatalogFts(handle.driver)
 
+    /**
+     * Adapt the JVM-only [CatalogFts] to the common-side [ProjectFtsSearcher] so
+     * [com.sketchbook.repo.impl.SqlProjectRepository] can stay in `commonMain`.
+     */
+    @Provides @SingleIn(AppScope::class)
+    fun provideProjectFtsSearcher(fts: CatalogFts): ProjectFtsSearcher =
+        ProjectFtsSearcher { query -> fts.search(query) }
+
     @Provides @SingleIn(AppScope::class)
     fun provideJvmScanner(catalog: Catalog, fts: CatalogFts): JvmScanner =
         JvmScanner(catalog = catalog, fts = fts)
@@ -113,25 +136,8 @@ interface DesktopAppGraph {
     fun provideJvmSampleScanner(catalog: Catalog): JvmSampleScanner =
         JvmSampleScanner(catalog = catalog)
 
-    @Provides @SingleIn(AppScope::class)
-    fun provideSyncStateStore(catalog: Catalog): SyncStateStore = SyncStateStore(catalog)
-
-    @Provides @SingleIn(AppScope::class)
-    fun provideJournalRepository(catalog: Catalog): JournalRepository =
-        SqlJournalRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
-
-    @Provides @SingleIn(AppScope::class)
-    fun provideProjectRepository(
-        catalog: Catalog,
-        fts: CatalogFts,
-        journal: JournalRepository,
-    ): ProjectRepository = SqlProjectRepository(
-        catalog = catalog,
-        ioDispatcher = Dispatchers.IO,
-        journal = journal,
-        ftsSearch = { query -> fts.search(query) },
-    )
-
+    // SqlSnapshotRepository stays manually wired — the `materialize` lambda is coupled to
+    // SwappableSyncQueue's current backend. Future `CloudScope` PR cleans this up.
     @Provides @SingleIn(AppScope::class)
     fun provideSnapshotRepository(
         catalog: Catalog,
@@ -155,27 +161,7 @@ interface DesktopAppGraph {
     )
 
     @Provides @SingleIn(AppScope::class)
-    fun provideProposalsRepository(catalog: Catalog): ProposalsRepository =
-        SqlProposalsRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
-
-    @Provides @SingleIn(AppScope::class)
-    fun provideProposalActionExecutor(projects: ProjectRepository): ProposalActionExecutor =
-        ProposalActionExecutor(projects)
-
-    @Provides @SingleIn(AppScope::class)
     fun provideAlsPatchService(): AlsPatchService = AlsPatcher()
-
-    @Provides @SingleIn(AppScope::class)
-    fun provideRepairRepository(
-        catalog: Catalog,
-        journal: JournalRepository,
-        patcher: AlsPatchService,
-    ): RepairRepository = SqlRepairRepository(
-        catalog = catalog,
-        ioDispatcher = Dispatchers.IO,
-        journal = journal,
-        patcher = patcher,
-    )
 
     @Provides @SingleIn(AppScope::class)
     fun provideSettingsRepository(): SettingsRepository = PreferencesSettingsRepository(
@@ -240,9 +226,6 @@ private fun hostIdentity(): HostIdentity {
     val name = "Sketchbook on " + (runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "unknown")
     return HostIdentity(id = id, name = name)
 }
-
-/** Application-lifetime scope marker for Metro bindings. */
-abstract class AppScope private constructor()
 
 /** Builds the graph at runtime — Metro generates the impl class. */
 fun buildDesktopAppGraph(): DesktopAppGraph = createGraph<DesktopAppGraph>()

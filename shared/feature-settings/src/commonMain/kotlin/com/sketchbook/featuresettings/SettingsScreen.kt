@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,13 +42,13 @@ import com.sketchbook.uishared.theme.AppTheme
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
-    holder: SettingsStateHolder,
+    vm: SettingsViewModel,
     onAddRootClicked: () -> Unit,
     onUploadCredentialClicked: () -> Unit,
     modifier: Modifier = Modifier,
     syncState: SyncQueueState? = null,
 ) {
-    val state by holder.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
     var showCloud by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
     Column(
@@ -94,7 +94,7 @@ fun SettingsScreen(
                     ) {
                         for (root in state.libraryRoots) {
                             LibraryRootCard(root) {
-                                holder.dispatch(SettingsStateHolder.Intent.RemoveRoot(root))
+                                vm.dispatch(SettingsViewModel.Intent.RemoveRoot(root))
                             }
                         }
                     }
@@ -124,15 +124,15 @@ fun SettingsScreen(
                             verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
                         ) {
                             Button(
-                                onClick = { holder.dispatch(SettingsStateHolder.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, +1))) },
+                                onClick = { vm.dispatch(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, +1))) },
                                 variant = ButtonVariant.Secondary,
                             ) { Text("Increase") }
                             Button(
-                                onClick = { holder.dispatch(SettingsStateHolder.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, -1))) },
+                                onClick = { vm.dispatch(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, -1))) },
                                 variant = ButtonVariant.Secondary,
                             ) { Text("Decrease") }
                             Button(
-                                onClick = { holder.dispatch(SettingsStateHolder.Intent.SetCacheLru(!cache.lruEnabled)) },
+                                onClick = { vm.dispatch(SettingsViewModel.Intent.SetCacheLru(!cache.lruEnabled)) },
                                 variant = ButtonVariant.Ghost,
                             ) { Text(if (cache.lruEnabled) "Disable LRU" else "Enable LRU") }
                         }
@@ -254,7 +254,7 @@ fun SettingsScreen(
                                 }
                                 if (state.cloudConfigured) {
                                     Button(
-                                        onClick = { holder.dispatch(SettingsStateHolder.Intent.SetCloudCredential(null)) },
+                                        onClick = { vm.dispatch(SettingsViewModel.Intent.SetCloudCredential(null)) },
                                         variant = ButtonVariant.Ghost,
                                     ) { Text("Clear") }
                                 }
@@ -269,7 +269,7 @@ fun SettingsScreen(
                                 value = bucketDraft,
                                 onChange = {
                                     bucketDraft = it
-                                    holder.dispatch(SettingsStateHolder.Intent.SetCloudBucket(it.takeIf { v -> v.isNotBlank() }))
+                                    vm.dispatch(SettingsViewModel.Intent.SetCloudBucket(it.takeIf { v -> v.isNotBlank() }))
                                 },
                                 placeholder = "Bucket name (e.g. sketchbook-srmarlins)",
                                 modifier = Modifier.fillMaxWidth(),

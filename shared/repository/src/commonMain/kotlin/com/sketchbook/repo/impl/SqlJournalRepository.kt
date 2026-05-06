@@ -6,9 +6,13 @@ import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.catalog.db.Journal_entries
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.SketchbookError
+import com.sketchbook.core.AppScope
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
+import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +34,9 @@ import kotlin.time.Instant
  * around blocking JDBC calls, and `transactionWithResult { }` so the insert + the
  * `last_insert_rowid()` lookup are atomic.
  */
+@SingleIn(AppScope::class)
+@ContributesBinding(AppScope::class)
+@Inject
 class SqlJournalRepository(
     private val catalog: Catalog,
     private val ioDispatcher: CoroutineDispatcher,

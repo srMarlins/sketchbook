@@ -25,7 +25,7 @@ class SqlProjectRepositoryTest {
             catalog = handle.catalog,
             ioDispatcher = UnconfinedTestDispatcher(),
             journal = journal,
-            ftsSearch = { q -> fts.search(q) },
+            fts = ProjectFtsSearcher { q -> fts.search(q) },
         )
         return Triple(handle.catalog, fts, repo)
     }

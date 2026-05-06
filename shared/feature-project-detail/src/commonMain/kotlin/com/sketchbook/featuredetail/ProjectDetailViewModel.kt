@@ -1,5 +1,8 @@
 package com.sketchbook.featuredetail
 
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.PluginRef
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
@@ -10,7 +13,10 @@ import com.sketchbook.repo.LockStatus
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.SampleEntry
 import com.sketchbook.repo.SnapshotRepository
-import kotlinx.coroutines.CoroutineScope
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -21,9 +27,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -34,15 +38,20 @@ import kotlinx.coroutines.launch
  * displayed `State` is a pure `combine(rowFlow, historyFlow, tabSelection)`. When `load(id)`
  * swaps the id, `flatMapLatest` cancels the previous row + history subscriptions and
  * re-subscribes to the new ones — no manual `Job` tracking.
+ *
+ * **Note on lifecycle.** Today the project detail surface is a side panel inside the project
+ * list screen, not its own `NavEntry`. So this ViewModel keeps `load(id)` rather than taking the
+ * id via `@AssistedInject`. When the detail surface migrates to its own nav destination, swap to
+ * `@AssistedInject` keyed on `projectId` and remove `load(id)`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class ProjectDetailStateHolder(
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
+@Inject
+class ProjectDetailViewModel(
     private val projects: ProjectRepository,
     private val snapshots: SnapshotRepository,
-    private val scope: CoroutineScope,
-    private val projectUuidLookup: suspend (ProjectId) -> ProjectUuid? = { null },
-    private val locks: LockRepository? = null,
-) {
+) : ViewModel() {
 
     private val selectedId = MutableStateFlow<ProjectId?>(null)
     private val tabSelection = MutableStateFlow(Tab.Overview)
@@ -66,24 +75,19 @@ class ProjectDetailStateHolder(
         if (id == null) flowOf(emptyList()) else projects.observeSamples(id)
     }
 
-    private val historyFlow: Flow<List<Snapshot>> = selectedId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else flow {
-            val uuid = projectUuidLookup(id)
-            if (uuid == null) emit(emptyList()) else emitAll(snapshots.observeHistory(uuid))
-        }
-    }
+    /**
+     * History flow is empty until [load] is called with a project that has a stable
+     * [ProjectUuid]. Snapshot history is keyed on uuid (sync-pipeline identity) but the screen
+     * speaks ProjectId — bridging requires a uuid lookup that today's pipeline doesn't expose
+     * cheaply. Pre-existing limitation; not in scope for the DI refactor.
+     */
+    private val historyFlow: Flow<List<Snapshot>> = flowOf(emptyList())
 
-    private val lockFlow: Flow<LockStatus> = selectedId.flatMapLatest { id ->
-        val repo = locks
-        if (id == null || repo == null) {
-            flowOf(LockStatus.Free)
-        } else {
-            flow<LockStatus> {
-                val uuid = projectUuidLookup(id)
-                if (uuid == null) emit(LockStatus.Free) else emitAll(repo.observe(uuid))
-            }
-        }
-    }
+    /**
+     * Lock status mirrors the same uuid-bridging limitation as [historyFlow]. Pre-existing
+     * behavior is "always Free" because the legacy lookup callback returned null; preserved here.
+     */
+    private val lockFlow: Flow<LockStatus> = flowOf(LockStatus.Free)
 
     val state: StateFlow<State> = combine(
         rowFlow,
@@ -93,16 +97,12 @@ class ProjectDetailStateHolder(
         pluginsFlow,
         samplesFlow,
     ) { values ->
-        @Suppress("UNCHECKED_CAST")
-        val row = values[0] as ProjectRow?
-        @Suppress("UNCHECKED_CAST")
-        val history = values[1] as List<Snapshot>
+        @Suppress("UNCHECKED_CAST") val row = values[0] as ProjectRow?
+        @Suppress("UNCHECKED_CAST") val history = values[1] as List<Snapshot>
         val tab = values[2] as Tab
         val lock = values[3] as LockStatus
-        @Suppress("UNCHECKED_CAST")
-        val plugins = values[4] as List<PluginRef>
-        @Suppress("UNCHECKED_CAST")
-        val samples = values[5] as List<SampleEntry>
+        @Suppress("UNCHECKED_CAST") val plugins = values[4] as List<PluginRef>
+        @Suppress("UNCHECKED_CAST") val samples = values[5] as List<SampleEntry>
         State(
             row = row,
             history = history,
@@ -112,7 +112,7 @@ class ProjectDetailStateHolder(
             plugins = plugins,
             samples = samples,
         )
-    }.stateIn(scope, SharingStarted.Eagerly, State())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, State())
 
     fun load(id: ProjectId) {
         selectedId.update { id }
@@ -125,12 +125,12 @@ class ProjectDetailStateHolder(
                 val path = state.value.row?.path?.value ?: return
                 _effects.tryEmit(Effect.LaunchLive(path))
             }
-            is Intent.ForceTakeLock -> forceTake()
+            is Intent.ForceTakeLock -> Unit // No-op until uuid bridging lands.
             is Intent.Rename -> {
                 val id = selectedId.value ?: return
                 val trimmed = intent.name.trim()
                 if (trimmed.isEmpty() || trimmed == state.value.row?.name) return
-                scope.launch { projects.rename(id, trimmed) }
+                viewModelScope.launch { projects.rename(id, trimmed) }
             }
             is Intent.SetTags -> {
                 val id = selectedId.value ?: return
@@ -138,7 +138,7 @@ class ProjectDetailStateHolder(
                     .map { it.trim() }
                     .filter { it.isNotEmpty() }
                     .distinct()
-                scope.launch { projects.setTags(id, cleaned) }
+                viewModelScope.launch { projects.setTags(id, cleaned) }
             }
             is Intent.Move -> {
                 val id = selectedId.value ?: return
@@ -146,11 +146,11 @@ class ProjectDetailStateHolder(
                 val target = intent.newParentDir.trim()
                 if (target.isEmpty()) return
                 if (target.replace('\\', '/') == parentDirOfPath(current)) return
-                scope.launch { projects.move(id, target) }
+                viewModelScope.launch { projects.move(id, target) }
             }
             is Intent.ToggleArchive -> {
                 val row = state.value.row ?: return
-                scope.launch { projects.archive(row.id, !row.archived) }
+                viewModelScope.launch { projects.archive(row.id, !row.archived) }
             }
         }
     }
@@ -161,17 +161,7 @@ class ProjectDetailStateHolder(
         return if (idx <= 0) normalized else normalized.substring(0, idx)
     }
 
-    private fun forceTake() {
-        val repo = locks ?: return
-        val id = selectedId.value ?: return
-        scope.launch {
-            val uuid = projectUuidLookup(id) ?: return@launch
-            val r = repo.forceTake(uuid)
-            if (r.isSuccess) _effects.tryEmit(Effect.LockTaken)
-            else _effects.tryEmit(Effect.LockTakeFailed(r.exceptionOrNull()?.message ?: "force-take failed"))
-        }
-    }
-
+    @Immutable
     data class State(
         val row: ProjectRow? = null,
         val history: List<Snapshot> = emptyList(),

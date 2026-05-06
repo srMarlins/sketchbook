@@ -1,9 +1,15 @@
 package com.sketchbook.featureprojects
 
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.repo.ProjectRepository
-import kotlinx.coroutines.CoroutineScope
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -19,25 +25,27 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
 /**
- * Project list state holder. Plain Kotlin: `StateFlow<State>` for UI to render, `SharedFlow<Effect>`
- * for one-shot navigation/notifications, and a `dispatch(Intent)` entry point. No MVI library —
- * sealed-class intents handled by a `when`.
+ * Project list ViewModel. `viewModelScope` cancels on `NavEntry` pop.
  *
- * **Derived state lives here, not in the view.** `groups` / `buckets` / `gemsView` /
- * `searchResults` are all computed from `rows + query + gemsShuffleSeed` inside the combiner,
- * so the screen composable just reads `state.*`. Selection (`searchSelectedIndex`,
- * `zoomShelf`, `openDetailId`) is driven by intents — the view never holds `var ... by remember`
- * for these.
+ * Plain Kotlin: `StateFlow<State>`, `SharedFlow<Effect>`, `dispatch(Intent)` — no MVI library.
+ * Derived state (groups/buckets/gemsView/searchResults) lives in the combiner so the screen
+ * composable just reads `state.*`.
  *
  * **Why FTS5 + matchesQuery both filter.** The repository's `observeProjects(query)` runs FTS5
  * which is fast but row-level. `matchesQuery` re-checks at the *group* level so a folder-only
  * or tag-only hit still passes when no individual row's `name` matches.
+ *
+ * Scratch UI state (`query`, `gemsShuffleSeed`, `zoomShelf`) is in-memory; window-restore
+ * via `SavedStateHandle` is a future enhancement once the desktop `SavedStateRegistry` writer
+ * is wired.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class ProjectListStateHolder(
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
+@Inject
+class ProjectListViewModel(
     private val repository: ProjectRepository,
-    scope: CoroutineScope,
-) {
+) : ViewModel() {
 
     private val query = MutableStateFlow("")
     private val gemsShuffleSeed = MutableStateFlow(0)
@@ -54,8 +62,8 @@ class ProjectListStateHolder(
     )
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
-    // Rows track the query — repository's `observeProjects` does FTS5 narrowing for us.
-    private val rowsFlow: Flow<List<ProjectRow>> = query.flatMapLatest { repository.observeProjects(it) }
+    private val rowsFlow: Flow<List<ProjectRow>> =
+        query.flatMapLatest { repository.observeProjects(it) }
     private val archivedRowsFlow: Flow<List<ProjectRow>> = repository.observeArchivedProjects()
     private val distinctKeysFlow: Flow<List<String>> = repository.observeDistinctKeys()
 
@@ -73,12 +81,9 @@ class ProjectListStateHolder(
             distinctKeysFlow,
         ),
     ) { values ->
-        @Suppress("UNCHECKED_CAST")
-        val q = values[0] as String
-        @Suppress("UNCHECKED_CAST")
-        val rawRows = values[1] as List<ProjectRow>
-        @Suppress("UNCHECKED_CAST")
-        val archivedRows = values[2] as List<ProjectRow>
+        @Suppress("UNCHECKED_CAST") val q = values[0] as String
+        @Suppress("UNCHECKED_CAST") val rawRows = values[1] as List<ProjectRow>
+        @Suppress("UNCHECKED_CAST") val archivedRows = values[2] as List<ProjectRow>
         val seed = values[3] as Int
         val zoom = values[4] as ShelfId?
         val openId = values[5] as ProjectId?
@@ -120,7 +125,7 @@ class ProjectListStateHolder(
             distinctKeys = distinctKeys,
             loading = false,
         )
-    }.stateIn(scope, SharingStarted.Eagerly, State(loading = true))
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
     private fun applyFilters(
         rows: List<ProjectRow>,
@@ -173,6 +178,7 @@ class ProjectListStateHolder(
         }
     }
 
+    @Immutable
     data class State(
         val query: String = "",
         val rows: List<ProjectRow> = emptyList(),
@@ -196,24 +202,14 @@ class ProjectListStateHolder(
     )
 
     sealed interface Intent {
-        /** Update the search query. Resets `searchSelectedIndex` to 0. */
         data class Search(val query: String) : Intent
-        /** Emits [Effect.Navigate] for external callers (deep-links, MCP); the dashboard uses
-         *  [OpenDetail] for its side panel instead. */
         data class Open(val id: ProjectId) : Intent
-        /** Switch the dashboard into "show all of bucket X" mode (or back to overview if null). */
         data class ZoomShelf(val shelf: ShelfId?) : Intent
-        /** Re-roll the random sample shown on the Forgotten Gems shelf. */
         data object ShuffleGems : Intent
-        /** Open the side detail panel for [id]. */
         data class OpenDetail(val id: ProjectId) : Intent
-        /** Dismiss the side detail panel. */
         data object CloseDetail : Intent
-        /** Move the keyboard cursor down one search result. */
         data object NavigateSearchNext : Intent
-        /** Move the keyboard cursor up one search result. */
         data object NavigateSearchPrev : Intent
-        /** Open the detail panel for the currently-highlighted search result. */
         data object OpenSelectedSearch : Intent
         /** Set the tempo range filter (`null` clears it). Applies to the row set before bucketing. */
         data class SetTempoRange(val range: ClosedFloatingPointRange<Double>?) : Intent

@@ -1,12 +1,18 @@
 package com.sketchbook.featuretimeline
 
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.MaterializationProgress
 import com.sketchbook.repo.SnapshotRepository
-import kotlinx.coroutines.CoroutineScope
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -25,26 +31,23 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Duration.Companion.minutes
 
 /**
  * Snapshot history viewer per design §A2. Default view shows `Named` + `Branch` snapshots only,
  * grouped by local-day. Toggling [Intent.ToggleShowAll] reveals every `Auto` save too.
  *
- * Inputs (selected uuid, showAll, pendingRewind) live in `MutableStateFlow`s; the published
- * `state` is a pure `combine(historyFlow, showAll, pendingRewind)`. `historyFlow` itself is a
- * `flatMapLatest` over the selected uuid so the upstream subscription auto-cancels when the
- * caller swaps projects.
- *
- * Rewind confirms via UI then dispatches `ConfirmRewind`, which calls
- * `SnapshotRepository.materializeAt`. Progress is reported via [Effect].
+ * `viewModelScope` cancels on `NavEntry` pop — leaving the timeline stops the history
+ * subscription. Long-running rewinds also cancel on pop, which matches the user's intent (they
+ * navigated away while a rewind was in progress).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class TimelineStateHolder(
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
+@Inject
+class TimelineViewModel(
     private val snapshots: SnapshotRepository,
-    private val scope: CoroutineScope,
     private val zone: TimeZone = TimeZone.currentSystemDefault(),
-) {
+) : ViewModel() {
 
     private val selectedUuid = MutableStateFlow<ProjectUuid?>(null)
     private val showAll = MutableStateFlow(false)
@@ -76,7 +79,7 @@ class TimelineStateHolder(
             loading = selectedUuid.value != null && history.isEmpty(),
             rewindProgress = progress,
         )
-    }.stateIn(scope, SharingStarted.Eagerly, State())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, State())
 
     fun load(uuid: ProjectUuid) {
         selectedUuid.update { uuid }
@@ -94,7 +97,7 @@ class TimelineStateHolder(
 
     private fun relabel(rev: SnapshotRev, newLabel: String?) {
         val uuid = selectedUuid.value ?: return
-        scope.launch {
+        viewModelScope.launch {
             // Trim before passing through; treat blank-after-trim as a clear gesture so
             // accidental whitespace doesn't masquerade as a label. We intentionally do NOT
             // round-trip the result back into local state — the SQL update flows through
@@ -114,7 +117,7 @@ class TimelineStateHolder(
 
     private fun rewind(rev: SnapshotRev) {
         val uuid = selectedUuid.value ?: return
-        scope.launch {
+        viewModelScope.launch {
             _effects.tryEmit(Effect.RewindStarted(rev))
             snapshots.materializeAtWithProgress(uuid, rev).collect { progress ->
                 rewindProgress.update { progress }
@@ -145,6 +148,7 @@ class TimelineStateHolder(
             .map { (date, snaps) -> DayGroup(date, snaps) }
     }
 
+    @Immutable
     data class State(
         val uuid: ProjectUuid? = null,
         val history: List<Snapshot> = emptyList(),

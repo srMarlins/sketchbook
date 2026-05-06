@@ -43,6 +43,13 @@ kotlin {
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.cio)
             implementation(libs.metro.runtime)
+            implementation(libs.lifecycle.viewmodel)
+            implementation(libs.lifecycle.viewmodel.compose)
+            implementation(libs.metro.viewmodel)
+            implementation(libs.metro.viewmodel.compose)
+            implementation(libs.lifecycle.viewmodel.navigation3)
+            implementation(libs.lifecycle.runtime.compose)
+            implementation(libs.kotlinx.coroutines.swing)
             // nav3-ui transitively pulls navigation3-runtime; explicit runtime dep is omitted
             // because the JetBrains fork only publishes navigation3-runtime via the ui artifact.
             implementation(libs.nav3.ui)
