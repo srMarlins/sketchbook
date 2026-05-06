@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -132,7 +134,7 @@ fun NeedsAttentionScreen(
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.macSection(
+private fun LazyListScope.macSection(
     entries: List<NeedsAttentionViewModel.MacEntry>,
     pending: Set<com.sketchbook.core.ProjectId>,
     onBulkRepair: () -> Unit,
@@ -143,12 +145,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.macSection(
         SectionHeader(
             title = "Mac-imported",
             count = entries.size,
-            shape = RoundedCornerShape(
-                topStart = 8.dp,
-                topEnd = 8.dp,
-                bottomStart = 0.dp,
-                bottomEnd = 0.dp,
-            ),
+            shape = HEADER_SHAPE,
             actions = {
                 Button(onClick = onBulkRepair, variant = ButtonVariant.Primary) {
                     Text("Repair all")
@@ -157,26 +154,27 @@ private fun androidx.compose.foundation.lazy.LazyListScope.macSection(
         )
     }
     val lastIndex = entries.lastIndex
-    entries.forEachIndexed { idx, entry ->
+    itemsIndexed(
+        items = entries,
+        key = { _, entry -> "mac-${entry.finding.projectId.value}" },
+    ) { idx, entry ->
         val finding = entry.finding
         val pid = finding.projectId
-        item(key = "mac-${pid.value}") {
-            MacImportRow(
-                name = finding.name,
-                macPathsCount = finding.macPathsCount,
-                projectInfoMissing = finding.projectInfoMissing,
-                isProjectBoundary = entry.isProjectBoundary,
-                isLast = idx == lastIndex,
-                isPending = pid in pending,
-                onOpen = { onOpen(finding) },
-                onRepair = { onRepair(pid) },
-            )
-        }
+        MacImportRow(
+            name = finding.name,
+            macPathsCount = finding.macPathsCount,
+            projectInfoMissing = finding.projectInfoMissing,
+            isProjectBoundary = entry.isProjectBoundary,
+            isLast = idx == lastIndex,
+            isPending = pid in pending,
+            onOpen = { onOpen(finding) },
+            onRepair = { onRepair(pid) },
+        )
     }
     item(key = "mac-footer") { CardFooter() }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.missingSection(
+private fun LazyListScope.missingSection(
     buckets: NeedsAttentionViewModel.MissingByConfidence,
     truncatedShown: Pair<Int, Int>?,
     pending: Set<Pair<com.sketchbook.core.ProjectId, String>>,
@@ -191,16 +189,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.missingSection(
     }
     val totalShown = buckets.autoMatch.size + buckets.multiCandidate.size + buckets.noCandidate.size
     item(key = "missing-header") {
-        SectionHeader(
-            title = title,
-            count = totalShown,
-            shape = RoundedCornerShape(
-                topStart = 8.dp,
-                topEnd = 8.dp,
-                bottomStart = 0.dp,
-                bottomEnd = 0.dp,
-            ),
-        )
+        SectionHeader(title = title, count = totalShown, shape = HEADER_SHAPE)
     }
 
     bucket(
@@ -258,7 +247,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.missingSection(
     item(key = "missing-footer") { CardFooter() }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.bucket(
+private fun LazyListScope.bucket(
     kind: MissingKind,
     title: String,
     entries: List<NeedsAttentionViewModel.MissingEntry>,
@@ -276,26 +265,44 @@ private fun androidx.compose.foundation.lazy.LazyListScope.bucket(
         )
     }
     val lastIndex = entries.lastIndex
-    entries.forEachIndexed { idx, entry ->
+    itemsIndexed(
+        items = entries,
+        key = { _, entry ->
+            val f = entry.finding
+            "miss-${kind.name}-${f.projectId.value}-${f.missingPath.hashCode()}"
+        },
+    ) { idx, entry ->
         val f = entry.finding
         val key = f.projectId to f.missingPath
-        item(key = "miss-${kind.name}-${f.projectId.value}-${f.missingPath.hashCode()}") {
-            MissingSampleRow(
-                projectName = f.projectName,
-                missingPath = f.missingPath,
-                kind = kind,
-                autoMatchParent = parentDirOf(f.autoMatch?.path),
-                candidatesCount = f.candidates.size,
-                isProjectBoundary = entry.isProjectBoundary,
-                isLast = idx == lastIndex,
-                isPending = key in pending,
-                onOpen = { onOpen(f) },
-            )
-        }
+        MissingSampleRow(
+            projectName = f.projectName,
+            missingPath = f.missingPath,
+            kind = kind,
+            autoMatchParent = parentDirOf(f.autoMatch?.path),
+            candidatesCount = f.candidates.size,
+            isProjectBoundary = entry.isProjectBoundary,
+            isLast = idx == lastIndex,
+            isPending = key in pending,
+            onOpen = { onOpen(f) },
+        )
     }
 }
 
 private enum class MissingKind { Auto, Multi, None }
+
+private val HEADER_SHAPE = RoundedCornerShape(
+    topStart = 8.dp,
+    topEnd = 8.dp,
+    bottomStart = 0.dp,
+    bottomEnd = 0.dp,
+)
+
+private val FOOTER_SHAPE = RoundedCornerShape(
+    topStart = 0.dp,
+    topEnd = 0.dp,
+    bottomStart = 8.dp,
+    bottomEnd = 8.dp,
+)
 
 @Composable
 private fun SectionHeader(
@@ -368,14 +375,7 @@ private fun CardFooter() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(
-                RoundedCornerShape(
-                    topStart = 0.dp,
-                    topEnd = 0.dp,
-                    bottomStart = 8.dp,
-                    bottomEnd = 8.dp,
-                ),
-            )
+            .clip(FOOTER_SHAPE)
             .background(AppTheme.colors.surfaceCard)
             .height(AppTheme.spacing.sm),
     )

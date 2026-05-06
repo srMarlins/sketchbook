@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -109,21 +110,22 @@ fun JournalScreen(
 
             val showBulkUndoOnFirstDay = state.isNarrowed && state.invertibleEntries.isNotEmpty()
             LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)) {
-                state.days.forEachIndexed { idx, day ->
-                    item(key = "g-${day.label}") {
-                        DayGroupCard(
-                            label = day.label,
-                            rows = day.rows,
-                            expanded = expanded[day.label] ?: true,
-                            onToggle = { expanded[day.label] = !(expanded[day.label] ?: true) },
-                            onOpen = { openEntry = it },
-                            showBulkUndo = showBulkUndoOnFirstDay && idx == 0,
-                            bulkUndoCount = state.invertibleEntries.size,
-                            onBulkUndo = {
-                                vm.dispatch(JournalViewModel.Intent.BulkUndo(state.invertibleEntries))
-                            },
-                        )
-                    }
+                itemsIndexed(
+                    items = state.days,
+                    key = { _, day -> "g-${day.label}" },
+                ) { idx, day ->
+                    DayGroupCard(
+                        label = day.label,
+                        rows = day.rows,
+                        expanded = expanded[day.label] ?: true,
+                        onToggle = { expanded[day.label] = !(expanded[day.label] ?: true) },
+                        onOpen = { openEntry = it },
+                        showBulkUndo = showBulkUndoOnFirstDay && idx == 0,
+                        bulkUndoCount = state.invertibleEntries.size,
+                        onBulkUndo = {
+                            vm.dispatch(JournalViewModel.Intent.BulkUndo(state.invertibleEntries))
+                        },
+                    )
                 }
             }
         }

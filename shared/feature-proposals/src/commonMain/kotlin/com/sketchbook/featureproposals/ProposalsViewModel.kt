@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -121,8 +122,10 @@ class ProposalsViewModel(
     }
 
     private suspend fun applyAndApprove(proposalId: String, single: Boolean): ApplyResult {
-        val proposal = state.value.pending.firstOrNull { it.proposalId == proposalId }
-            ?: state.value.resolved.firstOrNull { it.proposalId == proposalId }
+        // Look up directly through the repo so we don't depend on `state` having warmed up — under
+        // a TestDispatcher the eager combine may not have collected by the time tests dispatch.
+        val proposals = repository.observe().first()
+        val proposal = proposals.firstOrNull { it.proposalId == proposalId }
         if (proposal == null) {
             if (single) _effects.tryEmit(Effect.Failed(proposalId, "proposal not found"))
             return ApplyResult.Failed("proposal not found")
