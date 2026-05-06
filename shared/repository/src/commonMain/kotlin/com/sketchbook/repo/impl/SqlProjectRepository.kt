@@ -95,6 +95,12 @@ class SqlProjectRepository(
             rows.map { it.toDomain(tags = tagsByProject[it.id].orEmpty()) }
         }
 
+    override fun observeAllProjectNames(): Flow<Map<ProjectId, String>> =
+        catalog.catalogQueries.selectAllProjectIdsAndNames()
+            .asFlow()
+            .mapToList(ioDispatcher)
+            .map { rows -> rows.associate { ProjectId(it.id) to it.name } }
+
     override fun observeDistinctKeys(): Flow<List<String>> =
         catalog.catalogQueries.selectDistinctKeys()
             .asFlow()

@@ -114,6 +114,10 @@ private fun entryFields(action: ActionRecord): List<Pair<String, String>> = when
         "Mappings" to action.mappingCount.toString(),
         ".als outcome" to action.alsOutcome,
     )
+    is ActionRecord.MacPathRestored -> listOf(
+        "Mappings" to action.mappingCount.toString(),
+        ".als outcome" to action.alsOutcome,
+    )
     is ActionRecord.SnapshotRelabeled -> listOf(
         "Rev" to action.rev.toString(),
         "Before" to (action.labelBefore.takeUnless { it.isNullOrBlank() } ?: "(unlabeled)"),

@@ -56,6 +56,14 @@ class SqlJournalRepository(
             // moment anyone adds a suspend call inside the body. Pattern matches JvmScanner /
             // McpServer: explicit re-throw of cancellation, Result.failure for everything else.
             try {
+                // Centralized denormalization: capture the project's current name at write time.
+                // Repository callers (project mutators, repair flows, MCP) never need to thread
+                // the name through themselves — the journal just looks it up. If the entry already
+                // carries a name (e.g. an in-memory fake or a forward-from-MCP), respect it.
+                val resolvedName = entry.projectName
+                    ?: catalog.catalogQueries.selectProjectById(entry.projectId.value)
+                        .executeAsOneOrNull()
+                        ?.name
                 val newId = catalog.transactionWithResult<Long> {
                     catalog.catalogQueries.insertJournalEntry(
                         occurred_at = entry.timestamp.toEpochMilliseconds(),
@@ -66,10 +74,11 @@ class SqlJournalRepository(
                             ActionRecordSerializer,
                             entry.action,
                         ),
+                        project_name = resolvedName,
                     )
                     catalog.catalogQueries.lastJournalEntryId().executeAsOne()
                 }
-                Result.success(entry.copy(sequence = newId))
+                Result.success(entry.copy(sequence = newId, projectName = resolvedName))
             } catch (c: CancellationException) {
                 throw c
             } catch (t: Throwable) {
@@ -112,6 +121,7 @@ class SqlJournalRepository(
         action = json.decodeFromString(ActionRecordSerializer, row.payload_json),
         sequence = row.id,
         actor = row.actor,
+        projectName = row.project_name,
     )
 
     private companion object {

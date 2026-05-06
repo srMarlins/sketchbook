@@ -62,6 +62,18 @@ interface RepairRepository {
         missingPath: String,
         candidatePath: String,
     ): Result<Unit>
+
+    /**
+     * Reverse a previous [applyMacPathRepair]. The on-disk `.als` is restored from the
+     * patcher-undo sidecar (best-effort — `NoUndoBytes` is journaled if the sidecar is gone),
+     * the `mac_import` repair_ack row is deleted so the finding re-surfaces in Needs Attention,
+     * and a [com.sketchbook.repo.ActionRecord.MacPathRestored] entry is appended to the journal.
+     *
+     * Implementations must be idempotent: restoring a project that was never repaired (or one
+     * that was already restored) is a no-op on the catalog and writes a `NoUndoBytes` journal
+     * entry — the History column then has a record of the attempt either way.
+     */
+    suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit>
 }
 
 data class RepairFindings(

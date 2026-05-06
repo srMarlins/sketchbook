@@ -1,0 +1,6 @@
+-- v5 → v6: denormalize project name onto journal_entries. Without it, History rows for
+-- entries whose project_id has been orphaned by a catalog rescan have no name to show
+-- (project_id deliberately has no FK so stale ids stay readable, but stale ids alone aren't
+-- useful in the UI). Nullable so legacy rows pre-migration keep working — the History VM
+-- still does a live catalog lookup and a path-derived fallback when project_name is NULL.
+ALTER TABLE journal_entries ADD COLUMN project_name TEXT;

@@ -25,6 +25,15 @@ data class JournalEntry(
      * subprocess passes `"sketchbook"` (matching `Proposal.actor`).
      */
     val actor: String = "user",
+    /**
+     * Denormalized project name captured at write time. `journal_entries.project_id` deliberately
+     * has no FK (per the schema comment, "stale project_id stays meaningful"), so a catalog
+     * rescan that reassigns ids leaves the journal pointing at rows that no longer exist. The
+     * History row UI prefers this when present; null is only the legacy case for entries written
+     * before this column existed. Repository writes auto-fill from the catalog — callers do not
+     * pass it manually.
+     */
+    val projectName: String? = null,
 )
 
 /**
@@ -156,6 +165,23 @@ sealed interface ActionRecord {
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
         companion object { const val TYPE_KEY: String = "MacPathRepaired" }
+    }
+
+    /**
+     * Inverse of [MacPathRepaired]. The `.als` is restored from the patcher-undo sidecar (or
+     * journaled `NoUndoBytes` if the sidecar is gone), the `mac_import` repair_ack is deleted
+     * so the Mac-imported finding re-appears in Needs Attention, and a new entry is appended
+     * here so the History column shows the undo. Mirrors [MissingSampleUnmapped]'s role
+     * relative to [MissingSampleMapped].
+     */
+    @Serializable
+    data class MacPathRestored(
+        val mappingCount: Int,
+        /** One of `AlsPatchService.Outcome` names plus `NoUndoBytes`. */
+        val alsOutcome: String,
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "MacPathRestored" }
     }
 
     /**

@@ -396,6 +396,61 @@ class SqlRepairRepository(
         }
     }
 
+    override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> =
+        withContext(ioDispatcher) {
+            runCatching {
+                val alsPath = catalog.catalogQueries
+                    .selectProjectById(projectId.value)
+                    .executeAsOne()
+                    .path
+
+                // Mirror restoreMissingSampleMatch: try to restore the .als from the sidecar
+                // [applyMacPathRepair] wrote pre-patch. NoUndoBytes when the sidecar is gone
+                // (apply ran NoChange so no snapshot was taken; or sidecar got cleaned up).
+                val path: Path = Paths.get(alsPath)
+                val sidecar = path.resolveSibling("${path.fileName}.patcher-undo")
+                val mappingCount: Int
+                val outcomeName: String
+                if (Files.notExists(sidecar)) {
+                    mappingCount = 0
+                    outcomeName = NO_UNDO_BYTES
+                } else {
+                    val bytes = Files.readAllBytes(sidecar)
+                    val outcome = runCatching { patcher.restore(alsPath, bytes) }
+                        .getOrElse { AlsPatchService.Outcome.Failed }
+                    runCatching { Files.deleteIfExists(sidecar) }
+                    // Re-scan to confirm how many Mac-style paths the restore brought back —
+                    // this is also what [applyMacPathRepair] reported as `mappingCount`, so the
+                    // History entries pair up symmetrically for the user.
+                    val macPaths = runCatching { extractMacStyleSamplePaths(alsPath) }
+                        .getOrDefault(emptyList())
+                    mappingCount = macPaths.count { it != macToPosix(it) }
+                    outcomeName = outcome.name
+                }
+
+                catalog.transaction {
+                    catalog.catalogQueries.deleteRepairAck(
+                        scope = SCOPE_MAC,
+                        project_id = projectId.value,
+                        payload = "",
+                    )
+                }
+                ackTick.value = ackTick.value + 1
+
+                journal.append(
+                    JournalEntry(
+                        timestamp = Clock.System.now(),
+                        projectId = projectId,
+                        action = ActionRecord.MacPathRestored(
+                            mappingCount = mappingCount,
+                            alsOutcome = outcomeName,
+                        ),
+                    ),
+                )
+                Unit
+            }
+        }
+
     private companion object {
         const val SCOPE_MAC = "mac_import"
         const val SCOPE_MISS = "missing_sample"

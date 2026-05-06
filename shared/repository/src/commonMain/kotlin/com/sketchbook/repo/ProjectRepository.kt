@@ -28,6 +28,16 @@ interface ProjectRepository {
     /** Live list of archived projects, newest first. Excluded from [observeProjects]. */
     fun observeArchivedProjects(): Flow<List<ProjectRow>> = kotlinx.coroutines.flow.flowOf(emptyList())
 
+    /**
+     * Live id→name map across **all** projects (active and archived). For surfaces like the
+     * History column that need to render a project name next to a journal row but don't care
+     * about tags, missing-sample counts, or any other metadata — much cheaper than
+     * [observeProjects] + [observeArchivedProjects], and always emits a complete map so the
+     * row composables don't fall back to "project #N" while a heavier flow is still loading.
+     */
+    fun observeAllProjectNames(): Flow<Map<ProjectId, String>> =
+        kotlinx.coroutines.flow.flowOf(emptyMap())
+
     /** Live single-project view by local PK. Emits new state whenever the row mutates. */
     fun observeProject(id: ProjectId): Flow<ProjectRow?>
 

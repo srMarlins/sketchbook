@@ -9,6 +9,7 @@ import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.ProjectRepository
+import com.sketchbook.repo.RepairRepository
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
@@ -21,7 +22,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -45,7 +45,8 @@ import kotlin.time.Instant
 @Inject
 class JournalViewModel(
     private val repository: JournalRepository,
-    private val projects: ProjectRepository? = null,
+    private val projects: ProjectRepository,
+    private val repair: RepairRepository,
 ) : ViewModel() {
 
     private val _effects = MutableSharedFlow<Effect>(
@@ -59,16 +60,16 @@ class JournalViewModel(
 
     val state: StateFlow<State> = combine(
         repository.observeRecent(LIMIT),
-        projects?.observeProjects("") ?: flowOf(emptyList()),
+        projects.observeAllProjectNames(),
         filters,
-    ) { entries, projectRows, f ->
-        val nameById: Map<ProjectId, String> = projectRows.associate { it.id to it.name }
+    ) { entries, nameById, f ->
         val now = Clock.System.now()
         val rows = entries.asSequence()
+            .filter { isVisibleAction(it.action) }
             .filter { matchesActionType(it.action, f.actionType) }
             .filter { matchesDateRange(it.timestamp, f.dateRange, now) }
-            .filter { matchesSearch(it, nameById[it.projectId], f.search) }
-            .map { e -> JournalRow(e, nameById[e.projectId] ?: "project #${e.projectId.value}") }
+            .filter { matchesSearch(it, resolveName(it, nameById), f.search) }
+            .map { e -> JournalRow(e, resolveName(e, nameById)) }
             .toList()
         val days = if (rows.isEmpty()) emptyList() else buildDayGroups(rows, now)
         val invertibleEntries = rows.filter { it.isInvertible }.map { it.entry }
@@ -124,30 +125,30 @@ class JournalViewModel(
      * surface entries have their own undo flow in Needs Attention; the others are informational.
      */
     private suspend fun undoOne(entry: JournalEntry): Result<Unit> {
-        val proj = projects ?: return Result.failure(IllegalStateException("projects unavailable"))
         return when (val a = entry.action) {
             is ActionRecord.Move -> {
-                val current = proj.observeProject(entry.projectId).first()
+                val current = projects.observeProject(entry.projectId).first()
                 when {
                     current == null -> Result.failure(IllegalStateException("project not found"))
                     current.path.value != a.pathAfter -> Result.failure(
                         IllegalStateException("file is no longer at the recorded location — undo skipped"),
                     )
-                    else -> proj.move(entry.projectId, parentDirOf(a.pathBefore)).map {}
+                    else -> projects.move(entry.projectId, parentDirOf(a.pathBefore)).map {}
                 }
             }
             is ActionRecord.Rename -> {
-                val current = proj.observeProject(entry.projectId).first()
+                val current = projects.observeProject(entry.projectId).first()
                 when {
                     current == null -> Result.failure(IllegalStateException("project not found"))
                     current.name != a.nameAfter -> Result.failure(
                         IllegalStateException("project no longer named ${a.nameAfter} — undo skipped"),
                     )
-                    else -> proj.rename(entry.projectId, a.nameBefore).map {}
+                    else -> projects.rename(entry.projectId, a.nameBefore).map {}
                 }
             }
-            is ActionRecord.Archive -> proj.archive(entry.projectId, a.wasArchived).map {}
-            is ActionRecord.SetTags -> proj.setTags(entry.projectId, a.before).map {}
+            is ActionRecord.Archive -> projects.archive(entry.projectId, a.wasArchived).map {}
+            is ActionRecord.SetTags -> projects.setTags(entry.projectId, a.before).map {}
+            is ActionRecord.MacPathRepaired -> repair.restoreMacPathRepair(entry.projectId)
             else -> Result.failure(IllegalArgumentException("not invertible"))
         }
     }
@@ -177,6 +178,54 @@ class JournalViewModel(
             deltaDays <= 6 -> "$deltaDays days ago"
             else -> ts.toString().substring(0, 10)
         }
+    }
+
+    /**
+     * Resolve a project name with the same fallback chain the proposals queue uses:
+     *   1. The denormalized name on the journal entry itself (captured at write time).
+     *   2. Live catalog lookup by id.
+     *   3. Basename of any path embedded in the action (Move/Rename/MissingSample carry one).
+     *   4. `"project #N"` as a last-resort sentinel.
+     *
+     * The denormalization on (1) is what saves us when the catalog rescan reassigns ids and the
+     * old `project_id` no longer points at the row that originally produced the entry —
+     * `journal_entries.project_id` deliberately has no FK so stale ids stay readable.
+     */
+    private fun resolveName(entry: JournalEntry, nameById: Map<ProjectId, String>): String {
+        entry.projectName?.takeUnless { it.isBlank() }?.let { return it }
+        nameById[entry.projectId]?.let { return it }
+        nameFromAction(entry.action)?.let { return it }
+        return "project #${entry.projectId.value}"
+    }
+
+    private fun nameFromAction(action: ActionRecord): String? = when (action) {
+        is ActionRecord.Move -> basenameWithoutAls(action.pathAfter) ?: basenameWithoutAls(action.pathBefore)
+        is ActionRecord.Rename -> action.nameAfter.takeUnless { it.isBlank() }
+        is ActionRecord.MissingSampleMapped -> basenameOfDir(action.missingPath)
+        is ActionRecord.MissingSampleUnmapped -> basenameOfDir(action.missingPath)
+        else -> null
+    }
+
+    private fun basenameWithoutAls(path: String): String? {
+        val tail = path.substringAfterLast('/').substringAfterLast('\\').ifEmpty { return null }
+        return tail.removeSuffix(".als").takeUnless { it.isBlank() }
+    }
+
+    /** For sample paths, the project name is the *parent* dir's leaf, not the sample filename. */
+    private fun basenameOfDir(samplePath: String): String? {
+        val normalized = samplePath.replace('\\', '/')
+        val parent = normalized.substringBeforeLast('/', "")
+        return parent.substringAfterLast('/').takeUnless { it.isBlank() }
+    }
+
+    /**
+     * Hide noise from the journal feed: a `MacPathRepaired` with `mappingCount == 0` means the
+     * repair pass ran but found no Mac-style paths to rewrite — nothing actually changed for the
+     * user, so the row is just clutter in the History column.
+     */
+    private fun isVisibleAction(action: ActionRecord): Boolean = when (action) {
+        is ActionRecord.MacPathRepaired -> action.mappingCount > 0
+        else -> true
     }
 
     private fun matchesActionType(action: ActionRecord, filter: ActionTypeFilter): Boolean = when (filter) {
@@ -210,7 +259,8 @@ class JournalViewModel(
             is ActionRecord.SnapshotRelabeled -> "${a.labelBefore.orEmpty()} ${a.labelAfter.orEmpty()}"
             is ActionRecord.Archive,
             is ActionRecord.PushConflict,
-            is ActionRecord.MacPathRepaired -> ""
+            is ActionRecord.MacPathRepaired,
+            is ActionRecord.MacPathRestored -> ""
         }
         return haystack.lowercase().contains(q)
     }
@@ -283,6 +333,7 @@ val JournalViewModel.JournalRow.isInvertible: Boolean
         is ActionRecord.Move,
         is ActionRecord.Rename,
         is ActionRecord.Archive,
-        is ActionRecord.SetTags -> true
+        is ActionRecord.SetTags,
+        is ActionRecord.MacPathRepaired -> true
         else -> false
     }

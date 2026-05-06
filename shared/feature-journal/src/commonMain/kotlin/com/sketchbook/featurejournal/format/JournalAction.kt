@@ -75,6 +75,12 @@ fun journalLabel(action: ActionRecord): JournalLabel = when (action) {
         detail = alsOutcomeSuffix(action.alsOutcome).trim().ifEmpty { null },
         tintHint = VerbTint.Repair,
     )
+    is ActionRecord.MacPathRestored -> JournalLabel(
+        verb = "Undo repair",
+        target = "${action.mappingCount} mac paths",
+        detail = alsOutcomeSuffix(action.alsOutcome).trim().ifEmpty { null },
+        tintHint = VerbTint.Repair,
+    )
     is ActionRecord.SnapshotRelabeled -> {
         val before = action.labelBefore?.takeIf { it.isNotBlank() } ?: "(unlabeled)"
         val after = action.labelAfter?.takeIf { it.isNotBlank() } ?: "(unlabeled)"
@@ -117,6 +123,9 @@ fun humanReadable(action: ActionRecord): String = when (action) {
     is ActionRecord.MacPathRepaired ->
         "Repair Mac paths (${action.mappingCount})" +
             alsOutcomeSuffix(action.alsOutcome)
+    is ActionRecord.MacPathRestored ->
+        "Undo Mac-path repair (${action.mappingCount})" +
+            alsOutcomeSuffix(action.alsOutcome)
     is ActionRecord.SnapshotRelabeled -> {
         val before = action.labelBefore?.takeIf { it.isNotBlank() } ?: "(unlabeled)"
         val after = action.labelAfter?.takeIf { it.isNotBlank() } ?: "(unlabeled)"
@@ -133,8 +142,7 @@ private fun parentDirOf(path: String): String {
 }
 
 private fun alsOutcomeSuffix(outcome: String): String = when (outcome) {
-    "Patched", "" -> ""
-    "NoChange" -> " (no .als change)"
+    "Patched", "NoChange", "" -> "" // happy path or "no patch needed" — both are silent
     "SkippedBusy" -> " (.als open in Live — skipped)"
     "Failed" -> " (.als write failed)"
     "NoUndoBytes" -> " (no pre-patch snapshot — catalog only)"
