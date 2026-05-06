@@ -136,9 +136,11 @@ interface DesktopAppGraph {
     fun provideSnapshotRepository(
         catalog: Catalog,
         syncQueue: SyncQueue,
+        journal: JournalRepository,
     ): SnapshotRepository = SqlSnapshotRepository(
         catalog = catalog,
         ioDispatcher = Dispatchers.IO,
+        journal = journal,
         materialize = { uuid, rev ->
             // Delegates to the SwappableSyncQueue's currently-active materializer (built when
             // cloud creds land). Returns a friendly failure when cloud is unconfigured so the

@@ -36,8 +36,28 @@ class TimelineStateHolderTest {
     private class Repo(val flow: MutableStateFlow<List<Snapshot>>) : SnapshotRepository {
         var rewoundTo: SnapshotRev? = null
         var failNext: Boolean = false
+        var lastRelabel: Triple<ProjectUuid, SnapshotRev, String?>? = null
         override fun observeHistory(uuid: ProjectUuid): Flow<List<Snapshot>> = flow
         override suspend fun recordSnapshot(snapshot: Snapshot, manifestPath: String, manifestHash: String): Result<Unit> = Result.success(Unit)
+        override suspend fun setSnapshotLabel(
+            uuid: ProjectUuid,
+            rev: SnapshotRev,
+            label: String?,
+        ): Result<com.sketchbook.repo.JournalEntry> {
+            lastRelabel = Triple(uuid, rev, label)
+            return Result.success(
+                com.sketchbook.repo.JournalEntry(
+                    timestamp = kotlin.time.Instant.fromEpochMilliseconds(0L),
+                    projectId = com.sketchbook.core.ProjectId(0L),
+                    action = com.sketchbook.repo.ActionRecord.SnapshotRelabeled(
+                        rev = rev.value,
+                        labelBefore = null,
+                        labelAfter = label,
+                        kindBefore = "auto",
+                    ),
+                ),
+            )
+        }
         override suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> {
             return if (failNext) {
                 failNext = false

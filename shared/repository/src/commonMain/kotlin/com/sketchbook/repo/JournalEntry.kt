@@ -157,4 +157,29 @@ sealed interface ActionRecord {
         override val typeKey: String get() = TYPE_KEY
         companion object { const val TYPE_KEY: String = "MacPathRepaired" }
     }
+
+    /**
+     * User edited a snapshot's label inline on the Timeline. Carries [rev] so the audit log can
+     * tie the entry to a specific row, plus before/after labels for diffing. The accompanying SQL
+     * also promotes `kind` to `'named'`, so an `Auto` row that gets a hand-written label becomes
+     * a Named snapshot — consistent with PR-O O4's CoalesceJob — but we only record the label
+     * delta here; the kind promotion is implicit and visible in subsequent reads.
+     *
+     * Empty/blank [newLabel] is the "clear the label" gesture, not a no-op: the UI still wants
+     * the row to read as Named so the user's intent ("I noticed this row, I'm pinning it") is
+     * preserved. Repository callers should pass `""` for cleared and `null` only when they
+     * genuinely don't have a value.
+     */
+    @Serializable
+    data class SnapshotRelabeled(
+        val rev: Long,
+        val labelBefore: String?,
+        val labelAfter: String?,
+        /** Prior `kind` column ("auto" | "named" | "branch") — useful for telemetry on how
+         *  often hand-edits promote auto-saves vs. retitle named takes. */
+        val kindBefore: String,
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "SnapshotRelabeled" }
+    }
 }

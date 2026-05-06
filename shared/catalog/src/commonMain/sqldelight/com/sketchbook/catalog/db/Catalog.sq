@@ -333,6 +333,18 @@ VALUES (:project_uuid, :rev, :parent_rev, :timestamp, :host_id, :kind, :label, :
 selectSnapshotsForProject:
 SELECT * FROM snapshots WHERE project_uuid = :project_uuid ORDER BY rev DESC;
 
+-- PR-Z Z1: user-driven label edit. Promoting kind to 'named' on the same UPDATE keeps the row's
+-- semantics consistent with PR-O O4's CoalesceJob — once a human attaches a label, the row stops
+-- being a candidate for auto-coalescing/cleanup. Empty-string labels are accepted (treated as
+-- "cleared" by the UI) since TEXT allows them and we don't want the SQL to reject blanks.
+updateSnapshotLabel:
+UPDATE snapshots SET label = ?, kind = 'named' WHERE project_uuid = ? AND rev = ?;
+
+-- Single-row read used by SqlSnapshotRepository.setSnapshotLabel to capture the prior label/kind
+-- for the journal entry (and to fail with NotFound when the (uuid, rev) doesn't exist).
+selectSnapshotByRev:
+SELECT * FROM snapshots WHERE project_uuid = :project_uuid AND rev = :rev;
+
 -- sync_state
 insertOrReplaceSyncState:
 INSERT OR REPLACE INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained, updated_at)

@@ -27,6 +27,15 @@ interface SnapshotRepository {
     suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit>
 
     /**
+     * PR-Z Z1: edit the human-readable label on a snapshot row. Side-effect: promotes `kind` to
+     * `Named` so the row stops being a candidate for auto-coalescing (matches PR-O O4 semantics).
+     * [label] may be `null` or `""` to clear; both forms persist as `NULL`/`""` respectively per
+     * the SQL column. Implementations append a [JournalEntry] with [ActionRecord.SnapshotRelabeled]
+     * so the audit log captures the edit.
+     */
+    suspend fun setSnapshotLabel(uuid: ProjectUuid, rev: SnapshotRev, label: String?): Result<JournalEntry>
+
+    /**
      * Streaming variant of [materializeAt] for the rewind/restore UI: emits per-stage progress
      * so the user sees what's happening when blobs aren't cached. Default impl wraps
      * [materializeAt] with synthetic Start/Done events; real impls (sync engine in PR-9) emit
