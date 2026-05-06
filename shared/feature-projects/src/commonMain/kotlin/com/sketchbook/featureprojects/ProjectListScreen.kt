@@ -8,7 +8,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -31,6 +34,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import com.sketchbook.core.ParseStatus
 import com.sketchbook.core.ProjectId
@@ -120,7 +129,28 @@ fun ProjectListScreen(
                     value = state.query,
                     onChange = { holder.dispatch(ProjectListStateHolder.Intent.Search(it)) },
                     placeholder = "Search projects, plugins, samples…",
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.Escape && state.query.isNotBlank()) {
+                                holder.dispatch(ProjectListStateHolder.Intent.Search(""))
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                    trailing = if (state.query.isNotBlank()) {
+                        {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable { holder.dispatch(ProjectListStateHolder.Intent.Search("")) }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                            ) {
+                                Text("×", style = AppTheme.typography.body)
+                            }
+                        }
+                    } else null,
                 )
                 ScanIndicator(
                     active = scanActive,
@@ -129,27 +159,56 @@ fun ProjectListScreen(
                 )
             }
 
-            when {
-                state.query.isNotBlank() -> SearchResults(
-                    groups = groups.filter { matchesQuery(it, state.query) },
-                    onOpen = { openDetailId = it.representative.id },
-                    syncStateFor = syncStateFor,
-                )
-                zoomShelf != null -> ShelfFlat(
-                    groups = zoomShelf!!.bucket(buckets),
-                    onOpen = { openDetailId = it.representative.id },
-                    syncStateFor = syncStateFor,
-                )
-                else -> HomeDashboard(
-                    buckets = buckets,
-                    gemsView = gemsView,
-                    isWide = isWide,
-                    onOpen = { openDetailId = it.representative.id },
-                    onSeeAll = { zoomShelf = it },
-                    onChip = { zoomShelf = it },
-                    onShuffleGems = { gemsShuffleSeed = (gemsShuffleSeed + 1).coerceAtLeast(1) },
-                    syncStateFor = syncStateFor,
-                )
+            Box(modifier = Modifier.widthIn(max = 1240.dp).fillMaxWidth()) {
+                // Base layer — always rendered so it stays visible (dimmed) behind the overlay.
+                if (zoomShelf != null) {
+                    ShelfFlat(
+                        groups = zoomShelf!!.bucket(buckets),
+                        onOpen = { openDetailId = it.representative.id },
+                        syncStateFor = syncStateFor,
+                    )
+                } else {
+                    HomeDashboard(
+                        buckets = buckets,
+                        gemsView = gemsView,
+                        isWide = isWide,
+                        onOpen = { openDetailId = it.representative.id },
+                        onSeeAll = { zoomShelf = it },
+                        onChip = { zoomShelf = it },
+                        onShuffleGems = { gemsShuffleSeed = (gemsShuffleSeed + 1).coerceAtLeast(1) },
+                        syncStateFor = syncStateFor,
+                    )
+                }
+
+                // Search overlay — scrim + results panel anchored under the search field.
+                if (state.query.isNotBlank()) {
+                    // Scrim: paper-fog over the base layer; click anywhere to clear the query.
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(AppTheme.colors.surfaceSunken.copy(alpha = 0.85f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { holder.dispatch(ProjectListStateHolder.Intent.Search("")) },
+                            ),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter)
+                            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+                            .background(AppTheme.colors.surfaceCard)
+                            .border(1.dp, AppTheme.colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard))
+                            .padding(8.dp),
+                    ) {
+                        SearchResults(
+                            groups = groups.filter { matchesQuery(it, state.query) },
+                            onOpen = { openDetailId = it.representative.id },
+                            syncStateFor = syncStateFor,
+                        )
+                    }
+                }
             }
         }
 
