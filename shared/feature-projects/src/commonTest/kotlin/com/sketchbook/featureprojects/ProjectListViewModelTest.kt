@@ -1,6 +1,5 @@
 package com.sketchbook.featureprojects
 
-import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectPath
@@ -73,14 +72,11 @@ class ProjectListViewModelTest {
         ))
     }
 
-    private fun newVm(repo: ProjectRepository) =
-        ProjectListViewModel(repo, SavedStateHandle())
-
     @Test
     fun stateUpdatesWhenRepositoryEmits() = runTest(mainDispatcher) {
         val all = MutableStateFlow(listOf(row(1, "kick"), row(2, "snare")))
         val repo = FakeRepo(mapOf("" to all))
-        val vm = newVm(repo)
+        val vm = ProjectListViewModel(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -96,7 +92,7 @@ class ProjectListViewModelTest {
         val all = MutableStateFlow(listOf(row(1, "kick"), row(2, "snare")))
         val matches = MutableStateFlow(listOf(row(1, "kick")))
         val repo = FakeRepo(mapOf("" to all, "kick" to matches))
-        val vm = newVm(repo)
+        val vm = ProjectListViewModel(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -117,7 +113,7 @@ class ProjectListViewModelTest {
         val active = MutableStateFlow(listOf(row(1, "kick")))
         val archived = MutableStateFlow(listOf(row(2, "old-snare", archived = true)))
         val repo = FakeRepo(mapOf("" to active), archived)
-        val vm = newVm(repo)
+        val vm = ProjectListViewModel(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -139,7 +135,7 @@ class ProjectListViewModelTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val vm = newVm(repo)
+        val vm = ProjectListViewModel(repo)
 
         vm.state.test {
             // Drain until rows populate.
@@ -168,7 +164,7 @@ class ProjectListViewModelTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val vm = newVm(repo)
+        val vm = ProjectListViewModel(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -188,7 +184,7 @@ class ProjectListViewModelTest {
     @Test
     fun openIntentEmitsNavigateEffectExactlyOnce() = runTest(mainDispatcher) {
         val repo = FakeRepo()
-        val vm = newVm(repo)
+        val vm = ProjectListViewModel(repo)
 
         vm.effects.test {
             vm.dispatch(ProjectListViewModel.Intent.Open(ProjectId(7)))
@@ -196,27 +192,6 @@ class ProjectListViewModelTest {
             assertTrue(effect is ProjectListViewModel.Effect.Navigate)
             assertEquals(ProjectId(7), effect.id)
             expectNoEvents()
-        }
-    }
-
-    @Test
-    fun savedStateRestoresQueryOnReconstruction() = runTest(mainDispatcher) {
-        val savedState = SavedStateHandle(
-            mapOf(
-                "ProjectListViewModel.query" to "drum",
-                "ProjectListViewModel.searchIndex" to 0,
-            ),
-        )
-        val matches = MutableStateFlow(listOf(row(1, "drum-loop")))
-        val repo = FakeRepo(mapOf("drum" to matches, "" to MutableStateFlow(emptyList())))
-        val vm = ProjectListViewModel(repo, savedState)
-
-        vm.state.test {
-            var s: ProjectListViewModel.State = awaitItem()
-            while (s.query != "drum" || s.rows.isEmpty()) s = awaitItem()
-            assertEquals("drum", s.query)
-            assertEquals(listOf("drum-loop"), s.rows.map { it.name })
-            cancelAndIgnoreRemainingEvents()
         }
     }
 }

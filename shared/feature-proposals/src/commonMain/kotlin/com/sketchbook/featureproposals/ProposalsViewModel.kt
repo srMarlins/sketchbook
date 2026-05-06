@@ -7,7 +7,10 @@ import com.sketchbook.actions.ProposalActionExecutor
 import com.sketchbook.repo.Proposal
 import com.sketchbook.repo.ProposalStatus
 import com.sketchbook.repo.ProposalsRepository
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -23,6 +26,8 @@ import kotlinx.coroutines.launch
  * back through the repo. The publish path is a single `stateIn` over the repo flow — no manual
  * `Job` cancel / re-launch.
  */
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
 @Inject
 class ProposalsViewModel(
     private val repository: ProposalsRepository,

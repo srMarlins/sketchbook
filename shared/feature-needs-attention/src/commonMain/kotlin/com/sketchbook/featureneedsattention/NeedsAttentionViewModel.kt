@@ -7,7 +7,10 @@ import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.RepairRepository
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -22,6 +25,8 @@ import kotlinx.coroutines.launch
  * Repair surface. Reads `RepairRepository.observeFindings()` and exposes a single state with the
  * mac-import + missing-sample lists plus truncation metadata.
  */
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
 @Inject
 class NeedsAttentionViewModel(
     private val repository: RepairRepository,

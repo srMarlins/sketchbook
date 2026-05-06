@@ -1,13 +1,15 @@
 package com.sketchbook.featureprojects
 
 import androidx.compose.runtime.Immutable
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.repo.ProjectRepository
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -19,35 +21,37 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
 /**
- * Project list ViewModel. `viewModelScope` cancels on `NavEntry` pop. Scratch state
- * (`query`, `gemsShuffleSeed`, `zoomShelf`, `searchSelectedIndex`) survives process
- * restart via [SavedStateHandle]; `openDetailId` is purely transient.
+ * Project list ViewModel. `viewModelScope` cancels on `NavEntry` pop.
  *
  * Plain Kotlin: `StateFlow<State>`, `SharedFlow<Effect>`, `dispatch(Intent)` — no MVI library.
  * Derived state (groups/buckets/gemsView/searchResults) lives in the combiner so the screen
  * composable just reads `state.*`.
  *
- * Why FTS5 + matchesQuery both filter: the repository's `observeProjects(query)` runs FTS5
+ * **Why FTS5 + matchesQuery both filter.** The repository's `observeProjects(query)` runs FTS5
  * which is fast but row-level. `matchesQuery` re-checks at the *group* level so a folder-only
  * or tag-only hit still passes when no individual row's `name` matches.
+ *
+ * Scratch UI state (`query`, `gemsShuffleSeed`, `zoomShelf`) is in-memory; window-restore
+ * via `SavedStateHandle` is a future enhancement once the desktop `SavedStateRegistry` writer
+ * is wired.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
 @Inject
 class ProjectListViewModel(
     private val repository: ProjectRepository,
-    private val savedState: SavedStateHandle,
 ) : ViewModel() {
 
-    private val query = savedState.getStateFlow(KEY_QUERY, "")
-    private val gemsShuffleSeed = savedState.getStateFlow(KEY_GEMS_SEED, 0)
-    private val zoomShelfId = savedState.getStateFlow<String?>(KEY_ZOOM_SHELF, null)
-    private val searchSelectedIndex = savedState.getStateFlow(KEY_SEARCH_INDEX, 0)
+    private val query = MutableStateFlow("")
+    private val gemsShuffleSeed = MutableStateFlow(0)
+    private val zoomShelf = MutableStateFlow<ShelfId?>(null)
     private val openDetailId = MutableStateFlow<ProjectId?>(null)
+    private val searchSelectedIndex = MutableStateFlow(0)
     private val tempoRange = MutableStateFlow<ClosedFloatingPointRange<Double>?>(null)
     private val keyFilter = MutableStateFlow<String?>(null)
 
@@ -69,7 +73,7 @@ class ProjectListViewModel(
             rowsFlow,
             archivedRowsFlow,
             gemsShuffleSeed,
-            zoomShelfId.map { it?.let(ShelfId::fromId) },
+            zoomShelf,
             openDetailId,
             searchSelectedIndex,
             tempoRange,
@@ -139,33 +143,30 @@ class ProjectListViewModel(
     fun dispatch(intent: Intent) {
         when (intent) {
             is Intent.Search -> {
-                savedState[KEY_QUERY] = intent.query
-                savedState[KEY_SEARCH_INDEX] = 0
+                query.update { intent.query }
+                searchSelectedIndex.update { 0 }
             }
             is Intent.Open -> _effects.tryEmit(Effect.Navigate(intent.id))
-            is Intent.ZoomShelf -> savedState[KEY_ZOOM_SHELF] = intent.shelf?.id
-            is Intent.ShuffleGems ->
-                savedState[KEY_GEMS_SEED] = (gemsShuffleSeed.value + 1).coerceAtLeast(1)
-            is Intent.OpenDetail -> openDetailId.value = intent.id
-            is Intent.CloseDetail -> openDetailId.value = null
+            is Intent.ZoomShelf -> zoomShelf.update { intent.shelf }
+            is Intent.ShuffleGems -> gemsShuffleSeed.update { (it + 1).coerceAtLeast(1) }
+            is Intent.OpenDetail -> openDetailId.update { intent.id }
+            is Intent.CloseDetail -> openDetailId.update { null }
             is Intent.NavigateSearchNext -> {
                 val size = state.value.searchResults.size
                 if (size > 0) {
-                    savedState[KEY_SEARCH_INDEX] =
-                        (searchSelectedIndex.value + 1).coerceAtMost(size - 1)
+                    searchSelectedIndex.update { (it + 1).coerceAtMost(size - 1) }
                 }
             }
             is Intent.NavigateSearchPrev -> {
                 val size = state.value.searchResults.size
                 if (size > 0) {
-                    savedState[KEY_SEARCH_INDEX] =
-                        (searchSelectedIndex.value - 1).coerceAtLeast(0)
+                    searchSelectedIndex.update { (it - 1).coerceAtLeast(0) }
                 }
             }
             is Intent.OpenSelectedSearch -> {
                 val s = state.value
                 s.searchResults.getOrNull(s.searchSelectedIndex)?.let { group ->
-                    openDetailId.value = group.representative.id
+                    openDetailId.update { group.representative.id }
                 }
             }
             is Intent.SetTempoRange -> tempoRange.update { intent.range }
@@ -220,12 +221,5 @@ class ProjectListViewModel(
 
     sealed interface Effect {
         data class Navigate(val id: ProjectId) : Effect
-    }
-
-    private companion object {
-        const val KEY_QUERY = "ProjectListViewModel.query"
-        const val KEY_GEMS_SEED = "ProjectListViewModel.gemsSeed"
-        const val KEY_ZOOM_SHELF = "ProjectListViewModel.zoomShelf"
-        const val KEY_SEARCH_INDEX = "ProjectListViewModel.searchIndex"
     }
 }

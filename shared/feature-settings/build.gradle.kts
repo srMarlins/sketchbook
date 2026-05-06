@@ -15,10 +15,10 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(libs.metro.runtime)
-            implementation(libs.metro.viewmodel.compose)
             implementation(libs.lifecycle.viewmodel)
             implementation(libs.lifecycle.viewmodel.compose)
-            implementation(libs.lifecycle.viewmodel.savedstate)
+            implementation(libs.metro.viewmodel)
+            implementation(libs.metro.viewmodel.compose)
             implementation(libs.lifecycle.runtime.compose)
         }
         commonTest.dependencies {

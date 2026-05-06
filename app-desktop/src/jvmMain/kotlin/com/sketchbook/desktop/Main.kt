@@ -34,6 +34,7 @@ private fun runApp() = application {
         buildDesktopAppGraph().also {
             startBackgroundPull(it)
             startWatcher(it)
+            it.libraryScanCoordinator.start()
         }
     }
     // Dev convenience: if SKETCHBOOK_DEFAULT_ROOT is set and Settings has no roots, seed it

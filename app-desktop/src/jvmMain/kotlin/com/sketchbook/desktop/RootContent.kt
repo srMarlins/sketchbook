@@ -13,16 +13,20 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.ui.NavDisplay
+import dev.zacsweers.metrox.viewmodel.LocalMetroViewModelFactory
+import dev.zacsweers.metrox.viewmodel.metroViewModel
+import kotlinx.coroutines.flow.map
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,9 +60,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import com.sketchbook.featuredetail.ProjectDetailScreen
-import com.sketchbook.featuredetail.ProjectDetailStateHolder
+import com.sketchbook.featuredetail.ProjectDetailViewModel
 import com.sketchbook.featurejournal.JournalScreen
-import com.sketchbook.featurejournal.JournalStateHolder
+import com.sketchbook.featurejournal.JournalViewModel
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.ProvideContentColor
@@ -66,15 +70,15 @@ import com.sketchbook.uishared.components.Text
 import java.io.File
 import javax.swing.JFileChooser
 import com.sketchbook.featureneedsattention.NeedsAttentionScreen
-import com.sketchbook.featureneedsattention.NeedsAttentionStateHolder
+import com.sketchbook.featureneedsattention.NeedsAttentionViewModel
 import com.sketchbook.featureprojects.ProjectListScreen
-import com.sketchbook.featureprojects.ProjectListStateHolder
+import com.sketchbook.featureprojects.ProjectListViewModel
 import com.sketchbook.featureproposals.ProposalsScreen
-import com.sketchbook.featureproposals.ProposalsStateHolder
+import com.sketchbook.featureproposals.ProposalsViewModel
 import com.sketchbook.featuresettings.SettingsScreen
-import com.sketchbook.featuresettings.SettingsStateHolder
+import com.sketchbook.featuresettings.SettingsViewModel
 import com.sketchbook.featuretimeline.TimelineScreen
-import com.sketchbook.featuretimeline.TimelineStateHolder
+import com.sketchbook.featuretimeline.TimelineViewModel
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.ProjectSyncState
 import com.sketchbook.repo.SyncQueueState
@@ -106,47 +110,18 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
-    val projectListHolder = remember {
-        ProjectListStateHolder(graph.projectRepository, graph.appScope)
+    CompositionLocalProvider(LocalMetroViewModelFactory provides graph.metroViewModelFactory) {
+        RootContentBody(graph = graph, backStack = backStack)
     }
-    val projectDetailHolder = remember {
-        ProjectDetailStateHolder(
-            projects = graph.projectRepository,
-            snapshots = graph.snapshotRepository,
-            scope = graph.appScope,
-            locks = graph.lockRepository,
-        )
-    }
-    val timelineHolder = remember {
-        TimelineStateHolder(graph.snapshotRepository, graph.appScope)
-    }
-    val proposalsHolder = remember {
-        ProposalsStateHolder(
-            repository = graph.proposalsRepository,
-            scope = graph.appScope,
-            executor = graph.proposalActionExecutor,
-        )
-    }
-    val needsAttentionHolder = remember {
-        NeedsAttentionStateHolder(graph.repairRepository, graph.appScope)
-    }
-    val settingsHolder = remember {
-        SettingsStateHolder(graph.settingsRepository, graph.appScope)
-    }
-    val journalHolder = remember {
-        JournalStateHolder(graph.journalRepository, graph.appScope)
-    }
-    val scanner = graph.scanner
-    val sampleScanner = graph.sampleScanner
-    // The catalog scanner is a cold Flow; we derive a single-state holder here so the UI can
-    // bind to "current scan progress" without re-subscribing per recomposition. Scan kicks off
-    // when a library root appears in settings; see the LaunchedEffect below.
-    val scanProgressState = remember { kotlinx.coroutines.flow.MutableStateFlow<ScanUiState>(ScanUiState.Idle) }
-    val scanProgress by scanProgressState.collectAsState()
+}
+
+@Composable
+private fun RootContentBody(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
+    // No ViewModels live at this scope. Each VM is acquired via `metroViewModel<X>()` inside the
+    // `NavEntry` that needs it; this composable only reads cross-screen state for the sidebar
+    // (badges, scan/sync ribbon) and routes a couple of nav-scoped lambdas.
     val syncQueue = graph.syncQueue
-    val syncState by syncQueue.observe().collectAsState(initial = SyncQueueState())
-    // Concrete handle for desktop-only helpers (`pushNowById`, `snapshotFor`). The public
-    // `SyncQueue` interface stays narrow; the swappable façade exposes per-row wiring.
+    val syncState by syncQueue.observe().collectAsStateWithLifecycle(initialValue = SyncQueueState())
     val syncImpl = syncQueue as? SwappableSyncQueue
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     // Z3 quick-capture: Ctrl/Cmd+Shift+S forces a Named snapshot of the current project. Only
@@ -182,84 +157,19 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     val libraryHealth by graph.projectRepository.observeLibraryHealth()
         .collectAsState(initial = com.sketchbook.repo.LibraryHealth.EMPTY)
 
-    // Journal row taps navigate to project detail. Push onto the stack so the back gesture
-    // returns to the journal list.
-    LaunchedEffect(journalHolder) {
-        journalHolder.effects.collect { effect ->
-            when (effect) {
-                is JournalStateHolder.Effect.NavigateToProject ->
-                    backStack.add(Screen.ProjectDetail(effect.projectId))
-            }
-        }
-    }
-    // Project list now opens detail in a side-panel locally — no nav-stack push. The
-    // Navigate effect is left intact in the state holder for future shared-detail callers
-    // (deep-links, MCP tool invocations) but the desktop dashboard ignores it.
-    LaunchedEffect(projectDetailHolder) {
-        projectDetailHolder.effects.collect { effect ->
-            when (effect) {
-                is ProjectDetailStateHolder.Effect.LaunchLive -> Os.openInLive(effect.projectPath)
-                ProjectDetailStateHolder.Effect.LockTaken,
-                is ProjectDetailStateHolder.Effect.LockTakeFailed,
-                -> Unit
-            }
-        }
-    }
-    // Kick a scan whenever a library root is added (or the app starts with roots already in
-    // settings). Scan progress is exposed to the sidebar via [scanner.progress].
-    LaunchedEffect(settingsHolder) {
-        // Track which roots we've already scanned so settings re-emissions (cache toggle, etc.)
-        // don't spam re-scans. The scanner is idempotent (INSERT OR REPLACE) but a re-scan over
-        // 1900+ files is wasteful.
-        val scannedProjects = mutableSetOf<String>()
-        val scannedSamples = mutableSetOf<String>()
-        settingsHolder.state.collect { settingsState ->
-            // Project scan first (loud, time-bounded, drives the visible scan ribbon).
-            for (root in settingsState.libraryRoots) {
-                if (root is LibraryRoot.Projects && root.path !in scannedProjects) {
-                    scannedProjects += root.path
-                    val userSampleRoots = settingsState.libraryRoots
-                        .filterIsInstance<LibraryRoot.UserSamples>()
-                        .map { it.path }
-                    graph.appScope.launch {
-                        runScan(scanner, root.path, scanProgressState)
-                        // After the project scan finishes, walk every UserSamples root into the
-                        // `samples` corpus. This runs in the background — no progress UI for
-                        // v1 because the walk is fast (no parsing) and surfacing it would just
-                        // be noise after the louder project-scan ribbon.
-                        for (sampleRoot in userSampleRoots) {
-                            if (scannedSamples.add(sampleRoot)) {
-                                runCatching { sampleScanner.scan(sampleRoot) }
-                            }
-                        }
-                    }
-                    break // one project root at a time at v1
-                }
-            }
-            // If the user has no project roots configured but does have sample roots (or the
-            // project scan already kicked off on a previous emission), still pick up newly-added
-            // sample roots so the corpus stays fresh.
-            for (root in settingsState.libraryRoots) {
-                if (root is LibraryRoot.UserSamples && root.path !in scannedSamples) {
-                    scannedSamples += root.path
-                    graph.appScope.launch {
-                        runCatching { sampleScanner.scan(root.path) }
-                    }
-                }
-            }
-        }
-    }
-    // (Sync-state seeding lives on the queue itself — see InMemorySyncQueue.start; the graph
-    // hands it the project repository at construction. The UI just observes; it never feeds.)
+    // Scan kickoff is owned by [LibraryScanCoordinator] — started once in `Main`. Just observe
+    // the progress here.
+    val scanProgress by graph.libraryScanCoordinator.progress.collectAsStateWithLifecycle()
+
+    // Sidebar badges read from the repositories directly — cross-screen counters; no VM needed.
+    val proposalCount by graph.proposalsRepository.observe()
+        .map { proposals -> proposals.count { it.status == com.sketchbook.repo.ProposalStatus.Pending } }
+        .collectAsStateWithLifecycle(initialValue = 0)
+    val attentionCount by graph.repairRepository.observeFindings()
+        .map { it.macImports.size + it.missingSamplesTotal }
+        .collectAsStateWithLifecycle(initialValue = 0)
 
     val current = backStack.lastOrNull() ?: Screen.Projects
-    val proposalsState by proposalsHolder.state.collectAsState()
-    val needsAttentionState by needsAttentionHolder.state.collectAsState()
-    // Sidebar badges count *unresolved* items only — pending proposals + open findings — so the
-    // user sees "stuff that wants me" rather than a total that never goes down. mac-import +
-    // missing-sample collapse to a single integer because the screen merges them on arrival.
-    val proposalCount = proposalsState.pending.size
-    val attentionCount = needsAttentionState.macImports.size + needsAttentionState.missingSamplesTotal
     val items = sidebarItems(current, proposalCount, attentionCount)
     // Sidebar caption priority: scan first (most acute, time-bounded), then sync (slower
     // background activity), then offline marker, else nothing.
@@ -331,13 +241,6 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
                 items = items,
                 onSelect = { item ->
                     val target = screenForId(item.id)
-                    // Sidebar→Projects is the user's "go home" gesture. The list holder retains
-                    // the last query across navigations, so without this reset the dashboard
-                    // never reappears once a search has been typed — the screen keeps rendering
-                    // SearchResults because state.query is still non-blank.
-                    if (target == Screen.Projects) {
-                        projectListHolder.dispatch(ProjectListStateHolder.Intent.Search(""))
-                    }
                     backStack.clear()
                     backStack.add(target)
                 },
@@ -372,73 +275,107 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
                     entryProvider = { key ->
                         NavEntry(key) { current ->
                             when (current) {
-                                Screen.Projects -> ProjectListScreen(
-                                    holder = projectListHolder,
-                                    scanLabel = scanIndicatorLabel,
-                                    scanActive = scanIndicatorActive,
-                                    syncStateFor = syncImpl?.let { impl -> { id -> impl.snapshotFor(id) } },
-                                    detailPanel = { id, dismiss ->
-                                        LaunchedEffect(id) { projectDetailHolder.load(id) }
-                                        DetailPanelContent(
-                                            holder = projectDetailHolder,
-                                            onDismiss = dismiss,
-                                            syncStateFor = syncImpl?.let { impl -> { pid -> impl.snapshotFor(pid) } },
-                                            onPushNow = syncImpl?.let { impl -> { pid ->
-                                                coroutineScope.launch {
-                                                    impl.pushNowById(pid)
+                                Screen.Projects -> {
+                                    val vm: ProjectListViewModel = metroViewModel()
+                                    // Sidebar→Projects is the user's "go home" gesture. Today the
+                                    // VM is window-scoped so its query persists across nav; reset
+                                    // it on each (re)entry so the dashboard reappears. When per-
+                                    // NavEntry ViewModelStore decorators land, this becomes a
+                                    // fresh-VM-per-entry behavior automatically.
+                                    LaunchedEffect(Unit) {
+                                        vm.dispatch(ProjectListViewModel.Intent.Search(""))
+                                    }
+                                    ProjectListScreen(
+                                        vm = vm,
+                                        scanLabel = scanIndicatorLabel,
+                                        scanActive = scanIndicatorActive,
+                                        syncStateFor = syncImpl?.let { impl -> { id -> impl.snapshotFor(id) } },
+                                        detailPanel = { id, dismiss ->
+                                            val detailVm: com.sketchbook.featuredetail.ProjectDetailViewModel =
+                                                metroViewModel()
+                                            LaunchedEffect(id) { detailVm.load(id) }
+                                            LaunchedEffect(detailVm) {
+                                                detailVm.effects.collect { e ->
+                                                    when (e) {
+                                                        is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LaunchLive ->
+                                                            Os.openInLive(e.projectPath)
+                                                        com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTaken,
+                                                        is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTakeFailed,
+                                                        -> Unit
+                                                    }
                                                 }
-                                            } },
-                                            conflictMessageFor = syncImpl?.let { impl -> { pid -> impl.conflictMessage(pid) } },
-                                            onOpenTimeline = { pid ->
-                                                val uuid = graph.syncStateStore.identityFor(pid)
-                                                backStack.add(Screen.Timeline(uuid))
-                                            },
-                                            // PR-AA: hand the Plugins tab the inverse query + a hook to swap the
-                                            // panel's project on click. Reusing the same projectDetailHolder.load
-                                            // path keeps the side-panel-vs-back-stack semantics consistent — the
-                                            // user stays in the side-panel context, just on a different project.
-                                            pluginUsageFlow = { name, format, exclude ->
-                                                graph.projectRepository.observeProjectsUsing(name, format, exclude)
-                                            },
-                                            onSelectProject = { pid ->
-                                                projectListHolder.dispatch(
-                                                    ProjectListStateHolder.Intent.OpenDetail(pid),
-                                                )
-                                            },
-                                        )
-                                    },
-                                )
+                                            }
+                                            DetailPanelContent(
+                                                vm = detailVm,
+                                                onDismiss = dismiss,
+                                                syncStateFor = syncImpl?.let { impl -> { pid -> impl.snapshotFor(pid) } },
+                                                onPushNow = syncImpl?.let { impl -> { pid ->
+                                                    coroutineScope.launch { impl.pushNowById(pid) }
+                                                } },
+                                                conflictMessageFor = syncImpl?.let { impl -> { pid -> impl.conflictMessage(pid) } },
+                                                onOpenTimeline = { pid ->
+                                                    val uuid = graph.syncStateStore.identityFor(pid)
+                                                    backStack.add(Screen.Timeline(uuid))
+                                                },
+                                                // PR-AA: hand the Plugins tab the inverse query + a hook to swap
+                                                // the panel's project on click. Reusing the same `detailVm.load`
+                                                // path keeps the side-panel-vs-back-stack semantics consistent —
+                                                // the user stays in the side-panel context, just on a different
+                                                // project.
+                                                pluginUsageFlow = { name, format, exclude ->
+                                                    graph.projectRepository.observeProjectsUsing(name, format, exclude)
+                                                },
+                                                onSelectProject = { pid ->
+                                                    vm.dispatch(ProjectListViewModel.Intent.OpenDetail(pid))
+                                                },
+                                            )
+                                        },
+                                    )
+                                }
                                 is Screen.ProjectDetail -> {
-                                    LaunchedEffect(current.id) { projectDetailHolder.load(current.id) }
-                                    ProjectDetailScreen(projectDetailHolder)
+                                    val vm: com.sketchbook.featuredetail.ProjectDetailViewModel =
+                                        metroViewModel()
+                                    LaunchedEffect(current.id) { vm.load(current.id) }
+                                    ProjectDetailScreen(vm)
                                 }
                                 is Screen.Timeline -> {
-                                    LaunchedEffect(current.uuid) { timelineHolder.load(current.uuid) }
-                                    TimelineScreen(timelineHolder)
+                                    val vm: TimelineViewModel = metroViewModel()
+                                    LaunchedEffect(current.uuid) { vm.load(current.uuid) }
+                                    TimelineScreen(vm)
                                 }
-                                Screen.Proposals -> ProposalsScreen(proposalsHolder)
-                                Screen.NeedsAttention -> NeedsAttentionScreen(needsAttentionHolder)
-                                Screen.Journal -> JournalScreen(journalHolder)
-                                Screen.Settings -> SettingsScreen(
-                                    holder = settingsHolder,
-                                    syncState = syncState,
-                                    onAddRootClicked = {
-                                        Os.pickDirectory(title = "Add library root")?.let { path ->
-                                            settingsHolder.dispatch(
-                                                SettingsStateHolder.Intent.AddRoot(LibraryRoot.Projects(path)),
-                                            )
+                                Screen.Proposals -> ProposalsScreen(vm = metroViewModel())
+                                Screen.NeedsAttention -> NeedsAttentionScreen(vm = metroViewModel())
+                                Screen.Journal -> {
+                                    val vm: JournalViewModel = metroViewModel()
+                                    LaunchedEffect(vm) {
+                                        vm.effects.collect { e ->
+                                            when (e) {
+                                                is JournalViewModel.Effect.NavigateToProject ->
+                                                    backStack.add(Screen.ProjectDetail(e.projectId))
+                                            }
                                         }
-                                    },
-                                    onUploadCredentialClicked = {
-                                        Os.pickFile(title = "Service account JSON")?.let { path ->
-                                            val json = runCatching { java.io.File(path).readText() }.getOrNull()
-                                            settingsHolder.dispatch(
-                                                SettingsStateHolder.Intent.SetCloudCredential(json),
-                                            )
-                                        }
-                                    },
-                                )
-                                else -> Unit // unknown NavKey types are ignored
+                                    }
+                                    JournalScreen(vm)
+                                }
+                                Screen.Settings -> {
+                                    val vm: SettingsViewModel = metroViewModel()
+                                    SettingsScreen(
+                                        vm = vm,
+                                        syncState = syncState,
+                                        onAddRootClicked = {
+                                            Os.pickDirectory(title = "Add library root")?.let { path ->
+                                                vm.dispatch(SettingsViewModel.Intent.AddRoot(LibraryRoot.Projects(path)))
+                                            }
+                                        },
+                                        onUploadCredentialClicked = {
+                                            Os.pickFile(title = "Service account JSON")?.let { path ->
+                                                val json = runCatching { java.io.File(path).readText() }.getOrNull()
+                                                vm.dispatch(SettingsViewModel.Intent.SetCloudCredential(json))
+                                            }
+                                        },
+                                    )
+                                }
+                                else -> Unit
                             }
                         }
                     },
@@ -645,7 +582,7 @@ private fun screenForId(id: String): Screen = when (id) {
  */
 @Composable
 private fun DetailPanelContent(
-    holder: ProjectDetailStateHolder,
+    vm: ProjectDetailViewModel,
     onDismiss: () -> Unit,
     syncStateFor: ((com.sketchbook.core.ProjectId) -> ProjectSyncState)? = null,
     onPushNow: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
@@ -660,7 +597,7 @@ private fun DetailPanelContent(
     /** PR-AA: clicking a popover row swaps the detail panel to that project. */
     onSelectProject: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
 ) {
-    val state by holder.state.collectAsState()
+    val state by vm.state.collectAsStateWithLifecycle()
     val theme = com.sketchbook.uishared.theme.AppTheme
 
     var tab by remember { mutableStateOf(DetailTab.Overview) }
@@ -685,7 +622,7 @@ private fun DetailPanelContent(
                     if (row != null) {
                         EditableTitle(
                             name = row.name,
-                            onCommit = { holder.dispatch(com.sketchbook.featuredetail.ProjectDetailStateHolder.Intent.Rename(it)) },
+                            onCommit = { vm.dispatch(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.Rename(it)) },
                             theme = theme,
                         )
                     } else {
@@ -740,7 +677,7 @@ private fun DetailPanelContent(
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
                 ) {
                     com.sketchbook.uishared.components.Button(
-                        onClick = { holder.dispatch(com.sketchbook.featuredetail.ProjectDetailStateHolder.Intent.OpenInLive) },
+                        onClick = { vm.dispatch(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.OpenInLive) },
                         variant = com.sketchbook.uishared.components.ButtonVariant.Primary,
                     ) { Text("Open in Live") }
                     com.sketchbook.uishared.components.Button(
@@ -751,13 +688,13 @@ private fun DetailPanelContent(
                         onClick = {
                             val current = parentDirOf(row.path.value)
                             openMoveDialog(current) { picked ->
-                                holder.dispatch(ProjectDetailStateHolder.Intent.Move(picked))
+                                vm.dispatch(ProjectDetailViewModel.Intent.Move(picked))
                             }
                         },
                         variant = ButtonVariant.Secondary,
                     ) { Text("Move…") }
                     Button(
-                        onClick = { holder.dispatch(ProjectDetailStateHolder.Intent.ToggleArchive) },
+                        onClick = { vm.dispatch(ProjectDetailViewModel.Intent.ToggleArchive) },
                         variant = ButtonVariant.Secondary,
                     ) { Text(if (row.archived) "Unarchive" else "Archive") }
                 }
@@ -824,7 +761,7 @@ private fun DetailPanelContent(
                             DetailMetaSection(
                                 row = row,
                                 theme = theme,
-                                onTagsChange = { holder.dispatch(com.sketchbook.featuredetail.ProjectDetailStateHolder.Intent.SetTags(it)) },
+                                onTagsChange = { vm.dispatch(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.SetTags(it)) },
                             )
                             DetailQuickVersions(row, state, theme)
                         }
@@ -909,7 +846,7 @@ private fun DetailMetaSection(
 @Composable
 private fun DetailQuickVersions(
     row: com.sketchbook.core.ProjectRow,
-    state: ProjectDetailStateHolder.State,
+    state: ProjectDetailViewModel.State,
     theme: com.sketchbook.uishared.theme.AppTheme,
 ) {
     val unified = remember(row.path.value, state.history) { unifyVersions(row, state.history) }
@@ -934,7 +871,7 @@ private fun DetailQuickVersions(
 @Composable
 private fun DetailVersionsTab(
     row: com.sketchbook.core.ProjectRow,
-    state: ProjectDetailStateHolder.State,
+    state: ProjectDetailViewModel.State,
     theme: com.sketchbook.uishared.theme.AppTheme,
     onOpenTimeline: (() -> Unit)? = null,
 ) {
@@ -974,7 +911,7 @@ private fun DetailVersionsTab(
 
 @Composable
 private fun DetailHistoryTab(
-    state: ProjectDetailStateHolder.State,
+    state: ProjectDetailViewModel.State,
     theme: com.sketchbook.uishared.theme.AppTheme,
 ) {
     Section("Journal", theme) {
@@ -1169,7 +1106,7 @@ private fun SyncPill(state: ProjectSyncState, theme: com.sketchbook.uishared.the
 
 @Composable
 private fun DetailHistorySection(
-    state: com.sketchbook.featuredetail.ProjectDetailStateHolder.State,
+    state: com.sketchbook.featuredetail.ProjectDetailViewModel.State,
     theme: com.sketchbook.uishared.theme.AppTheme,
 ) {
     if (state.history.isEmpty()) return

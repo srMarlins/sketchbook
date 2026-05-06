@@ -7,7 +7,10 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.SettingsRepository
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -21,6 +24,8 @@ import kotlinx.coroutines.launch
 /**
  * Settings pane. Reads `SettingsRepository.observe()` and routes user intents back through the repo.
  */
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
 @Inject
 class SettingsViewModel(
     private val repository: SettingsRepository,

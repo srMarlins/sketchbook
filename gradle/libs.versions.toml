@@ -11,14 +11,10 @@ nav3 = "1.0.0-alpha06"
 
 # DI
 metro = "1.0.0"
-# `metrox-viewmodel-compose` is a Sweers extension artifact tracked on its own
-# version line; it's currently behind metro core. Bump independently.
-metro-viewmodel-compose = "0.10.1"
 
 # Lifecycle (JetBrains KMP fork — used with nav3 for ViewModel scoping).
-# 2.11.0-beta01 is the only published JetBrains fork currently; tracks the
-# alpha nav3 line we're already on (see `nav3 = "1.0.0-alpha06"` above).
-lifecycle = "2.11.0-beta01"
+# Pinned to stable; matches what the Metro samples target.
+lifecycle = "2.10.0"
 
 # Packaging / auto-update
 conveyor = "2.0"
@@ -62,7 +58,8 @@ kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.
 
 # DI
 metro-runtime = { module = "dev.zacsweers.metro:runtime", version.ref = "metro" }
-metro-viewmodel-compose = { module = "dev.zacsweers.metro:metrox-viewmodel-compose", version.ref = "metro-viewmodel-compose" }
+metro-viewmodel = { module = "dev.zacsweers.metro:metrox-viewmodel", version.ref = "metro" }
+metro-viewmodel-compose = { module = "dev.zacsweers.metro:metrox-viewmodel-compose", version.ref = "metro" }
 
 # Lifecycle (JetBrains KMP fork)
 lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "lifecycle" }

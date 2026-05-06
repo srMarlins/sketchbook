@@ -13,7 +13,10 @@ import com.sketchbook.repo.LockStatus
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.SampleEntry
 import com.sketchbook.repo.SnapshotRepository
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -42,6 +45,8 @@ import kotlinx.coroutines.launch
  * `@AssistedInject` keyed on `projectId` and remove `load(id)`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
 @Inject
 class ProjectDetailViewModel(
     private val projects: ProjectRepository,

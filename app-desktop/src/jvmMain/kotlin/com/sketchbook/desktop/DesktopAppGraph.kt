@@ -34,6 +34,7 @@ import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.createGraph
+import dev.zacsweers.metrox.viewmodel.ViewModelGraph
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -70,7 +71,7 @@ import java.util.prefs.Preferences
  * `%APPDATA%\Sketchbook\catalog.db` (Windows). One handle per app instance.
  */
 @DependencyGraph(scope = AppScope::class)
-interface DesktopAppGraph {
+interface DesktopAppGraph : ViewModelGraph {
 
     val appScope: CoroutineScope
     val catalogHandle: CatalogHandle
@@ -88,6 +89,12 @@ interface DesktopAppGraph {
     val settingsRepository: SettingsRepository
     val lockRepository: LockRepository
     val syncQueue: SyncQueue
+    val libraryScanCoordinator: LibraryScanCoordinator
+
+    // `metroViewModelFactory` is inherited from [ViewModelGraph] — the contributed
+    // `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject` ViewModel map is plumbed
+    // through `InjectedViewModelFactory` (below), then exposed via the inherited accessor and
+    // installed into Compose with `LocalMetroViewModelFactory` in `RootContent`.
 
     // ---- App lifetime: shared mutable state ---------------------------------------------------
 

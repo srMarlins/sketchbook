@@ -9,7 +9,10 @@ import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.MaterializationProgress
 import com.sketchbook.repo.SnapshotRepository
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +41,8 @@ import kotlinx.datetime.toLocalDateTime
  * navigated away while a rewind was in progress).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
 @Inject
 class TimelineViewModel(
     private val snapshots: SnapshotRepository,

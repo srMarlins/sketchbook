@@ -6,7 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
+import com.sketchbook.core.AppScope
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -19,6 +22,8 @@ import kotlinx.coroutines.flow.stateIn
 /**
  * Read-only journal viewer. Reads `JournalRepository.observeRecent` and exposes a single state.
  */
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
 @Inject
 class JournalViewModel(
     private val repository: JournalRepository,
