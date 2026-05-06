@@ -91,7 +91,11 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
         TimelineStateHolder(graph.snapshotRepository, graph.appScope)
     }
     val proposalsHolder = remember {
-        ProposalsStateHolder(graph.proposalsRepository, graph.appScope)
+        ProposalsStateHolder(
+            repository = graph.proposalsRepository,
+            scope = graph.appScope,
+            executor = graph.proposalActionExecutor,
+        )
     }
     val needsAttentionHolder = remember {
         NeedsAttentionStateHolder(graph.repairRepository, graph.appScope)

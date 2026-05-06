@@ -5,6 +5,7 @@ import com.sketchbook.catalog.CatalogFts
 import com.sketchbook.catalog.CatalogHandle
 import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
+import com.sketchbook.actions.ProposalActionExecutor
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.desktop.repo.InMemoryLockRepository
 import com.sketchbook.desktop.repo.PreferencesSettingsRepository
@@ -66,6 +67,7 @@ interface DesktopAppGraph {
     val journalRepository: JournalRepository
     val snapshotRepository: SnapshotRepository
     val proposalsRepository: ProposalsRepository
+    val proposalActionExecutor: ProposalActionExecutor
     val repairRepository: RepairRepository
     val settingsRepository: SettingsRepository
     val lockRepository: LockRepository
@@ -115,6 +117,10 @@ interface DesktopAppGraph {
     @Provides @SingleIn(AppScope::class)
     fun provideProposalsRepository(catalog: Catalog): ProposalsRepository =
         SqlProposalsRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
+
+    @Provides @SingleIn(AppScope::class)
+    fun provideProposalActionExecutor(projects: ProjectRepository): ProposalActionExecutor =
+        ProposalActionExecutor(projects)
 
     @Provides @SingleIn(AppScope::class)
     fun provideRepairRepository(catalog: Catalog): RepairRepository =
