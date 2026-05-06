@@ -9,6 +9,7 @@ import com.sketchbook.core.SketchbookError
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -43,7 +44,11 @@ class SqlJournalRepository(
 
     override suspend fun append(entry: JournalEntry): Result<JournalEntry> =
         withContext(ioDispatcher) {
-            runCatching {
+            // Don't use `runCatching` here: it catches `Throwable`, including
+            // `CancellationException`, which would silently break structured concurrency the
+            // moment anyone adds a suspend call inside the body. Pattern matches JvmScanner /
+            // McpServer: explicit re-throw of cancellation, Result.failure for everything else.
+            try {
                 val newId = catalog.transactionWithResult<Long> {
                     catalog.catalogQueries.insertJournalEntry(
                         occurred_at = entry.timestamp.toEpochMilliseconds(),
@@ -57,7 +62,11 @@ class SqlJournalRepository(
                     )
                     catalog.catalogQueries.lastJournalEntryId().executeAsOne()
                 }
-                entry.copy(sequence = newId)
+                Result.success(entry.copy(sequence = newId))
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Result.failure(t)
             }
         }
 
@@ -65,21 +74,28 @@ class SqlJournalRepository(
         withContext(ioDispatcher) {
             // Insert + delete must not interleave with another append/undo: read the head and
             // delete it inside one transaction so undo against an empty journal is a clean
-            // miss rather than a TOCTOU between two callers.
-            val popped = catalog.transactionWithResult<JournalEntry?> {
-                val row = catalog.catalogQueries.selectJournalRecent(limit_ = 1L)
-                    .executeAsOneOrNull()
-                if (row == null) {
-                    null
-                } else {
-                    catalog.catalogQueries.deleteJournalEntryById(row.id)
-                    toDomain(row)
+            // miss rather than a TOCTOU between two callers. Same cancellation discipline as
+            // append: re-throw CancellationException, wrap everything else.
+            try {
+                val popped = catalog.transactionWithResult<JournalEntry?> {
+                    val row = catalog.catalogQueries.selectJournalRecent(limit_ = 1L)
+                        .executeAsOneOrNull()
+                    if (row == null) {
+                        null
+                    } else {
+                        catalog.catalogQueries.deleteJournalEntryById(row.id)
+                        toDomain(row)
+                    }
                 }
-            }
-            if (popped == null) {
-                Result.failure(SketchbookError.NotFound("journal is empty"))
-            } else {
-                Result.success(popped)
+                if (popped == null) {
+                    Result.failure(SketchbookError.NotFound("journal is empty"))
+                } else {
+                    Result.success(popped)
+                }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Result.failure(t)
             }
         }
 

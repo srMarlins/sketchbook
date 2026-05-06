@@ -14,13 +14,14 @@ import kotlin.time.Duration.Companion.seconds
 
 /**
  * Regression test for the May 2026 "UI doesn't update during scan" bug. The catalog DB used to be
- * a HikariCP-pooled SQLDelight driver; that pool ate `Query.asFlow()` invalidation notifications,
- * so transactions committed by the scanner never woke up the UI's `selectAllProjects().asFlow()`
- * subscriber. The fix was to use a single-connection [JdbcSqliteDriver] for the on-disk catalog.
+ * built via `pooled.asJdbcDriver()` (HikariCP-wrapped DataSource). That extension is documented
+ * in SQLDelight 2.x's source to return a driver whose `addListener`/`notifyListeners` are
+ * **no-ops** — flow subscribers never receive a re-emission on transaction commit. The fix was
+ * to use a single-connection [JdbcSqliteDriver] whose listener trio is actually wired.
  *
- * This test asserts the contract `CatalogDb.openOnDisk` must satisfy: after a transaction commits
- * a write to `projects`, an active `Query.asFlow()` subscriber receives a fresh emission within
- * a few seconds. Without the fix, this hangs until the Turbine timeout.
+ * This test pins `CatalogDb.openOnDisk`'s contract: after a transaction commits a write to
+ * `projects`, an active `Query.asFlow()` subscriber receives a fresh emission within seconds.
+ * Without the fix, this hangs until the Turbine timeout.
  */
 class CatalogDbReactiveInvalidationTest {
 

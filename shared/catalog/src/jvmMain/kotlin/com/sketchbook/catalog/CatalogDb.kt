@@ -55,13 +55,26 @@ object CatalogDb {
     )
 
     fun openOnDisk(path: Path): CatalogHandle {
-        // Single-connection JdbcSqliteDriver. The earlier HikariCP-pooled setup looked nice on
-        // paper (parallel reads under WAL) but broke SQLDelight's `Query.asFlow()` invalidation:
-        // listener notifications fired during a transaction did not propagate to flow subscribers
-        // when the driver wrapped a connection pool. The user-visible symptom was the project
-        // list never updating during a scan — see PooledDriverInvalidationTest. WAL with one
-        // connection still queues reads behind the in-flight writer transaction, but on a
-        // 1,628-row catalog the contention is invisible compared to a flatlined UI.
+        // Single-connection JdbcSqliteDriver. The earlier `pooled.asJdbcDriver()` setup didn't
+        // fail because of HikariCP — `DataSource.asJdbcDriver()` in SQLDelight 2.x is documented
+        // to return a driver whose `addListener`/`removeListener`/`notifyListeners` are
+        // **no-ops**. See drivers/jdbc-driver/.../JdbcDriver.kt:
+        //
+        //   override fun addListener(...)    { /* No-op. JDBC Driver is not set up for
+        //                                         observing queries by default. */ }
+        //   override fun notifyListeners(...) { /* No-op. */ }
+        //
+        // `Query.asFlow().mapToList()` produces the initial fetch but then waits forever for a
+        // notification that the driver is contractually incapable of sending. User-visible
+        // symptom: project list frozen during scan. CatalogDbReactiveInvalidationTest pins it.
+        //
+        // Fix: use `JdbcSqliteDriver(jdbcUrl)` — its `addListener`/`notifyListeners` actually
+        // store and dispatch to a `LinkedHashMap<String, MutableSet<Query.Listener>>`. Single
+        // connection isn't a real downgrade for this workload: xerial-sqlite-jdbc serializes
+        // reads through a single Connection mutex anyway, so the pool was buying nothing in
+        // a single-process app. WAL still gives us multi-process concurrency for the desktop ↔
+        // MCP setup. If we ever need a pool with listeners, the upstream-recommended path is a
+        // custom JdbcDriver subclass that copies JdbcSqliteDriver's listener map.
         val driver = JdbcSqliteDriver(
             "jdbc:sqlite:${path.toAbsolutePath()}",
             Properties(),
