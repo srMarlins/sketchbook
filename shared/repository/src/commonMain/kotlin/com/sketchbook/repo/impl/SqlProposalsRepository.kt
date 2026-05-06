@@ -86,7 +86,10 @@ class SqlProposalsRepository(
                             },
                         ),
                     ),
-                    submittedAt = now(),
+                    // Use the project's last-modified time so the displayed "Nh ago" stays stable
+                    // across flow re-emits (an ack write triggers ackTick → re-derivation; if we
+                    // used `now()` here every other proposal would suddenly read "0s ago").
+                    submittedAt = Instant.fromEpochSeconds(row.last_modified.toLong()),
                     status = status,
                 )
             }

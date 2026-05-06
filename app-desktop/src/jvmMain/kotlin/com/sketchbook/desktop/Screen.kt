@@ -3,6 +3,7 @@ package com.sketchbook.desktop
 import androidx.navigation3.runtime.NavKey
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.desktop.inbox.InboxTab
 import kotlinx.serialization.Serializable
 
 /**
@@ -21,11 +22,7 @@ sealed interface Screen : NavKey {
 
     @Serializable data class Timeline(val uuid: ProjectUuid) : Screen
 
-    @Serializable data object Proposals : Screen
-
-    @Serializable data object NeedsAttention : Screen
+    @Serializable data class Inbox(val tab: InboxTab = InboxTab.Proposals) : Screen
 
     @Serializable data object Settings : Screen
-
-    @Serializable data object Journal : Screen
 }

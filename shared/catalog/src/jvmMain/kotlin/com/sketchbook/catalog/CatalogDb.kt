@@ -138,6 +138,9 @@ object CatalogDb {
                     // before 5.sqm
                     !columnExists(driver, "project_plugins", "is_installed") -> 5L
 
+                    // before 7.sqm — project_name added by this PR's 7.sqm
+                    !columnExists(driver, "journal_entries", "project_name") -> 7L
+
                     else -> target
                 }
                 if (detected < target) {

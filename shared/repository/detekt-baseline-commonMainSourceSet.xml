@@ -29,6 +29,7 @@
     <ID>FunctionSignature:RepairRepository.kt:RepairRepository$suspend fun applyMissingSampleMatch: Result&lt;Unit&gt;</ID>
     <ID>FunctionSignature:SnapshotRepository.kt:SnapshotRepository$fun materializeAtWithProgress: Flow&lt;MaterializationProgress&gt;</ID>
     <ID>FunctionSignature:SqlJournalRepository.kt:SqlJournalRepository$override fun observeRecent: Flow&lt;List&lt;JournalEntry&gt;&gt;</ID>
+    <ID>FunctionSignature:SqlProjectRepository.kt:SqlProjectRepository$override fun observeAllProjectNames: Flow&lt;Map&lt;ProjectId, String&gt;&gt;</ID>
     <ID>FunctionSignature:SqlProjectRepository.kt:SqlProjectRepository$override fun observeMissingPluginCoverage: Flow&lt;List&lt;com.sketchbook.repo.MissingPluginRow&gt;&gt;</ID>
     <ID>FunctionSignature:SqlProjectRepository.kt:SqlProjectRepository$override fun observeMissingPluginSummary: Flow&lt;com.sketchbook.repo.MissingPluginSummary?&gt;</ID>
     <ID>FunctionSignature:SqlProjectRepository.kt:SqlProjectRepository$override fun observePlugins: Flow&lt;List&lt;com.sketchbook.core.PluginRef&gt;&gt;</ID>

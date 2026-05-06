@@ -82,6 +82,7 @@ class NeedsAttentionViewModelTest {
             missingPath: String,
             candidatePath: String,
         ): Result<Unit> = Result.success(Unit)
+        override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> = Result.success(Unit)
     }
 
     @Test

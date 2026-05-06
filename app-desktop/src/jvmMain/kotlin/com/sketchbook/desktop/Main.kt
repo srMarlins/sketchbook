@@ -65,9 +65,9 @@ private fun runApp() = application {
                     backStack.clear()
                     backStack.add(Screen.Settings)
                 })
-                Item("Needs attention", onClick = {
+                Item("Inbox", onClick = {
                     backStack.clear()
-                    backStack.add(Screen.NeedsAttention)
+                    backStack.add(Screen.Inbox(com.sketchbook.desktop.inbox.InboxTab.NeedsAttention))
                 })
                 Separator()
                 Item("Quit", onClick = ::exitApplication)
@@ -79,7 +79,7 @@ private fun runApp() = application {
                 })
                 Item("Proposals", onClick = {
                     backStack.clear()
-                    backStack.add(Screen.Proposals)
+                    backStack.add(Screen.Inbox(com.sketchbook.desktop.inbox.InboxTab.Proposals))
                 })
             }
         }

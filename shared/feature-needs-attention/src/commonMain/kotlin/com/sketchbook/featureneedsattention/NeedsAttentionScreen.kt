@@ -1,232 +1,408 @@
 package com.sketchbook.featureneedsattention
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
-import com.sketchbook.repo.SampleCandidate
 import com.sketchbook.uishared.components.Badge
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.EmptyState
-import com.sketchbook.uishared.components.Surface
+import com.sketchbook.uishared.components.GroupCard
+import com.sketchbook.uishared.components.GroupRow
+import com.sketchbook.uishared.components.ProvideContentColor
+import com.sketchbook.uishared.components.SubGroupHeader
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
 
+/**
+ * Search field for the needs-attention queue. Filters macImports + missingSamples by name/path.
+ *
+ * The repair surface itself uses two top-level [GroupCard]s — Mac-imported and Missing samples —
+ * visually matching the Proposals queue: rounded-corner card with a tintCream header band, bulk
+ * action in the header, and flat hairline-divided rows nested as the body. Mac variations cluster
+ * (sorted by stripped base name); missing samples sub-group by confidence (Auto / Multi / None)
+ * via [SubGroupHeader] inside the same card. Each card is one LazyColumn item; rows inside use
+ * `key` blocks so Compose can skip unchanged rows when the pending set churns during a bulk
+ * repair. Per-row composables take primitive/`@Immutable` args. `detailPane` is an optional slot
+ * the host wires (RootContent owns navigation).
+ */
 @Composable
-fun NeedsAttentionScreen(
-    vm: NeedsAttentionViewModel,
+fun NeedsAttentionFilterBar(
+    state: NeedsAttentionViewModel.State,
+    onSearch: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val state by vm.state.collectAsStateWithLifecycle()
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(AppTheme.colors.surfacePage)
-            .padding(PaddingValues(AppTheme.spacing.md)),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-    ) {
-        Text("Needs attention", style = AppTheme.typography.title)
-        if (state.macImports.isEmpty() && state.missingSamples.isEmpty()) {
+    com.sketchbook.uishared.components.TextField(
+        value = state.search,
+        onChange = onSearch,
+        placeholder = "Search project, path, or filename…",
+        modifier = modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * Emits the needs-attention queue's content (mac-imported card + missing-samples card) into a
+ * parent LazyColumn. See [proposalsItems] for the rationale.
+ */
+fun LazyListScope.needsAttentionItems(
+    state: NeedsAttentionViewModel.State,
+    cardExpanded: SnapshotStateMap<String, Boolean>,
+    onOpen: (target: NeedsAttentionDetailTarget) -> Unit,
+    onRepair: (ProjectId) -> Unit,
+    onBulkRepair: () -> Unit,
+    onBulkApply: (List<MissingSampleFinding>) -> Unit,
+    onBulkDismiss: (List<MissingSampleFinding>) -> Unit,
+) {
+    val hasMissing = state.missingByConfidence.autoMatch.isNotEmpty() ||
+        state.missingByConfidence.multiCandidate.isNotEmpty() ||
+        state.missingByConfidence.noCandidate.isNotEmpty()
+    if (state.macEntries.isEmpty() && !hasMissing) {
+        item(key = "na-empty") {
             EmptyState(
-                title = if (state.loading) "Scanning…" else "All clear",
-                hint = "No Mac-imported projects or missing samples found.",
+                title = if (state.loading) {
+                    "Scanning…"
+                } else if (state.search.isNotBlank()) {
+                    "No matches"
+                } else {
+                    "All clear"
+                },
+                hint = if (state.search.isNotBlank()) {
+                    "Nothing matches \"${state.search}\". Clear the search to see everything."
+                } else {
+                    "No Mac-imported projects or missing samples found."
+                },
             )
-            return@Column
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)) {
-            if (state.macImports.isNotEmpty()) {
-                item(key = "header-mac") {
-                    Text("Mac-imported (${state.macImports.size})", style = AppTheme.typography.bodyEmphasis)
-                }
-                state.macImports.forEach { f ->
-                    item(key = "mac-${f.projectId.value}") {
-                        MacImportCard(
-                            f = f,
-                            onRepairMacPaths = { vm.dispatch(NeedsAttentionViewModel.Intent.RepairMacPaths(it)) },
-                        )
-                    }
-                }
-            }
-            if (state.missingSamples.isNotEmpty()) {
-                item(key = "header-missing") {
-                    val suffix = if (state.missingSamplesTruncated) " (${state.missingSamples.size} of ${state.missingSamplesTotal})" else " (${state.missingSamplesTotal})"
-                    Text("Missing samples$suffix", style = AppTheme.typography.bodyEmphasis)
-                }
-                state.missingSamples.forEach { f ->
-                    item(key = "missing-${f.projectId.value}-${f.missingPath.hashCode()}") {
-                        MissingSampleCard(
-                            f = f,
-                            onApplyMatch = { projectId, missingPath, candidatePath ->
-                                vm.dispatch(
-                                    NeedsAttentionViewModel.Intent.ApplyMatch(
-                                        projectId = projectId,
-                                        missingPath = missingPath,
-                                        candidatePath = candidatePath,
-                                    ),
-                                )
-                            },
-                            onDismissMissingSample = { projectId, missingPath ->
-                                vm.dispatch(
-                                    NeedsAttentionViewModel.Intent.DismissMissingSample(projectId, missingPath),
-                                )
-                            },
-                        )
-                    }
-                }
-            }
+        return
+    }
+    if (state.macEntries.isNotEmpty()) {
+        item(key = "na-mac-card") {
+            MacImportCard(
+                entries = state.macEntries,
+                pending = state.pendingMacRepairs,
+                expanded = cardExpanded["mac"] ?: true,
+                onToggle = { cardExpanded["mac"] = !(cardExpanded["mac"] ?: true) },
+                onBulkRepair = onBulkRepair,
+                onRepair = onRepair,
+                onOpen = { f -> onOpen(NeedsAttentionDetailTarget.Mac(f)) },
+            )
+        }
+    }
+    if (hasMissing) {
+        item(key = "na-missing-card") {
+            MissingSamplesCard(
+                buckets = state.missingByConfidence,
+                shown = state.missingSamples.size,
+                total = state.missingSamplesTotal,
+                truncated = state.missingSamplesTruncated,
+                pending = state.pendingMissingApplies,
+                expanded = cardExpanded["missing"] ?: true,
+                onToggle = { cardExpanded["missing"] = !(cardExpanded["missing"] ?: true) },
+                onOpen = { f -> onOpen(NeedsAttentionDetailTarget.Missing(f)) },
+                onBulkApply = onBulkApply,
+                onBulkDismiss = onBulkDismiss,
+            )
         }
     }
 }
 
 @Composable
 private fun MacImportCard(
-    f: MacImportFinding,
-    onRepairMacPaths: (ProjectId) -> Unit,
+    entries: List<NeedsAttentionViewModel.MacEntry>,
+    pending: Set<ProjectId>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onBulkRepair: () -> Unit,
+    onRepair: (ProjectId) -> Unit,
+    onOpen: (MacImportFinding) -> Unit,
 ) {
-    Surface(color = AppTheme.colors.surfacePanel) {
-        Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
-                if (f.projectInfoMissing) {
-                    Badge(color = AppTheme.colors.accentAction) {
-                        Text("no Project Info/", style = AppTheme.typography.caption)
-                    }
-                }
-                if (f.macPathsCount > 0) {
-                    Badge(color = AppTheme.colors.pinOrange) {
-                        Text("${f.macPathsCount} mac paths", style = AppTheme.typography.caption)
-                    }
-                }
+    GroupCard(
+        title = "Mac-imported",
+        count = entries.size,
+        expanded = expanded,
+        onToggle = onToggle,
+        actions = {
+            Button(onClick = onBulkRepair, variant = ButtonVariant.Primary) {
+                Text("Repair all", softWrap = false, maxLines = 1)
             }
-            Text(f.name, style = AppTheme.typography.bodyEmphasis)
-            Text(f.path, style = AppTheme.typography.caption)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                // PR-W W5 — actually rewrites the .als through the patcher pipe (was previously
-                // a no-op "Acknowledge" that only marked the catalog finding). Same Ghost variant
-                // as before — palette stays uniform per feedback_color_restraint, and per the
-                // task spec we only relabel the existing button (no new buttons / icons / colors).
-                // `RepairRepository.acknowledgeMacImport` is preserved for callers that want the
-                // dismiss-without-rewriting path (e.g. MCP tools, future "ignore" flow).
-                Button(
-                    onClick = { onRepairMacPaths(f.projectId) },
-                    variant = ButtonVariant.Ghost,
-                ) { Text("Repair paths") }
+        },
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            val lastIndex = entries.lastIndex
+            entries.forEachIndexed { idx, entry ->
+                val finding = entry.finding
+                val pid = finding.projectId
+                key(pid.value) {
+                    MacImportRow(
+                        name = finding.name,
+                        macPathsCount = finding.macPathsCount,
+                        projectInfoMissing = finding.projectInfoMissing,
+                        isProjectBoundary = entry.isProjectBoundary,
+                        isLast = idx == lastIndex,
+                        isPending = pid in pending,
+                        onOpen = { onOpen(finding) },
+                        onRepair = { onRepair(pid) },
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MissingSampleCard(
-    f: MissingSampleFinding,
-    onApplyMatch: (projectId: ProjectId, missingPath: String, candidatePath: String) -> Unit,
-    onDismissMissingSample: (projectId: ProjectId, missingPath: String) -> Unit,
+private fun MissingSamplesCard(
+    buckets: NeedsAttentionViewModel.MissingByConfidence,
+    shown: Int,
+    total: Int,
+    truncated: Boolean,
+    pending: Set<Pair<ProjectId, String>>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onOpen: (MissingSampleFinding) -> Unit,
+    onBulkApply: (List<MissingSampleFinding>) -> Unit,
+    onBulkDismiss: (List<MissingSampleFinding>) -> Unit,
 ) {
-    // Local expand toggle for the "N possible matches" affordance — kept inline (per
-    // feedback_layer_dont_redesign) rather than spawning a modal/picker.
-    var picking by remember(f.projectId.value, f.missingPath) { mutableStateOf(false) }
-    Surface(color = AppTheme.colors.surfacePanel) {
-        Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
-            Text(f.projectName, style = AppTheme.typography.bodyEmphasis)
-            Text(f.missingPath, style = AppTheme.typography.mono)
-            // High-confidence: filename+size matches a single sample. Inline chip + Apply.
-            f.autoMatch?.let { match ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-                ) {
-                    Badge(color = AppTheme.colors.pinGreen) {
-                        Text("auto-match", style = AppTheme.typography.caption)
-                    }
-                    Text(
-                        match.path,
-                        style = AppTheme.typography.caption,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Button(
-                        onClick = {
-                            onApplyMatch(f.projectId, f.missingPath, match.path)
+    val title = if (truncated) "Missing samples · $shown of $total" else "Missing samples"
+    val totalShown = buckets.autoMatch.size + buckets.multiCandidate.size + buckets.noCandidate.size
+    val sections = remember(buckets) {
+        listOfNotNull(
+            buckets.autoMatch.takeIf { it.isNotEmpty() }
+                ?.let { Section(MissingKind.Auto, "Auto-match", it) },
+            buckets.multiCandidate.takeIf { it.isNotEmpty() }
+                ?.let { Section(MissingKind.Multi, "Multiple candidates", it) },
+            buckets.noCandidate.takeIf { it.isNotEmpty() }
+                ?.let { Section(MissingKind.None, "No candidates", it) },
+        )
+    }
+
+    GroupCard(
+        title = title,
+        count = totalShown,
+        expanded = expanded,
+        onToggle = onToggle,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            val lastSectionIdx = sections.lastIndex
+            sections.forEachIndexed { sIdx, section ->
+                key(section.kind.name) {
+                    val findings = remember(section.entries) { section.entries.map { it.finding } }
+                    SubGroupHeader(
+                        title = section.title,
+                        count = section.entries.size,
+                        actions = {
+                            when (section.kind) {
+                                MissingKind.Auto -> Button(
+                                    onClick = { onBulkApply(findings) },
+                                    variant = ButtonVariant.Primary,
+                                ) { Text("Apply ${section.entries.size}", softWrap = false, maxLines = 1) }
+
+                                MissingKind.None -> Button(
+                                    onClick = { onBulkDismiss(findings) },
+                                    variant = ButtonVariant.Ghost,
+                                ) { Text("Dismiss ${section.entries.size}", softWrap = false, maxLines = 1) }
+
+                                MissingKind.Multi -> Unit
+                            }
                         },
-                        variant = ButtonVariant.Ghost,
-                    ) { Text("Apply") }
-                }
-            }
-            // Low-confidence: candidates without an auto-match. Show a count + an inline expand
-            // affordance to pick one. We don't auto-apply because filename collisions are common
-            // in sample libraries (ten different "kick.wav"s).
-            if (f.autoMatch == null && f.candidates.isNotEmpty()) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-                ) {
-                    Text(
-                        "${f.candidates.size} possible match${if (f.candidates.size == 1) "" else "es"}",
-                        style = AppTheme.typography.caption,
                     )
-                    Button(
-                        onClick = { picking = !picking },
-                        variant = ButtonVariant.Ghost,
-                    ) { Text(if (picking) "Hide" else "Show") }
-                }
-                if (picking) {
-                    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)) {
-                        f.candidates.take(5).forEach { c ->
-                            CandidatePickRow(
-                                finding = f,
-                                candidate = c,
-                                onApplyMatch = onApplyMatch,
+                    val lastRowIdx = section.entries.lastIndex
+                    section.entries.forEachIndexed { idx, entry ->
+                        val f = entry.finding
+                        val pendingKey = f.projectId to f.missingPath
+                        // The "last row" hairline only suppresses on the last row of the *last*
+                        // section so we don't draw a stray divider just before a SubGroupHeader.
+                        val isLast = sIdx == lastSectionIdx && idx == lastRowIdx && !truncated
+                        key(f.projectId.value, f.missingPath) {
+                            MissingSampleRow(
+                                projectName = f.projectName,
+                                missingPath = f.missingPath,
+                                kind = section.kind,
+                                autoMatchParent = parentDirOf(f.autoMatch?.path),
+                                candidatesCount = f.candidates.size,
+                                isProjectBoundary = entry.isProjectBoundary,
+                                isLast = isLast,
+                                isPending = pendingKey in pending,
+                                onOpen = { onOpen(f) },
                             )
                         }
                     }
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Button(
-                    onClick = { onDismissMissingSample(f.projectId, f.missingPath) },
-                    variant = ButtonVariant.Ghost,
-                ) { Text("Dismiss") }
+            if (truncated) {
+                ProvideContentColor(AppTheme.colors.inkMuted) {
+                    Text(
+                        "Showing $shown of $total — narrow your library or rescan to see the rest",
+                        style = AppTheme.typography.caption,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private enum class MissingKind { Auto, Multi, None }
+
+private data class Section(
+    val kind: MissingKind,
+    val title: String,
+    val entries: List<NeedsAttentionViewModel.MissingEntry>,
+)
+
+@Composable
+private fun MacImportRow(
+    name: String,
+    macPathsCount: Int,
+    projectInfoMissing: Boolean,
+    isProjectBoundary: Boolean,
+    isLast: Boolean,
+    isPending: Boolean,
+    onOpen: () -> Unit,
+    onRepair: () -> Unit,
+) {
+    if (isProjectBoundary) Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
+    // Verb pill suppressed — the card title ("Mac-imported") already conveys the action class.
+    // Trailing chevron suppressed — there's no detail pane to drill into in the column layout.
+    GroupRow(onClick = { if (!isPending) onOpen() }, last = isLast) {
+        ProvideContentColor(if (isPending) AppTheme.colors.inkMuted else AppTheme.colors.inkPrimary) {
+            Text(
+                name,
+                style = AppTheme.typography.bodyEmphasis,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (isPending) {
+            Badge(color = AppTheme.colors.tintBlue) {
+                ProvideContentColor(AppTheme.colors.inkPrimary) {
+                    Text("repairing…", style = AppTheme.typography.caption, maxLines = 1)
+                }
+            }
+        } else {
+            ProvideContentColor(AppTheme.colors.inkMuted) {
+                Text(
+                    macPathsLabel(macPathsCount, projectInfoMissing),
+                    style = AppTheme.typography.caption,
+                    maxLines = 1,
+                )
+            }
+            IconAction(glyph = "↻", color = AppTheme.colors.accentAction, onClick = onRepair)
+        }
+    }
+}
+
+@Composable
+private fun MissingSampleRow(
+    projectName: String,
+    missingPath: String,
+    kind: MissingKind,
+    autoMatchParent: String,
+    candidatesCount: Int,
+    isProjectBoundary: Boolean,
+    isLast: Boolean,
+    isPending: Boolean,
+    onOpen: () -> Unit,
+) {
+    if (isProjectBoundary) Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
+    // Verb pill suppressed — "Missing samples" card title already conveys the action class.
+    GroupRow(onClick = { if (!isPending) onOpen() }, last = isLast) {
+        Badge(color = AppTheme.colors.tintCream) {
+            ProvideContentColor(AppTheme.colors.inkPrimary) {
+                Text(projectName, style = AppTheme.typography.caption, maxLines = 1)
+            }
+        }
+        ProvideContentColor(if (isPending) AppTheme.colors.inkMuted else AppTheme.colors.inkPrimary) {
+            Text(
+                filenameOf(missingPath),
+                style = AppTheme.typography.body,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (isPending) {
+            Badge(color = AppTheme.colors.tintBlue) {
+                ProvideContentColor(AppTheme.colors.inkPrimary) {
+                    Text("applying…", style = AppTheme.typography.caption, maxLines = 1)
+                }
+            }
+        } else {
+            when (kind) {
+                MissingKind.Auto -> Badge(color = AppTheme.colors.tintSage) {
+                    ProvideContentColor(AppTheme.colors.inkPrimary) {
+                        Text(
+                            "→ ${autoMatchParent.ifEmpty { "match" }}/",
+                            style = AppTheme.typography.caption,
+                            maxLines = 1,
+                        )
+                    }
+                }
+
+                MissingKind.Multi -> Badge(color = AppTheme.colors.tintBlue) {
+                    ProvideContentColor(AppTheme.colors.inkPrimary) {
+                        Text("$candidatesCount matches", style = AppTheme.typography.caption)
+                    }
+                }
+
+                MissingKind.None -> Badge(color = AppTheme.colors.tintRose) {
+                    ProvideContentColor(AppTheme.colors.inkPrimary) {
+                        Text("no match", style = AppTheme.typography.caption)
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CandidatePickRow(
-    finding: MissingSampleFinding,
-    candidate: SampleCandidate,
-    onApplyMatch: (projectId: ProjectId, missingPath: String, candidatePath: String) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+private fun IconAction(glyph: String, color: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
+            .clickable(onClick = onClick)
+            .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
     ) {
-        Text(
-            "• ${candidate.path}",
-            style = AppTheme.typography.caption,
-            modifier = Modifier.weight(1f),
-        )
-        Button(
-            onClick = {
-                onApplyMatch(finding.projectId, finding.missingPath, candidate.path)
-            },
-            variant = ButtonVariant.Ghost,
-        ) { Text("Pick") }
+        ProvideContentColor(color) {
+            Text(glyph, style = AppTheme.typography.bodyEmphasis)
+        }
     }
+}
+
+private fun macPathsLabel(count: Int, projectInfoMissing: Boolean): String {
+    val plural = if (count == 1) "" else "s"
+    val infoSuffix = if (projectInfoMissing) " · no info/" else ""
+    return "$count mac path$plural$infoSuffix"
+}
+
+private fun filenameOf(path: String): String = path.substringAfterLast('/').substringAfterLast('\\').ifEmpty { path }
+
+private fun parentDirOf(path: String?): String {
+    if (path == null) return ""
+    val normalized = path.replace('\\', '/')
+    val idx = normalized.lastIndexOf('/')
+    if (idx <= 0) return ""
+    val parent = normalized.substring(0, idx)
+    val parts = parent.split('/').filter { it.isNotEmpty() }
+    return if (parts.size <= 2) parts.joinToString("/") else ".../${parts.takeLast(2).joinToString("/")}"
 }
