@@ -172,14 +172,20 @@ class GcsSyncQueueDrainTest {
     fun drainStartsImmediatelyOnLaunch() = runTest {
         val env = testScheduler.env(backgroundScope)
         // mtime >30s before virtual now (which starts at 0) — past the quiet period.
-        seedDirtyProject(env, "alpha", updatedAtMs = -60_000, fileMtimeMs = -60_000)
+        val (uuid, alsPath) = seedDirtyProject(env, "alpha", updatedAtMs = -60_000, fileMtimeMs = -60_000)
 
         env.queue.start()
         // No advanceTimeBy — drain should run before any wait.
         runCurrent()
         advanceUntilIdle()
 
-        assertEquals(1, env.cloud.appendCount)
+        val diag = "appendCount=${env.cloud.appendCount} " +
+            "lockAcquireCount=${env.cloud.lockAcquireCount} " +
+            "dirtyOldestFirst=${env.syncState.dirtyOldestFirst().size} " +
+            "fileMtime=${java.nio.file.Files.getLastModifiedTime(alsPath).toMillis()} " +
+            "virtualNow=${testScheduler.currentTime} " +
+            "clockNow=${env.clock.now().toEpochMilliseconds()}"
+        assertEquals(1, env.cloud.appendCount, diag)
     }
 
     @Test
