@@ -1,5 +1,7 @@
 # Audio Catalog v0.1 Implementation Plan
 
+**Status:** SUPERSEDED 2026-05-05. The Python `uv` workspace this plan describes was retired in PRs #49/#50 in favor of the Kotlin/Compose Multiplatform rewrite (`2026-05-05-kotlin-rewrite-impl-plan.md`). The data model and CLI feature surface mostly carried over; the implementation tree did not. Preserved for historical context — do not execute this plan.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Ship a Python `uv` workspace with a `core` library, `cli`, FastAPI `web` backend, and `mcp` server that scans `Z:\User\audio\Projects` (~1,628 `.als` files), catalogs them in SQLite/FTS5, lets the user (and Claude) search / open / rename / move / tag / archive projects, and reverses any write via a JSON undo journal. The React frontend is deferred to a follow-up plan.
