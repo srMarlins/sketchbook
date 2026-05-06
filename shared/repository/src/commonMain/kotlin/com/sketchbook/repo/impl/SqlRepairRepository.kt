@@ -13,10 +13,14 @@ import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.RepairFindings
 import com.sketchbook.repo.RepairRepository
 import com.sketchbook.repo.SampleCandidate
+import java.io.BufferedInputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
+import java.util.zip.GZIPInputStream
+import javax.xml.stream.XMLInputFactory
+import javax.xml.stream.XMLStreamConstants
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -136,6 +140,80 @@ class SqlRepairRepository(
                     )
                 }
                 ackTick.value = ackTick.value + 1
+            }
+        }
+
+    override suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit> =
+        withContext(ioDispatcher) {
+            runCatching {
+                val alsPath = catalog.catalogQueries
+                    .selectProjectById(projectId.value)
+                    .executeAsOne()
+                    .path
+
+                // Scan the .als for `<Path Value="..."/>` entries inside `<SampleRef>` that carry
+                // a Mac-style `Volume:` prefix. The catalog's `mac_paths_count` flag also fires on
+                // bare POSIX `/Users/` prefixes (the parser treats those as Mac-imported too), so
+                // a flagged project may have *no* `Volume:`-prefixed paths to actually repair —
+                // that's the expected case for a no-op patch.
+                val macPaths = runCatching { extractMacStyleSamplePaths(alsPath) }
+                    .getOrDefault(emptyList())
+                val mapping = macPaths
+                    .associateWith(::macToPosix)
+                    .filter { (k, v) -> k != v }
+
+                val outcome: AlsPatchService.Outcome = if (mapping.isEmpty()) {
+                    // Nothing to rewrite — skip the patcher (and the snapshot, since there's
+                    // nothing to undo) and journal NoChange. Still ack the finding so it drops.
+                    AlsPatchService.Outcome.NoChange
+                } else {
+                    // Snapshot the pre-patch bytes to a sidecar mirroring W4's pattern. PR-L L7
+                    // currently only wires Undo for missing-sample matches, but capturing the
+                    // sidecar here is cheap and keeps the option open without a separate code
+                    // path. Best-effort: if the snapshot itself fails, we journal Failed and
+                    // skip the patch — losing the ability to undo silently is the worst outcome.
+                    val snapshotResult = runCatching {
+                        val path = Paths.get(alsPath)
+                        val originalBytes = Files.readAllBytes(path)
+                        val sidecar = path.resolveSibling("${path.fileName}.patcher-undo")
+                        Files.write(
+                            sidecar,
+                            originalBytes,
+                            StandardOpenOption.CREATE,
+                            StandardOpenOption.TRUNCATE_EXISTING,
+                            StandardOpenOption.WRITE,
+                        )
+                    }
+
+                    if (snapshotResult.isFailure) {
+                        AlsPatchService.Outcome.Failed
+                    } else {
+                        runCatching { patcher.patch(alsPath, mapping) }
+                            .getOrElse { AlsPatchService.Outcome.Failed }
+                    }
+                }
+
+                catalog.transaction {
+                    catalog.catalogQueries.insertRepairAck(
+                        scope = SCOPE_MAC,
+                        project_id = projectId.value,
+                        payload = "",
+                        acked_at = Clock.System.now().toString(),
+                    )
+                }
+                ackTick.value = ackTick.value + 1
+
+                journal.append(
+                    JournalEntry(
+                        timestamp = Clock.System.now(),
+                        projectId = projectId,
+                        action = ActionRecord.MacPathRepaired(
+                            mappingCount = mapping.size,
+                            alsOutcome = outcome.name,
+                        ),
+                    ),
+                )
+                Unit
             }
         }
 
@@ -285,4 +363,69 @@ class SqlRepairRepository(
         const val SCOPE_MISS = "missing_sample"
         const val NO_UNDO_BYTES = "NoUndoBytes"
     }
+}
+
+/**
+ * Cached StAX factory for the Mac-path scan. Building a fresh one per repair would cost a
+ * non-trivial amount on bulk pass; configure once, use many. Mirrors the equivalent factory in
+ * [com.sketchbook.als.AlsRewriter] (we can't share it because pulling the parser-als module in
+ * would create a cycle through `:shared:sync-io`'s patcher adapter).
+ */
+private val MAC_SCAN_INPUT_FACTORY: XMLInputFactory = XMLInputFactory.newFactory().apply {
+    setProperty(XMLInputFactory.IS_COALESCING, true)
+    setProperty(XMLInputFactory.SUPPORT_DTD, false)
+    setProperty("javax.xml.stream.isSupportingExternalEntities", false)
+}
+
+/**
+ * Drop the `Volume:` prefix from a Mac-style absolute path (`Macintosh HD:/Users/...` →
+ * `/Users/...`). Anything before the first `:` is treated as the volume name. If the path has no
+ * `:`, it's returned unchanged — the caller filters those out via `filter { k != v }` so the
+ * mapping passed to the patcher is exactly the set of *changed* paths.
+ */
+private fun macToPosix(macPath: String): String {
+    val colon = macPath.indexOf(':')
+    return if (colon == -1) macPath else macPath.substring(colon + 1)
+}
+
+/**
+ * Walk a gzipped `.als` once and collect every `<Path Value="..."/>` value that lives inside a
+ * `<SampleRef>` and carries a `:` (i.e., a Mac-style absolute path). StAX-only — no DOM, so heap
+ * stays bounded the same way [com.sketchbook.als.AlsParser] does. We scan the file in
+ * applyMacPathRepair instead of storing per-finding paths in the catalog because (a) the
+ * parser-side counter doesn't distinguish `Volume:`-prefixed paths from POSIX `/Users/` ones,
+ * and (b) bulk-storing every Mac path in a separate table for findings that may never be
+ * actioned wastes space in the common case.
+ */
+private fun extractMacStyleSamplePaths(alsPath: String): List<String> {
+    val out = LinkedHashSet<String>()
+    Files.newInputStream(Paths.get(alsPath)).use { fileIn ->
+        GZIPInputStream(BufferedInputStream(fileIn)).use { gzIn ->
+            val reader = MAC_SCAN_INPUT_FACTORY.createXMLStreamReader(gzIn, "UTF-8")
+            try {
+                var depthInsideSampleRef = 0
+                while (reader.hasNext()) {
+                    when (reader.next()) {
+                        XMLStreamConstants.START_ELEMENT -> {
+                            val name = reader.localName
+                            if (name == "SampleRef") depthInsideSampleRef++
+                            if (depthInsideSampleRef > 0 && name == "Path") {
+                                val value = (0 until reader.attributeCount)
+                                    .firstOrNull { reader.getAttributeLocalName(it) == "Value" }
+                                    ?.let { reader.getAttributeValue(it) }
+                                if (value != null && ':' in value) out += value
+                            }
+                        }
+                        XMLStreamConstants.END_ELEMENT -> {
+                            if (reader.localName == "SampleRef") depthInsideSampleRef--
+                        }
+                        else -> {}
+                    }
+                }
+            } finally {
+                reader.close()
+            }
+        }
+    }
+    return out.toList()
 }

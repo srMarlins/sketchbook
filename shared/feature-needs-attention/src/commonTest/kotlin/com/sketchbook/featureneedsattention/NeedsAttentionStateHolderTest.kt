@@ -35,11 +35,16 @@ class NeedsAttentionStateHolderTest {
     private class FakeRepo(initial: RepairFindings) : RepairRepository {
         val flow = MutableStateFlow(initial)
         var ackedProjectId: ProjectId? = null
+        var repairedProjectId: ProjectId? = null
         var dismissedKey: Pair<ProjectId, String>? = null
         var appliedMatch: Triple<ProjectId, String, String>? = null
         override fun observeFindings(projectId: ProjectId?, limit: Int): Flow<RepairFindings> = flow
         override suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit> {
             ackedProjectId = projectId
+            return Result.success(Unit)
+        }
+        override suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit> {
+            repairedProjectId = projectId
             return Result.success(Unit)
         }
         override suspend fun dismissMissingSample(projectId: ProjectId, missingPath: String): Result<Unit> {
@@ -91,6 +96,22 @@ class NeedsAttentionStateHolderTest {
             assertTrue(effect is NeedsAttentionStateHolder.Effect.Acknowledged)
             assertEquals("ack", effect.kind)
             assertEquals(macFinding.projectId, repo.ackedProjectId)
+        }
+    }
+
+    @Test
+    fun repairMacPathsIntentRoutesToRepoAndEmitsEffect() = runTest {
+        // PR-W W5 — the "Repair paths" button on a mac-import card dispatches RepairMacPaths,
+        // which fans out through `applyMacPathRepair` and emits a MatchApplied effect. The legacy
+        // AckMacImport intent stays around for callers that want the dismiss-without-rewriting
+        // path (MCP tooling, future "ignore" flow).
+        val repo = FakeRepo(RepairFindings(listOf(macFinding), emptyList(), 0, false))
+        val holder = NeedsAttentionStateHolder(repo, backgroundScope)
+        holder.effects.test {
+            holder.dispatch(NeedsAttentionStateHolder.Intent.RepairMacPaths(macFinding.projectId))
+            val effect = awaitItem()
+            assertTrue(effect is NeedsAttentionStateHolder.Effect.MatchApplied)
+            assertEquals(macFinding.projectId, repo.repairedProjectId)
         }
     }
 

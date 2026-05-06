@@ -19,6 +19,18 @@ interface RepairRepository {
     /** Mark a Mac-import finding as repaired (drops it from subsequent flow emissions). */
     suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit>
 
+    /**
+     * Repair Mac-style absolute paths (e.g. `Macintosh HD:/Users/jay/...`) inside the project's
+     * `.als` by reusing the same patcher pipe as [applyMissingSampleMatch]: each Mac-style path
+     * found inside a `<SampleRef>` is mapped to its POSIX equivalent (everything after the first
+     * `:`). The mac-import finding is acknowledged so it drops out of Needs Attention.
+     *
+     * If the .als has no actual Mac-style paths to rewrite (the catalog flag fires on POSIX-only
+     * `/Users/` prefixes too, so this isn't unusual), the patcher is skipped and the journal
+     * records `mappingCount = 0` / `alsOutcome = "NoChange"`. The finding still acks.
+     */
+    suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit>
+
     /** Drop a missing-sample finding from the queue without changing on-disk state. */
     suspend fun dismissMissingSample(projectId: ProjectId, missingPath: String): Result<Unit>
 

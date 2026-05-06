@@ -92,10 +92,16 @@ private fun MacImportCard(f: MacImportFinding, holder: NeedsAttentionStateHolder
             Text(f.name, style = AppTheme.typography.bodyEmphasis)
             Text(f.path, style = AppTheme.typography.caption)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                // PR-W W5 — actually rewrites the .als through the patcher pipe (was previously
+                // a no-op "Acknowledge" that only marked the catalog finding). Same Ghost variant
+                // as before — palette stays uniform per feedback_color_restraint, and per the
+                // task spec we only relabel the existing button (no new buttons / icons / colors).
+                // `RepairRepository.acknowledgeMacImport` is preserved for callers that want the
+                // dismiss-without-rewriting path (e.g. MCP tools, future "ignore" flow).
                 Button(
-                    onClick = { holder.dispatch(NeedsAttentionStateHolder.Intent.AckMacImport(f.projectId)) },
+                    onClick = { holder.dispatch(NeedsAttentionStateHolder.Intent.RepairMacPaths(f.projectId)) },
                     variant = ButtonVariant.Ghost,
-                ) { Text("Acknowledge") }
+                ) { Text("Repair paths") }
             }
         }
     }

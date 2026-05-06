@@ -84,4 +84,5 @@ private fun actionType(action: ActionRecord): String = when (action) {
     is ActionRecord.PushConflict -> "push conflict"
     is ActionRecord.MissingSampleMapped -> "sample remap"
     is ActionRecord.MissingSampleUnmapped -> "sample remap undo"
+    is ActionRecord.MacPathRepaired -> "mac path repair"
 }
