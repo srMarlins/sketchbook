@@ -187,10 +187,10 @@ Box(modifier = Modifier.widthIn(max = 1240.dp).fillMaxWidth()) {
 ```
 
 Notes:
-- `maxHeight` comes from the surrounding `BoxWithConstraints` at line 95 — it's already in scope.
 - The scrim's `clickable` uses `indication = null` so clicking the scrim doesn't ripple; the visual feedback is the scrim itself disappearing as the query clears.
-- `SearchResults` is a `LazyColumn` already, so `heightIn(max = ...)` plus its internal scroll gives the "panel scrolls, dimmed home peeks below" behavior.
 - The `Box` wrap inherits the same `widthIn(max = 1240.dp).fillMaxWidth()` constraint the original `when` block sat under, so layout below the field is unchanged when the overlay is closed.
+- **Deviation from earlier plan draft:** the panel does NOT cap `heightIn(max = maxHeight * 0.6f)`. `SearchResults` is a `Column`, not a `LazyColumn`, so a height cap would clip overflowing rows with no internal scroll. The panel takes natural content height; the page-level `verticalScroll(scroll)` on the outer Column handles long results. When the panel is shorter than the base (few matches), the dimmed home naturally peeks below thanks to `Alignment.TopCenter`. See commit `6ce7d7c`.
+- **Visual refinement (commit `6bf09902`):** the scrim uses `surfaceSunken.copy(alpha = 0.85f)` (paper-shadow, not paper-on-paper) and the panel is wrapped as a framed card (`surfaceCard` + `ruleLineStrong` border + `cornerCard` radius + 8.dp padding) so it reads as a clearly distinct surface and feels cohesive with the search field's recessed-paper styling. No new color tokens.
 
 ### Step 2.2: Add the imports
 
