@@ -9,6 +9,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 
+/**
+ * In-memory settings store. Persistence to disk lands when v1.1 wires `java.util.prefs.Preferences`
+ * (or, for credentials, OS keychain). Today every restart resets to defaults — fine for the dev
+ * loop; production will hold creds across launches once the keychain bridge ships.
+ */
 class InMemorySettingsRepository(
     initial: Settings = Settings(
         libraryRoots = emptyList(),
@@ -34,7 +39,17 @@ class InMemorySettingsRepository(
     }
 
     override suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit> {
-        state.update { it.copy(cloudConfigured = serviceAccountJson != null) }
+        state.update {
+            it.copy(
+                cloudCredentialJson = serviceAccountJson,
+                cloudConfigured = serviceAccountJson != null,
+            )
+        }
+        return Result.success(Unit)
+    }
+
+    override suspend fun setCloudBucket(bucket: String?): Result<Unit> {
+        state.update { it.copy(cloudBucket = bucket?.takeIf { name -> name.isNotBlank() }) }
         return Result.success(Unit)
     }
 

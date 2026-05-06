@@ -40,6 +40,8 @@ class SettingsStateHolder(
             State(
                 libraryRoots = settings.libraryRoots,
                 cloudConfigured = settings.cloudConfigured,
+                cloudBucket = settings.cloudBucket,
+                cloudReady = settings.cloudReady,
                 selfContainedProjects = settings.selfContainedProjects,
                 cacheSettings = settings.cacheSettings,
                 loading = false,
@@ -57,6 +59,9 @@ class SettingsStateHolder(
             }
             is Intent.SetCloudCredential -> launchWithEffect("cloud") {
                 repository.setCloudCredential(intent.serviceAccountJson)
+            }
+            is Intent.SetCloudBucket -> launchWithEffect("cloud-bucket") {
+                repository.setCloudBucket(intent.bucket)
             }
             is Intent.ToggleSelfContained -> launchWithEffect(intent.uuid.value) {
                 repository.setSelfContained(intent.uuid, intent.value)
@@ -82,6 +87,8 @@ class SettingsStateHolder(
     data class State(
         val libraryRoots: List<LibraryRoot> = emptyList(),
         val cloudConfigured: Boolean = false,
+        val cloudBucket: String? = null,
+        val cloudReady: Boolean = false,
         val selfContainedProjects: Set<ProjectUuid> = emptySet(),
         val cacheSettings: BlobCacheSettings = BlobCacheSettings.Default,
         val loading: Boolean = false,
@@ -91,6 +98,7 @@ class SettingsStateHolder(
         data class AddRoot(val root: LibraryRoot) : Intent
         data class RemoveRoot(val root: LibraryRoot) : Intent
         data class SetCloudCredential(val serviceAccountJson: String?) : Intent
+        data class SetCloudBucket(val bucket: String?) : Intent
         data class ToggleSelfContained(val uuid: ProjectUuid, val value: Boolean) : Intent
         data class SetCacheSize(val settings: BlobCacheSettings) : Intent
         data class SetCacheLru(val enabled: Boolean) : Intent

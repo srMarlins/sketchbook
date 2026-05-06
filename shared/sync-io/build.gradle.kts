@@ -11,6 +11,7 @@ kotlin {
             implementation(libs.kotlinx.io.core)
         }
         jvmMain.dependencies {
+            implementation(project(":shared:sync"))
             implementation(libs.directory.watcher)
             implementation(libs.blake3)
         }
