@@ -4,11 +4,12 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
-// Depends on `core` only (per design doc §2.2). No data flow.
+// Per design doc §2.2 ui-shared may depend only on `core`. Today it transitively re-exports
+// nothing from core, so no project dep is declared (DA would flag it as unused). If a shared
+// composable starts surfacing a `core` type, restore `implementation(project(":shared:core"))`.
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":shared:core"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.ui)

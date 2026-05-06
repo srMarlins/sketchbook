@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ClassSignature:Lock.kt:ManifestRef</ID>
+    <ID>Filename:ServiceAccount.kt:com.sketchbook.cloud.ServiceAccount.kt</ID>
+    <ID>FunctionSignature:CloudBackend.kt:CloudBackend$suspend fun putBlob</ID>
+    <ID>MatchingDeclarationName:ServiceAccount.kt:ServiceAccountKey</ID>
+  </CurrentIssues>
+</SmellBaseline>

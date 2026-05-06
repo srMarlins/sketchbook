@@ -56,20 +56,18 @@ class LeasedLockRepository(
 
     private val byUuid = mutableMapOf<ProjectUuid, PerUuid>()
 
-    private fun get(uuid: ProjectUuid): PerUuid {
-        return byUuid.getOrPut(uuid) {
-            val backend = cloud() ?: NullCloudBackend
-            PerUuid(
-                state = LeaseLockState(
-                    cloud = backend,
-                    uuid = uuid,
-                    hostId = hostId,
-                    hostName = hostName,
-                    clock = clock,
-                ),
-                flow = MutableStateFlow<LockStatus>(LockStatus.Free),
-            )
-        }
+    private fun get(uuid: ProjectUuid): PerUuid = byUuid.getOrPut(uuid) {
+        val backend = cloud() ?: NullCloudBackend
+        PerUuid(
+            state = LeaseLockState(
+                cloud = backend,
+                uuid = uuid,
+                hostId = hostId,
+                hostName = hostName,
+                clock = clock,
+            ),
+            flow = MutableStateFlow<LockStatus>(LockStatus.Free),
+        )
     }
 
     override fun observe(uuid: ProjectUuid): Flow<LockStatus> = get(uuid).flow.asStateFlow()
@@ -94,6 +92,7 @@ class LeasedLockRepository(
                     per.flow.value = LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
                     startHeartbeat(uuid, per)
                 }
+
                 is LeaseAcquireResult.Held -> {
                     priorOwnerHostName = acquireResult.held.ownerHostName
                     priorExpiresAtMs = acquireResult.held.expiresAt.toEpochMilliseconds()
@@ -104,6 +103,7 @@ class LeasedLockRepository(
                             per.flow.value = LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
                             startHeartbeat(uuid, per)
                         }
+
                         LeaseRefreshResult.Stale -> {
                             per.flow.value = LockStatus.Stale(
                                 ownerHostName = acquireResult.held.ownerHostName,
@@ -147,7 +147,9 @@ class LeasedLockRepository(
             per.state.state.collect { st ->
                 per.flow.value = when (st) {
                     LockState.Idle -> LockStatus.Free
+
                     is LockState.Owned -> LockStatus.Ours(st.lock.acquiredAt, st.lock.expiresAt)
+
                     is LockState.HeldByOther -> {
                         // If the lease has expired, surface as Stale so the UI offers force-take.
                         val now = clock.now()
@@ -157,6 +159,7 @@ class LeasedLockRepository(
                             LockStatus.HeldByOther(st.held.ownerHostName, st.held.acquiredAt, st.held.expiresAt)
                         }
                     }
+
                     LockState.Lost -> LockStatus.Free
                 }
             }
@@ -169,21 +172,13 @@ class LeasedLockRepository(
  * [LeasedLockRepository] short-circuits before calling these in normal paths.
  */
 private object NullCloudBackend : CloudBackend {
-    override suspend fun headBlob(hash: com.sketchbook.core.BlobHash, scope: com.sketchbook.cloud.BlobScope) =
-        false
-    override suspend fun putBlob(hash: com.sketchbook.core.BlobHash, source: kotlinx.io.RawSource, size: Long, scope: com.sketchbook.cloud.BlobScope) =
-        error("cloud not configured")
-    override suspend fun getBlob(hash: com.sketchbook.core.BlobHash, scope: com.sketchbook.cloud.BlobScope) =
-        error("cloud not configured")
-    override suspend fun readManifest(uuid: ProjectUuid, rev: com.sketchbook.core.SnapshotRev) =
-        error("cloud not configured")
-    override suspend fun listManifests(uuid: ProjectUuid, sinceRev: com.sketchbook.core.SnapshotRev?) =
-        emptyList<com.sketchbook.cloud.ManifestRef>()
-    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: com.sketchbook.cloud.Generation?, manifest: com.sketchbook.core.Manifest) =
-        Result.failure<com.sketchbook.cloud.Generation>(IllegalStateException("cloud not configured"))
-    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) =
-        LeaseAcquireResult.Acquired(com.sketchbook.cloud.Generation("0"))
-    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: com.sketchbook.cloud.Generation) =
-        LeaseRefreshResult.Stale
+    override suspend fun headBlob(hash: com.sketchbook.core.BlobHash, scope: com.sketchbook.cloud.BlobScope) = false
+    override suspend fun putBlob(hash: com.sketchbook.core.BlobHash, source: kotlinx.io.RawSource, size: Long, scope: com.sketchbook.cloud.BlobScope) = error("cloud not configured")
+    override suspend fun getBlob(hash: com.sketchbook.core.BlobHash, scope: com.sketchbook.cloud.BlobScope) = error("cloud not configured")
+    override suspend fun readManifest(uuid: ProjectUuid, rev: com.sketchbook.core.SnapshotRev) = error("cloud not configured")
+    override suspend fun listManifests(uuid: ProjectUuid, sinceRev: com.sketchbook.core.SnapshotRev?) = emptyList<com.sketchbook.cloud.ManifestRef>()
+    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: com.sketchbook.cloud.Generation?, manifest: com.sketchbook.core.Manifest) = Result.failure<com.sketchbook.cloud.Generation>(IllegalStateException("cloud not configured"))
+    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) = LeaseAcquireResult.Acquired(com.sketchbook.cloud.Generation("0"))
+    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: com.sketchbook.cloud.Generation) = LeaseRefreshResult.Stale
     override suspend fun releaseLock(uuid: ProjectUuid, expected: com.sketchbook.cloud.Generation) {}
 }

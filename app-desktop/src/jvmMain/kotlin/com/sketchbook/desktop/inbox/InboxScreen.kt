@@ -258,11 +258,13 @@ private fun DetailPaneSwitch(
             vm = proposalsVm,
             onDismiss = onDismiss,
         )
+
         is InboxDetailTarget.Attention -> NeedsAttentionDetailPane(
             target = detail.target,
             vm = needsAttentionVm,
             onDismiss = onDismiss,
         )
+
         is InboxDetailTarget.JournalEntry -> JournalDetailPane(
             entry = detail.entry,
             projectName = detail.projectName,

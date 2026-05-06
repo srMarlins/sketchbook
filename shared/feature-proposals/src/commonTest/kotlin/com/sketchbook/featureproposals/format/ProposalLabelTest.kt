@@ -10,8 +10,7 @@ import kotlin.test.assertEquals
 
 class ProposalLabelTest {
 
-    private fun args(vararg pairs: Pair<String, JsonPrimitive>): JsonObject =
-        JsonObject(pairs.toMap())
+    private fun args(vararg pairs: Pair<String, JsonPrimitive>): JsonObject = JsonObject(pairs.toMap())
 
     @Test fun archiveResolvesProjectName() {
         val a = ProposalAction(

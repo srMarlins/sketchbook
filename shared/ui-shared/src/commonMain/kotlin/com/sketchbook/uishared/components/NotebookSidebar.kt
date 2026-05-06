@@ -196,8 +196,10 @@ private fun SidebarRow(item: SidebarItem, onClick: () -> Unit) {
     val colors = AppTheme.colors
     // Active row: a tab that overhangs the right edge with a soft drop. Inactive: flat.
     val pillShape = RoundedCornerShape(
-        topStart = 0.dp, bottomStart = 0.dp,
-        topEnd = AppTheme.spacing.cornerCard, bottomEnd = AppTheme.spacing.cornerCard,
+        topStart = 0.dp,
+        bottomStart = 0.dp,
+        topEnd = AppTheme.spacing.cornerCard,
+        bottomEnd = AppTheme.spacing.cornerCard,
     )
     val activeBg = if (item.active) colors.surfaceCard else Color.Transparent
     Row(

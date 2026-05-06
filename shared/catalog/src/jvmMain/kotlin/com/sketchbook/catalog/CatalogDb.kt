@@ -116,16 +116,31 @@ object CatalogDb {
                 Catalog.Schema.create(driver)
                 writeUserVersion(driver, target)
             }
+
             current == 0L && schemaPresent -> {
                 // Pre-tracking DB. Probe per-version markers to derive the actual installed
                 // schema version. Each marker is a column added in the corresponding `<n>.sqm`
                 // migration; presence means migrations up to and including <n> have already
                 // been applied. List in *ascending* order so the lowest missing marker wins.
                 val detected = when {
-                    !columnExists(driver, "sync_state", "updated_at") -> 1L  // before 1.sqm
-                    !tableExists(driver, "repair_acks") -> 2L                // before 2.sqm
-                    !tableExists(driver, "journal_entries") -> 3L            // before 3.sqm
-                    !columnExists(driver, "journal_entries", "project_name") -> 5L // before 5.sqm
+                    // before 1.sqm
+                    !columnExists(driver, "sync_state", "updated_at") -> 1L
+
+                    // before 2.sqm
+                    !tableExists(driver, "repair_acks") -> 2L
+
+                    // before 3.sqm
+                    !tableExists(driver, "journal_entries") -> 3L
+
+                    // before 4.sqm
+                    !indexExists(driver, "idx_projects_key") -> 4L
+
+                    // before 5.sqm
+                    !columnExists(driver, "project_plugins", "is_installed") -> 5L
+
+                    // before 7.sqm — project_name added by this PR's 7.sqm
+                    !columnExists(driver, "journal_entries", "project_name") -> 7L
+
                     else -> target
                 }
                 if (detected < target) {
@@ -133,6 +148,7 @@ object CatalogDb {
                 }
                 writeUserVersion(driver, target)
             }
+
             current < target -> {
                 Catalog.Schema.migrate(driver, current, target)
                 writeUserVersion(driver, target)
@@ -158,6 +174,20 @@ object CatalogDb {
             },
             parameters = 0,
         )
+        return found
+    }
+
+    private fun indexExists(driver: SqlDriver, name: String): Boolean {
+        var found = false
+        driver.executeQuery(
+            identifier = null,
+            sql = "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ? LIMIT 1",
+            mapper = { c: SqlCursor ->
+                if (c.next().value) found = true
+                QueryResult.Unit
+            },
+            parameters = 1,
+        ) { bindString(0, name) }
         return found
     }
 

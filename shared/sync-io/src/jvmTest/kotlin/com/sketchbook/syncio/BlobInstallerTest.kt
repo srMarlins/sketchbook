@@ -14,7 +14,9 @@ class BlobInstallerTest {
 
     private val root = createTempDirectory("blob-installer-test-")
 
-    @AfterTest fun cleanup() { root.toFile().deleteRecursively() }
+    @AfterTest fun cleanup() {
+        root.toFile().deleteRecursively()
+    }
 
     @Test
     fun hardlinksOnSameVolume() {

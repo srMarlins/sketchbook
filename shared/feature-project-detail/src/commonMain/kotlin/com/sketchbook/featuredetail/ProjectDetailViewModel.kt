@@ -3,17 +3,18 @@ package com.sketchbook.featuredetail
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.PluginRef
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
+import com.sketchbook.core.Stage
 import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.LockStatus
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.SampleEntry
 import com.sketchbook.repo.SnapshotRepository
-import com.sketchbook.core.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
@@ -97,12 +98,19 @@ class ProjectDetailViewModel(
         pluginsFlow,
         samplesFlow,
     ) { values ->
-        @Suppress("UNCHECKED_CAST") val row = values[0] as ProjectRow?
-        @Suppress("UNCHECKED_CAST") val history = values[1] as List<Snapshot>
+        @Suppress("UNCHECKED_CAST")
+        val row = values[0] as ProjectRow?
+
+        @Suppress("UNCHECKED_CAST")
+        val history = values[1] as List<Snapshot>
         val tab = values[2] as Tab
         val lock = values[3] as LockStatus
-        @Suppress("UNCHECKED_CAST") val plugins = values[4] as List<PluginRef>
-        @Suppress("UNCHECKED_CAST") val samples = values[5] as List<SampleEntry>
+
+        @Suppress("UNCHECKED_CAST")
+        val plugins = values[4] as List<PluginRef>
+
+        @Suppress("UNCHECKED_CAST")
+        val samples = values[5] as List<SampleEntry>
         State(
             row = row,
             history = history,
@@ -121,17 +129,22 @@ class ProjectDetailViewModel(
     fun dispatch(intent: Intent) {
         when (intent) {
             is Intent.SelectTab -> tabSelection.update { intent.tab }
+
             is Intent.OpenInLive -> {
                 val path = state.value.row?.path?.value ?: return
                 _effects.tryEmit(Effect.LaunchLive(path))
             }
-            is Intent.ForceTakeLock -> Unit // No-op until uuid bridging lands.
+
+            is Intent.ForceTakeLock -> Unit
+
+            // No-op until uuid bridging lands.
             is Intent.Rename -> {
                 val id = selectedId.value ?: return
                 val trimmed = intent.name.trim()
                 if (trimmed.isEmpty() || trimmed == state.value.row?.name) return
                 viewModelScope.launch { projects.rename(id, trimmed) }
             }
+
             is Intent.SetTags -> {
                 val id = selectedId.value ?: return
                 val cleaned = intent.tags
@@ -140,6 +153,7 @@ class ProjectDetailViewModel(
                     .distinct()
                 viewModelScope.launch { projects.setTags(id, cleaned) }
             }
+
             is Intent.Move -> {
                 val id = selectedId.value ?: return
                 val current = state.value.row?.path?.value ?: return
@@ -148,9 +162,15 @@ class ProjectDetailViewModel(
                 if (target.replace('\\', '/') == parentDirOfPath(current)) return
                 viewModelScope.launch { projects.move(id, target) }
             }
+
             is Intent.ToggleArchive -> {
                 val row = state.value.row ?: return
                 viewModelScope.launch { projects.archive(row.id, !row.archived) }
+            }
+
+            is Intent.SetStageOverride -> {
+                val id = selectedId.value ?: return
+                viewModelScope.launch { projects.setStageOverride(id, intent.stage) }
             }
         }
     }
@@ -182,6 +202,10 @@ class ProjectDetailViewModel(
         data class SetTags(val tags: List<String>) : Intent
         data class Move(val newParentDir: String) : Intent
         data object ToggleArchive : Intent
+
+        /** PR-R: Set or clear the per-project stage override. Null = clear (chip falls back to
+         *  the inferred classification). Round-trips through the repository to journal the change. */
+        data class SetStageOverride(val stage: Stage?) : Intent
     }
 
     sealed interface Effect {

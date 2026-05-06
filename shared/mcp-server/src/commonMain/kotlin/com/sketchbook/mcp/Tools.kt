@@ -78,6 +78,7 @@ class Tools(
         const val DEFAULT_LIMIT: Int = 50
         const val MAX_LIMIT: Int = 1000
         const val MAX_ACTIONS_PER_BATCH: Int = 100
+
         /**
          * Closed allowlist of action types accepted by propose_batch. Names match the v0.1
          * Python wire format and the [com.sketchbook.actions.ActionRecord] sealed type

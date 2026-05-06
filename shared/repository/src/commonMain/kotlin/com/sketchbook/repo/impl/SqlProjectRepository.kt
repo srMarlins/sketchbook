@@ -8,6 +8,7 @@ import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.SketchbookError
+import com.sketchbook.core.Stage
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
@@ -21,10 +22,10 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 
@@ -82,54 +83,49 @@ class SqlProjectRepository(
         }
     }
 
-    override fun observeArchivedProjects(): Flow<List<ProjectRow>> =
-        combine(
-            catalog.catalogQueries.selectArchivedProjectsWithMissing()
-                .asFlow()
-                .mapToList(ioDispatcher),
-            catalog.catalogQueries.selectAllProjectTagPairs()
-                .asFlow()
-                .mapToList(ioDispatcher),
-        ) { rows, pairs ->
-            val tagsByProject = pairs.groupBy({ it.project_id }, { it.name })
-            rows.map { it.toDomain(tags = tagsByProject[it.id].orEmpty()) }
-        }
-
-    override fun observeAllProjectNames(): Flow<Map<ProjectId, String>> =
-        catalog.catalogQueries.selectAllProjectIdsAndNames()
+    override fun observeArchivedProjects(): Flow<List<ProjectRow>> = combine(
+        catalog.catalogQueries.selectArchivedProjectsWithMissing()
             .asFlow()
-            .mapToList(ioDispatcher)
-            .map { rows -> rows.associate { ProjectId(it.id) to it.name } }
-
-    override fun observeDistinctKeys(): Flow<List<String>> =
-        catalog.catalogQueries.selectDistinctKeys()
+            .mapToList(ioDispatcher),
+        catalog.catalogQueries.selectAllProjectTagPairs()
             .asFlow()
-            .mapToList(ioDispatcher)
-            .map { rows -> rows.mapNotNull { it } }
+            .mapToList(ioDispatcher),
+    ) { rows, pairs ->
+        val tagsByProject = pairs.groupBy({ it.project_id }, { it.name })
+        rows.map { it.toDomain(tags = tagsByProject[it.id].orEmpty()) }
+    }
 
-    override fun observeProject(id: ProjectId): Flow<ProjectRow?> =
-        combine(
-            catalog.catalogQueries.selectProjectByIdWithMissing(id.value)
-                .asFlow()
-                .mapToOneOrNull(ioDispatcher),
-            catalog.catalogQueries.selectTagsForProject(id.value)
-                .asFlow()
-                .mapToList(ioDispatcher),
-        ) { row, tags -> row?.toDomain(tags = tags) }
+    override fun observeAllProjectNames(): Flow<Map<ProjectId, String>> = catalog.catalogQueries.selectAllProjectIdsAndNames()
+        .asFlow()
+        .mapToList(ioDispatcher)
+        .map { rows -> rows.associate { ProjectId(it.id) to it.name } }
 
-    override fun observePlugins(id: ProjectId): Flow<List<com.sketchbook.core.PluginRef>> =
-        catalog.catalogQueries.selectPluginsForProject(id.value)
+    override fun observeDistinctKeys(): Flow<List<String>> = catalog.catalogQueries.selectDistinctKeys()
+        .asFlow()
+        .mapToList(ioDispatcher)
+        .map { rows -> rows.mapNotNull { it } }
+
+    override fun observeProject(id: ProjectId): Flow<ProjectRow?> = combine(
+        catalog.catalogQueries.selectProjectByIdWithMissing(id.value)
             .asFlow()
-            .mapToList(ioDispatcher)
-            .map { rows ->
-                rows.map { r ->
-                    com.sketchbook.core.PluginRef(
-                        name = r.plugin_name,
-                        format = pluginFormatFor(r.plugin_type),
-                        trackName = r.track_name,
-                    )
-                }
+            .mapToOneOrNull(ioDispatcher),
+        catalog.catalogQueries.selectTagsForProject(id.value)
+            .asFlow()
+            .mapToList(ioDispatcher),
+    ) { row, tags -> row?.toDomain(tags = tags) }
+
+    override fun observePlugins(id: ProjectId): Flow<List<com.sketchbook.core.PluginRef>> = catalog.catalogQueries.selectPluginsForProject(id.value)
+        .asFlow()
+        .mapToList(ioDispatcher)
+        .map { rows ->
+            rows.map { r ->
+                com.sketchbook.core.PluginRef(
+                    name = r.plugin_name,
+                    format = pluginFormatFor(r.plugin_type),
+                    trackName = r.track_name,
+                )
             }
+        }
 
     /**
      * PR-BB: library health stream. SQLDelight's `asFlow()` already re-emits on any write to
@@ -139,34 +135,62 @@ class SqlProjectRepository(
      * sources to a fresh aggregate on either signal. `EMPTY` is the seed so the chip renders a
      * grey "Health: —" until the first DB read lands rather than blocking the sidebar.
      */
-    override fun observeLibraryHealth(): Flow<com.sketchbook.repo.LibraryHealth> =
-        combine(
-            catalog.catalogQueries.selectLibraryHealth().asFlow().mapToOneOrNull(ioDispatcher),
-            journal.observeRecent(limit = 1),
-        ) { row, _ ->
-            row?.let {
-                com.sketchbook.repo.LibraryHealth(
-                    total = it.total.toInt(),
-                    // SUM over zero rows is NULL; coalesce to 0 so the UI sees a clean numeric.
-                    synced = (it.synced ?: 0L).toInt(),
-                    sampleClean = (it.sample_clean ?: 0L).toInt(),
+    override fun observeLibraryHealth(): Flow<com.sketchbook.repo.LibraryHealth> = combine(
+        catalog.catalogQueries.selectLibraryHealth().asFlow().mapToOneOrNull(ioDispatcher),
+        journal.observeRecent(limit = 1),
+    ) { row, _ ->
+        row?.let {
+            com.sketchbook.repo.LibraryHealth(
+                total = it.total.toInt(),
+                // SUM over zero rows is NULL; coalesce to 0 so the UI sees a clean numeric.
+                synced = (it.synced ?: 0L).toInt(),
+                sampleClean = (it.sample_clean ?: 0L).toInt(),
+                // PR-CC: plugin presence + stage classification now flow through the same
+                // aggregate. The fields are nullable on the data class for forward-compat
+                // with older PRs, but the SQL always emits a count now so we always populate.
+                pluginInstalled = (it.plugin_installed ?: 0L).toInt(),
+                stageNotStuck = (it.stage_not_stuck ?: 0L).toInt(),
+            )
+        } ?: com.sketchbook.repo.LibraryHealth.EMPTY
+    }
+
+    override fun observeMissingPluginCoverage(): Flow<List<com.sketchbook.repo.MissingPluginRow>> = catalog.catalogQueries.selectMissingPluginCoverage()
+        .asFlow()
+        .mapToList(ioDispatcher)
+        .map { rows ->
+            rows.map { r ->
+                com.sketchbook.repo.MissingPluginRow(
+                    name = r.name,
+                    format = pluginFormatFor(r.type),
+                    affectedProjects = r.affected_projects.toInt(),
                 )
-            } ?: com.sketchbook.repo.LibraryHealth.EMPTY
+            }
         }
 
-    override fun observeSamples(id: ProjectId): Flow<List<com.sketchbook.repo.SampleEntry>> =
-        catalog.catalogQueries.selectSampleEntriesForProject(id.value)
-            .asFlow()
-            .mapToList(ioDispatcher)
-            .map { rows ->
-                rows.map { r ->
-                    com.sketchbook.repo.SampleEntry(
-                        rawPath = r.sample_path,
-                        isMissing = r.is_missing != 0L,
-                        sizeBytes = r.size_bytes,
-                    )
-                }
+    override fun observeMissingPluginSummary(): Flow<com.sketchbook.repo.MissingPluginSummary?> = catalog.catalogQueries.selectMissingPluginSummary()
+        .asFlow()
+        .mapToOneOrNull(ioDispatcher)
+        .map { row ->
+            row?.let {
+                com.sketchbook.repo.MissingPluginSummary(
+                    missingPluginCount = it.missing_count.toInt(),
+                    affectedProjects = it.affected_projects.toInt(),
+                )
             }
+        }
+
+    override fun observeSamples(id: ProjectId): Flow<List<com.sketchbook.repo.SampleEntry>> = catalog.catalogQueries.selectSampleEntriesForProject(id.value)
+        .asFlow()
+        .mapToList(ioDispatcher)
+        .map { rows ->
+            rows.map { r ->
+                com.sketchbook.repo.SampleEntry(
+                    rawPath = r.sample_path,
+                    isMissing = r.is_missing != 0L,
+                    sizeBytes = r.size_bytes,
+                )
+            }
+        }
 
     private fun pluginFormatFor(raw: String): com.sketchbook.core.PluginFormat = when (raw.lowercase()) {
         "vst2" -> com.sketchbook.core.PluginFormat.Vst2
@@ -181,9 +205,13 @@ class SqlProjectRepository(
     // representation stays an implementation detail.
     private fun pluginTypeStringFor(format: com.sketchbook.core.PluginFormat): String? = when (format) {
         com.sketchbook.core.PluginFormat.Vst2 -> "vst2"
+
         com.sketchbook.core.PluginFormat.Vst3 -> "vst3"
+
         com.sketchbook.core.PluginFormat.Au -> "au"
+
         com.sketchbook.core.PluginFormat.AbletonNative -> "abletonnative"
+
         // Unknown is a UI-side fallback for parser misses; it's never written into the catalog,
         // so passing it through as a filter would always return zero rows. Treat it as "any".
         com.sketchbook.core.PluginFormat.Unknown -> null
@@ -193,58 +221,71 @@ class SqlProjectRepository(
         pluginName: String,
         format: com.sketchbook.core.PluginFormat?,
         excludeProjectId: ProjectId?,
-    ): Flow<List<com.sketchbook.repo.PluginUsage>> =
-        catalog.catalogQueries.selectProjectsUsingPlugin(
-            plugin_name = pluginName,
-            plugin_type = format?.let { pluginTypeStringFor(it) },
-            exclude_id = excludeProjectId?.value,
+    ): Flow<List<com.sketchbook.repo.PluginUsage>> = catalog.catalogQueries.selectProjectsUsingPlugin(
+        plugin_name = pluginName,
+        plugin_type = format?.let { pluginTypeStringFor(it) },
+        exclude_id = excludeProjectId?.value,
+    )
+        .asFlow()
+        .mapToList(ioDispatcher)
+        .map { rows ->
+            rows.map { r ->
+                com.sketchbook.repo.PluginUsage(
+                    id = ProjectId(r.id),
+                    name = r.name,
+                    path = r.path,
+                    lastModified = r.last_modified,
+                )
+            }
+        }
+
+    override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> = mutate(id) { row ->
+        val pathBefore = row.path
+        val newPath = "$newParentDir/${row.name}.als"
+        catalog.catalogQueries.updateProjectPath(
+            path = newPath,
+            parent_dir = newParentDir,
+            id = id.value,
         )
-            .asFlow()
-            .mapToList(ioDispatcher)
-            .map { rows ->
-                rows.map { r ->
-                    com.sketchbook.repo.PluginUsage(
-                        id = ProjectId(r.id),
-                        name = r.name,
-                        path = r.path,
-                        lastModified = r.last_modified,
-                    )
-                }
-            }
+        ActionRecord.Move(pathBefore = pathBefore, pathAfter = newPath)
+    }
 
-    override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> =
-        mutate(id) { row ->
-            val pathBefore = row.path
-            val newPath = "$newParentDir/${row.name}.als"
-            catalog.catalogQueries.updateProjectPath(
-                path = newPath,
-                parent_dir = newParentDir,
-                id = id.value,
-            )
-            ActionRecord.Move(pathBefore = pathBefore, pathAfter = newPath)
-        }
+    override suspend fun rename(id: ProjectId, newName: String): Result<JournalEntry> = mutate(id) { row ->
+        val nameBefore = row.name
+        val newPath = row.path.substringBeforeLast('/') + "/$newName.als"
+        catalog.catalogQueries.updateProjectName(
+            name = newName,
+            path = newPath,
+            id = id.value,
+        )
+        ActionRecord.Rename(nameBefore = nameBefore, nameAfter = newName)
+    }
 
-    override suspend fun rename(id: ProjectId, newName: String): Result<JournalEntry> =
-        mutate(id) { row ->
-            val nameBefore = row.name
-            val newPath = row.path.substringBeforeLast('/') + "/$newName.als"
-            catalog.catalogQueries.updateProjectName(
-                name = newName,
-                path = newPath,
-                id = id.value,
-            )
-            ActionRecord.Rename(nameBefore = nameBefore, nameAfter = newName)
+    override suspend fun archive(id: ProjectId, archived: Boolean): Result<JournalEntry> = mutate(id) { row ->
+        val wasArchived = row.is_archived != 0L
+        // Direct UPDATE rather than insertOrReplace (avoids re-writing every column).
+        catalog.transaction {
+            catalog.catalogQueries.setArchived(if (archived) 1 else 0, id.value)
         }
+        ActionRecord.Archive(wasArchived = wasArchived, isArchived = archived)
+    }
 
-    override suspend fun archive(id: ProjectId, archived: Boolean): Result<JournalEntry> =
-        mutate(id) { row ->
-            val wasArchived = row.is_archived != 0L
-            // Direct UPDATE rather than insertOrReplace (avoids re-writing every column).
-            catalog.transaction {
-                catalog.catalogQueries.setArchived(if (archived) 1 else 0, id.value)
-            }
-            ActionRecord.Archive(wasArchived = wasArchived, isArchived = archived)
-        }
+    override suspend fun setStageOverride(
+        id: ProjectId,
+        stage: Stage?,
+    ): Result<JournalEntry> = mutate(id) { row ->
+        val before = row.stage_override
+        val inferred = row.stage_inferred
+        catalog.catalogQueries.updateStageOverride(
+            stage_override = stage?.name,
+            id = id.value,
+        )
+        ActionRecord.StageOverridden(
+            stageInferred = inferred,
+            stageBefore = before,
+            stageAfter = stage?.name,
+        )
+    }
 
     override suspend fun setTags(id: ProjectId, tags: List<String>): Result<JournalEntry> {
         return withContext(ioDispatcher) {

@@ -31,8 +31,7 @@ fun proposalLabel(
     action: ProposalAction,
     projectNameById: Map<Long, String> = emptyMap(),
 ): ProposalLabel {
-    fun s(key: String): String? =
-        (action.args[key] as? JsonPrimitive)?.contentOrNull
+    fun s(key: String): String? = (action.args[key] as? JsonPrimitive)?.contentOrNull
     val pidLong = s("project_id")?.toLongOrNull()
     val resolvedName = pidLong?.let { projectNameById[it] }
     // Fallback chain: catalog lookup → JSON `name` → JSON `path` basename → "project #ID" →
@@ -55,6 +54,7 @@ fun proposalLabel(
                 tintHint = VerbTint.Action,
             )
         }
+
         "RenameProject" -> {
             val from = s("from_") ?: s("from").orEmpty()
             val to = s("to").orEmpty()
@@ -65,11 +65,13 @@ fun proposalLabel(
                 tintHint = VerbTint.Action,
             )
         }
+
         "ArchiveProject" -> ProposalLabel(
             verb = "Archive",
             target = projectLabel,
             tintHint = VerbTint.Remove,
         )
+
         "SetTags" -> {
             val tags = (action.args["after"] as? JsonArray)
                 ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
@@ -82,6 +84,7 @@ fun proposalLabel(
                 tintHint = if (tags.isEmpty()) VerbTint.Remove else VerbTint.Add,
             )
         }
+
         "SetColorTag" -> {
             val after = (action.args["after"] as? JsonPrimitive)?.contentOrNull
             ProposalLabel(
@@ -91,11 +94,13 @@ fun proposalLabel(
                 tintHint = VerbTint.Add,
             )
         }
+
         "Undo" -> ProposalLabel(
             verb = "Undo",
             target = "previous batch",
             tintHint = VerbTint.Action,
         )
+
         else -> ProposalLabel(verb = action.type, target = "", tintHint = VerbTint.Neutral)
     }
 }
@@ -105,17 +110,19 @@ private fun tagsList(action: ProposalAction): List<String> {
     return when (raw) {
         is JsonArray -> raw.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
             .filter { it.isNotEmpty() }
-        is JsonPrimitive -> raw.contentOrNull
-            ?.split(',')
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            .orEmpty()
+
+        is JsonPrimitive ->
+            raw.contentOrNull
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                .orEmpty()
+
         else -> emptyList()
     }
 }
 
-private fun filenameOf(path: String): String =
-    path.substringAfterLast('/').ifEmpty { path }
+private fun filenameOf(path: String): String = path.substringAfterLast('/').ifEmpty { path }
 
 private fun parentDirOf(path: String): String {
     val idx = path.lastIndexOf('/')

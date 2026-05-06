@@ -1,5 +1,6 @@
 plugins {
     id("kmp-test")
+    alias(libs.plugins.metro)
 }
 
 kotlin {
@@ -7,8 +8,8 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":shared:core"))
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.io.core)
+            implementation(libs.metro.runtime)
         }
         jvmMain.dependencies {
             implementation(project(":shared:sync"))
@@ -21,7 +22,6 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
-            implementation(libs.sqldelight.jvm.driver)
         }
         commonTest.dependencies {
             implementation(libs.turbine)

@@ -26,7 +26,10 @@ import kotlin.time.Duration.Companion.seconds
 class CatalogDbReactiveInvalidationTest {
 
     private val tmp = createTempDirectory("catalog-reactive-")
-    @AfterTest fun cleanup() { tmp.toFile().deleteRecursively() }
+
+    @AfterTest fun cleanup() {
+        tmp.toFile().deleteRecursively()
+    }
 
     @Test
     fun queryAsFlowReEmitsAfterTransactionCommit() = runBlocking {

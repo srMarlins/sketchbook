@@ -62,7 +62,8 @@ private fun runApp() = application {
         MenuBar {
             Menu("File", mnemonic = 'F') {
                 Item("Library settings", onClick = {
-                    backStack.clear(); backStack.add(Screen.Settings)
+                    backStack.clear()
+                    backStack.add(Screen.Settings)
                 })
                 Item("Inbox", onClick = {
                     backStack.clear()
@@ -73,7 +74,8 @@ private fun runApp() = application {
             }
             Menu("Project", mnemonic = 'P') {
                 Item("Projects", onClick = {
-                    backStack.clear(); backStack.add(Screen.Projects)
+                    backStack.clear()
+                    backStack.add(Screen.Projects)
                 })
                 Item("Proposals", onClick = {
                     backStack.clear()

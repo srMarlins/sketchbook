@@ -35,7 +35,14 @@ CREATE TABLE projects (
   has_project_info INTEGER,
   file_size_bytes INTEGER,
   is_missing      INTEGER NOT NULL DEFAULT 0,
-  last_seen       REAL
+  last_seen       REAL,
+  -- PR-R: stage classification. `stage_inferred` is rewritten on every successful scan from
+  -- StageInferrer.infer; `stage_override` is user-set via the per-row chip popup and wins on
+  -- read. `has_local_bounce` is the scan-time bounce-probe result, cached so PR-CC's library
+  -- health aggregate doesn't have to walk the filesystem.
+  stage_inferred  TEXT,
+  stage_override  TEXT,
+  has_local_bounce INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_projects_parent_dir ON projects(parent_dir);
@@ -48,11 +55,17 @@ CREATE TABLE project_plugins (
   project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   plugin_name TEXT NOT NULL,
   plugin_type TEXT NOT NULL,
-  track_name  TEXT
+  track_name  TEXT,
+  -- PR-T: 1 when the plugin file exists in one of the platform-default install dirs (or
+  -- when we couldn't normalize the name), 0 when the user's filesystem is missing it. Default
+  -- 1 so brand-new rows from the parser don't blink to "missing" before the presence probe
+  -- has actually walked the disk; the probe flips them to 0 if no match is found.
+  is_installed INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX idx_pp_project ON project_plugins(project_id);
 CREATE INDEX idx_pp_name ON project_plugins(plugin_name);
+CREATE INDEX idx_pp_is_installed ON project_plugins(is_installed);
 
 CREATE TABLE project_samples (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -247,6 +260,19 @@ SELECT id FROM projects WHERE parent_dir = :parent_dir;
 deleteAllProjects:
 DELETE FROM projects;
 
+-- PR-R R1: per-row stage column writes. The scanner uses these inside a transaction that wraps
+-- the existing insertOrReplaceProject + plugin/sample upserts so the inferred stage and the
+-- preserved override land atomically with the rest of the row.
+selectStageOverrideById:
+SELECT stage_override FROM projects WHERE id = :id;
+
+updateStageInferred:
+UPDATE projects SET stage_inferred = :stage_inferred, has_local_bounce = :has_local_bounce
+WHERE id = :id;
+
+updateStageOverride:
+UPDATE projects SET stage_override = :stage_override WHERE id = :id;
+
 selectProjectsByIds:
 SELECT * FROM projects WHERE id IN :ids ORDER BY last_modified DESC;
 
@@ -322,6 +348,51 @@ ORDER BY p.last_modified DESC;
 
 selectSamplesForProject:
 SELECT sample_path FROM project_samples WHERE project_id = :project_id;
+
+-- PR-T: distinct (plugin_name, plugin_type) pairs across the entire catalog. The presence probe
+-- iterates this list, normalizes each name, and flips is_installed in bulk via the marker
+-- queries below. DISTINCT collapses the same plugin loaded across many projects/tracks into one
+-- row so we don't normalize the same string thousands of times on each probe.
+selectAllDistinctPlugins:
+SELECT DISTINCT plugin_name, plugin_type FROM project_plugins;
+
+-- PR-T: bulk flip the `is_installed` flag for every row matching a (name, type) pair. The probe
+-- calls this twice per pair (once per outcome) so the UPDATE is idempotent — running the probe
+-- a second time over the same disk produces no net change. Indexed on (plugin_name) so the
+-- catalog-wide UPDATE only touches the matching rows.
+markPluginsInstalledByNameAndType:
+UPDATE project_plugins
+SET is_installed = :is_installed
+WHERE plugin_name = :plugin_name AND plugin_type = :plugin_type;
+
+-- PR-T: aggregate "missing plugins by (name, type)" view that powers the Home coverage chip's
+-- popup list. Grouped on (name, type) so a plugin loaded as both VST2 and VST3 surfaces twice if
+-- *both* formats are missing — that mirrors how the user sees them in Live's plugin browser, and
+-- a user with VST3 installed but not VST2 of the same name should only see the VST2 row as
+-- missing. Archived projects are excluded so a project the user already shelved doesn't keep
+-- inflating the affected-projects column.
+selectMissingPluginCoverage:
+SELECT pp.plugin_name AS name,
+       pp.plugin_type AS type,
+       COUNT(DISTINCT pp.project_id) AS affected_projects
+FROM project_plugins pp
+JOIN projects p ON p.id = pp.project_id
+WHERE pp.is_installed = 0 AND p.is_archived = 0
+GROUP BY pp.plugin_name, pp.plugin_type
+ORDER BY affected_projects DESC, pp.plugin_name ASC;
+
+-- PR-T: scalar summary for the Home chip itself ("N plugins missing affecting M projects"). One
+-- row, two counts. The compound key in `missing_count` (`name || '|' || type`) treats VST2/VST3
+-- as separate entries to match the coverage list above. `COUNT(DISTINCT … || '|' || …)` is the
+-- portable trick — SQLite has no `COUNT(DISTINCT name, type)` syntax. Archived projects are
+-- excluded for the same reason as the coverage query.
+selectMissingPluginSummary:
+SELECT COUNT(DISTINCT pp.plugin_name || '|' || pp.plugin_type) AS missing_count,
+       COUNT(DISTINCT pp.project_id) AS affected_projects
+FROM project_plugins pp
+JOIN projects p ON p.id = pp.project_id
+WHERE pp.is_installed = 0 AND p.is_archived = 0;
+
 
 selectSampleEntriesForProject:
 SELECT sample_path, is_missing, size_bytes FROM project_samples WHERE project_id = :project_id;
@@ -519,21 +590,27 @@ SET sample_path = :old_path, is_missing = 1
 WHERE project_id = :project_id AND sample_path = :new_path;
 
 -- PR-BB: composite library health aggregate. Returns per-signal counts the sidebar chip
--- divides by `total` to render percentages. Two of four planned signals are computed today:
+-- divides by `total` to render percentages. PR-CC fills in the remaining two signals:
 --   * synced — sync_state row exists, not dirty, and local_rev matches cloud_head_rev. A
 --     project with no sync_state row (never pushed) is *not* synced; the LEFT JOIN means
 --     `s.dirty` is NULL there, so the predicate fails and it counts as unsynced.
 --   * sample_clean — no missing samples (or no rows in project_samples at all).
--- The plugin-installed and stage-not-stuck signals come with PR-T and PR-R respectively;
--- their `SUM(CASE…)` clauses get inserted here when those PRs land. Archived projects are
--- excluded so the chip reflects the user's *active* library health.
+--   * plugin_installed — no project_plugins rows with is_installed=0 (either every loaded
+--     plugin resolves to a file on disk or the project has no plugin rows at all).
+--   * stage_not_stuck — `stage_inferred` is NULL or anything other than 'Stuck'. We
+--     deliberately read the *inferred* column rather than the user's `stage_override`:
+--     the chip is the catalog's objective state, not the user's mood. Override is for
+--     the per-row chip; the heuristic is for the dashboard.
+-- Archived projects are excluded so the chip reflects the user's *active* library health.
 -- The sync_state PK is `project_uuid`, so the join goes through `project_identity` which
 -- maps projects.id → uuid (sync_state has no `project_id` column directly).
 selectLibraryHealth:
 SELECT
     COUNT(*) AS total,
     SUM(CASE WHEN s.dirty IS NOT NULL AND s.dirty = 0 AND s.local_rev = s.cloud_head_rev THEN 1 ELSE 0 END) AS synced,
-    SUM(CASE WHEN ms.missing_count IS NULL OR ms.missing_count = 0 THEN 1 ELSE 0 END) AS sample_clean
+    SUM(CASE WHEN ms.missing_count IS NULL OR ms.missing_count = 0 THEN 1 ELSE 0 END) AS sample_clean,
+    SUM(CASE WHEN mp.missing_count IS NULL OR mp.missing_count = 0 THEN 1 ELSE 0 END) AS plugin_installed,
+    SUM(CASE WHEN p.stage_inferred IS NULL OR p.stage_inferred != 'Stuck' THEN 1 ELSE 0 END) AS stage_not_stuck
 FROM projects p
 LEFT JOIN project_identity pi ON pi.project_id = p.id
 LEFT JOIN sync_state s ON s.project_uuid = pi.uuid
@@ -543,6 +620,12 @@ LEFT JOIN (
     WHERE is_missing = 1
     GROUP BY project_id
 ) ms ON ms.project_id = p.id
+LEFT JOIN (
+    SELECT project_id, COUNT(*) AS missing_count
+    FROM project_plugins
+    WHERE is_installed = 0
+    GROUP BY project_id
+) mp ON mp.project_id = p.id
 WHERE p.is_archived = 0;
 
 -- journal_entries — persistent audit log of every catalog write. Replaces the in-memory

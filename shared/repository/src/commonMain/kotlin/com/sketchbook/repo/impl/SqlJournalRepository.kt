@@ -4,9 +4,9 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.catalog.db.Journal_entries
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.SketchbookError
-import com.sketchbook.core.AppScope
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
@@ -43,77 +43,74 @@ class SqlJournalRepository(
     private val json: Json = DefaultJson,
 ) : JournalRepository {
 
-    override fun observeRecent(limit: Int): Flow<List<JournalEntry>> =
-        catalog.catalogQueries.selectJournalRecent(limit.toLong())
-            .asFlow()
-            .mapToList(ioDispatcher)
-            .map { rows -> rows.map(::toDomain) }
+    override fun observeRecent(limit: Int): Flow<List<JournalEntry>> = catalog.catalogQueries.selectJournalRecent(limit.toLong())
+        .asFlow()
+        .mapToList(ioDispatcher)
+        .map { rows -> rows.map(::toDomain) }
 
-    override suspend fun append(entry: JournalEntry): Result<JournalEntry> =
-        withContext(ioDispatcher) {
-            // Don't use `runCatching` here: it catches `Throwable`, including
-            // `CancellationException`, which would silently break structured concurrency the
-            // moment anyone adds a suspend call inside the body. Pattern matches JvmScanner /
-            // McpServer: explicit re-throw of cancellation, Result.failure for everything else.
-            try {
-                // Centralized denormalization: capture the project's current name at write time.
-                // Repository callers (project mutators, repair flows, MCP) never need to thread
-                // the name through themselves — the journal just looks it up. If the entry already
-                // carries a name (e.g. an in-memory fake or a forward-from-MCP), respect it.
-                val resolvedName = entry.projectName
-                    ?: catalog.catalogQueries.selectProjectById(entry.projectId.value)
-                        .executeAsOneOrNull()
-                        ?.name
-                val newId = catalog.transactionWithResult<Long> {
-                    catalog.catalogQueries.insertJournalEntry(
-                        occurred_at = entry.timestamp.toEpochMilliseconds(),
-                        actor = entry.actor,
-                        action_type = entry.action.typeKey,
-                        project_id = entry.projectId.value,
-                        payload_json = json.encodeToString(
-                            ActionRecordSerializer,
-                            entry.action,
-                        ),
-                        project_name = resolvedName,
-                    )
-                    catalog.catalogQueries.lastJournalEntryId().executeAsOne()
-                }
-                Result.success(entry.copy(sequence = newId, projectName = resolvedName))
-            } catch (c: CancellationException) {
-                throw c
-            } catch (t: Throwable) {
-                Result.failure(t)
+    override suspend fun append(entry: JournalEntry): Result<JournalEntry> = withContext(ioDispatcher) {
+        // Don't use `runCatching` here: it catches `Throwable`, including
+        // `CancellationException`, which would silently break structured concurrency the
+        // moment anyone adds a suspend call inside the body. Pattern matches JvmScanner /
+        // McpServer: explicit re-throw of cancellation, Result.failure for everything else.
+        try {
+            // Centralized denormalization: capture the project's current name at write time.
+            // Repository callers (project mutators, repair flows, MCP) never need to thread
+            // the name through themselves — the journal just looks it up. If the entry already
+            // carries a name (e.g. an in-memory fake or a forward-from-MCP), respect it.
+            val resolvedName = entry.projectName
+                ?: catalog.catalogQueries.selectProjectById(entry.projectId.value)
+                    .executeAsOneOrNull()
+                    ?.name
+            val newId = catalog.transactionWithResult<Long> {
+                catalog.catalogQueries.insertJournalEntry(
+                    occurred_at = entry.timestamp.toEpochMilliseconds(),
+                    actor = entry.actor,
+                    action_type = entry.action.typeKey,
+                    project_id = entry.projectId.value,
+                    payload_json = json.encodeToString(
+                        ActionRecordSerializer,
+                        entry.action,
+                    ),
+                    project_name = resolvedName,
+                )
+                catalog.catalogQueries.lastJournalEntryId().executeAsOne()
             }
+            Result.success(entry.copy(sequence = newId, projectName = resolvedName))
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
+    }
 
-    override suspend fun undoLast(): Result<JournalEntry> =
-        withContext(ioDispatcher) {
-            // Insert + delete must not interleave with another append/undo: read the head and
-            // delete it inside one transaction so undo against an empty journal is a clean
-            // miss rather than a TOCTOU between two callers. Same cancellation discipline as
-            // append: re-throw CancellationException, wrap everything else.
-            try {
-                val popped = catalog.transactionWithResult<JournalEntry?> {
-                    val row = catalog.catalogQueries.selectJournalRecent(limit_ = 1L)
-                        .executeAsOneOrNull()
-                    if (row == null) {
-                        null
-                    } else {
-                        catalog.catalogQueries.deleteJournalEntryById(row.id)
-                        toDomain(row)
-                    }
-                }
-                if (popped == null) {
-                    Result.failure(SketchbookError.NotFound("journal is empty"))
+    override suspend fun undoLast(): Result<JournalEntry> = withContext(ioDispatcher) {
+        // Insert + delete must not interleave with another append/undo: read the head and
+        // delete it inside one transaction so undo against an empty journal is a clean
+        // miss rather than a TOCTOU between two callers. Same cancellation discipline as
+        // append: re-throw CancellationException, wrap everything else.
+        try {
+            val popped = catalog.transactionWithResult<JournalEntry?> {
+                val row = catalog.catalogQueries.selectJournalRecent(limit_ = 1L)
+                    .executeAsOneOrNull()
+                if (row == null) {
+                    null
                 } else {
-                    Result.success(popped)
+                    catalog.catalogQueries.deleteJournalEntryById(row.id)
+                    toDomain(row)
                 }
-            } catch (c: CancellationException) {
-                throw c
-            } catch (t: Throwable) {
-                Result.failure(t)
             }
+            if (popped == null) {
+                Result.failure(SketchbookError.NotFound("journal is empty"))
+            } else {
+                Result.success(popped)
+            }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
+    }
 
     private fun toDomain(row: Journal_entries): JournalEntry = JournalEntry(
         timestamp = Instant.fromEpochMilliseconds(row.occurred_at),

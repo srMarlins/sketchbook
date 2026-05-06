@@ -33,19 +33,17 @@ import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
 
 /**
- * Repair surface. Two top-level [GroupCard]s — Mac-imported and Missing samples — visually
- * matching the Proposals queue: rounded-corner card with a tintCream header band, bulk action in
- * the header, and flat hairline-divided rows nested as the body. Mac variations cluster (sorted
- * by stripped base name); missing samples sub-group by confidence (Auto / Multi / None) using
- * [SubGroupHeader] inside the same card.
+ * Search field for the needs-attention queue. Filters macImports + missingSamples by name/path.
  *
- * Performance: each card is one LazyColumn item, rows inside use [key] blocks so Compose can
- * skip unchanged rows when the pending set churns during a bulk repair. Per-row composables take
- * primitive/`@Immutable` args — no full finding-object dependency at the row argument level.
- *
- * `detailPane` is an optional slot the host wires (RootContent owns navigation).
+ * The repair surface itself uses two top-level [GroupCard]s — Mac-imported and Missing samples —
+ * visually matching the Proposals queue: rounded-corner card with a tintCream header band, bulk
+ * action in the header, and flat hairline-divided rows nested as the body. Mac variations cluster
+ * (sorted by stripped base name); missing samples sub-group by confidence (Auto / Multi / None)
+ * via [SubGroupHeader] inside the same card. Each card is one LazyColumn item; rows inside use
+ * `key` blocks so Compose can skip unchanged rows when the pending set churns during a bulk
+ * repair. Per-row composables take primitive/`@Immutable` args. `detailPane` is an optional slot
+ * the host wires (RootContent owns navigation).
  */
-/** Search field for the needs-attention queue. Filters macImports + missingSamples by name/path. */
 @Composable
 fun NeedsAttentionFilterBar(
     state: NeedsAttentionViewModel.State,
@@ -79,12 +77,18 @@ fun LazyListScope.needsAttentionItems(
     if (state.macEntries.isEmpty() && !hasMissing) {
         item(key = "na-empty") {
             EmptyState(
-                title = if (state.loading) "Scanning…"
-                    else if (state.search.isNotBlank()) "No matches"
-                    else "All clear",
-                hint = if (state.search.isNotBlank())
+                title = if (state.loading) {
+                    "Scanning…"
+                } else if (state.search.isNotBlank()) {
+                    "No matches"
+                } else {
+                    "All clear"
+                },
+                hint = if (state.search.isNotBlank()) {
                     "Nothing matches \"${state.search}\". Clear the search to see everything."
-                else "No Mac-imported projects or missing samples found.",
+                } else {
+                    "No Mac-imported projects or missing samples found."
+                },
             )
         }
         return
@@ -209,10 +213,12 @@ private fun MissingSamplesCard(
                                     onClick = { onBulkApply(findings) },
                                     variant = ButtonVariant.Primary,
                                 ) { Text("Apply ${section.entries.size}", softWrap = false, maxLines = 1) }
+
                                 MissingKind.None -> Button(
                                     onClick = { onBulkDismiss(findings) },
                                     variant = ButtonVariant.Ghost,
                                 ) { Text("Dismiss ${section.entries.size}", softWrap = false, maxLines = 1) }
+
                                 MissingKind.Multi -> Unit
                             }
                         },
@@ -341,24 +347,28 @@ private fun MissingSampleRow(
                     Text("applying…", style = AppTheme.typography.caption, maxLines = 1)
                 }
             }
-        } else when (kind) {
-            MissingKind.Auto -> Badge(color = AppTheme.colors.tintSage) {
-                ProvideContentColor(AppTheme.colors.inkPrimary) {
-                    Text(
-                        "→ ${autoMatchParent.ifEmpty { "match" }}/",
-                        style = AppTheme.typography.caption,
-                        maxLines = 1,
-                    )
+        } else {
+            when (kind) {
+                MissingKind.Auto -> Badge(color = AppTheme.colors.tintSage) {
+                    ProvideContentColor(AppTheme.colors.inkPrimary) {
+                        Text(
+                            "→ ${autoMatchParent.ifEmpty { "match" }}/",
+                            style = AppTheme.typography.caption,
+                            maxLines = 1,
+                        )
+                    }
                 }
-            }
-            MissingKind.Multi -> Badge(color = AppTheme.colors.tintBlue) {
-                ProvideContentColor(AppTheme.colors.inkPrimary) {
-                    Text("$candidatesCount matches", style = AppTheme.typography.caption)
+
+                MissingKind.Multi -> Badge(color = AppTheme.colors.tintBlue) {
+                    ProvideContentColor(AppTheme.colors.inkPrimary) {
+                        Text("$candidatesCount matches", style = AppTheme.typography.caption)
+                    }
                 }
-            }
-            MissingKind.None -> Badge(color = AppTheme.colors.tintRose) {
-                ProvideContentColor(AppTheme.colors.inkPrimary) {
-                    Text("no match", style = AppTheme.typography.caption)
+
+                MissingKind.None -> Badge(color = AppTheme.colors.tintRose) {
+                    ProvideContentColor(AppTheme.colors.inkPrimary) {
+                        Text("no match", style = AppTheme.typography.caption)
+                    }
                 }
             }
         }
@@ -385,8 +395,7 @@ private fun macPathsLabel(count: Int, projectInfoMissing: Boolean): String {
     return "$count mac path$plural$infoSuffix"
 }
 
-private fun filenameOf(path: String): String =
-    path.substringAfterLast('/').substringAfterLast('\\').ifEmpty { path }
+private fun filenameOf(path: String): String = path.substringAfterLast('/').substringAfterLast('\\').ifEmpty { path }
 
 private fun parentDirOf(path: String?): String {
     if (path == null) return ""

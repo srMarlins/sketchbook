@@ -74,7 +74,9 @@ fun RowItem(
                     indication = null,
                     onClick = onClick,
                 )
-            } else it
+            } else {
+                it
+            }
         }
     Row(
         modifier = rowMod.padding(PaddingValues(horizontal = AppTheme.spacing.md, vertical = 12.dp)),
@@ -95,4 +97,3 @@ fun RowItem(
         if (trailing != null) trailing()
     }
 }
-

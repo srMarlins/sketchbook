@@ -73,32 +73,30 @@ class SyncStateStore(private val catalog: Catalog) {
     }
 
     /** All sync_state rows. Used by the queue's aggregate observer. */
-    fun all(): List<SyncStateRow> =
-        catalog.catalogQueries.selectAllSyncStates().executeAsList().map { r ->
-            SyncStateRow(
-                uuid = ProjectUuid(r.project_uuid),
-                localRev = r.local_rev,
-                cloudHeadRev = r.cloud_head_rev,
-                dirty = r.dirty != 0L,
-                selfContained = r.self_contained != 0L,
-            )
-        }
+    fun all(): List<SyncStateRow> = catalog.catalogQueries.selectAllSyncStates().executeAsList().map { r ->
+        SyncStateRow(
+            uuid = ProjectUuid(r.project_uuid),
+            localRev = r.local_rev,
+            cloudHeadRev = r.cloud_head_rev,
+            dirty = r.dirty != 0L,
+            selfContained = r.self_contained != 0L,
+        )
+    }
 
     /**
      * Dirty rows ordered oldest-first by `updated_at`. Used by the GcsSyncQueue background
      * drain to pick the longest-pending project off the queue. Tiebreaker is uuid for
      * determinism (matters in tests; users won't notice).
      */
-    fun dirtyOldestFirst(): List<SyncStateRow> =
-        catalog.catalogQueries.selectDirtyOldestFirst().executeAsList().map { r ->
-            SyncStateRow(
-                uuid = ProjectUuid(r.project_uuid),
-                localRev = r.local_rev,
-                cloudHeadRev = r.cloud_head_rev,
-                dirty = r.dirty != 0L,
-                selfContained = r.self_contained != 0L,
-            )
-        }
+    fun dirtyOldestFirst(): List<SyncStateRow> = catalog.catalogQueries.selectDirtyOldestFirst().executeAsList().map { r ->
+        SyncStateRow(
+            uuid = ProjectUuid(r.project_uuid),
+            localRev = r.local_rev,
+            cloudHeadRev = r.cloud_head_rev,
+            dirty = r.dirty != 0L,
+            selfContained = r.self_contained != 0L,
+        )
+    }
 
     /**
      * Commit the result of a successful push: clamp dirty=0, set local_rev = cloud_head_rev =

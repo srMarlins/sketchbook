@@ -28,8 +28,7 @@ class AlsRewriterTest {
         return out.toByteArray()
     }
 
-    private fun ungzipToString(gzipped: ByteArray): String =
-        GZIPInputStream(ByteArrayInputStream(gzipped)).use { it.readBytes().toString(Charsets.UTF_8) }
+    private fun ungzipToString(gzipped: ByteArray): String = GZIPInputStream(ByteArrayInputStream(gzipped)).use { it.readBytes().toString(Charsets.UTF_8) }
 
     @Test
     fun `rewrites SampleRef Path Value while preserving everything else`() {
@@ -102,7 +101,7 @@ class AlsRewriterTest {
             newRelativePath = "Samples/Imported/kick.wav",
             newRelativePathType = 1,
             newOriginalFileSize = 58394528L,
-            newOriginalCrc = 0L,           // force Live to recompute
+            newOriginalCrc = 0L, // force Live to recompute
             newLastModDate = 1700000000L,
         )
         val out = AlsRewriter.rewriteSampleRefs(gz, listOf(edit))
@@ -125,7 +124,8 @@ class AlsRewriterTest {
     @Test fun rewriteSamplePathsStillWorksAsThinWrapper() {
         val gz = javaClass.getResourceAsStream("/live12-sampleref.xml.gz")!!.readBytes()
         val out = AlsRewriter.rewriteSamplePaths(
-            gz, mapOf("D:/Audio/Project/Samples/Imported/kick.wav" to "E:/x/kick.wav"),
+            gz,
+            mapOf("D:/Audio/Project/Samples/Imported/kick.wav" to "E:/x/kick.wav"),
         )
         val md = AlsParser.parse(out.inputStream())
         assertEquals("E:/x/kick.wav", md.sampleRefs[0].rawPath)

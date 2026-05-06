@@ -33,13 +33,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,7 +46,11 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.core.ProjectId
+import com.sketchbook.core.Stage
 import com.sketchbook.repo.ProjectSyncState
 import com.sketchbook.uishared.components.EmptyState
 import com.sketchbook.uishared.components.HighlightChip
@@ -58,6 +59,8 @@ import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.ScanIndicator
 import com.sketchbook.uishared.components.ShelfHeader
+import com.sketchbook.uishared.components.SongStageChip
+import com.sketchbook.uishared.components.SongStageTone
 import com.sketchbook.uishared.components.SongStrip
 import com.sketchbook.uishared.components.SongStripData
 import com.sketchbook.uishared.components.SongSyncBadge
@@ -134,11 +137,13 @@ fun ProjectListScreen(
                     PageHeader(
                         title = state.zoomShelf?.title() ?: "Projects",
                         subtitle = state.zoomShelf?.subtitle()
-                            ?: "Your Ableton catalog — ${state.groups.size} project${if (state.groups.size == 1) "" else "s"}, "
-                            + "${state.rows.size} `.als` file${if (state.rows.size == 1) "" else "s"}.",
+                            ?: "Your Ableton catalog — ${state.groups.size} project${if (state.groups.size == 1) "" else "s"}, " +
+                            "${state.rows.size} `.als` file${if (state.rows.size == 1) "" else "s"}.",
                         actions = if (state.zoomShelf != null) {
                             { BackToOverview(onClick = { onZoomShelf(null) }) }
-                        } else null,
+                        } else {
+                            null
+                        },
                     )
                     TextField(
                         value = state.query,
@@ -159,17 +164,23 @@ fun ProjectListScreen(
                                     Text("×", style = AppTheme.typography.body)
                                 }
                             }
-                        } else null,
+                        } else {
+                            null
+                        },
                     )
                     FilterChipsRow(
                         tempoRange = state.tempoRange,
                         keyFilter = state.keyFilter,
                         distinctKeys = state.distinctKeys,
+                        stageFilter = state.stageFilter,
                         onTempoChange = { range ->
                             dispatch(ProjectListViewModel.Intent.SetTempoRange(range))
                         },
                         onKeyChange = { key ->
                             dispatch(ProjectListViewModel.Intent.SetKeyFilter(key))
+                        },
+                        onStageChange = { stages ->
+                            dispatch(ProjectListViewModel.Intent.SetStageFilter(stages))
                         },
                     )
                     ScanIndicator(
@@ -272,18 +283,22 @@ private fun handleSearchKey(
             dispatch(ProjectListViewModel.Intent.Search(""))
             true
         }
+
         state.query.isNotBlank() && state.searchResults.isNotEmpty() && key == Key.DirectionDown -> {
             dispatch(ProjectListViewModel.Intent.NavigateSearchNext)
             true
         }
+
         state.query.isNotBlank() && state.searchResults.isNotEmpty() && key == Key.DirectionUp -> {
             dispatch(ProjectListViewModel.Intent.NavigateSearchPrev)
             true
         }
+
         state.query.isNotBlank() && state.searchResults.isNotEmpty() && (key == Key.Enter || key == Key.NumPadEnter) -> {
             dispatch(ProjectListViewModel.Intent.OpenSelectedSearch)
             true
         }
+
         else -> false
     }
 }
@@ -556,16 +571,24 @@ private fun FilterChipsRow(
     tempoRange: ClosedFloatingPointRange<Double>?,
     keyFilter: String?,
     distinctKeys: List<String>,
+    stageFilter: Set<Stage>,
     onTempoChange: (ClosedFloatingPointRange<Double>?) -> Unit,
     onKeyChange: (String?) -> Unit,
+    onStageChange: (Set<Stage>) -> Unit,
 ) {
     var tempoOpen by remember { mutableStateOf(false) }
     var keyOpen by remember { mutableStateOf(false) }
+    var stageOpen by remember { mutableStateOf(false) }
 
     val tempoLabel = tempoRange?.let { range ->
         "Tempo: ${formatBpm(range.start)}–${formatBpm(range.endInclusive)}"
     } ?: "Tempo: any"
     val keyLabel = "Key: ${keyFilter ?: "any"}"
+    val stageLabel = if (stageFilter.isEmpty()) {
+        "Stage: any"
+    } else {
+        "Stage: " + stageFilter.sortedBy { it.ordinal }.joinToString(", ") { it.name.lowercase() }
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -618,6 +641,78 @@ private fun FilterChipsRow(
                     )
                 }
             }
+        }
+        Box {
+            FilterChip(
+                label = stageLabel,
+                active = stageFilter.isNotEmpty(),
+                onClick = { stageOpen = !stageOpen },
+            )
+            if (stageOpen) {
+                Popup(
+                    onDismissRequest = { stageOpen = false },
+                    // Multi-select stays open across toggles; only "Any" / outside-click close it.
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    StageFilterPopup(
+                        current = stageFilter,
+                        onToggle = { stage ->
+                            val next = if (stage in stageFilter) stageFilter - stage else stageFilter + stage
+                            onStageChange(next)
+                        },
+                        onAny = {
+                            onStageChange(emptySet())
+                            stageOpen = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Stage popup: an "Any" reset row + one toggle row per [Stage]. Multi-select — clicking a
+ * stage toggles it in the active set without closing the popup, matching how producers expect
+ * a checkbox-style filter to feel ("show me Mixing AND Done").
+ */
+@Composable
+private fun StageFilterPopup(
+    current: Set<Stage>,
+    onToggle: (Stage) -> Unit,
+    onAny: () -> Unit,
+) {
+    val colors = AppTheme.colors
+    Column(
+        modifier = Modifier
+            .widthIn(min = 200.dp, max = 260.dp)
+            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+            .background(colors.surfaceCard)
+            .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard)),
+    ) {
+        StageFilterRow(label = "Any", selected = current.isEmpty(), onClick = onAny)
+        for (stage in Stage.values()) {
+            StageFilterRow(
+                label = stage.displayName,
+                selected = stage in current,
+                onClick = { onToggle(stage) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun StageFilterRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = AppTheme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (selected) colors.tintCream else colors.surfaceCard)
+            .clickable(onClick = onClick)
+            .padding(horizontal = AppTheme.spacing.md, vertical = 8.dp),
+    ) {
+        ProvideContentColor(if (selected) colors.inkPrimary else colors.inkSecondary) {
+            Text(label, style = AppTheme.typography.body)
         }
     }
 }
@@ -827,21 +922,40 @@ private fun ProjectGroup.toSongStripData(sync: ProjectSyncState?): SongStripData
         warning = if (missingSampleCount > 0) "$missingSampleCount missing sample${if (missingSampleCount == 1) "" else "s"}" else null,
         sync = sync?.toBadge(),
         variantCount = variantCount,
+        // Effective stage: override wins over the inferred classification — same rule the
+        // toolbar filter uses, so chip rendering and filter membership always agree.
+        stage = r.effectiveStage?.toChip(),
     )
 }
 
-internal fun ProjectGroup.toSongStripDataForTest(sync: ProjectSyncState?): SongStripData =
-    toSongStripData(sync)
+private fun Stage.toChip(): SongStageChip = SongStageChip(
+    label = label,
+    tone = when (this) {
+        Stage.Sketch -> SongStageTone.Sketch
+        Stage.InProgress -> SongStageTone.InProgress
+        Stage.Mixing -> SongStageTone.Mixing
+        Stage.Done -> SongStageTone.Done
+        Stage.Stuck -> SongStageTone.Stuck
+    },
+)
+
+internal fun ProjectGroup.toSongStripDataForTest(sync: ProjectSyncState?): SongStripData = toSongStripData(sync)
 
 private fun ProjectSyncState.toBadge(): SongSyncBadge = when (this) {
     ProjectSyncState.Synced -> SongSyncBadge.Synced
+
     ProjectSyncState.Pending -> SongSyncBadge.Pending
+
     ProjectSyncState.Uploading -> SongSyncBadge.Uploading
+
     ProjectSyncState.Conflict -> SongSyncBadge.Conflict
+
     // Remote ahead is "we owe a pull" — surface it as Pending in the song-strip badge so the
     // user reads "this row needs sync attention" without introducing a new badge variant.
     ProjectSyncState.RemoteAhead -> SongSyncBadge.Pending
+
     ProjectSyncState.LocalOnly -> SongSyncBadge.LocalOnly
+
     ProjectSyncState.Unknown -> SongSyncBadge.Unknown
 }
 

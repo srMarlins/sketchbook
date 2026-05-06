@@ -62,10 +62,16 @@ class NeedsAttentionViewModel(
     ) { findings, p, q ->
         // Filter the upstream lists by the search query before bucketizing/sorting so the
         // project-boundary flags reflect only the visible rows. Empty query short-circuits.
-        val visibleMac = if (q.isBlank()) findings.macImports
-            else findings.macImports.filter { it.matchesSearch(q) }
-        val visibleMissing = if (q.isBlank()) findings.missingSamples
-            else findings.missingSamples.filter { it.matchesSearch(q) }
+        val visibleMac = if (q.isBlank()) {
+            findings.macImports
+        } else {
+            findings.macImports.filter { it.matchesSearch(q) }
+        }
+        val visibleMissing = if (q.isBlank()) {
+            findings.missingSamples
+        } else {
+            findings.missingSamples.filter { it.matchesSearch(q) }
+        }
         val macEntries = macEntries(visibleMac)
         val missingByConfidence = bucketize(visibleMissing)
         // Auto-clean: if a pending row has already left the findings list, drop the pending
@@ -106,10 +112,12 @@ class NeedsAttentionViewModel(
     fun dispatch(intent: Intent) {
         when (intent) {
             is Intent.SetSearch -> search.value = intent.query
+
             is Intent.AckMacImport -> viewModelScope.launch {
                 val r = repository.acknowledgeMacImport(intent.projectId)
                 emitAck(r.isSuccess, intent.projectId.value.toString(), "ack")
             }
+
             is Intent.RepairMacPaths -> viewModelScope.launch {
                 pending.update { it.copy(macRepairs = it.macRepairs + intent.projectId) }
                 val r = runCatching { repository.applyMacPathRepair(intent.projectId) }
@@ -122,10 +130,12 @@ class NeedsAttentionViewModel(
                     _effects.tryEmit(Effect.Failed(intent.projectId.value.toString(), "repair failed"))
                 }
             }
+
             is Intent.DismissMissingSample -> viewModelScope.launch {
                 val r = repository.dismissMissingSample(intent.projectId, intent.missingPath)
                 emitAck(r.isSuccess, intent.projectId.value.toString(), "dismiss")
             }
+
             is Intent.ApplyMatch -> viewModelScope.launch {
                 val key = intent.projectId to intent.missingPath
                 pending.update { it.copy(missingApplies = it.missingApplies + key) }
@@ -143,6 +153,7 @@ class NeedsAttentionViewModel(
                     _effects.tryEmit(Effect.Failed(intent.projectId.value.toString(), "apply failed"))
                 }
             }
+
             is Intent.BulkAck -> viewModelScope.launch {
                 val successes = mutableListOf<String>()
                 val failures = mutableListOf<String>()
@@ -154,6 +165,7 @@ class NeedsAttentionViewModel(
                 }
                 _effects.tryEmit(Effect.BulkAcked(successes, failures))
             }
+
             is Intent.BulkRepairMacPaths -> viewModelScope.launch {
                 pending.update { it.copy(macRepairs = it.macRepairs + intent.projectIds) }
                 val successes = mutableListOf<String>()
@@ -171,6 +183,7 @@ class NeedsAttentionViewModel(
                 }
                 _effects.tryEmit(Effect.BulkRepaired(successes, failures))
             }
+
             is Intent.BulkApplyAutoMatch -> viewModelScope.launch {
                 val keys = intent.findings.map { it.projectId to it.missingPath }
                 pending.update { it.copy(missingApplies = it.missingApplies + keys) }
@@ -197,6 +210,7 @@ class NeedsAttentionViewModel(
                 }
                 _effects.tryEmit(Effect.BulkApplied(successes, failures))
             }
+
             is Intent.BulkDismiss -> viewModelScope.launch {
                 val successes = mutableListOf<String>()
                 val failures = mutableListOf<String>()
@@ -213,8 +227,11 @@ class NeedsAttentionViewModel(
     }
 
     private fun emitAck(success: Boolean, key: String, kind: String) {
-        if (success) _effects.tryEmit(Effect.Acknowledged(key, kind))
-        else _effects.tryEmit(Effect.Failed(key, "$kind failed"))
+        if (success) {
+            _effects.tryEmit(Effect.Acknowledged(key, kind))
+        } else {
+            _effects.tryEmit(Effect.Failed(key, "$kind failed"))
+        }
     }
 
     /**

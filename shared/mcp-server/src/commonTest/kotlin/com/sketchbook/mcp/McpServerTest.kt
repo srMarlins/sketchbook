@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
-import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -21,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 class McpServerTest {
 
@@ -43,8 +43,7 @@ class McpServerTest {
             val filtered = if (query.isBlank()) rows else rows.filter { query in it.name }
             return flowOf(filtered)
         }
-        override fun observeProject(id: ProjectId): Flow<ProjectRow?> =
-            flowOf(rows.firstOrNull { it.id == id })
+        override fun observeProject(id: ProjectId): Flow<ProjectRow?> = flowOf(rows.firstOrNull { it.id == id })
         override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> = Result.success(stub())
         override suspend fun rename(id: ProjectId, newName: String): Result<JournalEntry> = Result.success(stub())
         override suspend fun archive(id: ProjectId, archived: Boolean): Result<JournalEntry> = Result.success(stub())
@@ -86,11 +85,16 @@ class McpServerTest {
     fun searchProjectsCallReturnsMatches() = runTest {
         val (server, _) = makeServer()
         val req = buildJsonObject {
-            put("jsonrpc", "2.0"); put("id", 2); put("method", "tools/call")
-            put("params", buildJsonObject {
-                put("name", "search_projects")
-                put("arguments", buildJsonObject { put("query", "kick") })
-            })
+            put("jsonrpc", "2.0")
+            put("id", 2)
+            put("method", "tools/call")
+            put(
+                "params",
+                buildJsonObject {
+                    put("name", "search_projects")
+                    put("arguments", buildJsonObject { put("query", "kick") })
+                },
+            )
         }
         val response = assertNotNull(server.handle(req.toString()))
         val structured = Json.parseToJsonElement(response).jsonObject["result"]?.jsonObject
@@ -105,22 +109,38 @@ class McpServerTest {
     fun proposeBatchPersistsThroughWriter() = runTest {
         val (server, writer) = makeServer()
         val req = buildJsonObject {
-            put("jsonrpc", "2.0"); put("id", 3); put("method", "tools/call")
-            put("params", buildJsonObject {
-                put("name", "propose_batch")
-                put("arguments", buildJsonObject {
-                    put("rationale", "tidy up untriaged")
-                    put("actions", kotlinx.serialization.json.buildJsonArray {
-                        add(buildJsonObject {
-                            put("type", "SetColorTag")
-                            put("args", buildJsonObject {
-                                put("project_id", 7)
-                                put("color", 4)
-                            })
-                        })
-                    })
-                })
-            })
+            put("jsonrpc", "2.0")
+            put("id", 3)
+            put("method", "tools/call")
+            put(
+                "params",
+                buildJsonObject {
+                    put("name", "propose_batch")
+                    put(
+                        "arguments",
+                        buildJsonObject {
+                            put("rationale", "tidy up untriaged")
+                            put(
+                                "actions",
+                                kotlinx.serialization.json.buildJsonArray {
+                                    add(
+                                        buildJsonObject {
+                                            put("type", "SetColorTag")
+                                            put(
+                                                "args",
+                                                buildJsonObject {
+                                                    put("project_id", 7)
+                                                    put("color", 4)
+                                                },
+                                            )
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                },
+            )
         }
         val response = assertNotNull(server.handle(req.toString()))
         val structured = Json.parseToJsonElement(response).jsonObject["result"]?.jsonObject

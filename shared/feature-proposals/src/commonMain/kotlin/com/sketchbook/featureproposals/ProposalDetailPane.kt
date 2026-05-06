@@ -197,20 +197,26 @@ private fun actionFields(
             "From" to (s("from") ?: "—"),
             "To" to (s("to") ?: "—"),
         )
+
         "RenameProject" -> projectField + listOf(
             "From" to ((s("from_") ?: s("from")) ?: "—"),
             "To" to (s("to") ?: "—"),
         )
+
         "ArchiveProject" -> projectField + listOf("Action" to "Archive")
+
         "SetTags" -> projectField + listOf(
             "Before" to arr("before").joinToString(", ").ifEmpty { "(none)" },
             "After" to arr("after").joinToString(", ").ifEmpty { "(none)" },
         )
+
         "SetColorTag" -> projectField + listOf(
             "Before" to (s("before") ?: "(none)"),
             "After" to (s("after") ?: "(none)"),
         )
+
         "Undo" -> listOf("Action" to "Undo previous batch")
+
         else -> action.args.entries.map { (k, v) -> k to v.toString() }
     }
 }

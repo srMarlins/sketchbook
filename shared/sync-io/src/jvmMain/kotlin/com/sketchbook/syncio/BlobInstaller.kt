@@ -43,11 +43,9 @@ object BlobInstaller {
     }
 
     /** True iff both paths point at the same physical file (same inode on POSIX, same fileKey on Windows). */
-    fun sameInode(a: Path, b: Path): Boolean {
-        return try {
-            Files.isSameFile(a, b)
-        } catch (_: java.io.IOException) {
-            false
-        }
+    fun sameInode(a: Path, b: Path): Boolean = try {
+        Files.isSameFile(a, b)
+    } catch (_: java.io.IOException) {
+        false
     }
 }

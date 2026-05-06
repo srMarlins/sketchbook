@@ -9,7 +9,11 @@ import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.desktop.repo.SwappableSyncQueue
+import com.sketchbook.featureprojects.HealthFilter
+import com.sketchbook.featureprojects.ProjectFilterCoordinator
 import com.sketchbook.repo.LibraryHealth
+import com.sketchbook.repo.MissingPluginRow
+import com.sketchbook.repo.MissingPluginSummary
 import com.sketchbook.repo.PluginUsage
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProjectSyncState
@@ -49,6 +53,7 @@ class RootChromeViewModel(
     proposalsRepository: ProposalsRepository,
     repairRepository: RepairRepository,
     private val projectRepository: ProjectRepository,
+    private val filterCoordinator: ProjectFilterCoordinator,
 ) : ViewModel() {
 
     /**
@@ -76,6 +81,30 @@ class RootChromeViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryHealth.EMPTY)
 
     /**
+     * Sidebar Health-chip row-click handler. Publishes [filter] into the AppScope-lifetime
+     * [ProjectFilterCoordinator] so the per-NavEntry `ProjectListViewModel` (which may not even
+     * exist yet at the moment the chip is clicked) picks it up via constructor injection. No
+     * `LaunchedEffect` orchestration needed in `RootContent`.
+     */
+    fun publishHealthFilter(filter: HealthFilter) {
+        filterCoordinator.setFilter(filter)
+    }
+
+    /**
+     * PR-T: scalar count for the Home coverage chip. `null` while the SQL is still warming up so
+     * the chip has a way to render nothing rather than a flashing "0 missing" placeholder.
+     */
+    val missingPluginSummary: StateFlow<MissingPluginSummary?> = projectRepository.observeMissingPluginSummary()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * PR-T: list of missing (name, format) pairs that the chip's popup renders. Empty list while
+     * loading; filled once the probe has run + the SQL has propagated.
+     */
+    val missingPluginCoverage: StateFlow<List<MissingPluginRow>> = projectRepository.observeMissingPluginCoverage()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /**
      * `null` when cloud isn't configured — the cluster of nullable callbacks (`syncStateFor`,
      * `onPushNow`, `conflictMessageFor`) bottoms out here so the UI can disable affordances
      * without a deeper conditional.
@@ -83,15 +112,13 @@ class RootChromeViewModel(
     val syncWired: Boolean get() = syncImpl != null
 
     /** Per-project sync pip. Falls back to [ProjectSyncState.Unknown] without a desktop façade. */
-    fun syncStateFor(id: ProjectId): ProjectSyncState =
-        syncImpl?.snapshotFor(id) ?: ProjectSyncState.Unknown
+    fun syncStateFor(id: ProjectId): ProjectSyncState = syncImpl?.snapshotFor(id) ?: ProjectSyncState.Unknown
 
     /** Optional friendly message for the per-project conflict surface. */
     fun conflictMessage(id: ProjectId): String? = syncImpl?.conflictMessage(id)
 
     /** Trigger an immediate push for one project. No-op without cloud. */
-    suspend fun pushNow(id: ProjectId): Result<Unit> =
-        syncImpl?.pushNowById(id) ?: Result.failure(IllegalStateException("Cloud not configured"))
+    suspend fun pushNow(id: ProjectId): Result<Unit> = syncImpl?.pushNowById(id) ?: Result.failure(IllegalStateException("Cloud not configured"))
 
     /** Translate the local id used everywhere in the UI to the cloud-stable [ProjectUuid]. */
     fun timelineUuidFor(id: ProjectId): ProjectUuid = syncStateStore.identityFor(id)

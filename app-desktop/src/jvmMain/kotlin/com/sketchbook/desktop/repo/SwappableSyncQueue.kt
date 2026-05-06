@@ -1,31 +1,30 @@
 package com.sketchbook.desktop.repo
 
 import com.sketchbook.catalog.SyncStateStore
+import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.DirectGcsBackend
 import com.sketchbook.cloud.GcsAuth
 import com.sketchbook.cloud.ServiceAccountKey
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.UserId
+import com.sketchbook.repo.BlobCacheSettings
+import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProjectSyncState
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
-import com.sketchbook.cloud.CloudBackend
-import com.sketchbook.core.SnapshotRev
-import com.sketchbook.repo.BlobCacheSettings
-import com.sketchbook.repo.JournalRepository
 import com.sketchbook.sync.ForceSnapshotPipeline
 import com.sketchbook.sync.JvmBlobCache
 import com.sketchbook.sync.SnapshotPipeline
 import com.sketchbook.syncio.ManifestMaterializer
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -33,8 +32,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.serialization.json.Json
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.UUID
 
 /**
@@ -64,7 +64,8 @@ class SwappableSyncQueue(
     private val journal: JournalRepository? = null,
     private val httpClient: HttpClient = HttpClient(CIO),
     private val json: Json = Json { ignoreUnknownKeys = false },
-) : SyncQueue, ForceSnapshotPipeline {
+) : SyncQueue,
+    ForceSnapshotPipeline {
 
     private val fallback = InMemorySyncQueue(projects = projects, scope = scope)
     private val delegate = MutableStateFlow<SyncQueue>(fallback)
@@ -114,74 +115,69 @@ class SwappableSyncQueue(
         }
     }
 
-    private fun buildGcsQueue(credentialJson: String, bucket: String): SyncQueue {
-        return runCatching {
-            val key = json.decodeFromString(ServiceAccountKey.serializer(), credentialJson)
-            val auth = GcsAuth(key = key, httpClient = httpClient)
-            val backend = DirectGcsBackend(
-                http = httpClient,
-                auth = auth,
-                bucket = bucket,
-                userId = UserId.DEFAULT,
-            )
-            val pipeline = SnapshotPipeline(
-                cloud = backend,
-                ownerUserId = UserId.DEFAULT,
-                hostId = hostId,
-                hostName = hostName,
-            )
-            // Build the materializer alongside the queue so Timeline rewind works the moment
-            // creds land. Cache settings come from settings.observe() — we read once here; a
-            // cache-policy change forces the user to re-toggle creds today (rare, acceptable).
-            val cacheSettings: () -> BlobCacheSettings = {
-                kotlinx.coroutines.runBlocking { settings.observe().first() }.cacheSettings
-            }
-            val blobCache = JvmBlobCache(
-                catalog = catalog,
-                cacheRoot = blobCacheRoot,
-                cloud = backend,
-                cacheSettings = cacheSettings,
-            )
-            _currentCloud.value = backend
-            currentMaterializer = ManifestMaterializer(
-                cloud = backend,
-                blobCache = blobCache,
-                projectRoot = { uuid ->
-                    val pid = syncStateStore.projectIdFor(uuid)
-                        ?: throw IllegalStateException("no local project for uuid $uuid")
-                    val row = kotlinx.coroutines.runBlocking {
-                        projects.observeProject(pid).first()
-                    } ?: throw IllegalStateException("project row $pid not found")
-                    val parent = Paths.get(row.path.value).parent
-                        ?: throw IllegalStateException("project path has no parent: ${row.path.value}")
-                    parent
-                },
-            )
-            GcsSyncQueue(
-                cloud = backend,
-                pipeline = pipeline,
-                syncState = syncStateStore,
-                projects = projects,
-                scope = scope,
-                journal = journal,
-            )
-        }.getOrElse {
-            // Bad creds JSON or unsupported scheme — fall back to in-memory so the UI keeps
-            // rendering. The error surfaces via Settings → Test connection.
-            currentMaterializer = null
-            _currentCloud.value = null
-            fallback
+    private fun buildGcsQueue(credentialJson: String, bucket: String): SyncQueue = runCatching {
+        val key = json.decodeFromString(ServiceAccountKey.serializer(), credentialJson)
+        val auth = GcsAuth(key = key, httpClient = httpClient)
+        val backend = DirectGcsBackend(
+            http = httpClient,
+            auth = auth,
+            bucket = bucket,
+            userId = UserId.DEFAULT,
+        )
+        val pipeline = SnapshotPipeline(
+            cloud = backend,
+            ownerUserId = UserId.DEFAULT,
+            hostId = hostId,
+            hostName = hostName,
+        )
+        // Build the materializer alongside the queue so Timeline rewind works the moment
+        // creds land. Cache settings come from settings.observe() — we read once here; a
+        // cache-policy change forces the user to re-toggle creds today (rare, acceptable).
+        val cacheSettings: () -> BlobCacheSettings = {
+            kotlinx.coroutines.runBlocking { settings.observe().first() }.cacheSettings
         }
+        val blobCache = JvmBlobCache(
+            catalog = catalog,
+            cacheRoot = blobCacheRoot,
+            cloud = backend,
+            cacheSettings = cacheSettings,
+        )
+        _currentCloud.value = backend
+        currentMaterializer = ManifestMaterializer(
+            cloud = backend,
+            blobCache = blobCache,
+            projectRoot = { uuid ->
+                val pid = syncStateStore.projectIdFor(uuid)
+                    ?: throw IllegalStateException("no local project for uuid $uuid")
+                val row = kotlinx.coroutines.runBlocking {
+                    projects.observeProject(pid).first()
+                } ?: throw IllegalStateException("project row $pid not found")
+                val parent = Paths.get(row.path.value).parent
+                    ?: throw IllegalStateException("project path has no parent: ${row.path.value}")
+                parent
+            },
+        )
+        GcsSyncQueue(
+            cloud = backend,
+            pipeline = pipeline,
+            syncState = syncStateStore,
+            projects = projects,
+            scope = scope,
+            journal = journal,
+        )
+    }.getOrElse {
+        // Bad creds JSON or unsupported scheme — fall back to in-memory so the UI keeps
+        // rendering. The error surfaces via Settings → Test connection.
+        currentMaterializer = null
+        _currentCloud.value = null
+        fallback
     }
 
-    override fun observe(): Flow<SyncQueueState> =
-        delegate.flatMapLatest { it.observe() }
+    override fun observe(): Flow<SyncQueueState> = delegate.flatMapLatest { it.observe() }
 
-    override fun observeProject(id: ProjectId): Flow<ProjectSyncState> =
-        delegate.flatMapLatest { it.observeProject(id) }
+    override fun observeProject(id: ProjectId): Flow<ProjectSyncState> = delegate.flatMapLatest { it.observeProject(id) }
 
-    override suspend fun pushNow(uuid: ProjectUuid): Result<Unit> =
-        delegate.value.pushNow(uuid)
+    override suspend fun pushNow(uuid: ProjectUuid): Result<Unit> = delegate.value.pushNow(uuid)
 
     /**
      * Z3 quick-capture: route through the live cloud queue so the forced Named snapshot picks up
@@ -189,22 +185,23 @@ class SwappableSyncQueue(
      * a clear failure rather than silently dropping the snapshot — the desktop dialog can show
      * the user a "configure cloud first" message.
      */
-    override suspend fun recordForcedNamed(uuid: ProjectUuid, label: String): Result<SnapshotRev> {
-        return when (val current = delegate.value) {
-            is GcsSyncQueue -> current.recordForcedNamed(uuid, label)
-            else -> Result.failure(
-                IllegalStateException("Cloud sync isn't configured — set credentials in Settings first."),
-            )
-        }
+    override suspend fun recordForcedNamed(uuid: ProjectUuid, label: String): Result<SnapshotRev> = when (val current = delegate.value) {
+        is GcsSyncQueue -> current.recordForcedNamed(uuid, label)
+
+        else -> Result.failure(
+            IllegalStateException("Cloud sync isn't configured — set credentials in Settings first."),
+        )
     }
 
     /** Per-row Sync-now invocation from the desktop detail panel. */
     suspend fun pushNowById(id: ProjectId): Result<Unit> = when (val current = delegate.value) {
         is GcsSyncQueue -> current.pushNowById(id)
+
         is InMemorySyncQueue -> {
             current.pushNowById(id)
             Result.success(Unit)
         }
+
         else -> Result.failure(IllegalStateException("unsupported sync queue impl"))
     }
 

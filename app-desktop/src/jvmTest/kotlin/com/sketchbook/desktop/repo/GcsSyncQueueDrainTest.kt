@@ -241,25 +241,31 @@ class GcsSyncQueueDrainTest {
         assertEquals(1, env.cloud.lockAcquireCount, "first attempt should fire immediately")
 
         // Backoff after fail #1 = 30s. Verify no retry before that.
-        advanceTimeBy(29_000); runCurrent()
+        advanceTimeBy(29_000)
+        runCurrent()
         assertEquals(1, env.cloud.lockAcquireCount, "no retry before 30s backoff expires")
         // Cross 30s boundary → next 60s wake fires retry. Use 60s wake (the only timer).
-        advanceTimeBy(31_000); runCurrent() // total 60s → wake fires drainOnce.
+        advanceTimeBy(31_000)
+        runCurrent() // total 60s → wake fires drainOnce.
         assertEquals(2, env.cloud.lockAcquireCount, "second attempt at ~60s")
 
         // Backoff after fail #2 = 60s. Next wake: another 60s window. Need to wait ~60s past t=60.
-        advanceTimeBy(60_000); runCurrent() // t=120 → next wake.
+        advanceTimeBy(60_000)
+        runCurrent() // t=120 → next wake.
         assertEquals(3, env.cloud.lockAcquireCount, "third attempt around t=120s (60s backoff cleared)")
 
         // Backoff after fail #3 = 300s. Next wake at +60s (t=180), but backoff still active.
-        advanceTimeBy(60_000); runCurrent() // t=180.
+        advanceTimeBy(60_000)
+        runCurrent() // t=180.
         assertEquals(3, env.cloud.lockAcquireCount, "still backed off at t=180s")
         // Several more 60s wakes pass, all skip. We need t >= 120 + 300 = 420.
-        advanceTimeBy(240_000); runCurrent() // t=420.
+        advanceTimeBy(240_000)
+        runCurrent() // t=420.
         assertEquals(4, env.cloud.lockAcquireCount, "fourth attempt around t=420s (300s backoff cleared)")
 
         // Backoff after fail #4 = 900s. Need t >= 420 + 900 = 1320.
-        advanceTimeBy(900_000); runCurrent() // t=1320.
+        advanceTimeBy(900_000)
+        runCurrent() // t=1320.
         assertEquals(5, env.cloud.lockAcquireCount, "fifth attempt around t=1320s (900s cap)")
     }
 
@@ -272,19 +278,25 @@ class GcsSyncQueueDrainTest {
         env.queue.start()
         runCurrent()
         // Walk through 5 failures the same way as the previous test.
-        advanceTimeBy(60_000); runCurrent()  // attempt #2
-        advanceTimeBy(60_000); runCurrent()  // attempt #3
-        advanceTimeBy(300_000); runCurrent() // attempt #4
-        advanceTimeBy(900_000); runCurrent() // attempt #5
+        advanceTimeBy(60_000)
+        runCurrent() // attempt #2
+        advanceTimeBy(60_000)
+        runCurrent() // attempt #3
+        advanceTimeBy(300_000)
+        runCurrent() // attempt #4
+        advanceTimeBy(900_000)
+        runCurrent() // attempt #5
         assertEquals(5, env.cloud.lockAcquireCount)
 
         // After attempt #5 fails, backoff should still be 900s (capped). Verify by advancing
         // exactly 900s — attempt #6 should fire right around that boundary.
-        advanceTimeBy(900_000); runCurrent()
+        advanceTimeBy(900_000)
+        runCurrent()
         assertEquals(6, env.cloud.lockAcquireCount, "6th attempt should fire at 900s cap, not grow further")
 
         // And the 7th: another 900s, not 30 minutes or anything bigger.
-        advanceTimeBy(900_000); runCurrent()
+        advanceTimeBy(900_000)
+        runCurrent()
         assertEquals(7, env.cloud.lockAcquireCount, "7th attempt also at 900s cap (no further growth)")
     }
 
@@ -297,12 +309,14 @@ class GcsSyncQueueDrainTest {
         env.cloud.firstAppendIsConflict = true
 
         env.queue.start()
-        runCurrent(); advanceUntilIdle()
+        runCurrent()
+        advanceUntilIdle()
 
         // Pipeline ran once and produced the branch; uuid is now in `conflicts`. Even after a
         // long quiet period the drain should not retry the same uuid.
         val attemptsAfterConflict = env.cloud.lockAcquireCount
-        advanceTimeBy(3_600_000); runCurrent() // 1h.
+        advanceTimeBy(3_600_000)
+        runCurrent() // 1h.
         advanceUntilIdle()
         assertEquals(attemptsAfterConflict, env.cloud.lockAcquireCount, "uuid in conflict should not be re-attempted")
 
@@ -310,7 +324,8 @@ class GcsSyncQueueDrainTest {
         // branch write but the test simulates the user-driven clearance pattern).
         env.syncState.markDirty(uuid)
         env.queue.clearConflict(uuid)
-        advanceTimeBy(1_000); runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
         advanceUntilIdle()
         assertTrue(env.cloud.lockAcquireCount > attemptsAfterConflict, "drain should pick up the uuid after conflict cleared")
     }
@@ -324,8 +339,10 @@ class GcsSyncQueueDrainTest {
 
         env.queue.start()
         runCurrent()
-        advanceTimeBy(60_000); runCurrent() // attempt #2
-        advanceTimeBy(60_000); runCurrent() // attempt #3 — succeeds, backoff cleared
+        advanceTimeBy(60_000)
+        runCurrent() // attempt #2
+        advanceTimeBy(60_000)
+        runCurrent() // attempt #3 — succeeds, backoff cleared
 
         assertTrue(env.cloud.appendCount >= 1, "third attempt should have written a manifest")
         val baselineAcquires = env.cloud.lockAcquireCount
@@ -338,14 +355,16 @@ class GcsSyncQueueDrainTest {
 
         env.cloud.failuresRemaining = 1
         env.syncState.markDirty(uuid)
-        advanceTimeBy(1_000); runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
         val attemptsAfterFreshFail = env.cloud.lockAcquireCount
         assertTrue(attemptsAfterFreshFail > baselineAcquires, "version bump should have driven a retry")
 
         // After the fresh fail, backoff must be 30s (the floor). The next 60s wake will fire
         // drainOnce; the row's nextAttempt is past, so a retry happens. If backoff had carried
         // over the prior 60s/300s state, we'd see no retry within this window.
-        advanceTimeBy(120_000); runCurrent()
+        advanceTimeBy(120_000)
+        runCurrent()
         assertTrue(
             env.cloud.lockAcquireCount > attemptsAfterFreshFail,
             "after reset, 30s backoff should let retry happen well before 5m",
@@ -373,7 +392,8 @@ class GcsSyncQueueDrainTest {
         // signal independent of the mtime change).
         val uuid = env.syncState.dirtyOldestFirst().single().uuid
         env.syncState.markDirty(uuid)
-        advanceTimeBy(1_000); runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
         advanceUntilIdle()
 
         assertEquals(1, env.cloud.appendCount, "drain should pick up the project once mtime ages out")
@@ -385,7 +405,8 @@ class GcsSyncQueueDrainTest {
         seedDirtyProject(env, "halt", updatedAtMs = -60_000, fileMtimeMs = -60_000)
 
         env.queue.start()
-        runCurrent(); advanceUntilIdle()
+        runCurrent()
+        advanceUntilIdle()
         val countAfterFirstPush = env.cloud.appendCount
         assertTrue(countAfterFirstPush >= 1, "expected at least one push before stop")
 
@@ -394,7 +415,8 @@ class GcsSyncQueueDrainTest {
         // Re-mark dirty after stop — without an active drain, this should be ignored.
         val uuid = env.syncState.identityFor(com.sketchbook.core.ProjectId(1L))
         env.syncState.markDirty(uuid)
-        advanceTimeBy(3_600_000); runCurrent()
+        advanceTimeBy(3_600_000)
+        runCurrent()
         advanceUntilIdle()
 
         assertEquals(countAfterFirstPush, env.cloud.appendCount, "stopped drain must not push")
@@ -442,8 +464,7 @@ private class CountingCloudBackend : CloudBackend {
 
     private fun nextGeneration(): Generation = Generation((nextGen++).toString())
 
-    override suspend fun headBlob(hash: BlobHash, scope: BlobScope) =
-        blobs.containsKey(scope to hash)
+    override suspend fun headBlob(hash: BlobHash, scope: BlobScope) = blobs.containsKey(scope to hash)
 
     override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) {
         if (failuresRemaining > 0) {
@@ -454,8 +475,7 @@ private class CountingCloudBackend : CloudBackend {
         blobs[scope to hash] = bytes
     }
 
-    override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource =
-        error("not used in drain tests")
+    override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource = error("not used in drain tests")
 
     override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest {
         val list = manifests[uuid] ?: throw SketchbookError.NotFound("no manifests for $uuid")

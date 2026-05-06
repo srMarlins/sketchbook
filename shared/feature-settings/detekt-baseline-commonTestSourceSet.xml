@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>BinaryExpressionWrapping:SettingsViewModelTest.kt:SettingsViewModelTest.FakeRepo$flow.value.selfContainedProjects - uuid</ID>
+  </CurrentIssues>
+</SmellBaseline>

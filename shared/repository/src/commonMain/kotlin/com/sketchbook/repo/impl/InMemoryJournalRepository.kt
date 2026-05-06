@@ -5,8 +5,8 @@ import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.getAndUpdate
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -21,8 +21,7 @@ class InMemoryJournalRepository : JournalRepository {
     private val seqMutex = Mutex()
     private var nextSequence = 1L
 
-    override fun observeRecent(limit: Int): Flow<List<JournalEntry>> =
-        state.map { it.take(limit) }
+    override fun observeRecent(limit: Int): Flow<List<JournalEntry>> = state.map { it.take(limit) }
 
     override suspend fun append(entry: JournalEntry): Result<JournalEntry> {
         val seq = seqMutex.withLock { nextSequence++ }

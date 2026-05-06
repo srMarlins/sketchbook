@@ -31,6 +31,7 @@ class ProposalActionExecutor(private val projects: ProjectRepository) {
                     id = ProjectId(a.args.projectIdLong()),
                     archived = true,
                 )
+
                 "SetTags" -> {
                     val id = ProjectId(a.args.projectIdLong())
                     val tags = (a.args["tags"] as? JsonArray)
@@ -38,6 +39,7 @@ class ProposalActionExecutor(private val projects: ProjectRepository) {
                         ?: emptyList()
                     projects.setTags(id, tags)
                 }
+
                 else -> Result.failure<Unit>(
                     IllegalArgumentException("unknown proposal action ${a.type}"),
                 )
@@ -47,7 +49,6 @@ class ProposalActionExecutor(private val projects: ProjectRepository) {
         return Result.success(Unit)
     }
 
-    private fun JsonObject.projectIdLong(): Long =
-        this["project_id"]?.jsonPrimitive?.long
-            ?: error("ProposalAction.args missing project_id")
+    private fun JsonObject.projectIdLong(): Long = this["project_id"]?.jsonPrimitive?.long
+        ?: error("ProposalAction.args missing project_id")
 }

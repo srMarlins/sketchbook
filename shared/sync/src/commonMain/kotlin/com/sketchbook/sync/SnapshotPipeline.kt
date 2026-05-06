@@ -59,6 +59,7 @@ class SnapshotPipeline(
                 emit(SnapshotProgress.LeaseAcquired(uuid))
                 r.generation
             }
+
             is LeaseAcquireResult.Held -> {
                 emit(SnapshotProgress.LeaseHeld(uuid, r.held.ownerHostName))
                 emit(SnapshotProgress.Failed(uuid, "lock held by ${r.held.ownerHostName}"))

@@ -35,8 +35,13 @@ class ProjectDetailViewModelTest {
 
     private val mainDispatcher = StandardTestDispatcher()
 
-    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
-    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
+    @BeforeTest fun setUpMain() {
+        Dispatchers.setMain(mainDispatcher)
+    }
+
+    @AfterTest fun tearDownMain() {
+        Dispatchers.resetMain()
+    }
 
     private val now = Instant.parse("2026-05-05T12:00:00Z")
     private val sampleRow = ProjectRow(
@@ -54,6 +59,7 @@ class ProjectDetailViewModelTest {
     private class FakeProjects(private val row: ProjectRow?) : ProjectRepository {
         var lastMove: Pair<ProjectId, String>? = null
         var lastArchive: Pair<ProjectId, Boolean>? = null
+        var lastStageOverride: Pair<ProjectId, com.sketchbook.core.Stage?>? = null
         override fun observeProjects(query: String): Flow<List<ProjectRow>> = flowOf(emptyList())
         override fun observeProject(id: ProjectId): Flow<ProjectRow?> = flowOf(row)
         override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> {
@@ -66,14 +72,20 @@ class ProjectDetailViewModelTest {
             return Result.success(stub())
         }
         override suspend fun setTags(id: ProjectId, tags: List<String>) = Result.success(stub())
+        override suspend fun setStageOverride(
+            id: ProjectId,
+            stage: com.sketchbook.core.Stage?,
+        ): Result<JournalEntry> {
+            lastStageOverride = id to stage
+            return Result.success(stub())
+        }
         private fun stub() = JournalEntry(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.Archive(false, true))
     }
 
     private class FakeSnapshots(private val flow: MutableStateFlow<List<Snapshot>>) : SnapshotRepository {
         override fun observeHistory(uuid: ProjectUuid): Flow<List<Snapshot>> = flow
         override suspend fun recordSnapshot(snapshot: Snapshot, manifestPath: String, manifestHash: String): Result<Unit> = Result.success(Unit)
-        override suspend fun setSnapshotLabel(uuid: ProjectUuid, rev: SnapshotRev, label: String?): Result<JournalEntry> =
-            Result.success(JournalEntry(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto")))
+        override suspend fun setSnapshotLabel(uuid: ProjectUuid, rev: SnapshotRev, label: String?): Result<JournalEntry> = Result.success(JournalEntry(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto")))
         override suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> = Result.success(Unit)
     }
 
@@ -130,6 +142,24 @@ class ProjectDetailViewModelTest {
         vm.dispatch(ProjectDetailViewModel.Intent.Move("/new/parent"))
         advanceUntilIdle()
         assertEquals(ProjectId(7) to "/new/parent", projects.lastMove)
+    }
+
+    @Test
+    fun setStageOverrideIntentDispatchesToRepository() = runTest(UnconfinedTestDispatcher()) {
+        val projects = FakeProjects(sampleRow)
+        val snaps = FakeSnapshots(MutableStateFlow(emptyList()))
+        val vm = ProjectDetailViewModel(projects, snaps)
+        vm.load(ProjectId(7))
+        advanceUntilIdle()
+
+        vm.dispatch(ProjectDetailViewModel.Intent.SetStageOverride(com.sketchbook.core.Stage.Done))
+        advanceUntilIdle()
+        assertEquals(ProjectId(7) to com.sketchbook.core.Stage.Done, projects.lastStageOverride)
+
+        // Null clears the override.
+        vm.dispatch(ProjectDetailViewModel.Intent.SetStageOverride(null))
+        advanceUntilIdle()
+        assertEquals(ProjectId(7) to null, projects.lastStageOverride)
     }
 
     @Test

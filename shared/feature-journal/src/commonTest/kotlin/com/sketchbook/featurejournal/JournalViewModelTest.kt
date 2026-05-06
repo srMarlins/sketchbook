@@ -29,8 +29,13 @@ class JournalViewModelTest {
 
     private val mainDispatcher = StandardTestDispatcher()
 
-    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
-    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
+    @BeforeTest fun setUpMain() {
+        Dispatchers.setMain(mainDispatcher)
+    }
+
+    @AfterTest fun tearDownMain() {
+        Dispatchers.resetMain()
+    }
 
     @Test
     fun observesAppendedEntries() = runTest(mainDispatcher) {
@@ -78,8 +83,7 @@ class JournalViewModelTest {
     }
 
     private object EmptyRepair : RepairRepository {
-        override fun observeFindings(projectId: ProjectId?, limit: Int): Flow<RepairFindings> =
-            flowOf(RepairFindings(emptyList(), emptyList(), 0, false))
+        override fun observeFindings(projectId: ProjectId?, limit: Int): Flow<RepairFindings> = flowOf(RepairFindings(emptyList(), emptyList(), 0, false))
         override suspend fun acknowledgeMacImport(projectId: ProjectId) = error("not used")
         override suspend fun applyMacPathRepair(projectId: ProjectId) = error("not used")
         override suspend fun dismissMissingSample(projectId: ProjectId, missingPath: String) = error("not used")

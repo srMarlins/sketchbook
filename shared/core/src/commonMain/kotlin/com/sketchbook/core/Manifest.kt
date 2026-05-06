@@ -1,8 +1,8 @@
 package com.sketchbook.core
 
-import kotlin.time.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.time.Instant
 
 /**
  * Serialized snapshot manifest. Wire format — see design doc §3.1.

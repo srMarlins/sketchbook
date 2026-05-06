@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ClassSignature:JournalBatch.kt:JournalBatch</ID>
+    <ID>ConstructorParameterNaming:JournalBatch.kt:JournalBatch$val batch_id: String</ID>
+    <ID>Filename:Action.kt:com.sketchbook.actions.Action.kt</ID>
+    <ID>MatchingDeclarationName:Action.kt:ActionRecord</ID>
+  </CurrentIssues>
+</SmellBaseline>

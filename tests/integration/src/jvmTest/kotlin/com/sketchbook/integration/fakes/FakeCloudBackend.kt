@@ -34,8 +34,7 @@ class FakeCloudBackend : CloudBackend {
 
     fun nextGeneration(): Generation = Generation((generationCounter++).toString())
 
-    override suspend fun headBlob(hash: BlobHash, scope: BlobScope): Boolean =
-        blobs.containsKey(BlobKey(scope, hash))
+    override suspend fun headBlob(hash: BlobHash, scope: BlobScope): Boolean = blobs.containsKey(BlobKey(scope, hash))
 
     override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) {
         val key = BlobKey(scope, hash)
@@ -44,8 +43,7 @@ class FakeCloudBackend : CloudBackend {
         blobs[key] = bytes
     }
 
-    override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource =
-        error("not used in these tests")
+    override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource = error("not used in these tests")
 
     override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest {
         val list = manifests[uuid] ?: throw SketchbookError.NotFound("no manifests for $uuid")
@@ -123,8 +121,7 @@ class FakeCloudBackend : CloudBackend {
 
     fun blobsCount(): Int = blobs.size
     fun sharedBlobsCount(): Int = blobs.keys.count { it.scope == BlobScope.Shared }
-    fun privateBlobsCount(uuid: ProjectUuid): Int =
-        blobs.keys.count { (it.scope as? BlobScope.Private)?.uuid == uuid }
+    fun privateBlobsCount(uuid: ProjectUuid): Int = blobs.keys.count { (it.scope as? BlobScope.Private)?.uuid == uuid }
     fun manifestsFor(uuid: ProjectUuid): List<Manifest> = manifests[uuid]?.map { it.manifest } ?: emptyList()
     fun forceLock(uuid: ProjectUuid, lock: LeaseLock): Generation {
         val gen = nextGeneration()
@@ -132,8 +129,7 @@ class FakeCloudBackend : CloudBackend {
         return gen
     }
 
-    fun headGenerationFor(uuid: ProjectUuid): Generation =
-        manifests[uuid]?.lastOrNull()?.ref?.generation ?: Generation.ZERO
+    fun headGenerationFor(uuid: ProjectUuid): Generation = manifests[uuid]?.lastOrNull()?.ref?.generation ?: Generation.ZERO
 
     fun blobBytes(hash: BlobHash, selfContained: Boolean, uuid: ProjectUuid): ByteArray {
         val scope: BlobScope = if (selfContained) BlobScope.Private(uuid) else BlobScope.Shared

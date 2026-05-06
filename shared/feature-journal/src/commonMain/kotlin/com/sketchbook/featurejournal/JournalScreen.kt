@@ -37,18 +37,17 @@ import com.sketchbook.uishared.theme.AppTheme
 import kotlin.time.Instant
 
 /**
- * Journal viewer with filters, search, and day grouping. Bulk-undo lives on the first day's card
- * header when filters are active and at least one row is invertible — most-narrow-result wins,
- * since users typically narrow first ("show me yesterday's renames") and then bulk-undo.
+ * Filter chips + search field for the journal queue. The journal viewer itself supports filters,
+ * search, and day grouping; bulk-undo lives on the first day's card header when filters are
+ * active and at least one row is invertible (most-narrow-result wins — users typically narrow
+ * first, "show me yesterday's renames", and then bulk-undo).
  *
  * `detailPane` is an optional slot the host wires (RootContent owns navigation). When null, row
- * clicks are no-ops and the screen renders read-only.
- *
- * Performance: each day card and the rows within it stay as a single LazyColumn item so
- * journal-volume (capped at 200 rows) stays cheap. Per-row composables take a remembered
- * @Immutable view so Compose skips unchanged rows on parent recomposition.
+ * clicks are no-ops and the screen renders read-only. Each day card and the rows within it stay
+ * as a single LazyColumn item so journal-volume (capped at 200 rows) stays cheap; per-row
+ * composables take a remembered `@Immutable` view so Compose skips unchanged rows on parent
+ * recomposition.
  */
-/** Filter chips + search field for the journal queue. */
 @Composable
 fun JournalFilterBar(
     state: JournalViewModel.State,
@@ -94,12 +93,18 @@ fun LazyListScope.journalItems(
     if (state.rows.isEmpty()) {
         item(key = "j-empty") {
             EmptyState(
-                title = if (state.loading) "Loading…"
-                    else if (state.isNarrowed) "No matches"
-                    else "No entries",
-                hint = if (state.isNarrowed)
+                title = if (state.loading) {
+                    "Loading…"
+                } else if (state.isNarrowed) {
+                    "No matches"
+                } else {
+                    "No entries"
+                },
+                hint = if (state.isNarrowed) {
                     "Nothing matches the current filters. Clear them to see everything."
-                else "Move/rename/archive/tag actions land here.",
+                } else {
+                    "Move/rename/archive/tag actions land here."
+                },
             )
         }
         return

@@ -1,0 +1,46 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>BlankLineBetweenWhenConditions:ProposalDetailPane.kt:when (action.type) { "MoveProject" -&gt; projectField + listOf( "From" to (s("from") ?: "—"), "To" to (s("to") ?: "—"), ) "RenameProject" -&gt; projectField + listOf( "From" to ((s("from_") ?: s("from")) ?: "—"), "To" to (s("to") ?: "—"), ) "ArchiveProject" -&gt; projectField + listOf("Action" to "Archive") "SetTags" -&gt; projectField + listOf( "Before" to arr("before").joinToString(", ").ifEmpty { "(none)" }, "After" to arr("after").joinToString(", ").ifEmpty { "(none)" }, ) "SetColorTag" -&gt; projectField + listOf( "Before" to (s("before") ?: "(none)"), "After" to (s("after") ?: "(none)"), ) "Undo" -&gt; listOf("Action" to "Undo previous batch") else -&gt; action.args.entries.map { (k, v) -&gt; k to v.toString() } }</ID>
+    <ID>BlankLineBetweenWhenConditions:ProposalLabel.kt:when (action.type) { "MoveProject" -&gt; { val to = s("to").orEmpty() ProposalLabel( verb = "Move", target = projectLabel, detail = "→ ${parentDirOf(to)}/", tintHint = VerbTint.Action, ) } "RenameProject" -&gt; { val from = s("from_") ?: s("from").orEmpty() val to = s("to").orEmpty() ProposalLabel( verb = "Rename", target = filenameOf(from), detail = "→ ${filenameOf(to)}", tintHint = VerbTint.Action, ) } "ArchiveProject" -&gt; ProposalLabel( verb = "Archive", target = projectLabel, tintHint = VerbTint.Remove, ) "SetTags" -&gt; { val tags = (action.args["after"] as? JsonArray) ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } ?.filter { it.isNotBlank() } ?: tagsList(action) ProposalLabel( verb = if (tags.isEmpty()) "Clear tags" else "Tag", target = projectLabel, detail = if (tags.isEmpty()) null else tags.joinToString(", "), tintHint = if (tags.isEmpty()) VerbTint.Remove else VerbTint.Add, ) } "SetColorTag" -&gt; { val after = (action.args["after"] as? JsonPrimitive)?.contentOrNull ProposalLabel( verb = "Color", target = projectLabel, detail = after?.let { "color $it" }, tintHint = VerbTint.Add, ) } "Undo" -&gt; ProposalLabel( verb = "Undo", target = "previous batch", tintHint = VerbTint.Action, ) else -&gt; ProposalLabel(verb = action.type, target = "", tintHint = VerbTint.Neutral) }</ID>
+    <ID>BlankLineBetweenWhenConditions:ProposalLabel.kt:when (raw) { is JsonArray -&gt; raw.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() } .filter { it.isNotEmpty() } is JsonPrimitive -&gt; raw.contentOrNull ?.split(',') ?.map { it.trim() } ?.filter { it.isNotEmpty() } .orEmpty() else -&gt; emptyList() }</ID>
+    <ID>BlankLineBetweenWhenConditions:ProposalsViewModel.kt:ProposalsViewModel$when (filter) { SourceFilter.All -&gt; true // Best-effort actor → source mapping. The MCP subprocess writes "sketchbook" today; // hand-rolled CLI / future user-driven proposals will use other actor names. Anything // that doesn't match a known prefix lands under "User" so it's never invisible. SourceFilter.Mcp -&gt; actor.equals("sketchbook", ignoreCase = true) || actor.startsWith("mcp", ignoreCase = true) SourceFilter.Code -&gt; actor.startsWith("code", ignoreCase = true) || actor.startsWith("agent", ignoreCase = true) SourceFilter.User -&gt; !actor.equals("sketchbook", ignoreCase = true) &amp;&amp; !actor.startsWith("mcp", ignoreCase = true) &amp;&amp; !actor.startsWith("code", ignoreCase = true) &amp;&amp; !actor.startsWith("agent", ignoreCase = true) }</ID>
+    <ID>BlankLineBetweenWhenConditions:ProposalsViewModel.kt:ProposalsViewModel$when (intent) { is Intent.SetSourceFilter -&gt; filters.update { it.copy(sourceFilter = intent.filter) } is Intent.SetSearch -&gt; filters.update { it.copy(search = intent.query) } is Intent.Approve -&gt; viewModelScope.launch { applyAndApprove(intent.proposalId, single = true) } is Intent.Reject -&gt; viewModelScope.launch { rejectOne(intent.proposalId, single = true) } is Intent.BulkApprove -&gt; viewModelScope.launch { val approvedIds = mutableListOf&lt;String&gt;() val failed = mutableListOf&lt;Pair&lt;String, String&gt;&gt;() for (id in intent.proposalIds) { when (val r = applyAndApprove(id, single = false)) { is ApplyResult.Approved -&gt; approvedIds += id is ApplyResult.Failed -&gt; failed += id to r.reason } } _effects.tryEmit(Effect.BulkApproved(approvedIds, failed)) } is Intent.BulkReject -&gt; viewModelScope.launch { val rejected = mutableListOf&lt;String&gt;() val failed = mutableListOf&lt;Pair&lt;String, String&gt;&gt;() for (id in intent.proposalIds) { when (val r = rejectOne(id, single = false)) { is RejectResult.Rejected -&gt; rejected += id is RejectResult.Failed -&gt; failed += id to r.reason } } _effects.tryEmit(Effect.BulkRejected(rejected, failed)) } }</ID>
+    <ID>ClassSignature:ProposalsViewModel.kt:ProposalsViewModel$Filters</ID>
+    <ID>ClassSignature:ProposalsViewModel.kt:ProposalsViewModel$ProposalGroup</ID>
+    <ID>ClassSignature:ProposalsViewModel.kt:ProposalsViewModel.Effect$BulkApproved : Effect</ID>
+    <ID>ClassSignature:ProposalsViewModel.kt:ProposalsViewModel.Effect$BulkRejected : Effect</ID>
+    <ID>CyclomaticComplexMethod:ProposalDetailPane.kt:private fun actionFields: List&lt;Pair&lt;String, String&gt;&gt;</ID>
+    <ID>CyclomaticComplexMethod:ProposalLabel.kt:fun proposalLabel: ProposalLabel</ID>
+    <ID>FunctionNaming:ProposalDetailPane.kt:@Composable fun ProposalDetailPane</ID>
+    <ID>FunctionNaming:ProposalDetailPane.kt:@Composable private fun ActionDetail</ID>
+    <ID>FunctionNaming:ProposalDetailPane.kt:@Composable private fun LabelledRow</ID>
+    <ID>FunctionNaming:ProposalsScreen.kt:@Composable fun ProposalsFilterBar</ID>
+    <ID>FunctionNaming:ProposalsScreen.kt:@Composable private fun IconAction</ID>
+    <ID>FunctionNaming:ProposalsScreen.kt:@Composable private fun ProposalGroupCard</ID>
+    <ID>FunctionNaming:ProposalsScreen.kt:@Composable private fun ProposalListRow</ID>
+    <ID>FunctionNaming:ProposalsScreen.kt:@Composable private fun ResolvedCard</ID>
+    <ID>FunctionNaming:ProposalsScreen.kt:@Composable private fun ResolvedRow</ID>
+    <ID>FunctionSignature:ProposalDetailPane.kt:@Composable fun ProposalDetailPane</ID>
+    <ID>FunctionSignature:ProposalDetailPane.kt:private fun actionFields: List&lt;Pair&lt;String, String&gt;&gt;</ID>
+    <ID>FunctionSignature:ProposalLabel.kt:fun proposalLabel: ProposalLabel</ID>
+    <ID>FunctionSignature:ProposalLabel.kt:fun s: String?</ID>
+    <ID>FunctionSignature:ProposalLabel.kt:private fun filenameOf: String</ID>
+    <ID>FunctionSignature:ProposalsScreen.kt:@Composable private fun ResolvedRow</ID>
+    <ID>Kdoc:ProposalsScreen.kt:/** * Proposals queue. Pending items cluster into action-category cards (Archive / Move / Tag / * Color / Other) with bulk approve/reject in each header; rows render a verb pill + bold target * + trailing detail + inline ✓/✗ for single-item action without drilling into the detail pane. * * `detailPane` is an optional slot the host wires (RootContent owns navigation). When null, the * row click is a no-op and the inline icons handle approve/reject without drill-in. * * Performance notes: row composables take only primitive/`@Immutable` args so Compose can skip * unchanged rows when the parent state changes. Per-row click lambdas capture stable values from * the dispatch surface and the proposal id only. */</ID>
+    <ID>MagicNumber:ProposalDetailPane.kt:3600</ID>
+    <ID>MagicNumber:ProposalDetailPane.kt:60</ID>
+    <ID>MagicNumber:ProposalDetailPane.kt:86_400</ID>
+    <ID>MagicNumber:ProposalsScreen.kt:2_592_000</ID>
+    <ID>MagicNumber:ProposalsScreen.kt:31_536_000</ID>
+    <ID>MagicNumber:ProposalsScreen.kt:3600</ID>
+    <ID>MagicNumber:ProposalsScreen.kt:60</ID>
+    <ID>MagicNumber:ProposalsScreen.kt:604_800</ID>
+    <ID>MagicNumber:ProposalsScreen.kt:86_400</ID>
+    <ID>ModifierMissing:ProposalDetailPane.kt:@Composable fun ProposalDetailPane</ID>
+    <ID>NoUnusedImports:ProposalsViewModel.kt:com.sketchbook.featureproposals.ProposalsViewModel.kt</ID>
+    <ID>ReturnCount:ProposalsViewModel.kt:ProposalsViewModel$private fun matchesSearch: Boolean</ID>
+    <ID>Wrapping:ProposalLabel.kt:-&gt;</ID>
+  </CurrentIssues>
+</SmellBaseline>

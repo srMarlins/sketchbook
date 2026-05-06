@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:TimelineViewModelTest.kt:TimelineViewModelTest.Repo$(Unit)</ID>
+    <ID>FunctionSignature:TimelineViewModelTest.kt:TimelineViewModelTest.Repo$override suspend fun recordSnapshot: Result&lt;Unit&gt;</ID>
+    <ID>MaxLineLength:TimelineViewModelTest.kt:TimelineViewModelTest.Repo$override suspend fun recordSnapshot: Result&lt;Unit&gt;</ID>
+    <ID>ParameterListWrapping:TimelineViewModelTest.kt:TimelineViewModelTest.Repo$(snapshot: Snapshot, manifestPath: String, manifestHash: String)</ID>
+  </CurrentIssues>
+</SmellBaseline>

@@ -91,11 +91,15 @@ class ProposalsViewModel(
     fun dispatch(intent: Intent) {
         when (intent) {
             is Intent.SetSourceFilter -> filters.update { it.copy(sourceFilter = intent.filter) }
+
             is Intent.SetSearch -> filters.update { it.copy(search = intent.query) }
+
             is Intent.Approve -> viewModelScope.launch {
                 applyAndApprove(intent.proposalId, single = true)
             }
+
             is Intent.Reject -> viewModelScope.launch { rejectOne(intent.proposalId, single = true) }
+
             is Intent.BulkApprove -> viewModelScope.launch {
                 val approvedIds = mutableListOf<String>()
                 val failed = mutableListOf<Pair<String, String>>()
@@ -107,6 +111,7 @@ class ProposalsViewModel(
                 }
                 _effects.tryEmit(Effect.BulkApproved(approvedIds, failed))
             }
+
             is Intent.BulkReject -> viewModelScope.launch {
                 val rejected = mutableListOf<String>()
                 val failed = mutableListOf<Pair<String, String>>()
@@ -161,13 +166,16 @@ class ProposalsViewModel(
 
     private fun matchesSource(actor: String, filter: SourceFilter): Boolean = when (filter) {
         SourceFilter.All -> true
+
         // Best-effort actor → source mapping. The MCP subprocess writes "sketchbook" today;
         // hand-rolled CLI / future user-driven proposals will use other actor names. Anything
         // that doesn't match a known prefix lands under "User" so it's never invisible.
         SourceFilter.Mcp -> actor.equals("sketchbook", ignoreCase = true) ||
             actor.startsWith("mcp", ignoreCase = true)
+
         SourceFilter.Code -> actor.startsWith("code", ignoreCase = true) ||
             actor.startsWith("agent", ignoreCase = true)
+
         SourceFilter.User -> !actor.equals("sketchbook", ignoreCase = true) &&
             !actor.startsWith("mcp", ignoreCase = true) &&
             !actor.startsWith("code", ignoreCase = true) &&

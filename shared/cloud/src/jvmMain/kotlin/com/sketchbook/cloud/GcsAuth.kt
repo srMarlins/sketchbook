@@ -7,8 +7,6 @@ import io.ktor.http.Parameters
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -21,8 +19,10 @@ import java.security.PrivateKey
 import java.security.Signature
 import java.security.spec.PKCS8EncodedKeySpec
 import java.util.Base64
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * Service-account JWT signer + access-token cache. RS256 (SHA256withRSA) using the JDK's
@@ -142,4 +142,7 @@ internal fun decodePkcs8PrivateKey(pem: String): PrivateKey {
     return KeyFactory.getInstance("RSA").generatePrivate(spec)
 }
 
-private val compactJson = Json { encodeDefaults = false; prettyPrint = false }
+private val compactJson = Json {
+    encodeDefaults = false
+    prettyPrint = false
+}

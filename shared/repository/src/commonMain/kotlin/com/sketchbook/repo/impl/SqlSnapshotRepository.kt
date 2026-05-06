@@ -43,11 +43,10 @@ class SqlSnapshotRepository(
         { _, _ -> Result.success(Unit) },
 ) : SnapshotRepository {
 
-    override fun observeHistory(uuid: ProjectUuid): Flow<List<Snapshot>> =
-        catalog.catalogQueries.selectSnapshotsForProject(uuid.value)
-            .asFlow()
-            .mapToList(ioDispatcher)
-            .map { rows -> rows.map { it.toDomain() } }
+    override fun observeHistory(uuid: ProjectUuid): Flow<List<Snapshot>> = catalog.catalogQueries.selectSnapshotsForProject(uuid.value)
+        .asFlow()
+        .mapToList(ioDispatcher)
+        .map { rows -> rows.map { it.toDomain() } }
 
     override suspend fun recordSnapshot(
         snapshot: Snapshot,

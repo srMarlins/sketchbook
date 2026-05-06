@@ -72,7 +72,9 @@ private fun isInvertible(action: ActionRecord): Boolean = when (action) {
     is ActionRecord.Move,
     is ActionRecord.Rename,
     is ActionRecord.Archive,
-    is ActionRecord.SetTags -> true
+    is ActionRecord.SetTags,
+    -> true
+
     else -> false
 }
 
@@ -81,47 +83,63 @@ private fun entryFields(action: ActionRecord): List<Pair<String, String>> = when
         "From" to action.pathBefore,
         "To" to action.pathAfter,
     )
+
     is ActionRecord.Rename -> listOf(
         "From" to action.nameBefore,
         "To" to action.nameAfter,
     )
+
     is ActionRecord.Archive -> listOf(
         "Was archived" to action.wasArchived.toString(),
         "Is archived" to action.isArchived.toString(),
     )
+
     is ActionRecord.SetTags -> listOf(
         "Before" to action.before.joinToString(", ").ifEmpty { "(none)" },
         "After" to action.after.joinToString(", ").ifEmpty { "(none)" },
     )
+
     is ActionRecord.ForceTakeLock -> listOf(
         "Prior owner" to (action.priorOwnerHostName ?: "(unknown)"),
     )
+
     is ActionRecord.PushConflict -> listOf(
         "Our rev" to action.ourRev.toString(),
         "Their rev" to action.theirRev.toString(),
     )
+
     is ActionRecord.MissingSampleMapped -> listOf(
         "Missing" to action.missingPath,
         "Candidate" to action.candidatePath,
         ".als outcome" to action.alsOutcome,
     )
+
     is ActionRecord.MissingSampleUnmapped -> listOf(
         "Missing" to action.missingPath,
         "Candidate" to action.candidatePath,
         ".als outcome" to action.alsOutcome,
     )
+
     is ActionRecord.MacPathRepaired -> listOf(
         "Mappings" to action.mappingCount.toString(),
         ".als outcome" to action.alsOutcome,
     )
+
     is ActionRecord.MacPathRestored -> listOf(
         "Mappings" to action.mappingCount.toString(),
         ".als outcome" to action.alsOutcome,
     )
+
     is ActionRecord.SnapshotRelabeled -> listOf(
         "Rev" to action.rev.toString(),
         "Before" to (action.labelBefore.takeUnless { it.isNullOrBlank() } ?: "(unlabeled)"),
         "After" to (action.labelAfter.takeUnless { it.isNullOrBlank() } ?: "(unlabeled)"),
+    )
+
+    is ActionRecord.StageOverridden -> listOf(
+        "Inferred" to (action.stageInferred ?: "(none)"),
+        "Before" to (action.stageBefore ?: "(auto)"),
+        "After" to (action.stageAfter ?: "(auto)"),
     )
 }
 

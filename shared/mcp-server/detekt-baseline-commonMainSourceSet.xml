@@ -1,0 +1,17 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:McpServer.kt:McpServer$(SearchProjectsArgs.serializer(), arguments)</ID>
+    <ID>ArgumentListWrapping:McpServer.kt:McpServer$(json.decodeFromJsonElement(SearchProjectsArgs.serializer(), arguments))</ID>
+    <ID>ClassSignature:Tools.kt:GetProjectArgs</ID>
+    <ID>ClassSignature:Tools.kt:ListRecentArgs</ID>
+    <ID>ClassSignature:Tools.kt:ProposeBatchArgs</ID>
+    <ID>ClassSignature:Tools.kt:ProposeBatchResult</ID>
+    <ID>ClassSignature:Tools.kt:ProposedAction</ID>
+    <ID>ClassSignature:Tools.kt:SearchProjectsArgs</ID>
+    <ID>ClassSignature:Tools.kt:Tools</ID>
+    <ID>LongMethod:McpServer.kt:McpServer$private fun toolsListResult: JsonObject</ID>
+    <ID>MaxLineLength:McpServer.kt:McpServer$description = "Full-text search the catalog by name/plugins/sample filenames. Returns matches ordered by last-modified desc."</ID>
+  </CurrentIssues>
+</SmellBaseline>

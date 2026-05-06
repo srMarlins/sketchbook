@@ -70,8 +70,11 @@ class PreferencesSettingsRepository(
     }
 
     override suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit> = withContext(ioDispatcher) {
-        if (serviceAccountJson == null) node.remove(KEY_CLOUD_CREDENTIAL)
-        else node.put(KEY_CLOUD_CREDENTIAL, serviceAccountJson)
+        if (serviceAccountJson == null) {
+            node.remove(KEY_CLOUD_CREDENTIAL)
+        } else {
+            node.put(KEY_CLOUD_CREDENTIAL, serviceAccountJson)
+        }
         node.flush()
         state.value = state.value.copy(
             cloudCredentialJson = serviceAccountJson,
@@ -82,8 +85,11 @@ class PreferencesSettingsRepository(
 
     override suspend fun setCloudBucket(bucket: String?): Result<Unit> = withContext(ioDispatcher) {
         val normalized = bucket?.takeIf { it.isNotBlank() }
-        if (normalized == null) node.remove(KEY_CLOUD_BUCKET)
-        else node.put(KEY_CLOUD_BUCKET, normalized)
+        if (normalized == null) {
+            node.remove(KEY_CLOUD_BUCKET)
+        } else {
+            node.put(KEY_CLOUD_BUCKET, normalized)
+        }
         node.flush()
         state.value = state.value.copy(cloudBucket = normalized)
         Result.success(Unit)
@@ -178,20 +184,25 @@ class PreferencesSettingsRepository(
     ) {
         fun toDomain(): LibraryRoot = when (kind) {
             "projects" -> LibraryRoot.Projects(path)
+
             "user_samples" -> LibraryRoot.UserSamples(path)
+
             "external" -> LibraryRoot.External(
                 path = path,
                 alias = alias.orEmpty(),
                 kind = externalKind?.let { runCatching { ExternalKind.valueOf(it) }.getOrNull() }
                     ?: ExternalKind.Other,
             )
+
             else -> LibraryRoot.Projects(path)
         }
 
         companion object {
             fun fromDomain(root: LibraryRoot): StoredRoot = when (root) {
                 is LibraryRoot.Projects -> StoredRoot(kind = "projects", path = root.path)
+
                 is LibraryRoot.UserSamples -> StoredRoot(kind = "user_samples", path = root.path)
+
                 is LibraryRoot.External -> StoredRoot(
                     kind = "external",
                     path = root.path,

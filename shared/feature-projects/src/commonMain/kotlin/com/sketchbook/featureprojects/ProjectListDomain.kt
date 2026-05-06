@@ -43,7 +43,8 @@ enum class ShelfId(val id: String) {
     HasPotential("has-potential"),
     Untriaged("untriaged"),
     Broken("broken"),
-    Archived("archived");
+    Archived("archived"),
+    ;
 
     fun title(): String = when (this) {
         CurrentlyWorking -> "Currently working on"

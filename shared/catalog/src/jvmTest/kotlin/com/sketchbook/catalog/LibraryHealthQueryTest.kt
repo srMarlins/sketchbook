@@ -73,8 +73,34 @@ class LibraryHealthQueryTest {
     private fun seedSample(projectId: Long, isMissing: Boolean) {
         catalog.catalogQueries.insertProjectSampleWithMissing(
             project_id = projectId,
-            sample_path = "/samples/${projectId}_${isMissing}.wav",
+            sample_path = "/samples/${projectId}_$isMissing.wav",
             is_missing = if (isMissing) 1L else 0L,
+        )
+    }
+
+    private fun seedPlugin(projectId: Long, name: String, isInstalled: Boolean) {
+        // insertProjectPlugin defaults is_installed=1 via the schema; seed an explicit row
+        // when we need is_installed=0 to test the missing-plugin signal.
+        catalog.catalogQueries.insertProjectPlugin(
+            project_id = projectId,
+            plugin_name = name,
+            plugin_type = "VST3",
+            track_name = "track-$name",
+        )
+        if (!isInstalled) {
+            catalog.catalogQueries.markPluginsInstalledByNameAndType(
+                is_installed = 0L,
+                plugin_name = name,
+                plugin_type = "VST3",
+            )
+        }
+    }
+
+    private fun seedStageInferred(projectId: Long, stage: String?) {
+        catalog.catalogQueries.updateStageInferred(
+            stage_inferred = stage,
+            has_local_bounce = 0L,
+            id = projectId,
         )
     }
 
@@ -144,6 +170,56 @@ class LibraryHealthQueryTest {
         // Sample-clean (no missing samples): P1, P3, P4, P5, P6, P10. P4 has zero sample rows
         // (we only seeded sync_state for it), so missing_count is NULL → counts as clean.
         assertEquals(6L, row.sample_clean, "sample_clean should be 6 (P1, P3, P4, P5, P6, P10)")
+        // No plugin rows seeded → all 9 active projects are "plugin_installed" (vacuously true).
+        assertEquals(9L, row.plugin_installed, "plugin_installed defaults to all when no plugin rows")
+        // No stage_inferred set → all 9 active projects count as "not stuck".
+        assertEquals(9L, row.stage_not_stuck, "stage_not_stuck defaults to all when stage_inferred is NULL")
+    }
+
+    @Test
+    fun pluginInstalledAndStageNotStuckCountFailures() {
+        // PR-CC fixture: 10 projects, 3 with at least one missing plugin, 2 with stage_inferred='Stuck'.
+        // Asserts plugin_installed = 7 (10 minus 3 with is_installed=0 plugin rows) and
+        // stage_not_stuck = 8 (10 minus 2 with stage_inferred='Stuck').
+        val ids = (1..10).map { seedProject("p$it") }
+
+        // Seed installed plugins for everyone (baseline). p1..p7 have all-installed plugins.
+        ids.take(7).forEach { id -> seedPlugin(id, "PluginA-$id", isInstalled = true) }
+        // p8, p9, p10 each have at least one missing plugin.
+        seedPlugin(ids[7], "MissingX", isInstalled = false)
+        seedPlugin(ids[8], "MissingY", isInstalled = false)
+        // p10 has BOTH installed and missing — should still count as "missing" since any
+        // is_installed=0 row flips the project out of the installed bucket.
+        seedPlugin(ids[9], "InstalledZ", isInstalled = true)
+        seedPlugin(ids[9], "MissingZ", isInstalled = false)
+
+        // Stage_inferred: 2 stuck (p1, p2), 3 with other stages, rest NULL.
+        seedStageInferred(ids[0], "Stuck")
+        seedStageInferred(ids[1], "Stuck")
+        seedStageInferred(ids[2], "Mixing")
+        seedStageInferred(ids[3], "Sketch")
+        seedStageInferred(ids[4], "Done")
+        // ids[5..9] left NULL — should count as "not stuck".
+
+        val row = catalog.catalogQueries.selectLibraryHealth().executeAsOne()
+
+        assertEquals(10L, row.total)
+        assertEquals(7L, row.plugin_installed, "plugin_installed should be 7 (p1..p7 — p8/p9/p10 each have a missing plugin)")
+        assertEquals(8L, row.stage_not_stuck, "stage_not_stuck should be 8 (everyone except p1, p2)")
+    }
+
+    @Test
+    fun stageOverrideDoesNotAffectStageNotStuck() {
+        // PR-CC sanity check: the SQL aggregate reads `stage_inferred`, not `stage_override`.
+        // A user marking a stuck project as Done via override should NOT flip the chip.
+        val p = seedProject("override-test")
+        seedStageInferred(p, "Stuck")
+        catalog.catalogQueries.updateStageOverride(stage_override = "Done", id = p)
+
+        val row = catalog.catalogQueries.selectLibraryHealth().executeAsOne()
+        assertEquals(1L, row.total)
+        // Inferred is still Stuck → stage_not_stuck = 0 even though override says Done.
+        assertEquals(0L, row.stage_not_stuck)
     }
 
     @Test
@@ -151,8 +227,11 @@ class LibraryHealthQueryTest {
         val row = catalog.catalogQueries.selectLibraryHealth().executeAsOne()
         assertEquals(0L, row.total)
         // SQLite SUM over zero rows is NULL — SQLDelight surfaces that as null Long.
+        // The repository mapping coalesces these to 0 before the UI ever sees them.
         assertEquals(null, row.synced)
         assertEquals(null, row.sample_clean)
+        assertEquals(null, row.plugin_installed)
+        assertEquals(null, row.stage_not_stuck)
     }
 
     @Test

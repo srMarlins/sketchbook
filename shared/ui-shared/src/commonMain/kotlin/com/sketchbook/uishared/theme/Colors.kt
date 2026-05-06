@@ -67,18 +67,18 @@ data class AppColors(
             // 10-color sunset/sea palette mapped onto the semantic accent slots. The vivid hues
             // do the talking; the paper surfaces and ink tones stay calm so the accents pop
             // without the overall canvas feeling neon.
-            val crimson = Color(0xFFF94144)      // destructive only (Reject, Conflict, pinRed)
-            val orange = Color(0xFFF3722C)       // rule margin — sunset accent strip
+            val crimson = Color(0xFFF94144) // destructive only (Reject, Conflict, pinRed)
+            val orange = Color(0xFFF3722C) // rule margin — sunset accent strip
             val brightOrange = Color(0xFFF8961E) // pinOrange
-            val saffron = Color(0xFFF9C74F)      // accentWarning, pinYellow
-            val pistachio = Color(0xFF90BE6D)    // accentPositive, pinGreen
-            val zomp = Color(0xFF43AA8B)         // primary CTA — fresh, distinctly not red
-            val slateBlue = Color(0xFF577590)    // accentSecondary
-            val celadonBlue = Color(0xFF277DA1)  // pinBlue
-            val tintBlue = Color(0xFFE3EEF3)       // pale celadon wash
-            val tintRose = Color(0xFFFCE0D5)       // pale orange wash
-            val tintSage = Color(0xFFE6F1D7)       // pale pistachio wash
-            val tintCream = Color(0xFFFDEFC4)      // pale saffron wash
+            val saffron = Color(0xFFF9C74F) // accentWarning, pinYellow
+            val pistachio = Color(0xFF90BE6D) // accentPositive, pinGreen
+            val zomp = Color(0xFF43AA8B) // primary CTA — fresh, distinctly not red
+            val slateBlue = Color(0xFF577590) // accentSecondary
+            val celadonBlue = Color(0xFF277DA1) // pinBlue
+            val tintBlue = Color(0xFFE3EEF3) // pale celadon wash
+            val tintRose = Color(0xFFFCE0D5) // pale orange wash
+            val tintSage = Color(0xFFE6F1D7) // pale pistachio wash
+            val tintCream = Color(0xFFFDEFC4) // pale saffron wash
             AppColors(
                 surfacePage = paperBase,
                 surfaceCard = paperRaised,
@@ -126,10 +126,10 @@ data class AppColors(
             surfaceCard = Color(0xFF383330),
             surfaceSunken = Color(0xFF131110),
             surfacePanel = Color(0xFF383330),
-            tintBlue = Color(0xFF2C4A55),   // deep celadon wash
-            tintRose = Color(0xFF6A3F2E),   // deep orange wash
-            tintSage = Color(0xFF4B5C3A),   // deep pistachio wash
-            tintCream = Color(0xFF5C4B23),  // deep saffron wash
+            tintBlue = Color(0xFF2C4A55), // deep celadon wash
+            tintRose = Color(0xFF6A3F2E), // deep orange wash
+            tintSage = Color(0xFF4B5C3A), // deep pistachio wash
+            tintCream = Color(0xFF5C4B23), // deep saffron wash
             surfaceOverlay = Color(0x59080503),
             inkPrimary = Color(0xFFF5ECD8),
             inkSecondary = Color(0xFFD6C9AF),
@@ -138,14 +138,14 @@ data class AppColors(
             inkOnFill = Color(0xFF1D1A17),
             ruleLine = Color(0x24DCC8AA),
             ruleLineStrong = Color(0x3DDCC8AA),
-            ruleMargin = Color(0xFFF3722C),   // sunset orange — same as light mode, vivid on dark too
+            ruleMargin = Color(0xFFF3722C), // sunset orange — same as light mode, vivid on dark too
             ruleBlue = Color(0xFF4A5A6A),
-            accentAction = Color(0xFF5DC4A4),  // brightened zomp for dark surface
-            accentSoft = Color(0xFF2C5447),    // deep zomp selection
+            accentAction = Color(0xFF5DC4A4), // brightened zomp for dark surface
+            accentSoft = Color(0xFF2C5447), // deep zomp selection
             accentSecondary = Color(0xFF8AA0BB), // brightened slate
-            accentPositive = Color(0xFFAFD58A),  // brightened pistachio
-            accentWarning = Color(0xFFFFD773),   // brightened saffron
-            accentDanger = Color(0xFFFF6669),    // brightened crimson
+            accentPositive = Color(0xFFAFD58A), // brightened pistachio
+            accentWarning = Color(0xFFFFD773), // brightened saffron
+            accentDanger = Color(0xFFFF6669), // brightened crimson
             tintOverlay = Color(0x8C281C12),
             isDark = true,
         )

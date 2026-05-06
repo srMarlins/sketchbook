@@ -28,16 +28,15 @@ import kotlin.time.Instant
  */
 class JvmWorkingTree(private val root: Path) : WorkingTree {
 
-    override fun list(): List<String> =
-        Files.walk(root, FileVisitOption.FOLLOW_LINKS).use { stream ->
-            stream.asSequence()
-                .filter { it.isRegularFile() }
-                .filter { p -> p.none { c -> c.fileName?.toString() in SKIP_DIRS } }
-                .filter { !it.fileName.toString().startsWith(".") }
-                .filter { !it.fileName.toString().endsWith(".als.bak", ignoreCase = true) }
-                .map { root.relativize(it).toString().replace('\\', '/') }
-                .toList()
-        }
+    override fun list(): List<String> = Files.walk(root, FileVisitOption.FOLLOW_LINKS).use { stream ->
+        stream.asSequence()
+            .filter { it.isRegularFile() }
+            .filter { p -> p.none { c -> c.fileName?.toString() in SKIP_DIRS } }
+            .filter { !it.fileName.toString().startsWith(".") }
+            .filter { !it.fileName.toString().endsWith(".als.bak", ignoreCase = true) }
+            .map { root.relativize(it).toString().replace('\\', '/') }
+            .toList()
+    }
 
     override fun stat(relativePath: String): FileStat {
         val abs = root.resolve(relativePath)

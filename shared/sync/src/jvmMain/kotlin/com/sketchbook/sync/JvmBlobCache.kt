@@ -39,9 +39,7 @@ class JvmBlobCache(
         Files.createDirectories(cacheRoot)
     }
 
-    override suspend fun contains(hash: BlobHash, scope: BlobScope): Boolean {
-        return Files.exists(blobPath(hash, scope))
-    }
+    override suspend fun contains(hash: BlobHash, scope: BlobScope): Boolean = Files.exists(blobPath(hash, scope))
 
     /**
      * Get the on-disk path for [hash] in [scope], fetching from the cloud on miss. Returns a

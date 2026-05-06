@@ -40,7 +40,9 @@ class ManifestMaterializerBusyTest {
     private val uuid = ProjectUuid("p-busy")
     private val rev = SnapshotRev(11)
 
-    @AfterTest fun cleanup() { tmp.toFile().deleteRecursively() }
+    @AfterTest fun cleanup() {
+        tmp.toFile().deleteRecursively()
+    }
 
     @Test
     fun failsFastWhenDestinationFileIsHeldByAnotherChannel() = runTest {
@@ -52,9 +54,12 @@ class ManifestMaterializerBusyTest {
 
         val files = mapOf("Project.als" to "new-bytes".toByteArray())
         val manifest = manifestFor(files)
-        val cloud = CountingCloud(manifest, files.entries.associate { (rel, b) ->
-            manifest.files[rel]!!.hash to b
-        })
+        val cloud = CountingCloud(
+            manifest,
+            files.entries.associate { (rel, b) ->
+                manifest.files[rel]!!.hash to b
+            },
+        )
         val handle = CatalogDb.openInMemory()
         val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = { BlobCacheSettings.Default })
         val mat = ManifestMaterializer(cloud, cache) { projectRoot }
@@ -134,8 +139,7 @@ private class CountingCloud(
         private set
 
     override suspend fun headBlob(hash: BlobHash, scope: BlobScope): Boolean = true
-    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) =
-        error("not used")
+    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) = error("not used")
     override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource {
         blobFetchCount++
         val bytes = bytesByHash[hash] ?: ByteArray(0)
@@ -145,11 +149,8 @@ private class CountingCloud(
     }
     override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest = manifest
     override suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?) = emptyList<ManifestRef>()
-    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest) =
-        Result.failure<Generation>(SketchbookError.Conflict("not used"))
-    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) =
-        LeaseAcquireResult.Acquired(Generation("1"))
-    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation) =
-        LeaseRefreshResult.Refreshed(Generation("1"))
+    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest) = Result.failure<Generation>(SketchbookError.Conflict("not used"))
+    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) = LeaseAcquireResult.Acquired(Generation("1"))
+    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation) = LeaseRefreshResult.Refreshed(Generation("1"))
     override suspend fun releaseLock(uuid: ProjectUuid, expected: Generation) {}
 }

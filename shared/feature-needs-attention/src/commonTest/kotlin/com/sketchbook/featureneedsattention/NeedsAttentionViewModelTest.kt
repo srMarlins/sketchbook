@@ -25,8 +25,13 @@ class NeedsAttentionViewModelTest {
 
     private val mainDispatcher = StandardTestDispatcher()
 
-    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
-    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
+    @BeforeTest fun setUpMain() {
+        Dispatchers.setMain(mainDispatcher)
+    }
+
+    @AfterTest fun tearDownMain() {
+        Dispatchers.resetMain()
+    }
 
     private val macFinding = MacImportFinding(
         projectId = ProjectId(1),
@@ -77,8 +82,7 @@ class NeedsAttentionViewModelTest {
             missingPath: String,
             candidatePath: String,
         ): Result<Unit> = Result.success(Unit)
-        override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> =
-            Result.success(Unit)
+        override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> = Result.success(Unit)
     }
 
     @Test
@@ -131,11 +135,13 @@ class NeedsAttentionViewModelTest {
         val repo = FakeRepo(RepairFindings(emptyList(), listOf(missingFinding), 1, false))
         val vm = NeedsAttentionViewModel(repo)
         vm.effects.test {
-            vm.dispatch(NeedsAttentionViewModel.Intent.ApplyMatch(
-                projectId = missingFinding.projectId,
-                missingPath = missingFinding.missingPath,
-                candidatePath = "/Volumes/Library/Samples/k.wav",
-            ))
+            vm.dispatch(
+                NeedsAttentionViewModel.Intent.ApplyMatch(
+                    projectId = missingFinding.projectId,
+                    missingPath = missingFinding.missingPath,
+                    candidatePath = "/Volumes/Library/Samples/k.wav",
+                ),
+            )
             val effect = awaitItem()
             assertTrue(effect is NeedsAttentionViewModel.Effect.MatchApplied)
             assertEquals(
@@ -150,9 +156,12 @@ class NeedsAttentionViewModelTest {
         val repo = FakeRepo(RepairFindings(emptyList(), listOf(missingFinding), 1, false))
         val vm = NeedsAttentionViewModel(repo)
         vm.effects.test {
-            vm.dispatch(NeedsAttentionViewModel.Intent.DismissMissingSample(
-                missingFinding.projectId, missingFinding.missingPath,
-            ))
+            vm.dispatch(
+                NeedsAttentionViewModel.Intent.DismissMissingSample(
+                    missingFinding.projectId,
+                    missingFinding.missingPath,
+                ),
+            )
             val effect = awaitItem()
             assertTrue(effect is NeedsAttentionViewModel.Effect.Acknowledged)
             assertEquals("dismiss", effect.kind)

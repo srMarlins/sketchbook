@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>EmptyFunctionBlock:DirectGcsBackendTest.kt:DirectGcsBackendTest.&lt;no name provided&gt;${}</ID>
+    <ID>FunctionSignature:DirectGcsBackendTest.kt:DirectGcsBackendTest$private fun makeBackend: DirectGcsBackend</ID>
+    <ID>MaxLineLength:DirectGcsBackendTest.kt:DirectGcsBackendTest$private</ID>
+    <ID>NoUnusedImports:GcsAuthTest.kt:com.sketchbook.cloud.GcsAuthTest.kt</ID>
+  </CurrentIssues>
+</SmellBaseline>

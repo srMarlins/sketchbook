@@ -18,6 +18,13 @@ import com.sketchbook.repo.SampleCandidate
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -27,13 +34,6 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
 import javax.xml.stream.XMLInputFactory
 import javax.xml.stream.XMLStreamConstants
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 
 /**
@@ -105,8 +105,11 @@ class SqlRepairRepository(
                             .selectSamplesByFilenameAndSize(filename = filename, size_bytes = size)
                             .executeAsList()
                     } ?: emptyList()
-                    val raw = if (sized.isNotEmpty()) sized
-                    else catalog.catalogQueries.selectSamplesByFilename(filename).executeAsList()
+                    val raw = if (sized.isNotEmpty()) {
+                        sized
+                    } else {
+                        catalog.catalogQueries.selectSamplesByFilename(filename).executeAsList()
+                    }
                     val candidates = raw.take(5).map {
                         SampleCandidate(path = it.path, filename = it.filename, sizeBytes = it.size_bytes)
                     }
@@ -137,101 +140,99 @@ class SqlRepairRepository(
         }
     }
 
-    override suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit> =
-        withContext(ioDispatcher) {
-            runCatching {
-                catalog.transaction {
-                    catalog.catalogQueries.insertRepairAck(
-                        scope = SCOPE_MAC,
-                        project_id = projectId.value,
-                        payload = "",
-                        acked_at = Clock.System.now().toString(),
-                    )
-                }
-                ackTick.value = ackTick.value + 1
-            }
-        }
-
-    override suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit> =
-        withContext(ioDispatcher) {
-            runCatching {
-                val alsPath = catalog.catalogQueries
-                    .selectProjectById(projectId.value)
-                    .executeAsOne()
-                    .path
-
-                // Scan the .als for `<Path Value="..."/>` entries inside `<SampleRef>` that carry
-                // a Mac-style `Volume:` prefix. The catalog's `mac_paths_count` flag also fires on
-                // bare POSIX `/Users/` prefixes (the parser treats those as Mac-imported too), so
-                // a flagged project may have *no* `Volume:`-prefixed paths to actually repair —
-                // that's the expected case for a no-op patch.
-                val macPaths = runCatching { extractMacStyleSamplePaths(alsPath) }
-                    .getOrDefault(emptyList())
-                val mapping = macPaths
-                    .associateWith(::macToPosix)
-                    .filter { (k, v) -> k != v }
-
-                val outcome: AlsPatchService.Outcome = if (mapping.isEmpty()) {
-                    // Nothing to rewrite — skip the patcher (and the snapshot, since there's
-                    // nothing to undo) and journal NoChange. Still ack the finding so it drops.
-                    AlsPatchService.Outcome.NoChange
-                } else {
-                    // Snapshot the pre-patch bytes to a sidecar mirroring W4's pattern. PR-L L7
-                    // currently only wires Undo for missing-sample matches, but capturing the
-                    // sidecar here is cheap and keeps the option open without a separate code
-                    // path. Best-effort: if the snapshot itself fails, we journal Failed and
-                    // skip the patch — losing the ability to undo silently is the worst outcome.
-                    val snapshotResult = runCatching {
-                        val path = Paths.get(alsPath)
-                        val originalBytes = Files.readAllBytes(path)
-                        val sidecar = path.resolveSibling("${path.fileName}.patcher-undo")
-                        Files.write(
-                            sidecar,
-                            originalBytes,
-                            StandardOpenOption.CREATE,
-                            StandardOpenOption.TRUNCATE_EXISTING,
-                            StandardOpenOption.WRITE,
-                        )
-                    }
-
-                    if (snapshotResult.isFailure) {
-                        AlsPatchService.Outcome.Failed
-                    } else {
-                        // Project Mac → POSIX mapping into rich edits with `newOriginalCrc=0L`.
-                        // Path change invalidates the CRC (Live recomputes on next save). We don't
-                        // have a candidate file to stat in the Mac-path repair case, so size /
-                        // mtime / RelativePathType are left untouched.
-                        val edits = mapping.map { (mac, posix) ->
-                            SampleRefEdit(oldPath = mac, newPath = posix, newOriginalCrc = 0L)
-                        }
-                        runCatching { patcher.patch(alsPath, edits) }
-                            .getOrElse { AlsPatchService.Outcome.Failed }
-                    }
-                }
-
-                catalog.transaction {
-                    catalog.catalogQueries.insertRepairAck(
-                        scope = SCOPE_MAC,
-                        project_id = projectId.value,
-                        payload = "",
-                        acked_at = Clock.System.now().toString(),
-                    )
-                }
-                ackTick.value = ackTick.value + 1
-
-                journal.append(
-                    JournalEntry(
-                        timestamp = Clock.System.now(),
-                        projectId = projectId,
-                        action = ActionRecord.MacPathRepaired(
-                            mappingCount = mapping.size,
-                            alsOutcome = outcome.name,
-                        ),
-                    ),
+    override suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            catalog.transaction {
+                catalog.catalogQueries.insertRepairAck(
+                    scope = SCOPE_MAC,
+                    project_id = projectId.value,
+                    payload = "",
+                    acked_at = Clock.System.now().toString(),
                 )
-                Unit
             }
+            ackTick.value = ackTick.value + 1
         }
+    }
+
+    override suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val alsPath = catalog.catalogQueries
+                .selectProjectById(projectId.value)
+                .executeAsOne()
+                .path
+
+            // Scan the .als for `<Path Value="..."/>` entries inside `<SampleRef>` that carry
+            // a Mac-style `Volume:` prefix. The catalog's `mac_paths_count` flag also fires on
+            // bare POSIX `/Users/` prefixes (the parser treats those as Mac-imported too), so
+            // a flagged project may have *no* `Volume:`-prefixed paths to actually repair —
+            // that's the expected case for a no-op patch.
+            val macPaths = runCatching { extractMacStyleSamplePaths(alsPath) }
+                .getOrDefault(emptyList())
+            val mapping = macPaths
+                .associateWith(::macToPosix)
+                .filter { (k, v) -> k != v }
+
+            val outcome: AlsPatchService.Outcome = if (mapping.isEmpty()) {
+                // Nothing to rewrite — skip the patcher (and the snapshot, since there's
+                // nothing to undo) and journal NoChange. Still ack the finding so it drops.
+                AlsPatchService.Outcome.NoChange
+            } else {
+                // Snapshot the pre-patch bytes to a sidecar mirroring W4's pattern. PR-L L7
+                // currently only wires Undo for missing-sample matches, but capturing the
+                // sidecar here is cheap and keeps the option open without a separate code
+                // path. Best-effort: if the snapshot itself fails, we journal Failed and
+                // skip the patch — losing the ability to undo silently is the worst outcome.
+                val snapshotResult = runCatching {
+                    val path = Paths.get(alsPath)
+                    val originalBytes = Files.readAllBytes(path)
+                    val sidecar = path.resolveSibling("${path.fileName}.patcher-undo")
+                    Files.write(
+                        sidecar,
+                        originalBytes,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING,
+                        StandardOpenOption.WRITE,
+                    )
+                }
+
+                if (snapshotResult.isFailure) {
+                    AlsPatchService.Outcome.Failed
+                } else {
+                    // Project Mac → POSIX mapping into rich edits with `newOriginalCrc=0L`.
+                    // Path change invalidates the CRC (Live recomputes on next save). We don't
+                    // have a candidate file to stat in the Mac-path repair case, so size /
+                    // mtime / RelativePathType are left untouched.
+                    val edits = mapping.map { (mac, posix) ->
+                        SampleRefEdit(oldPath = mac, newPath = posix, newOriginalCrc = 0L)
+                    }
+                    runCatching { patcher.patch(alsPath, edits) }
+                        .getOrElse { AlsPatchService.Outcome.Failed }
+                }
+            }
+
+            catalog.transaction {
+                catalog.catalogQueries.insertRepairAck(
+                    scope = SCOPE_MAC,
+                    project_id = projectId.value,
+                    payload = "",
+                    acked_at = Clock.System.now().toString(),
+                )
+            }
+            ackTick.value = ackTick.value + 1
+
+            journal.append(
+                JournalEntry(
+                    timestamp = Clock.System.now(),
+                    projectId = projectId,
+                    action = ActionRecord.MacPathRepaired(
+                        mappingCount = mapping.size,
+                        alsOutcome = outcome.name,
+                    ),
+                ),
+            )
+            Unit
+        }
+    }
 
     override suspend fun dismissMissingSample(
         projectId: ProjectId,
@@ -396,60 +397,59 @@ class SqlRepairRepository(
         }
     }
 
-    override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> =
-        withContext(ioDispatcher) {
-            runCatching {
-                val alsPath = catalog.catalogQueries
-                    .selectProjectById(projectId.value)
-                    .executeAsOne()
-                    .path
+    override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val alsPath = catalog.catalogQueries
+                .selectProjectById(projectId.value)
+                .executeAsOne()
+                .path
 
-                // Mirror restoreMissingSampleMatch: try to restore the .als from the sidecar
-                // [applyMacPathRepair] wrote pre-patch. NoUndoBytes when the sidecar is gone
-                // (apply ran NoChange so no snapshot was taken; or sidecar got cleaned up).
-                val path: Path = Paths.get(alsPath)
-                val sidecar = path.resolveSibling("${path.fileName}.patcher-undo")
-                val mappingCount: Int
-                val outcomeName: String
-                if (Files.notExists(sidecar)) {
-                    mappingCount = 0
-                    outcomeName = NO_UNDO_BYTES
-                } else {
-                    val bytes = Files.readAllBytes(sidecar)
-                    val outcome = runCatching { patcher.restore(alsPath, bytes) }
-                        .getOrElse { AlsPatchService.Outcome.Failed }
-                    runCatching { Files.deleteIfExists(sidecar) }
-                    // Re-scan to confirm how many Mac-style paths the restore brought back —
-                    // this is also what [applyMacPathRepair] reported as `mappingCount`, so the
-                    // History entries pair up symmetrically for the user.
-                    val macPaths = runCatching { extractMacStyleSamplePaths(alsPath) }
-                        .getOrDefault(emptyList())
-                    mappingCount = macPaths.count { it != macToPosix(it) }
-                    outcomeName = outcome.name
-                }
-
-                catalog.transaction {
-                    catalog.catalogQueries.deleteRepairAck(
-                        scope = SCOPE_MAC,
-                        project_id = projectId.value,
-                        payload = "",
-                    )
-                }
-                ackTick.value = ackTick.value + 1
-
-                journal.append(
-                    JournalEntry(
-                        timestamp = Clock.System.now(),
-                        projectId = projectId,
-                        action = ActionRecord.MacPathRestored(
-                            mappingCount = mappingCount,
-                            alsOutcome = outcomeName,
-                        ),
-                    ),
-                )
-                Unit
+            // Mirror restoreMissingSampleMatch: try to restore the .als from the sidecar
+            // [applyMacPathRepair] wrote pre-patch. NoUndoBytes when the sidecar is gone
+            // (apply ran NoChange so no snapshot was taken; or sidecar got cleaned up).
+            val path: Path = Paths.get(alsPath)
+            val sidecar = path.resolveSibling("${path.fileName}.patcher-undo")
+            val mappingCount: Int
+            val outcomeName: String
+            if (Files.notExists(sidecar)) {
+                mappingCount = 0
+                outcomeName = NO_UNDO_BYTES
+            } else {
+                val bytes = Files.readAllBytes(sidecar)
+                val outcome = runCatching { patcher.restore(alsPath, bytes) }
+                    .getOrElse { AlsPatchService.Outcome.Failed }
+                runCatching { Files.deleteIfExists(sidecar) }
+                // Re-scan to confirm how many Mac-style paths the restore brought back —
+                // this is also what [applyMacPathRepair] reported as `mappingCount`, so the
+                // History entries pair up symmetrically for the user.
+                val macPaths = runCatching { extractMacStyleSamplePaths(alsPath) }
+                    .getOrDefault(emptyList())
+                mappingCount = macPaths.count { it != macToPosix(it) }
+                outcomeName = outcome.name
             }
+
+            catalog.transaction {
+                catalog.catalogQueries.deleteRepairAck(
+                    scope = SCOPE_MAC,
+                    project_id = projectId.value,
+                    payload = "",
+                )
+            }
+            ackTick.value = ackTick.value + 1
+
+            journal.append(
+                JournalEntry(
+                    timestamp = Clock.System.now(),
+                    projectId = projectId,
+                    action = ActionRecord.MacPathRestored(
+                        mappingCount = mappingCount,
+                        alsOutcome = outcomeName,
+                    ),
+                ),
+            )
+            Unit
         }
+    }
 
     private companion object {
         const val SCOPE_MAC = "mac_import"
@@ -509,9 +509,11 @@ private fun extractMacStyleSamplePaths(alsPath: String): List<String> {
                                 if (value != null && ':' in value) out += value
                             }
                         }
+
                         XMLStreamConstants.END_ELEMENT -> {
                             if (reader.localName == "SampleRef") depthInsideSampleRef--
                         }
+
                         else -> {}
                     }
                 }

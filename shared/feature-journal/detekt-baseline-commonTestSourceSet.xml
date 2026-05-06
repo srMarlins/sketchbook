@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:JournalViewModelTest.kt:JournalViewModelTest.EmptyRepair$(RepairFindings(emptyList(), emptyList(), 0, false))</ID>
+    <ID>ArgumentListWrapping:JournalViewModelTest.kt:JournalViewModelTest.EmptyRepair$(emptyList(), emptyList(), 0, false)</ID>
+    <ID>FunctionSignature:JournalViewModelTest.kt:JournalViewModelTest.EmptyRepair$override fun observeFindings: Flow&lt;RepairFindings&gt;</ID>
+    <ID>MaxLineLength:JournalViewModelTest.kt:JournalViewModelTest.EmptyRepair$override fun observeFindings: Flow&lt;RepairFindings&gt;</ID>
+    <ID>ParameterListWrapping:JournalViewModelTest.kt:JournalViewModelTest.EmptyRepair$(projectId: ProjectId?, limit: Int)</ID>
+  </CurrentIssues>
+</SmellBaseline>

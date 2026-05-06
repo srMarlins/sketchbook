@@ -1,6 +1,12 @@
--- v5 → v6: denormalize project name onto journal_entries. Without it, History rows for
--- entries whose project_id has been orphaned by a catalog rescan have no name to show
--- (project_id deliberately has no FK so stale ids stay readable, but stale ids alone aren't
--- useful in the UI). Nullable so legacy rows pre-migration keep working — the History VM
--- still does a live catalog lookup and a path-derived fallback when project_name is NULL.
-ALTER TABLE journal_entries ADD COLUMN project_name TEXT;
+-- v5 → v6: PR-R stage classification.
+--   * stage_inferred — written by JvmScanner.persistOk via StageInferrer.infer; null when no
+--     heuristic rule matches. Re-written every successful (re-)scan.
+--   * stage_override — set by SqlProjectRepository.setStageOverride from the per-project chip
+--     popup. Wins over stage_inferred at render time. Preserved across re-scan (the scanner
+--     reads-then-restores it because INSERT OR REPLACE wipes columns it doesn't bind).
+--   * has_local_bounce — best-effort scan-time signal. Persisted (rather than recomputed on
+--     every read) so the library-health aggregate query in PR-CC can stay a single SELECT.
+-- All three default to NULL/0 so the migration is purely additive on existing rows.
+ALTER TABLE projects ADD COLUMN stage_inferred TEXT;
+ALTER TABLE projects ADD COLUMN stage_override TEXT;
+ALTER TABLE projects ADD COLUMN has_local_bounce INTEGER NOT NULL DEFAULT 0;

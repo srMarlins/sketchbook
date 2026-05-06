@@ -1,0 +1,8 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>FunctionSignature:ProposalActionExecutorTest.kt:ProposalActionExecutorTest.FakeProjects$override suspend fun move: Result&lt;JournalEntry&gt;</ID>
+    <ID>NoUnusedImports:JournalParityTest.kt:com.sketchbook.actions.JournalParityTest.kt</ID>
+  </CurrentIssues>
+</SmellBaseline>

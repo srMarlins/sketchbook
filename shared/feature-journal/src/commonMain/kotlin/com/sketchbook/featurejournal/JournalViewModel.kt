@@ -91,23 +91,34 @@ class JournalViewModel(
     fun dispatch(intent: Intent) {
         when (intent) {
             is Intent.OpenProject -> _effects.tryEmit(Effect.NavigateToProject(intent.projectId))
+
             is Intent.SetActionTypeFilter -> filters.update { it.copy(actionType = intent.filter) }
+
             is Intent.SetSearch -> filters.update { it.copy(search = intent.query) }
+
             is Intent.SetDateRange -> filters.update { it.copy(dateRange = intent.range) }
+
             is Intent.UndoOne -> viewModelScope.launch {
                 val r = undoOne(intent.entry)
-                if (r.isSuccess) _effects.tryEmit(Effect.Undone(intent.entry))
-                else _effects.tryEmit(
-                    Effect.UndoFailed(intent.entry, r.exceptionOrNull()?.message ?: "unknown"),
-                )
+                if (r.isSuccess) {
+                    _effects.tryEmit(Effect.Undone(intent.entry))
+                } else {
+                    _effects.tryEmit(
+                        Effect.UndoFailed(intent.entry, r.exceptionOrNull()?.message ?: "unknown"),
+                    )
+                }
             }
+
             is Intent.BulkUndo -> viewModelScope.launch {
                 val successes = mutableListOf<JournalEntry>()
                 val failures = mutableListOf<Pair<JournalEntry, String>>()
                 for (e in intent.entries) {
                     val r = undoOne(e)
-                    if (r.isSuccess) successes += e
-                    else failures += e to (r.exceptionOrNull()?.message ?: "unknown")
+                    if (r.isSuccess) {
+                        successes += e
+                    } else {
+                        failures += e to (r.exceptionOrNull()?.message ?: "unknown")
+                    }
                 }
                 _effects.tryEmit(Effect.BulkUndone(successes, failures))
             }
@@ -124,33 +135,40 @@ class JournalViewModel(
      * `MacPathRepaired`, `SnapshotRelabeled`) are not invertible from this generic path. Repair-
      * surface entries have their own undo flow in Needs Attention; the others are informational.
      */
-    private suspend fun undoOne(entry: JournalEntry): Result<Unit> {
-        return when (val a = entry.action) {
-            is ActionRecord.Move -> {
-                val current = projects.observeProject(entry.projectId).first()
-                when {
-                    current == null -> Result.failure(IllegalStateException("project not found"))
-                    current.path.value != a.pathAfter -> Result.failure(
-                        IllegalStateException("file is no longer at the recorded location — undo skipped"),
-                    )
-                    else -> projects.move(entry.projectId, parentDirOf(a.pathBefore)).map {}
-                }
+    private suspend fun undoOne(entry: JournalEntry): Result<Unit> = when (val a = entry.action) {
+        is ActionRecord.Move -> {
+            val current = projects.observeProject(entry.projectId).first()
+            when {
+                current == null -> Result.failure(IllegalStateException("project not found"))
+
+                current.path.value != a.pathAfter -> Result.failure(
+                    IllegalStateException("file is no longer at the recorded location — undo skipped"),
+                )
+
+                else -> projects.move(entry.projectId, parentDirOf(a.pathBefore)).map {}
             }
-            is ActionRecord.Rename -> {
-                val current = projects.observeProject(entry.projectId).first()
-                when {
-                    current == null -> Result.failure(IllegalStateException("project not found"))
-                    current.name != a.nameAfter -> Result.failure(
-                        IllegalStateException("project no longer named ${a.nameAfter} — undo skipped"),
-                    )
-                    else -> projects.rename(entry.projectId, a.nameBefore).map {}
-                }
-            }
-            is ActionRecord.Archive -> projects.archive(entry.projectId, a.wasArchived).map {}
-            is ActionRecord.SetTags -> projects.setTags(entry.projectId, a.before).map {}
-            is ActionRecord.MacPathRepaired -> repair.restoreMacPathRepair(entry.projectId)
-            else -> Result.failure(IllegalArgumentException("not invertible"))
         }
+
+        is ActionRecord.Rename -> {
+            val current = projects.observeProject(entry.projectId).first()
+            when {
+                current == null -> Result.failure(IllegalStateException("project not found"))
+
+                current.name != a.nameAfter -> Result.failure(
+                    IllegalStateException("project no longer named ${a.nameAfter} — undo skipped"),
+                )
+
+                else -> projects.rename(entry.projectId, a.nameBefore).map {}
+            }
+        }
+
+        is ActionRecord.Archive -> projects.archive(entry.projectId, a.wasArchived).map {}
+
+        is ActionRecord.SetTags -> projects.setTags(entry.projectId, a.before).map {}
+
+        is ActionRecord.MacPathRepaired -> repair.restoreMacPathRepair(entry.projectId)
+
+        else -> Result.failure(IllegalArgumentException("not invertible"))
     }
 
     private fun parentDirOf(path: String): String {
@@ -251,16 +269,26 @@ class JournalViewModel(
         if (name?.lowercase()?.contains(q) == true) return true
         val haystack = when (val a = entry.action) {
             is ActionRecord.Move -> "${a.pathBefore} ${a.pathAfter}"
+
             is ActionRecord.Rename -> "${a.nameBefore} ${a.nameAfter}"
+
             is ActionRecord.SetTags -> "${a.before.joinToString(" ")} ${a.after.joinToString(" ")}"
+
             is ActionRecord.ForceTakeLock -> a.priorOwnerHostName.orEmpty()
+
             is ActionRecord.MissingSampleMapped -> "${a.missingPath} ${a.candidatePath}"
+
             is ActionRecord.MissingSampleUnmapped -> "${a.missingPath} ${a.candidatePath}"
+
             is ActionRecord.SnapshotRelabeled -> "${a.labelBefore.orEmpty()} ${a.labelAfter.orEmpty()}"
+
+            is ActionRecord.StageOverridden -> "${a.stageBefore.orEmpty()} ${a.stageAfter.orEmpty()}"
+
             is ActionRecord.Archive,
             is ActionRecord.PushConflict,
             is ActionRecord.MacPathRepaired,
-            is ActionRecord.MacPathRestored -> ""
+            is ActionRecord.MacPathRestored,
+            -> ""
         }
         return haystack.lowercase().contains(q)
     }
@@ -334,6 +362,8 @@ val JournalViewModel.JournalRow.isInvertible: Boolean
         is ActionRecord.Rename,
         is ActionRecord.Archive,
         is ActionRecord.SetTags,
-        is ActionRecord.MacPathRepaired -> true
+        is ActionRecord.MacPathRepaired,
+        -> true
+
         else -> false
     }

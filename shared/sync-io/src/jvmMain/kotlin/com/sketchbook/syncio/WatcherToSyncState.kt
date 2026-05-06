@@ -40,8 +40,11 @@ class WatcherToSyncState(
     fun watchAll(roots: List<Path>): Flow<SaveEvent> {
         val flows = roots.map { watcher.watch(it) }
         val merged: Flow<SaveEvent> =
-            if (flows.isEmpty()) emptyFlow()
-            else merge(*flows.toTypedArray())
+            if (flows.isEmpty()) {
+                emptyFlow()
+            } else {
+                merge(*flows.toTypedArray())
+            }
         return merged.onEach { event ->
             if (event is SaveEvent.Saved) handleSave(event.path)
         }.flowOn(Dispatchers.IO)

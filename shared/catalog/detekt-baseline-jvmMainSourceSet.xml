@@ -1,0 +1,20 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:JvmScanner.kt:JvmScanner$(abs = abs, name = name, parent = parent, sizeBytes = sizeBytes, mtimeSec = mtimeSec)</ID>
+    <ID>ArgumentListWrapping:JvmScanner.kt:JvmScanner$(abs = abs, name = name, parent = parent, sizeBytes = sizeBytes, mtimeSec = mtimeSec, reason = reason)</ID>
+    <ID>ClassSignature:JvmSampleScanner.kt:JvmSampleScanner</ID>
+    <ID>ClassSignature:JvmScanner.kt:FailedReport</ID>
+    <ID>FunctionLiteral:SyncStateStore.kt:SyncStateStore$&lt;anonymous&gt;</ID>
+    <ID>FunctionOnlyReturningConstant:CatalogFts.kt:@Suppress("unused") private fun touchPreparedStatement: SqlPreparedStatement?</ID>
+    <ID>FunctionSignature:JvmSampleScanner.kt:JvmSampleScanner$suspend fun scan: Int</ID>
+    <ID>FunctionSignature:SyncStateStore.kt:SyncStateStore$fun dirtyOldestFirst: List&lt;SyncStateRow&gt;</ID>
+    <ID>LongMethod:JvmScanner.kt:JvmScanner$private fun persistOk</ID>
+    <ID>MagicNumber:CatalogFts.kt:CatalogFts$3</ID>
+    <ID>MagicNumber:CatalogFts.kt:CatalogFts$4</ID>
+    <ID>MagicNumber:CatalogFts.kt:CatalogFts$5</ID>
+    <ID>NoUnusedImports:JvmSampleScanner.kt:com.sketchbook.catalog.JvmSampleScanner.kt</ID>
+    <ID>NoUnusedImports:JvmScanner.kt:com.sketchbook.catalog.JvmScanner.kt</ID>
+  </CurrentIssues>
+</SmellBaseline>

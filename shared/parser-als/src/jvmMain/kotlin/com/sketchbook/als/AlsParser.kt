@@ -46,7 +46,12 @@ object AlsParser {
     private val denomTable = intArrayOf(1, 2, 4, 8, 16, 32, 64)
 
     private val trackTags = setOf(
-        "MidiTrack", "AudioTrack", "ReturnTrack", "GroupTrack", "MasterTrack", "MainTrack",
+        "MidiTrack",
+        "AudioTrack",
+        "ReturnTrack",
+        "GroupTrack",
+        "MasterTrack",
+        "MainTrack",
     )
 
     private val nativeDeviceTags = setOf(
@@ -199,6 +204,7 @@ object AlsParser {
                     "RootNote" -> if (rootNote == null) {
                         rootNote = start.attr("Value")?.toIntOrNull()
                     }
+
                     "Name" -> if (scaleName == null) {
                         scaleName = start.attr("Value")
                     }
@@ -224,9 +230,11 @@ object AlsParser {
             // Plugin device boundaries.
             when (tag) {
                 "PluginDevice" -> pendingPlugin = PendingPlugin(track = currentTrackName())
+
                 "AuPluginDevice" -> if (!isInsidePluginDevice()) {
                     pendingPlugin = PendingPlugin(track = currentTrackName(), forcedFormat = PluginFormat.Au)
                 }
+
                 "SampleRef" -> pendingSample = PendingSample()
             }
 
@@ -234,17 +242,23 @@ object AlsParser {
             pendingPlugin?.let { plug ->
                 when (tag) {
                     "Vst3PluginInfo" -> plug.format = PluginFormat.Vst3
+
                     "VstPluginInfo" -> plug.format = PluginFormat.Vst2
+
                     "AuPluginInfo" -> if (plug.forcedFormat == null) plug.format = PluginFormat.Au
+
                     "Name" -> when (parentTag()) {
                         "Vst3PluginInfo", "AuPluginInfo" -> plug.name = start.attr("Value") ?: plug.name
+
                         "AuPluginDevice" -> if (plug.forcedFormat == PluginFormat.Au) {
                             plug.name = start.attr("Value") ?: plug.name
                         }
                     }
+
                     "PlugName" -> if (parentTag() == "VstPluginInfo") {
                         plug.name = start.attr("Value") ?: plug.name
                     }
+
                     "Manufacturer" -> if (plug.name == null &&
                         (parentTag() == "AuPluginInfo" || parentTag() == "AuPluginDevice")
                     ) {
@@ -267,9 +281,13 @@ object AlsParser {
                         "Path" -> if (samp.collectedPath == null) {
                             start.attr("Value")?.let { samp.collectedPath = it }
                         }
+
                         "Name" -> start.attr("Value")?.let { samp.relName = it }
+
                         "RelativePathType" -> start.attr("Value")?.toIntOrNull()?.let { samp.relativePathType = it }
+
                         "OriginalFileSize" -> start.attr("Value")?.toLongOrNull()?.let { samp.originalFileSize = it }
+
                         "OriginalCrc" -> start.attr("Value")?.toLongOrNull()?.let { samp.originalCrc = it }
                     }
                 }
@@ -286,6 +304,7 @@ object AlsParser {
                         "FileSize" -> if (samp.originalFileSize == null) {
                             start.attr("Value")?.toLongOrNull()?.let { samp.originalFileSize = it }
                         }
+
                         "Crc" -> if (samp.originalCrc == null) {
                             start.attr("Value")?.toLongOrNull()?.let { samp.originalCrc = it }
                         }
@@ -405,5 +424,4 @@ object AlsParser {
     }
 }
 
-private fun StartElement.attr(name: String): String? =
-    getAttributeByName(QName(name))?.value
+private fun StartElement.attr(name: String): String? = getAttributeByName(QName(name))?.value

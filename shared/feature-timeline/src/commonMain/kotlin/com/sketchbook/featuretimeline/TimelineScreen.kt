@@ -16,7 +16,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +32,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.input.ImeAction
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.MaterializationProgress
@@ -57,7 +57,10 @@ fun TimelineScreen(
             .padding(PaddingValues(AppTheme.spacing.md)),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
     ) {
-        Header(state, vm)
+        Header(
+            state = state,
+            onToggleShowAll = { vm.dispatch(TimelineViewModel.Intent.ToggleShowAll) },
+        )
         // visibleGroups does filter+sort+groupBy+sortedMap on every call. The state ticks
         // frequently while a rewind is in progress; recompute only when the inputs that
         // actually feed the result change.
@@ -109,7 +112,10 @@ fun TimelineScreen(
 }
 
 @Composable
-private fun Header(state: TimelineViewModel.State, vm: TimelineViewModel) {
+private fun Header(
+    state: TimelineViewModel.State,
+    onToggleShowAll: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -117,7 +123,7 @@ private fun Header(state: TimelineViewModel.State, vm: TimelineViewModel) {
     ) {
         Text("History", style = AppTheme.typography.title, modifier = Modifier.weight(1f))
         Button(
-            onClick = { vm.dispatch(TimelineViewModel.Intent.ToggleShowAll) },
+            onClick = onToggleShowAll,
             variant = ButtonVariant.Secondary,
         ) {
             Text(if (state.showAll) "Hide auto-saves" else "Show all saves")
@@ -151,9 +157,11 @@ private fun SnapshotRow(
             SnapshotKind.Branch -> Badge(color = AppTheme.colors.accentAction) {
                 Text("branch", style = AppTheme.typography.caption)
             }
+
             SnapshotKind.Named -> Badge(color = AppTheme.colors.pinGreen) {
                 Text("named", style = AppTheme.typography.caption)
             }
+
             SnapshotKind.Auto -> Badge(color = AppTheme.colors.accentSecondary) {
                 Text("auto", style = AppTheme.typography.caption)
             }
@@ -221,7 +229,9 @@ private fun EditableLabelCell(
                             buffer = initialEditValue
                             editing = false
                             true
-                        } else false
+                        } else {
+                            false
+                        }
                     }
                     .onFocusChanged { focus ->
                         // Blur commits — but only if we're still in edit mode (Esc may have just
@@ -276,15 +286,21 @@ private fun ConfirmRewindDialog(
 private fun ProgressLine(progress: MaterializationProgress) {
     val text = when (progress) {
         is MaterializationProgress.Started -> "Starting…"
+
         is MaterializationProgress.Downloading -> {
             val pct = if (progress.bytesTotal > 0) {
                 ((progress.bytesDone * 100) / progress.bytesTotal).coerceIn(0L, 100L)
-            } else 0L
+            } else {
+                0L
+            }
             "Downloading blobs · $pct% (${progress.blobsRemaining} remaining)"
         }
+
         is MaterializationProgress.WritingFiles ->
             "Writing files · ${progress.filesDone}/${progress.filesTotal}"
+
         is MaterializationProgress.Done -> "Done."
+
         is MaterializationProgress.Failed -> "Failed: ${progress.reason}"
     }
     Text(text, style = AppTheme.typography.caption)

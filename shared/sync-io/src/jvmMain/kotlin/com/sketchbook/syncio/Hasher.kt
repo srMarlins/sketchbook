@@ -49,4 +49,3 @@ object Hasher {
         return BlobHash("b3:" + hasher.hexdigest())
     }
 }
-

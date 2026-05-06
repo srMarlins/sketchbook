@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.sketchbook.featureprojects.HealthFilter
 import com.sketchbook.repo.LibraryHealth
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.Text
@@ -50,6 +51,7 @@ import com.sketchbook.uishared.theme.AppTheme
 fun HealthChip(
     health: LibraryHealth,
     modifier: Modifier = Modifier,
+    onRowFilter: (HealthFilter) -> Unit = {},
 ) {
     val colors = AppTheme.colors
     var open by remember { mutableStateOf(false) }
@@ -98,7 +100,15 @@ fun HealthChip(
             ) {
                 HealthBreakdownPopup(
                     health = health,
-                    onRowClick = { open = false },
+                    onRowClick = { filter ->
+                        open = false
+                        // PR-CC: forward the row's failing-subset filter to the host so it can
+                        // navigate to Browse + narrow the row set. Filters are dispatched even when
+                        // the row is at 100% (count == total) — the projects screen renders the
+                        // empty state cleanly and the chrome's filter chip surfaces the active
+                        // narrowing so the user sees what they did.
+                        onRowFilter(filter)
+                    },
                 )
             }
         }
@@ -117,7 +127,7 @@ fun HealthChip(
 @Composable
 private fun HealthBreakdownPopup(
     health: LibraryHealth,
-    onRowClick: () -> Unit,
+    onRowClick: (HealthFilter) -> Unit,
 ) {
     val colors = AppTheme.colors
     Column(
@@ -137,21 +147,29 @@ private fun HealthBreakdownPopup(
             label = "Synced",
             count = health.synced,
             total = health.total,
-            onClick = onRowClick,
+            onClick = { onRowClick(HealthFilter.OnlyUnsynced) },
         )
         BreakdownRow(
             label = "Samples clean",
             count = health.sampleClean,
             total = health.total,
-            onClick = onRowClick,
+            onClick = { onRowClick(HealthFilter.OnlyMissingSamples) },
         )
-        // PR-T plugs in here: BreakdownRow(label = "Plugins installed", count = health.pluginInstalled!!, …)
         health.pluginInstalled?.let {
-            BreakdownRow(label = "Plugins installed", count = it, total = health.total, onClick = onRowClick)
+            BreakdownRow(
+                label = "Plugins installed",
+                count = it,
+                total = health.total,
+                onClick = { onRowClick(HealthFilter.OnlyMissingPlugins) },
+            )
         }
-        // PR-R plugs in here: BreakdownRow(label = "Active (not stuck)", count = health.stageNotStuck!!, …)
         health.stageNotStuck?.let {
-            BreakdownRow(label = "Active (not stuck)", count = it, total = health.total, onClick = onRowClick)
+            BreakdownRow(
+                label = "Active (not stuck)",
+                count = it,
+                total = health.total,
+                onClick = { onRowClick(HealthFilter.OnlyStuck) },
+            )
         }
     }
 }

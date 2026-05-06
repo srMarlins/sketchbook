@@ -1,0 +1,790 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, "CREATE INDEX journal_entries_project_idx ON journal_entries(project_id, occurred_at DESC)", 0)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("blob_cache")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("journal_entries")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("project_plugins")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("project_plugins", "projects")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("project_samples", "projects", "repair_acks")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("project_tags", "tags")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("projects")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("projects", "project_samples")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("projects", "repair_acks")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("samples")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("sync_state")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$("sync_state", "project_samples", "project_plugins", "projects", "project_identity")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(-167_044_634, arrayOf("samples"), driver, "Catalog.sq", "countSamples", "SELECT COUNT(*) FROM samples")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(-1_467_951_626, arrayOf("sync_state"), driver, "Catalog.sq", "selectAllSyncStates", "SELECT sync_state.project_uuid, sync_state.local_rev, sync_state.cloud_head_rev, sync_state.dirty, sync_state.self_contained, sync_state.lock_owner, sync_state.lock_expires, sync_state.last_pulled, sync_state.updated_at FROM sync_state")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(-1_850_581_817, arrayOf("sync_state"), driver, "Catalog.sq", "selectDirtyOldestFirst", "SELECT sync_state.project_uuid, sync_state.local_rev, sync_state.cloud_head_rev, sync_state.dirty, sync_state.self_contained, sync_state.lock_owner, sync_state.lock_expires, sync_state.last_pulled, sync_state.updated_at FROM sync_state WHERE dirty != 0 ORDER BY updated_at ASC, project_uuid ASC")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(-1_936_687_912, arrayOf("projects"), driver, "Catalog.sq", "selectAllProjectsForMigration", "SELECT id, path, parent_dir FROM projects")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(-1_967_004_062, """INSERT INTO project_samples (project_id, sample_path, is_missing) VALUES (?, ?, ?)""", 3)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(-447_776_935, arrayOf("blob_cache"), driver, "Catalog.sq", "selectAllBlobsByLruThenSize", "SELECT blob_cache.hash, blob_cache.size, blob_cache.last_used, blob_cache.pinned FROM blob_cache WHERE pinned = 0 ORDER BY last_used ASC, size DESC")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(-680_691_159, arrayOf("projects"), driver, "Catalog.sq", "selectAllProjectIdsAndNames", "SELECT id, name FROM projects")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(-810_683_172, arrayOf("journal_entries"), driver, "Catalog.sq", "countJournalEntries", "SELECT COUNT(*) FROM journal_entries")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(1_228_154_331, """UPDATE snapshots SET label = ?, kind = 'named' WHERE project_uuid = ? AND rev = ?""", 3)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(1_356_252_286, """INSERT INTO project_samples (project_id, sample_path) VALUES (?, ?)""", 2)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(1_644_417_816, arrayOf("projects"), driver, "Catalog.sq", "selectDistinctKeys", "SELECT DISTINCT key FROM projects WHERE key IS NOT NULL ORDER BY key")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(1_802_219_307, arrayOf("project_plugins"), driver, "Catalog.sq", "selectAllDistinctPlugins", "SELECT DISTINCT plugin_name, plugin_type FROM project_plugins")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(359_717_445, arrayOf("blob_cache"), driver, "Catalog.sq", "sumBlobCacheBytes", "SELECT COALESCE(SUM(size), 0) AS total FROM blob_cache")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(56_804_403, arrayOf("projects"), driver, "Catalog.sq", "selectAllProjects", "SELECT projects.id, projects.path, projects.name, projects.parent_dir, projects.tempo, projects.time_sig_num, projects.time_sig_den, projects.key, projects.track_count, projects.audio_tracks, projects.midi_tracks, projects.return_tracks, projects.length_seconds, projects.live_version, projects.last_modified, projects.last_scanned, projects.file_hash, projects.is_archived, projects.color_tag, projects.notes, projects.effort_score, projects.effort_breakdown, projects.parse_status, projects.parse_error, projects.mac_paths_count, projects.has_project_info, projects.file_size_bytes, projects.is_missing, projects.last_seen, projects.stage_inferred, projects.stage_override, projects.has_local_bounce FROM projects WHERE is_archived = 0 ORDER BY last_modified DESC")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(925_006_616, driver, "Catalog.sq", "lastJournalEntryId", "SELECT last_insert_rowid()")</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(::SelectAllDistinctPlugins)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(::SelectAllProjectIdsAndNames)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(::SelectAllProjectTagPairs)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(::SelectAllProjectsForMigration)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(::SelectAllProjectsWithMissing)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(::SelectArchivedProjectsWithMissing)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(::SelectMacImportProjects)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(::SelectMissingPluginCoverage)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(::SelectMissingPluginSummary)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(cutoff, ::SelectArchiveCandidates)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(filename, size_bytes, ::Samples)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(id)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(id, ::SelectProjectByIdWithMissing)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(id, ::SelectStageOverrideById)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(ids)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(ids, ::SelectTagPairsForProjects)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(limit, ::SelectMissingSamples)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(parent_dir)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(plugin_name, plugin_type, exclude_id, ::SelectProjectsUsingPlugin)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(project_id)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(project_id, ::Project_identity)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(project_id, ::SelectPluginsForProject)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(project_id, ::SelectSampleEntriesForProject)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(project_id, limit_, ::Journal_entries)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(project_uuid, ::Snapshots)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(project_uuid, rev, ::Snapshots)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(proposal_key, ::Proposal_acks)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries$(uuid, ::Project_identity)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.CountMissingSamplesForProjectQuery$(1_172_498_934, """SELECT COUNT(*) FROM project_samples WHERE project_id = ? AND is_missing = 1""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectBlobQuery$(-1_257_924_699, """SELECT blob_cache.hash, blob_cache.size, blob_cache.last_used, blob_cache.pinned FROM blob_cache WHERE hash = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectIdentityByProjectIdQuery$(-2_113_047_849, """SELECT project_identity.project_id, project_identity.uuid, project_identity.created_at FROM project_identity WHERE project_id = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectIdentityByUuidQuery$(1_107_346_712, """SELECT project_identity.project_id, project_identity.uuid, project_identity.created_at FROM project_identity WHERE uuid = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectJournalRecentQuery$(659_586_410, """SELECT journal_entries.id, journal_entries.occurred_at, journal_entries.actor, journal_entries.action_type, journal_entries.project_id, journal_entries.payload_json, journal_entries.project_name FROM journal_entries ORDER BY occurred_at DESC, id DESC LIMIT ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectPluginsForProjectQuery$(1_549_615_816, """SELECT plugin_name, plugin_type, track_name FROM project_plugins WHERE project_id = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectProjectByIdQuery$(-58_727_037, """SELECT projects.id, projects.path, projects.name, projects.parent_dir, projects.tempo, projects.time_sig_num, projects.time_sig_den, projects.key, projects.track_count, projects.audio_tracks, projects.midi_tracks, projects.return_tracks, projects.length_seconds, projects.live_version, projects.last_modified, projects.last_scanned, projects.file_hash, projects.is_archived, projects.color_tag, projects.notes, projects.effort_score, projects.effort_breakdown, projects.parse_status, projects.parse_error, projects.mac_paths_count, projects.has_project_info, projects.file_size_bytes, projects.is_missing, projects.last_seen, projects.stage_inferred, projects.stage_override, projects.has_local_bounce FROM projects WHERE id = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectProjectByPathQuery$(-601_898_355, """SELECT projects.id, projects.path, projects.name, projects.parent_dir, projects.tempo, projects.time_sig_num, projects.time_sig_den, projects.key, projects.track_count, projects.audio_tracks, projects.midi_tracks, projects.return_tracks, projects.length_seconds, projects.live_version, projects.last_modified, projects.last_scanned, projects.file_hash, projects.is_archived, projects.color_tag, projects.notes, projects.effort_score, projects.effort_breakdown, projects.parse_status, projects.parse_error, projects.mac_paths_count, projects.has_project_info, projects.file_size_bytes, projects.is_missing, projects.last_seen, projects.stage_inferred, projects.stage_override, projects.has_local_bounce FROM projects WHERE path = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectProjectIdByPathQuery$(-1_126_390_968, """SELECT id FROM projects WHERE path = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectProjectIdsByParentDirQuery$(-246_259_835, """SELECT id FROM projects WHERE parent_dir = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectProjectsByIdsQuery$(null, """SELECT projects.id, projects.path, projects.name, projects.parent_dir, projects.tempo, projects.time_sig_num, projects.time_sig_den, projects.key, projects.track_count, projects.audio_tracks, projects.midi_tracks, projects.return_tracks, projects.length_seconds, projects.live_version, projects.last_modified, projects.last_scanned, projects.file_hash, projects.is_archived, projects.color_tag, projects.notes, projects.effort_score, projects.effort_breakdown, projects.parse_status, projects.parse_error, projects.mac_paths_count, projects.has_project_info, projects.file_size_bytes, projects.is_missing, projects.last_seen, projects.stage_inferred, projects.stage_override, projects.has_local_bounce FROM projects WHERE id IN $idsIndexes ORDER BY last_modified DESC""", mapper, ids.size)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectProposalAckQuery$(-1_759_946_961, """SELECT proposal_acks.proposal_key, proposal_acks.status, proposal_acks.decided_at FROM proposal_acks WHERE proposal_key = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectSampleEntriesForProjectQuery$(-2_092_573_394, """SELECT sample_path, is_missing, size_bytes FROM project_samples WHERE project_id = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectSamplesForProjectQuery$(1_162_959_857, """SELECT sample_path FROM project_samples WHERE project_id = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectSnapshotByRevQuery$(-1_961_126_304, """SELECT snapshots.project_uuid, snapshots.rev, snapshots.parent_rev, snapshots.timestamp, snapshots.host_id, snapshots.kind, snapshots.label, snapshots.manifest_path, snapshots.manifest_hash, snapshots.file_count, snapshots.total_bytes, snapshots.new_bytes FROM snapshots WHERE project_uuid = ? AND rev = ?""", mapper, 2)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectSnapshotsForProjectQuery$(501_705_111, """SELECT snapshots.project_uuid, snapshots.rev, snapshots.parent_rev, snapshots.timestamp, snapshots.host_id, snapshots.kind, snapshots.label, snapshots.manifest_path, snapshots.manifest_hash, snapshots.file_count, snapshots.total_bytes, snapshots.new_bytes FROM snapshots WHERE project_uuid = ? ORDER BY rev DESC""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectStageOverrideByIdQuery$(-812_673_836, """SELECT stage_override FROM projects WHERE id = ?""", mapper, 1)</ID>
+    <ID>ArgumentListWrapping:CatalogQueries.kt:CatalogQueries.SelectSyncStateQuery$(1_543_602_094, """SELECT sync_state.project_uuid, sync_state.local_rev, sync_state.cloud_head_rev, sync_state.dirty, sync_state.self_contained, sync_state.lock_owner, sync_state.lock_expires, sync_state.last_pulled, sync_state.updated_at FROM sync_state WHERE project_uuid = ?""", mapper, 1)</ID>
+    <ID>ClassNaming:Blob_cache.kt:Blob_cache</ID>
+    <ID>ClassNaming:Journal_entries.kt:Journal_entries</ID>
+    <ID>ClassNaming:Pending_uploads.kt:Pending_uploads</ID>
+    <ID>ClassNaming:Project_identity.kt:Project_identity</ID>
+    <ID>ClassNaming:Project_plugins.kt:Project_plugins</ID>
+    <ID>ClassNaming:Project_samples.kt:Project_samples</ID>
+    <ID>ClassNaming:Project_tags.kt:Project_tags</ID>
+    <ID>ClassNaming:Proposal_acks.kt:Proposal_acks</ID>
+    <ID>ClassNaming:Repair_acks.kt:Repair_acks</ID>
+    <ID>ClassNaming:Sync_state.kt:Sync_state</ID>
+    <ID>ClassSignature:CatalogImpl.kt:CatalogImpl : TransacterImplCatalog</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries : TransacterImpl</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectArchiveCandidatesQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectBlobQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectIdentityByUuidQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectJournalRecentQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectMissingSamplesQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectProjectByIdQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectProjectByIdWithMissingQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectProjectByPathQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectProjectIdByPathQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectProposalAckQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectStageOverrideByIdQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectSyncStateQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:CatalogQueries.kt:CatalogQueries$SelectTagsForProjectQuery&lt;out T : Any&gt; : Query</ID>
+    <ID>ClassSignature:Project_identity.kt:Project_identity</ID>
+    <ID>ClassSignature:Project_tags.kt:Project_tags</ID>
+    <ID>ClassSignature:Scanner.kt:ScanProgress$Finished : ScanProgress</ID>
+    <ID>ClassSignature:Scanner.kt:ScanProgress$ProjectFailed : ScanProgress</ID>
+    <ID>ClassSignature:SelectAllDistinctPlugins.kt:SelectAllDistinctPlugins</ID>
+    <ID>ClassSignature:SelectAllProjectIdsAndNames.kt:SelectAllProjectIdsAndNames</ID>
+    <ID>ClassSignature:SelectAllProjectTagPairs.kt:SelectAllProjectTagPairs</ID>
+    <ID>ClassSignature:SelectMissingPluginSummary.kt:SelectMissingPluginSummary</ID>
+    <ID>ClassSignature:SelectStageOverrideById.kt:SelectStageOverrideById</ID>
+    <ID>ClassSignature:SelectTagPairsForProjects.kt:SelectTagPairsForProjects</ID>
+    <ID>ClassSignature:Tags.kt:Tags</ID>
+    <ID>ConstructorParameterNaming:Blob_cache.kt:Blob_cache$public val last_used: String</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.CountMissingSamplesForProjectQuery$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectIdentityByProjectIdQuery$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectJournalForProjectQuery$public val limit_: Long</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectJournalForProjectQuery$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectJournalRecentQuery$public val limit_: Long</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectPluginsForProjectQuery$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectProjectIdsByParentDirQuery$public val parent_dir: String</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectProjectsUsingPluginQuery$public val exclude_id: Long?</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectProjectsUsingPluginQuery$public val plugin_name: String</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectProjectsUsingPluginQuery$public val plugin_type: String?</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectProposalAckQuery$public val proposal_key: String</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectSampleEntriesForProjectQuery$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectSamplesByFilenameAndSizeQuery$public val size_bytes: Long</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectSamplesForProjectQuery$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectSnapshotByRevQuery$public val project_uuid: String</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectSnapshotsForProjectQuery$public val project_uuid: String</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectSyncStateQuery$public val project_uuid: String</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectTagsForProjectQuery$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:Journal_entries.kt:Journal_entries$public val action_type: String</ID>
+    <ID>ConstructorParameterNaming:Journal_entries.kt:Journal_entries$public val occurred_at: Long</ID>
+    <ID>ConstructorParameterNaming:Journal_entries.kt:Journal_entries$public val payload_json: String</ID>
+    <ID>ConstructorParameterNaming:Journal_entries.kt:Journal_entries$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:Journal_entries.kt:Journal_entries$public val project_name: String?</ID>
+    <ID>ConstructorParameterNaming:Pending_uploads.kt:Pending_uploads$public val enqueued_at: String</ID>
+    <ID>ConstructorParameterNaming:Pending_uploads.kt:Pending_uploads$public val source_path: String</ID>
+    <ID>ConstructorParameterNaming:Project_identity.kt:Project_identity$public val created_at: String</ID>
+    <ID>ConstructorParameterNaming:Project_identity.kt:Project_identity$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:Project_plugins.kt:Project_plugins$public val is_installed: Long</ID>
+    <ID>ConstructorParameterNaming:Project_plugins.kt:Project_plugins$public val plugin_name: String</ID>
+    <ID>ConstructorParameterNaming:Project_plugins.kt:Project_plugins$public val plugin_type: String</ID>
+    <ID>ConstructorParameterNaming:Project_plugins.kt:Project_plugins$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:Project_plugins.kt:Project_plugins$public val track_name: String?</ID>
+    <ID>ConstructorParameterNaming:Project_samples.kt:Project_samples$public val is_missing: Long</ID>
+    <ID>ConstructorParameterNaming:Project_samples.kt:Project_samples$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:Project_samples.kt:Project_samples$public val sample_hash: String?</ID>
+    <ID>ConstructorParameterNaming:Project_samples.kt:Project_samples$public val sample_path: String</ID>
+    <ID>ConstructorParameterNaming:Project_samples.kt:Project_samples$public val size_bytes: Long?</ID>
+    <ID>ConstructorParameterNaming:Project_tags.kt:Project_tags$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:Project_tags.kt:Project_tags$public val tag_id: Long</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val audio_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val color_tag: Long?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val effort_breakdown: String?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val effort_score: Long?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val file_hash: String?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val file_size_bytes: Long?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val has_local_bounce: Long</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val has_project_info: Long?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val is_archived: Long</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val is_missing: Long</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val last_modified: Double</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val last_scanned: Double</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val last_seen: Double?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val length_seconds: Double?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val live_version: String?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val mac_paths_count: Long?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val midi_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val parent_dir: String</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val parse_error: String?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val parse_status: String?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val return_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val stage_inferred: String?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val stage_override: String?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val time_sig_den: Long?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val time_sig_num: Long?</ID>
+    <ID>ConstructorParameterNaming:Projects.kt:Projects$public val track_count: Long</ID>
+    <ID>ConstructorParameterNaming:Proposal_acks.kt:Proposal_acks$public val decided_at: String</ID>
+    <ID>ConstructorParameterNaming:Proposal_acks.kt:Proposal_acks$public val proposal_key: String</ID>
+    <ID>ConstructorParameterNaming:Repair_acks.kt:Repair_acks$public val acked_at: String</ID>
+    <ID>ConstructorParameterNaming:Repair_acks.kt:Repair_acks$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:Samples.kt:Samples$public val parent_dir: String</ID>
+    <ID>ConstructorParameterNaming:Samples.kt:Samples$public val size_bytes: Long</ID>
+    <ID>ConstructorParameterNaming:SelectAllDistinctPlugins.kt:SelectAllDistinctPlugins$public val plugin_name: String</ID>
+    <ID>ConstructorParameterNaming:SelectAllDistinctPlugins.kt:SelectAllDistinctPlugins$public val plugin_type: String</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectTagPairs.kt:SelectAllProjectTagPairs$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsForMigration.kt:SelectAllProjectsForMigration$public val parent_dir: String</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val audio_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val color_tag: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val effort_breakdown: String?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val effort_score: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val file_hash: String?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val file_size_bytes: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val has_local_bounce: Long</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val has_project_info: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val is_archived: Long</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val is_missing: Long</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val last_modified: Double</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val last_scanned: Double</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val last_seen: Double?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val length_seconds: Double?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val live_version: String?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val mac_paths_count: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val midi_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val missing_sample_count: Long</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val parent_dir: String</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val parse_error: String?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val parse_status: String?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val return_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val stage_inferred: String?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val stage_override: String?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val time_sig_den: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val time_sig_num: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectAllProjectsWithMissing.kt:SelectAllProjectsWithMissing$public val track_count: Long</ID>
+    <ID>ConstructorParameterNaming:SelectArchiveCandidates.kt:SelectArchiveCandidates$public val last_modified: Double</ID>
+    <ID>ConstructorParameterNaming:SelectArchiveCandidates.kt:SelectArchiveCandidates$public val parent_dir: String</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val audio_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val color_tag: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val effort_breakdown: String?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val effort_score: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val file_hash: String?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val file_size_bytes: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val has_local_bounce: Long</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val has_project_info: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val is_archived: Long</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val is_missing: Long</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val last_modified: Double</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val last_scanned: Double</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val last_seen: Double?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val length_seconds: Double?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val live_version: String?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val mac_paths_count: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val midi_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val missing_sample_count: Long</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val parent_dir: String</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val parse_error: String?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val parse_status: String?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val return_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val stage_inferred: String?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val stage_override: String?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val time_sig_den: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val time_sig_num: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectArchivedProjectsWithMissing.kt:SelectArchivedProjectsWithMissing$public val track_count: Long</ID>
+    <ID>ConstructorParameterNaming:SelectLibraryHealth.kt:SelectLibraryHealth$public val plugin_installed: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectLibraryHealth.kt:SelectLibraryHealth$public val sample_clean: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectLibraryHealth.kt:SelectLibraryHealth$public val stage_not_stuck: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectMacImportProjects.kt:SelectMacImportProjects$public val has_project_info: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectMacImportProjects.kt:SelectMacImportProjects$public val mac_paths_count: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectMacImportProjects.kt:SelectMacImportProjects$public val parent_dir: String</ID>
+    <ID>ConstructorParameterNaming:SelectMissingPluginCoverage.kt:SelectMissingPluginCoverage$public val affected_projects: Long</ID>
+    <ID>ConstructorParameterNaming:SelectMissingPluginSummary.kt:SelectMissingPluginSummary$public val affected_projects: Long</ID>
+    <ID>ConstructorParameterNaming:SelectMissingPluginSummary.kt:SelectMissingPluginSummary$public val missing_count: Long</ID>
+    <ID>ConstructorParameterNaming:SelectMissingSamples.kt:SelectMissingSamples$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:SelectMissingSamples.kt:SelectMissingSamples$public val project_name: String</ID>
+    <ID>ConstructorParameterNaming:SelectMissingSamples.kt:SelectMissingSamples$public val project_path: String</ID>
+    <ID>ConstructorParameterNaming:SelectMissingSamples.kt:SelectMissingSamples$public val sample_path: String</ID>
+    <ID>ConstructorParameterNaming:SelectMissingSamples.kt:SelectMissingSamples$public val sample_size: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectPluginsForProject.kt:SelectPluginsForProject$public val plugin_name: String</ID>
+    <ID>ConstructorParameterNaming:SelectPluginsForProject.kt:SelectPluginsForProject$public val plugin_type: String</ID>
+    <ID>ConstructorParameterNaming:SelectPluginsForProject.kt:SelectPluginsForProject$public val track_name: String?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val audio_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val color_tag: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val effort_breakdown: String?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val effort_score: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val file_hash: String?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val file_size_bytes: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val has_local_bounce: Long</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val has_project_info: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val is_archived: Long</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val is_missing: Long</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val last_modified: Double</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val last_scanned: Double</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val last_seen: Double?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val length_seconds: Double?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val live_version: String?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val mac_paths_count: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val midi_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val missing_sample_count: Long</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val parent_dir: String</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val parse_error: String?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val parse_status: String?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val return_tracks: Long</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val stage_inferred: String?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val stage_override: String?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val time_sig_den: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val time_sig_num: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectProjectByIdWithMissing.kt:SelectProjectByIdWithMissing$public val track_count: Long</ID>
+    <ID>ConstructorParameterNaming:SelectProjectsUsingPlugin.kt:SelectProjectsUsingPlugin$public val last_modified: Double</ID>
+    <ID>ConstructorParameterNaming:SelectSampleEntriesForProject.kt:SelectSampleEntriesForProject$public val is_missing: Long</ID>
+    <ID>ConstructorParameterNaming:SelectSampleEntriesForProject.kt:SelectSampleEntriesForProject$public val sample_path: String</ID>
+    <ID>ConstructorParameterNaming:SelectSampleEntriesForProject.kt:SelectSampleEntriesForProject$public val size_bytes: Long?</ID>
+    <ID>ConstructorParameterNaming:SelectStageOverrideById.kt:SelectStageOverrideById$public val stage_override: String?</ID>
+    <ID>ConstructorParameterNaming:SelectTagPairsForProjects.kt:SelectTagPairsForProjects$public val project_id: Long</ID>
+    <ID>ConstructorParameterNaming:Snapshots.kt:Snapshots$public val file_count: Long</ID>
+    <ID>ConstructorParameterNaming:Snapshots.kt:Snapshots$public val host_id: String</ID>
+    <ID>ConstructorParameterNaming:Snapshots.kt:Snapshots$public val manifest_hash: String</ID>
+    <ID>ConstructorParameterNaming:Snapshots.kt:Snapshots$public val manifest_path: String</ID>
+    <ID>ConstructorParameterNaming:Snapshots.kt:Snapshots$public val new_bytes: Long</ID>
+    <ID>ConstructorParameterNaming:Snapshots.kt:Snapshots$public val parent_rev: Long?</ID>
+    <ID>ConstructorParameterNaming:Snapshots.kt:Snapshots$public val project_uuid: String</ID>
+    <ID>ConstructorParameterNaming:Snapshots.kt:Snapshots$public val total_bytes: Long</ID>
+    <ID>ConstructorParameterNaming:Sync_state.kt:Sync_state$public val cloud_head_rev: Long</ID>
+    <ID>ConstructorParameterNaming:Sync_state.kt:Sync_state$public val last_pulled: String?</ID>
+    <ID>ConstructorParameterNaming:Sync_state.kt:Sync_state$public val local_rev: Long</ID>
+    <ID>ConstructorParameterNaming:Sync_state.kt:Sync_state$public val lock_expires: String?</ID>
+    <ID>ConstructorParameterNaming:Sync_state.kt:Sync_state$public val lock_owner: String?</ID>
+    <ID>ConstructorParameterNaming:Sync_state.kt:Sync_state$public val project_uuid: String</ID>
+    <ID>ConstructorParameterNaming:Sync_state.kt:Sync_state$public val self_contained: Long</ID>
+    <ID>ConstructorParameterNaming:Sync_state.kt:Sync_state$public val updated_at: Long</ID>
+    <ID>Filename:Scanner.kt:com.sketchbook.catalog.Scanner.kt</ID>
+    <ID>FunctionLiteral:CatalogQueries.kt:CatalogQueries$&lt;anonymous&gt;</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$acked_at: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$action_type: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$audio_tracks: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$cloud_head_rev: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$created_at: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$decided_at: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$effort_breakdown: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$effort_score: Long?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$exclude_id: Long?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$file_count: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$file_size_bytes: Long?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$has_local_bounce: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$host_id: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$is_installed: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$is_missing: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$last_modified: Double</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$last_scanned: Double</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$last_used: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$limit_: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$live_version: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$local_rev: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$mac_paths_count: Long?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$manifest_hash: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$manifest_path: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$midi_tracks: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$new_bytes: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$new_path: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$occurred_at: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$old_path: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$parent_dir: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$parent_glob: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$parent_rev: Long?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$parse_error: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$parse_status: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$payload_json: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$plugin_name: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$plugin_type: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$plugin_type: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$project_id: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$project_id: Long?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$project_name: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$project_uuid: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$proposal_key: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$return_tracks: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$sample_path: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$self_contained: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$size_bytes: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$size_bytes: Long?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$stage_inferred: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$stage_override: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$time_sig_den: Long?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$time_sig_num: Long?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$total_bytes: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$track_count: Long</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$track_name: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$updated_at: Long</ID>
+    <ID>FunctionSignature:CatalogImpl.kt:CatalogImpl.Schema$override fun migrate: QueryResult.Value&lt;Unit&gt;</ID>
+    <ID>FunctionSignature:CatalogImpl.kt:CatalogImpl.Schema$private fun migrateInternal: QueryResult.Value&lt;Unit&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectAllBlobsByLruThenSize: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectAllDistinctPlugins: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectAllProjectIdsAndNames: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectAllProjectTagPairs: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectAllProjects: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectAllProjectsForMigration: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectAllProjectsWithMissing: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectAllSyncStates: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectArchiveCandidates: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectArchivedProjectsWithMissing: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectBlob: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectDirtyOldestFirst: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectIdentityByProjectId: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectIdentityByUuid: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectJournalForProject: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectJournalRecent: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectLibraryHealth: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectMacImportProjects: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectMissingPluginCoverage: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectMissingPluginSummary: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectMissingSamples: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectPluginsForProject: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectProjectById: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectProjectByIdWithMissing: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectProjectByPath: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectProjectsByIds: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectProjectsUsingPlugin: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectProposalAck: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectSampleEntriesForProject: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectSamplesByFilename: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectSamplesByFilenameAndSize: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectSnapshotByRev: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectSnapshotsForProject: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectStageOverrideById: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectSyncState: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun &lt;T : Any&gt; selectTagPairsForProjects: Query&lt;T&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun applyMissingSampleMatch: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun countJournalEntries: Query&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun countMissingSamples: Query&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun countMissingSamplesForProject: Query&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun countSamples: Query&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun deleteRepairAck: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertBlobCache: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertJournalEntry: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertOrReplaceProject: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertOrReplaceSyncState: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertProjectIdentityIfAbsent: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertProjectPlugin: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertProjectSampleWithMissing: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertProjectSampleWithMissingAndSize: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertProposalAck: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertRepairAck: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertSnapshot: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun lastJournalEntryId: ExecutableQuery&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun markPluginsInstalledByNameAndType: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun markSyncStateCloudHead: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun revertMissingSampleMatch: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectAllDistinctPlugins: Query&lt;SelectAllDistinctPlugins&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectAllProjectIdsAndNames: Query&lt;SelectAllProjectIdsAndNames&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectAllProjectTagPairs: Query&lt;SelectAllProjectTagPairs&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectAllProjectsForMigration: Query&lt;SelectAllProjectsForMigration&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectAllProjectsWithMissing: Query&lt;SelectAllProjectsWithMissing&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectArchiveCandidates: Query&lt;SelectArchiveCandidates&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectArchivedProjectsWithMissing: Query&lt;SelectArchivedProjectsWithMissing&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectDistinctKeys: Query&lt;String&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectIdentityByProjectId: Query&lt;Project_identity&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectIdentityByUuid: Query&lt;Project_identity&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectJournalForProject: Query&lt;Journal_entries&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectMacImportProjects: Query&lt;SelectMacImportProjects&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectMissingPluginCoverage: Query&lt;SelectMissingPluginCoverage&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectMissingPluginSummary: Query&lt;SelectMissingPluginSummary&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectMissingSamples: Query&lt;SelectMissingSamples&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectPluginsForProject: Query&lt;SelectPluginsForProject&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectProjectByIdWithMissing: Query&lt;SelectProjectByIdWithMissing&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectProjectIdsByParentDir: Query&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectProjectsUsingPlugin: Query&lt;SelectProjectsUsingPlugin&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectProposalAck: Query&lt;Proposal_acks&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectSampleEntriesForProject: Query&lt;SelectSampleEntriesForProject&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectSamplesByFilenameAndSize: Query&lt;Samples&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectSamplesForProject: Query&lt;String&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectSnapshotByRev: Query&lt;Snapshots&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectSnapshotsForProject: Query&lt;Snapshots&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectStageOverrideById: Query&lt;SelectStageOverrideById&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectTagPairsForProjects: Query&lt;SelectTagPairsForProjects&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun sumBlobCacheBytes: Query&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun updateProjectName: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun updateProjectPath: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun updateSnapshotLabel: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun updateStageInferred: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun upsertProjectIdentity: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun upsertSample: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.CountMissingSamplesForProjectQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectArchiveCandidatesQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectBlobQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectIdentityByProjectIdQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectIdentityByUuidQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectJournalForProjectQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectJournalRecentQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectMissingSamplesQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectPluginsForProjectQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectProjectByIdQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectProjectByIdWithMissingQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectProjectByPathQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectProjectIdByPathQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectProjectIdsByParentDirQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectProposalAckQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectSampleEntriesForProjectQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectSamplesByFilenameAndSizeQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectSamplesByFilenameQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectSamplesForProjectQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectSnapshotByRevQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectSnapshotsForProjectQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectStageOverrideByIdQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectSyncStateQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries.SelectTagsForProjectQuery$override fun &lt;R&gt; execute: QueryResult&lt;R&gt;</ID>
+    <ID>LargeClass:CatalogQueries.kt:CatalogQueries : TransacterImpl</ID>
+    <ID>LongMethod:CatalogImpl.kt:CatalogImpl.Schema$override fun create: QueryResult.Value&lt;Unit&gt;</ID>
+    <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$3</ID>
+    <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$4</ID>
+    <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$5</ID>
+    <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$6</ID>
+    <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$7</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$10</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$11</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$12</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$13</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$14</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$15</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$16</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$167_044_634</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$17</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$18</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$19</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_050_669_632</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_091_400_297</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_093_477_771</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_181_229_771</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_228_154_331</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_280_753_159</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_282_746_806</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_356_252_286</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_382_644_361</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_397_129_180</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_467_951_626</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_468_320_824</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_511_278_358</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_544_916_559</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_544_976_361</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_590_593_884</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_623_456_485</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_644_417_816</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_658_774_633</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_802_219_307</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_850_581_817</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_932_854_116</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_936_687_912</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_967_004_062</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_979_195_120</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_996_300_723</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$20</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$21</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$22</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$23</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$233_103_807</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$24</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$25</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$256_387_336</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$26</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$27</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$271_425_314</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$28</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$287_056_024</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$29</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$296_426_123</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$2_093_407_078</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$2_132_346_668</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$3</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$30</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$31</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$32</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$329_262_266</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$337_527_990</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$359_717_445</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$4</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$439_440_006</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$446_383_892</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$447_776_935</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$478_395_840</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$5</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$540_037_723</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$56_804_403</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$6</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$658_081_273</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$663_429_659</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$680_691_159</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$7</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$8</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$810_683_172</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$851_132_078</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$857_869_767</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$85_993_675</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$881_029_124</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$9</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$925_006_616</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$945_130_611</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$968_000_529</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$990_420_132</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.CountMissingSamplesForProjectQuery$1_172_498_934</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectArchiveCandidatesQuery$255_013_546</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectBlobQuery$1_257_924_699</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectIdentityByProjectIdQuery$2_113_047_849</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectIdentityByUuidQuery$1_107_346_712</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectJournalForProjectQuery$65_546_655</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectJournalRecentQuery$659_586_410</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectMissingSamplesQuery$1_074_861_515</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectPluginsForProjectQuery$1_549_615_816</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectProjectByIdQuery$58_727_037</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectProjectByIdWithMissingQuery$943_874_109</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectProjectByPathQuery$601_898_355</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectProjectIdByPathQuery$1_126_390_968</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectProjectIdsByParentDirQuery$246_259_835</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectProjectsUsingPluginQuery$5</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectProposalAckQuery$1_759_946_961</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectSampleEntriesForProjectQuery$2_092_573_394</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectSamplesByFilenameAndSizeQuery$801_971_175</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectSamplesByFilenameQuery$2_083_011_233</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectSamplesForProjectQuery$1_162_959_857</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectSnapshotByRevQuery$1_961_126_304</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectSnapshotsForProjectQuery$501_705_111</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectStageOverrideByIdQuery$812_673_836</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectSyncStateQuery$1_543_602_094</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectTagsForProjectQuery$1_073_375_983</ID>
+    <ID>MatchingDeclarationName:Scanner.kt:ScanProgress</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$)</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectAllProjectsForMigration: Query&lt;SelectAllProjectsForMigration&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectAllProjectsWithMissing: Query&lt;SelectAllProjectsWithMissing&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectArchiveCandidates: Query&lt;SelectArchiveCandidates&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectArchivedProjectsWithMissing: Query&lt;SelectArchivedProjectsWithMissing&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectIdentityByProjectId: Query&lt;Project_identity&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectJournalForProject: Query&lt;Journal_entries&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectPluginsForProject: Query&lt;SelectPluginsForProject&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectProjectByIdWithMissing: Query&lt;SelectProjectByIdWithMissing&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectSampleEntriesForProject: Query&lt;SelectSampleEntriesForProject&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectSamplesByFilenameAndSize: Query&lt;Samples&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectTagPairsForProjects: Query&lt;SelectTagPairsForProjects&gt;</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$val</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.CountMissingSamplesForProjectQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectBlobQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectIdentityByProjectIdQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectIdentityByUuidQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectJournalRecentQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectPluginsForProjectQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectProjectByIdQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectProjectByPathQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectProjectIdByPathQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectProjectIdsByParentDirQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectProjectsByIdsQuery$return</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectProposalAckQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectSampleEntriesForProjectQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectSamplesForProjectQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectSnapshotByRevQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectSnapshotsForProjectQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectStageOverrideByIdQuery$override</ID>
+    <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectSyncStateQuery$override</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(cutoff: Double, mapper: ( id: Long, path: String, name: String, parent_dir: String, last_modified: Double, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(filename: String, mapper: ( id: Long, path: String, filename: String, size_bytes: Long, mtime: Double, parent_dir: String, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(hash: String, mapper: ( hash: String, size: Long, last_used: String, pinned: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(id: Long, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(id: Long, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, missing_sample_count: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(ids: Collection&lt;Long&gt;, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(limit: Long, mapper: ( project_id: Long, sample_path: String, sample_size: Long?, project_path: String, project_name: String, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(limit_: Long, mapper: ( id: Long, occurred_at: Long, actor: String, action_type: String, project_id: Long, payload_json: String, project_name: String?, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(mapper: ( hash: String, size: Long, last_used: String, pinned: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(mapper: ( id: Long, path: String, name: String, parent_dir: String, mac_paths_count: Long?, has_project_info: Long?, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, missing_sample_count: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(mapper: ( id: Long, path: String, parent_dir: String, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(mapper: ( name: String, type: String, affected_projects: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(mapper: ( project_uuid: String, local_rev: Long, cloud_head_rev: Long, dirty: Long, self_contained: Long, lock_owner: String?, lock_expires: String?, last_pulled: String?, updated_at: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(mapper: ( total: Long, synced: Long?, sample_clean: Long?, plugin_installed: Long?, stage_not_stuck: Long?, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(path: String, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(project_id: Long, mapper: ( plugin_name: String, plugin_type: String, track_name: String?, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(project_id: Long, mapper: ( project_id: Long, uuid: String, created_at: String, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(project_id: Long, mapper: ( sample_path: String, is_missing: Long, size_bytes: Long?, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(project_uuid: String, mapper: ( project_uuid: String, local_rev: Long, cloud_head_rev: Long, dirty: Long, self_contained: Long, lock_owner: String?, lock_expires: String?, last_pulled: String?, updated_at: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(project_uuid: String, mapper: ( project_uuid: String, rev: Long, parent_rev: Long?, timestamp: String, host_id: String, kind: String, label: String?, manifest_path: String, manifest_hash: String, file_count: Long, total_bytes: Long, new_bytes: Long, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(proposal_key: String, mapper: ( proposal_key: String, status: String, decided_at: String, ) -&gt; T)</ID>
+    <ID>ParameterListWrapping:CatalogQueries.kt:CatalogQueries$(uuid: String, mapper: ( project_id: Long, uuid: String, created_at: String, ) -&gt; T)</ID>
+    <ID>TooManyFunctions:CatalogQueries.kt:CatalogQueries : TransacterImpl</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getLong(1)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getLong(1)!!, cursor.getString(2)!!, cursor.getString(3)!!, cursor.getLong(4)!!, cursor.getString(5)!!, cursor.getString(6) )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getLong(1), cursor.getLong(2), cursor.getLong(3), cursor.getLong(4) )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getString(1)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getString(1)!!, cursor.getLong(2), cursor.getString(3)!!, cursor.getString(4)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getString(1)!!, cursor.getString(2)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getString(1)!!, cursor.getString(2)!!, cursor.getDouble(3)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getString(1)!!, cursor.getString(2)!!, cursor.getLong(3)!!, cursor.getDouble(4)!!, cursor.getString(5)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getString(1)!!, cursor.getString(2)!!, cursor.getString(3)!!, cursor.getDouble(4)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getString(1)!!, cursor.getString(2)!!, cursor.getString(3)!!, cursor.getDouble(4), cursor.getLong(5), cursor.getLong(6), cursor.getString(7), cursor.getLong(8)!!, cursor.getLong(9)!!, cursor.getLong(10)!!, cursor.getLong(11)!!, cursor.getDouble(12), cursor.getString(13), cursor.getDouble(14)!!, cursor.getDouble(15)!!, cursor.getString(16), cursor.getLong(17)!!, cursor.getLong(18), cursor.getString(19), cursor.getLong(20), cursor.getString(21), cursor.getString(22), cursor.getString(23), cursor.getLong(24), cursor.getLong(25), cursor.getLong(26), cursor.getLong(27)!!, cursor.getDouble(28), cursor.getString(29), cursor.getString(30), cursor.getLong(31)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getString(1)!!, cursor.getString(2)!!, cursor.getString(3)!!, cursor.getDouble(4), cursor.getLong(5), cursor.getLong(6), cursor.getString(7), cursor.getLong(8)!!, cursor.getLong(9)!!, cursor.getLong(10)!!, cursor.getLong(11)!!, cursor.getDouble(12), cursor.getString(13), cursor.getDouble(14)!!, cursor.getDouble(15)!!, cursor.getString(16), cursor.getLong(17)!!, cursor.getLong(18), cursor.getString(19), cursor.getLong(20), cursor.getString(21), cursor.getString(22), cursor.getString(23), cursor.getLong(24), cursor.getLong(25), cursor.getLong(26), cursor.getLong(27)!!, cursor.getDouble(28), cursor.getString(29), cursor.getString(30), cursor.getLong(31)!!, cursor.getLong(32)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getLong(0)!!, cursor.getString(1)!!, cursor.getString(2)!!, cursor.getString(3)!!, cursor.getLong(4), cursor.getLong(5) )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getString(0) )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getString(0)!!, cursor.getLong(1)!!, cursor.getLong(2) )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getString(0)!!, cursor.getLong(1)!!, cursor.getLong(2)!!, cursor.getLong(3)!!, cursor.getLong(4)!!, cursor.getString(5), cursor.getString(6), cursor.getString(7), cursor.getLong(8)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getString(0)!!, cursor.getLong(1)!!, cursor.getLong(2), cursor.getString(3)!!, cursor.getString(4)!!, cursor.getString(5)!!, cursor.getString(6), cursor.getString(7)!!, cursor.getString(8)!!, cursor.getLong(9)!!, cursor.getLong(10)!!, cursor.getLong(11)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getString(0)!!, cursor.getLong(1)!!, cursor.getString(2)!!, cursor.getLong(3)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getString(0)!!, cursor.getString(1)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getString(0)!!, cursor.getString(1)!!, cursor.getLong(2)!! )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getString(0)!!, cursor.getString(1)!!, cursor.getString(2) )</ID>
+    <ID>TrailingCommaOnCallSite:CatalogQueries.kt:CatalogQueries$( cursor.getString(0)!!, cursor.getString(1)!!, cursor.getString(2)!! )</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(cutoff: Double, mapper: ( id: Long, path: String, name: String, parent_dir: String, last_modified: Double, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(filename: String, mapper: ( id: Long, path: String, filename: String, size_bytes: Long, mtime: Double, parent_dir: String, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(hash: String, mapper: ( hash: String, size: Long, last_used: String, pinned: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(id: Long, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(id: Long, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, missing_sample_count: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(ids: Collection&lt;Long&gt;, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(limit: Long, mapper: ( project_id: Long, sample_path: String, sample_size: Long?, project_path: String, project_name: String, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(limit_: Long, mapper: ( id: Long, occurred_at: Long, actor: String, action_type: String, project_id: Long, payload_json: String, project_name: String?, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(mapper: ( hash: String, size: Long, last_used: String, pinned: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(mapper: ( id: Long, path: String, name: String, parent_dir: String, mac_paths_count: Long?, has_project_info: Long?, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, missing_sample_count: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(mapper: ( id: Long, path: String, parent_dir: String, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(mapper: ( name: String, type: String, affected_projects: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(mapper: ( project_uuid: String, local_rev: Long, cloud_head_rev: Long, dirty: Long, self_contained: Long, lock_owner: String?, lock_expires: String?, last_pulled: String?, updated_at: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(mapper: ( total: Long, synced: Long?, sample_clean: Long?, plugin_installed: Long?, stage_not_stuck: Long?, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(path: String, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(project_id: Long, mapper: ( plugin_name: String, plugin_type: String, track_name: String?, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(project_id: Long, mapper: ( project_id: Long, uuid: String, created_at: String, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(project_id: Long, mapper: ( sample_path: String, is_missing: Long, size_bytes: Long?, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(project_uuid: String, mapper: ( project_uuid: String, local_rev: Long, cloud_head_rev: Long, dirty: Long, self_contained: Long, lock_owner: String?, lock_expires: String?, last_pulled: String?, updated_at: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(project_uuid: String, mapper: ( project_uuid: String, rev: Long, parent_rev: Long?, timestamp: String, host_id: String, kind: String, label: String?, manifest_path: String, manifest_hash: String, file_count: Long, total_bytes: Long, new_bytes: Long, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(proposal_key: String, mapper: ( proposal_key: String, status: String, decided_at: String, ) -&gt; T)</ID>
+    <ID>TrailingCommaOnDeclarationSite:CatalogQueries.kt:CatalogQueries$(uuid: String, mapper: ( project_id: Long, uuid: String, created_at: String, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE blob_cache ( | hash TEXT PRIMARY KEY, | size INTEGER NOT NULL, | last_used TEXT NOT NULL, | pinned INTEGER NOT NULL DEFAULT 0 |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE journal_entries ( | id INTEGER PRIMARY KEY AUTOINCREMENT, | occurred_at INTEGER NOT NULL, | actor TEXT NOT NULL, | action_type TEXT NOT NULL, | -- NOT NULL but intentionally no FK: audit entries outlive their project; projects.id is | -- AUTOINCREMENT so the int never gets reused, so a stale project_id stays meaningful. | project_id INTEGER NOT NULL, | payload_json TEXT NOT NULL DEFAULT '{}' |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE journal_entries ( | id INTEGER PRIMARY KEY AUTOINCREMENT, | occurred_at INTEGER NOT NULL, | actor TEXT NOT NULL, | action_type TEXT NOT NULL, | -- NOT NULL but intentionally no FK: audit entries outlive their project; projects.id is | -- AUTOINCREMENT so the int never gets reused, so a stale project_id stays meaningful. | project_id INTEGER NOT NULL, | payload_json TEXT NOT NULL DEFAULT '{}', | -- Denormalized project name captured at append time. Survives catalog rescans that drop or | -- reassign project ids — without this, the History UI has no way to render a name for an | -- orphaned entry beyond a "project #N" sentinel. Nullable for legacy rows written before v6. | project_name TEXT |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE pending_uploads ( | hash TEXT PRIMARY KEY, | size INTEGER NOT NULL, | source_path TEXT NOT NULL, | enqueued_at TEXT NOT NULL, | attempts INTEGER NOT NULL DEFAULT 0 |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE project_identity ( | project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE, | uuid TEXT NOT NULL UNIQUE, | created_at TEXT NOT NULL |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE project_plugins ( | id INTEGER PRIMARY KEY AUTOINCREMENT, | project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, | plugin_name TEXT NOT NULL, | plugin_type TEXT NOT NULL, | track_name TEXT, | -- PR-T: 1 when the plugin file exists in one of the platform-default install dirs (or | -- when we couldn't normalize the name), 0 when the user's filesystem is missing it. Default | -- 1 so brand-new rows from the parser don't blink to "missing" before the presence probe | -- has actually walked the disk; the probe flips them to 0 if no match is found. | is_installed INTEGER NOT NULL DEFAULT 1 |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE project_samples ( | id INTEGER PRIMARY KEY AUTOINCREMENT, | project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, | sample_path TEXT NOT NULL, | sample_hash TEXT, | is_missing INTEGER NOT NULL DEFAULT 0, | size_bytes INTEGER |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE project_tags ( | project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, | tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE, | PRIMARY KEY (project_id, tag_id) |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE projects ( | id INTEGER PRIMARY KEY AUTOINCREMENT, | path TEXT NOT NULL UNIQUE, | name TEXT NOT NULL, | parent_dir TEXT NOT NULL, | tempo REAL, | time_sig_num INTEGER, | time_sig_den INTEGER, | key TEXT, | track_count INTEGER NOT NULL DEFAULT 0, | audio_tracks INTEGER NOT NULL DEFAULT 0, | midi_tracks INTEGER NOT NULL DEFAULT 0, | return_tracks INTEGER NOT NULL DEFAULT 0, | length_seconds REAL, | live_version TEXT, | last_modified REAL NOT NULL, | last_scanned REAL NOT NULL, | file_hash TEXT, | is_archived INTEGER NOT NULL DEFAULT 0, | color_tag INTEGER, | notes TEXT, | effort_score INTEGER, | effort_breakdown TEXT, | parse_status TEXT, | parse_error TEXT, | mac_paths_count INTEGER, | has_project_info INTEGER, | file_size_bytes INTEGER, | is_missing INTEGER NOT NULL DEFAULT 0, | last_seen REAL, | -- PR-R: stage classification. `stage_inferred` is rewritten on every successful scan from | -- StageInferrer.infer; `stage_override` is user-set via the per-row chip popup and wins on | -- read. `has_local_bounce` is the scan-time bounce-probe result, cached so PR-CC's library | -- health aggregate doesn't have to walk the filesystem. | stage_inferred TEXT, | stage_override TEXT, | has_local_bounce INTEGER NOT NULL DEFAULT 0 |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE proposal_acks ( | proposal_key TEXT PRIMARY KEY, | status TEXT NOT NULL, -- 'approved' | 'rejected' | decided_at TEXT NOT NULL |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE proposal_acks ( | proposal_key TEXT PRIMARY KEY, | status TEXT NOT NULL, | decided_at TEXT NOT NULL |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE repair_acks ( | scope TEXT NOT NULL, -- 'mac_import' | 'missing_sample' | project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, | payload TEXT NOT NULL DEFAULT '', -- empty for mac_import; missing_path for missing_sample | acked_at TEXT NOT NULL, | PRIMARY KEY (scope, project_id, payload) |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE repair_acks ( | scope TEXT NOT NULL, | project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, | payload TEXT NOT NULL DEFAULT '', | acked_at TEXT NOT NULL, | PRIMARY KEY (scope, project_id, payload) |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE samples ( | id INTEGER PRIMARY KEY AUTOINCREMENT, | path TEXT NOT NULL UNIQUE, | filename TEXT NOT NULL, | size_bytes INTEGER NOT NULL, | mtime REAL NOT NULL, | parent_dir TEXT NOT NULL |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE snapshots ( | project_uuid TEXT NOT NULL, | rev INTEGER NOT NULL, | parent_rev INTEGER, | timestamp TEXT NOT NULL, | host_id TEXT NOT NULL, | kind TEXT NOT NULL CHECK(kind IN ('auto','named','branch')), | label TEXT, | manifest_path TEXT NOT NULL, | manifest_hash TEXT NOT NULL, | file_count INTEGER NOT NULL, | total_bytes INTEGER NOT NULL, | new_bytes INTEGER NOT NULL, | PRIMARY KEY (project_uuid, rev) |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE sync_state ( | project_uuid TEXT PRIMARY KEY, | local_rev INTEGER NOT NULL, | cloud_head_rev INTEGER NOT NULL, | dirty INTEGER NOT NULL DEFAULT 0, | self_contained INTEGER NOT NULL DEFAULT 0, | lock_owner TEXT, | lock_expires TEXT, | last_pulled TEXT, | -- Epoch millis of the last write that touched this row. Drives drainOldestFirst() so the | -- background sync drain processes longest-pending dirty work first (FIFO fairness). | updated_at INTEGER NOT NULL DEFAULT 0 |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE tags ( | id INTEGER PRIMARY KEY AUTOINCREMENT, | name TEXT NOT NULL UNIQUE |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE VIRTUAL TABLE projects_fts USING fts5( | name, parent_dir, plugin_names, sample_filenames, notes, | tokenize='porter unicode61' |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_050_669_632, """ |INSERT INTO journal_entries(occurred_at, actor, action_type, project_id, payload_json, project_name) |VALUES (?, ?, ?, ?, ?, ?) """.trimMargin(), 6)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_091_400_297, """ |INSERT OR REPLACE INTO repair_acks (scope, project_id, payload, acked_at) |VALUES (?, ?, ?, ?) """.trimMargin(), 4)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_181_229_771, arrayOf("project_plugins", "projects"), driver, "Catalog.sq", "selectMissingPluginSummary", """ |SELECT COUNT(DISTINCT pp.plugin_name || '|' || pp.plugin_type) AS missing_count, | COUNT(DISTINCT pp.project_id) AS affected_projects |FROM project_plugins pp |JOIN projects p ON p.id = pp.project_id |WHERE pp.is_installed = 0 AND p.is_archived = 0 """.trimMargin())</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_511_278_358, """ |INSERT OR REPLACE INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained, updated_at) |VALUES (?, ?, ?, ?, ?, ?) """.trimMargin(), 6)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_658_774_633, """ |UPDATE project_samples |SET sample_path = ?, is_missing = 0 |WHERE project_id = ? AND sample_path = ? """.trimMargin(), 3)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_932_854_116, arrayOf("projects", "project_samples"), driver, "Catalog.sq", "selectArchivedProjectsWithMissing", """ |SELECT p.id, p.path, p.name, p.parent_dir, p.tempo, p.time_sig_num, p.time_sig_den, p.key, p.track_count, p.audio_tracks, p.midi_tracks, p.return_tracks, p.length_seconds, p.live_version, p.last_modified, p.last_scanned, p.file_hash, p.is_archived, p.color_tag, p.notes, p.effort_score, p.effort_breakdown, p.parse_status, p.parse_error, p.mac_paths_count, p.has_project_info, p.file_size_bytes, p.is_missing, p.last_seen, p.stage_inferred, p.stage_override, p.has_local_bounce, | COALESCE((SELECT COUNT(*) FROM project_samples ps | WHERE ps.project_id = p.id AND ps.is_missing = 1), 0) AS missing_sample_count |FROM projects p |WHERE p.is_archived = 1 |ORDER BY p.last_modified DESC """.trimMargin())</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_996_300_723, """ |INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, key, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes) |VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """.trimMargin(), 20)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-287_056_024, """ |INSERT OR IGNORE INTO project_identity (project_id, uuid, created_at) |VALUES (?, ?, ?) """.trimMargin(), 3)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-296_426_123, """ |INSERT OR IGNORE INTO project_tags (project_id, tag_id) |SELECT ?, id FROM tags WHERE name = ? """.trimMargin(), 2)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-329_262_266, arrayOf("project_samples", "projects", "repair_acks"), driver, "Catalog.sq", "countMissingSamples", """ |SELECT COUNT(*) |FROM project_samples ps |JOIN projects p ON p.id = ps.project_id |WHERE ps.is_missing = 1 | AND p.is_archived = 0 | AND NOT EXISTS ( | SELECT 1 FROM repair_acks ra | WHERE ra.scope = 'missing_sample' | AND ra.project_id = ps.project_id | AND ra.payload = ps.sample_path | ) """.trimMargin())</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-446_383_892, """ |UPDATE projects SET stage_inferred = ?, has_local_bounce = ? |WHERE id = ? """.trimMargin(), 3)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-540_037_723, """ |INSERT OR REPLACE INTO samples (path, filename, size_bytes, mtime, parent_dir) |VALUES (?, ?, ?, ?, ?) """.trimMargin(), 5)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-663_429_659, """ |UPDATE project_samples |SET sample_path = ?, is_missing = 1 |WHERE project_id = ? AND sample_path = ? """.trimMargin(), 3)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-851_132_078, """ |INSERT OR REPLACE INTO proposal_acks (proposal_key, status, decided_at) |VALUES (?, ?, ?) """.trimMargin(), 3)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-857_869_767, arrayOf("project_plugins", "projects"), driver, "Catalog.sq", "selectMissingPluginCoverage", """ |SELECT pp.plugin_name AS name, | pp.plugin_type AS type, | COUNT(DISTINCT pp.project_id) AS affected_projects |FROM project_plugins pp |JOIN projects p ON p.id = pp.project_id |WHERE pp.is_installed = 0 AND p.is_archived = 0 |GROUP BY pp.plugin_name, pp.plugin_type |ORDER BY affected_projects DESC, pp.plugin_name ASC """.trimMargin())</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-881_029_124, """ |UPDATE project_plugins |SET is_installed = ? |WHERE plugin_name = ? AND plugin_type = ? """.trimMargin(), 3)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-945_130_611, arrayOf("projects", "project_samples"), driver, "Catalog.sq", "selectAllProjectsWithMissing", """ |SELECT p.id, p.path, p.name, p.parent_dir, p.tempo, p.time_sig_num, p.time_sig_den, p.key, p.track_count, p.audio_tracks, p.midi_tracks, p.return_tracks, p.length_seconds, p.live_version, p.last_modified, p.last_scanned, p.file_hash, p.is_archived, p.color_tag, p.notes, p.effort_score, p.effort_breakdown, p.parse_status, p.parse_error, p.mac_paths_count, p.has_project_info, p.file_size_bytes, p.is_missing, p.last_seen, p.stage_inferred, p.stage_override, p.has_local_bounce, | COALESCE((SELECT COUNT(*) FROM project_samples ps | WHERE ps.project_id = p.id AND ps.is_missing = 1), 0) AS missing_sample_count |FROM projects p |WHERE p.is_archived = 0 |ORDER BY p.last_modified DESC """.trimMargin())</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-968_000_529, arrayOf("sync_state", "project_samples", "project_plugins", "projects", "project_identity"), driver, "Catalog.sq", "selectLibraryHealth", """ |SELECT | COUNT(*) AS total, | SUM(CASE WHEN s.dirty IS NOT NULL AND s.dirty = 0 AND s.local_rev = s.cloud_head_rev THEN 1 ELSE 0 END) AS synced, | SUM(CASE WHEN ms.missing_count IS NULL OR ms.missing_count = 0 THEN 1 ELSE 0 END) AS sample_clean, | SUM(CASE WHEN mp.missing_count IS NULL OR mp.missing_count = 0 THEN 1 ELSE 0 END) AS plugin_installed, | SUM(CASE WHEN p.stage_inferred IS NULL OR p.stage_inferred != 'Stuck' THEN 1 ELSE 0 END) AS stage_not_stuck |FROM projects p |LEFT JOIN project_identity pi ON pi.project_id = p.id |LEFT JOIN sync_state s ON s.project_uuid = pi.uuid |LEFT JOIN ( | SELECT project_id, COUNT(*) AS missing_count | FROM project_samples | WHERE is_missing = 1 | GROUP BY project_id |) ms ON ms.project_id = p.id |LEFT JOIN ( | SELECT project_id, COUNT(*) AS missing_count | FROM project_plugins | WHERE is_installed = 0 | GROUP BY project_id |) mp ON mp.project_id = p.id |WHERE p.is_archived = 0 """.trimMargin())</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_280_753_159, """ |INSERT INTO project_plugins (project_id, plugin_name, plugin_type, track_name) |VALUES (?, ?, ?, ?) """.trimMargin(), 4)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_282_746_806, """ |INSERT INTO project_samples (project_id, sample_path, is_missing, size_bytes) |VALUES (?, ?, ?, ?) """.trimMargin(), 4)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_382_644_361, """ |INSERT INTO snapshots (project_uuid, rev, parent_rev, timestamp, host_id, kind, label, manifest_path, manifest_hash, file_count, total_bytes, new_bytes) |VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """.trimMargin(), 12)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_468_320_824, """ |INSERT INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained, updated_at) |VALUES (?, 0, ?, 0, 0, ?) |ON CONFLICT(project_uuid) DO UPDATE SET cloud_head_rev = ?, updated_at = ? """.trimMargin(), 5)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_590_593_884, """ |INSERT OR REPLACE INTO project_identity (project_id, uuid, created_at) |VALUES (?, ?, ?) """.trimMargin(), 3)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_623_456_485, """ |DELETE FROM repair_acks |WHERE scope = ? AND project_id = ? AND payload = ? """.trimMargin(), 3)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(233_103_807, arrayOf("project_tags", "tags"), driver, "Catalog.sq", "selectAllProjectTagPairs", """ |SELECT pt.project_id, t.name FROM project_tags pt |JOIN tags t ON t.id = pt.tag_id |ORDER BY pt.project_id, t.name """.trimMargin())</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(2_093_407_078, arrayOf("projects", "repair_acks"), driver, "Catalog.sq", "selectMacImportProjects", """ |SELECT id, path, name, parent_dir, mac_paths_count, has_project_info |FROM projects |WHERE is_archived = 0 | AND (COALESCE(mac_paths_count, 0) &gt; 0 OR COALESCE(has_project_info, 1) = 0) | AND id NOT IN (SELECT project_id FROM repair_acks WHERE scope = 'mac_import') |ORDER BY mac_paths_count DESC, last_modified DESC """.trimMargin())</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(478_395_840, """ |INSERT OR REPLACE INTO blob_cache (hash, size, last_used, pinned) |VALUES (?, ?, ?, ?) """.trimMargin(), 4)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(cutoff: Double, mapper: ( id: Long, path: String, name: String, parent_dir: String, last_modified: Double, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(filename: String, mapper: ( id: Long, path: String, filename: String, size_bytes: Long, mtime: Double, parent_dir: String, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(hash: String, mapper: ( hash: String, size: Long, last_used: String, pinned: Long, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(id: Long, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(id: Long, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, missing_sample_count: Long, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(ids: Collection&lt;Long&gt;, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(limit: Long, mapper: ( project_id: Long, sample_path: String, sample_size: Long?, project_path: String, project_name: String, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(limit_: Long, mapper: ( id: Long, occurred_at: Long, actor: String, action_type: String, project_id: Long, payload_json: String, project_name: String?, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(path: String, mapper: ( id: Long, path: String, name: String, parent_dir: String, tempo: Double?, time_sig_num: Long?, time_sig_den: Long?, key: String?, track_count: Long, audio_tracks: Long, midi_tracks: Long, return_tracks: Long, length_seconds: Double?, live_version: String?, last_modified: Double, last_scanned: Double, file_hash: String?, is_archived: Long, color_tag: Long?, notes: String?, effort_score: Long?, effort_breakdown: String?, parse_status: String?, parse_error: String?, mac_paths_count: Long?, has_project_info: Long?, file_size_bytes: Long?, is_missing: Long, last_seen: Double?, stage_inferred: String?, stage_override: String?, has_local_bounce: Long, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(project_id: Long, mapper: ( plugin_name: String, plugin_type: String, track_name: String?, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(project_id: Long, mapper: ( project_id: Long, uuid: String, created_at: String, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(project_id: Long, mapper: ( sample_path: String, is_missing: Long, size_bytes: Long?, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(project_uuid: String, mapper: ( project_uuid: String, local_rev: Long, cloud_head_rev: Long, dirty: Long, self_contained: Long, lock_owner: String?, lock_expires: String?, last_pulled: String?, updated_at: Long, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(project_uuid: String, mapper: ( project_uuid: String, rev: Long, parent_rev: Long?, timestamp: String, host_id: String, kind: String, label: String?, manifest_path: String, manifest_hash: String, file_count: Long, total_bytes: Long, new_bytes: Long, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(proposal_key: String, mapper: ( proposal_key: String, status: String, decided_at: String, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(uuid: String, mapper: ( project_id: Long, uuid: String, created_at: String, ) -&gt; T)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectArchiveCandidatesQuery$(</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectArchiveCandidatesQuery$(255_013_546, """ |SELECT id, path, name, parent_dir, last_modified |FROM projects |WHERE is_archived = 0 | AND color_tag IS NULL | AND last_modified &lt; ? |ORDER BY last_modified ASC |LIMIT 50 """.trimMargin(), mapper, 1)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectJournalForProjectQuery$(</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectJournalForProjectQuery$(65_546_655, """ |SELECT journal_entries.id, journal_entries.occurred_at, journal_entries.actor, journal_entries.action_type, journal_entries.project_id, journal_entries.payload_json, journal_entries.project_name FROM journal_entries WHERE project_id = ? |ORDER BY occurred_at DESC, id DESC LIMIT ? """.trimMargin(), mapper, 2)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectMissingSamplesQuery$(</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectMissingSamplesQuery$(1_074_861_515, """ |SELECT ps.project_id, ps.sample_path, ps.size_bytes AS sample_size, | p.path AS project_path, p.name AS project_name |FROM project_samples ps |JOIN projects p ON p.id = ps.project_id |WHERE ps.is_missing = 1 | AND p.is_archived = 0 | AND NOT EXISTS ( | SELECT 1 FROM repair_acks ra | WHERE ra.scope = 'missing_sample' | AND ra.project_id = ps.project_id | AND ra.payload = ps.sample_path | ) |ORDER BY p.last_modified DESC |LIMIT ? """.trimMargin(), mapper, 1)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectProjectByIdWithMissingQuery$(</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectProjectByIdWithMissingQuery$(943_874_109, """ |SELECT p.id, p.path, p.name, p.parent_dir, p.tempo, p.time_sig_num, p.time_sig_den, p.key, p.track_count, p.audio_tracks, p.midi_tracks, p.return_tracks, p.length_seconds, p.live_version, p.last_modified, p.last_scanned, p.file_hash, p.is_archived, p.color_tag, p.notes, p.effort_score, p.effort_breakdown, p.parse_status, p.parse_error, p.mac_paths_count, p.has_project_info, p.file_size_bytes, p.is_missing, p.last_seen, p.stage_inferred, p.stage_override, p.has_local_bounce, | COALESCE((SELECT COUNT(*) FROM project_samples ps | WHERE ps.project_id = p.id AND ps.is_missing = 1), 0) AS missing_sample_count |FROM projects p |WHERE p.id = ? """.trimMargin(), mapper, 1)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectProjectsUsingPluginQuery$(</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectProjectsUsingPluginQuery$(null, """ |SELECT DISTINCT p.id, p.name, p.path, p.last_modified |FROM projects p |JOIN project_plugins pp ON pp.project_id = p.id |WHERE pp.plugin_name = ? | AND (? IS NULL OR pp.plugin_type ${ if (plugin_type == null) "IS" else "=" } ?) | AND (? IS NULL OR p.id ${ if (exclude_id == null) "IS NOT" else "!=" } ?) | AND p.is_archived = 0 |ORDER BY p.last_modified DESC """.trimMargin(), mapper, 5)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectSamplesByFilenameAndSizeQuery$(</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectSamplesByFilenameAndSizeQuery$(-801_971_175, """ |SELECT samples.id, samples.path, samples.filename, samples.size_bytes, samples.mtime, samples.parent_dir FROM samples WHERE filename = ? AND size_bytes = ? |ORDER BY mtime DESC LIMIT 5 """.trimMargin(), mapper, 2)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectSamplesByFilenameQuery$(</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectSamplesByFilenameQuery$(-2_083_011_233, """ |SELECT samples.id, samples.path, samples.filename, samples.size_bytes, samples.mtime, samples.parent_dir FROM samples WHERE filename = ? |ORDER BY mtime DESC LIMIT 5 """.trimMargin(), mapper, 1)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectTagPairsForProjectsQuery$(</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectTagPairsForProjectsQuery$(null, """ |SELECT pt.project_id, t.name FROM project_tags pt |JOIN tags t ON t.id = pt.tag_id |WHERE pt.project_id IN $idsIndexes |ORDER BY pt.project_id, t.name """.trimMargin(), mapper, ids.size)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectTagsForProjectQuery$(</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries.SelectTagsForProjectQuery$(-1_073_375_983, """ |SELECT t.name FROM tags t |JOIN project_tags pt ON pt.tag_id = t.id |WHERE pt.project_id = ? |ORDER BY t.name """.trimMargin(), mapper, 1)</ID>
+  </CurrentIssues>
+</SmellBaseline>

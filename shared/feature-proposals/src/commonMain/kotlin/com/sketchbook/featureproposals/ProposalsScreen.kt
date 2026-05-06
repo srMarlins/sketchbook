@@ -41,20 +41,17 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
- * Proposals queue. Pending items cluster into action-category cards (Archive / Move / Tag /
- * Color / Other) with bulk approve/reject in each header; rows render a verb pill + bold target
- * + trailing detail + inline ✓/✗ for single-item action without drilling into the detail pane.
- *
- * `detailPane` is an optional slot the host wires (RootContent owns navigation). When null, the
- * row click is a no-op and the inline icons handle approve/reject without drill-in.
- *
- * Performance notes: row composables take only primitive/`@Immutable` args so Compose can skip
- * unchanged rows when the parent state changes. Per-row click lambdas capture stable values from
- * the dispatch surface and the proposal id only.
- */
-/**
  * Filter chip row + search field for the proposals queue. Lives outside the LazyColumn so it
- * doesn't get key()'d as part of the lazy list — chip selection isn't recomposition-sensitive.
+ * doesn't get `key()`'d as part of the lazy list — chip selection isn't recomposition-sensitive.
+ *
+ * The proposals queue itself: pending items cluster into action-category cards (Archive / Move /
+ * Tag / Color / Other) with bulk approve/reject in each header; rows render a verb pill + bold
+ * target + trailing detail + inline ✓/✗ for single-item action without drilling into the detail
+ * pane. `detailPane` is an optional slot the host wires (RootContent owns navigation). When null,
+ * the row click is a no-op and the inline icons handle approve/reject without drill-in. Row
+ * composables take only primitive/`@Immutable` args so Compose can skip unchanged rows when the
+ * parent state changes; per-row click lambdas capture stable values from the dispatch surface and
+ * the proposal id only.
  */
 @Composable
 fun ProposalsFilterBar(
