@@ -65,6 +65,13 @@ interface ProjectRepository {
     /** Sample refs the parser found, with their resolved missing/found status. */
     fun observeSamples(id: ProjectId): Flow<List<SampleEntry>> = kotlinx.coroutines.flow.flowOf(emptyList())
 
+    /**
+     * PR-BB: composite library health for the sidebar chip. Flow re-emits when the underlying
+     * tables (`projects`, `sync_state`, `project_samples`) change, so the chip updates without
+     * a manual refresh after archive/scan/sync mutations.
+     */
+    fun observeLibraryHealth(): Flow<LibraryHealth> = kotlinx.coroutines.flow.flowOf(LibraryHealth.EMPTY)
+
     /** Move the project's working tree to a new parent directory. Path-rename only; no FS I/O. */
     suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry>
 
@@ -106,6 +113,45 @@ data class PluginUsage(
     /** Epoch seconds (matches the `projects.last_modified` REAL column). */
     val lastModified: Double,
 )
+
+/**
+ * PR-BB: composite library-health snapshot used by the sidebar chip + popup.
+ *
+ * Today only `synced` and `sampleClean` are computed. `pluginInstalled` and `stageNotStuck` are
+ * reserved for PR-T (plugin `is_installed` column) and PR-R (`stage_inferred` column) respectively;
+ * those PRs add the matching `SUM(CASE…)` clauses to `selectLibraryHealth` and flip these fields
+ * from `null` to a real count. The popup renders one row per non-null signal — `null` means
+ * "data not available yet" and the row is suppressed, not shown as 0%.
+ */
+data class LibraryHealth(
+    /** Active (non-archived) projects in the catalog. The denominator for every percentage. */
+    val total: Int,
+    /** Projects whose sync_state row is non-dirty AND `local_rev == cloud_head_rev`. */
+    val synced: Int,
+    /** Projects with zero `is_missing=1` rows in `project_samples`. */
+    val sampleClean: Int,
+    /** PR-T placeholder. */
+    val pluginInstalled: Int? = null,
+    /** PR-R placeholder. */
+    val stageNotStuck: Int? = null,
+) {
+    /** Composite score: average of every non-null signal, in [0..1]. Zero when no projects. */
+    val compositePercent: Float
+        get() {
+            if (total <= 0) return 0f
+            val ratios = buildList<Float> {
+                add(synced.toFloat() / total)
+                add(sampleClean.toFloat() / total)
+                pluginInstalled?.let { add(it.toFloat() / total) }
+                stageNotStuck?.let { add(it.toFloat() / total) }
+            }
+            return ratios.average().toFloat()
+        }
+
+    companion object {
+        val EMPTY = LibraryHealth(total = 0, synced = 0, sampleClean = 0)
+    }
+}
 
 /** Convenience: report a [SketchbookError] as a `Result.failure`. */
 internal fun <T> failed(error: SketchbookError): Result<T> = Result.failure(error)

@@ -118,6 +118,29 @@ class SqlProjectRepository(
                 }
             }
 
+    /**
+     * PR-BB: library health stream. SQLDelight's `asFlow()` already re-emits on any write to
+     * `projects` / `sync_state` / `project_samples` (the tables the query reads), but per the
+     * PR-BB spec we *also* trigger off the journal's most-recent entry — that catches sync-engine
+     * writes that bypass the project repo (the journal sees them all). The combine collapses both
+     * sources to a fresh aggregate on either signal. `EMPTY` is the seed so the chip renders a
+     * grey "Health: —" until the first DB read lands rather than blocking the sidebar.
+     */
+    override fun observeLibraryHealth(): Flow<com.sketchbook.repo.LibraryHealth> =
+        combine(
+            catalog.catalogQueries.selectLibraryHealth().asFlow().mapToOneOrNull(ioDispatcher),
+            journal.observeRecent(limit = 1),
+        ) { row, _ ->
+            row?.let {
+                com.sketchbook.repo.LibraryHealth(
+                    total = it.total.toInt(),
+                    // SUM over zero rows is NULL; coalesce to 0 so the UI sees a clean numeric.
+                    synced = (it.synced ?: 0L).toInt(),
+                    sampleClean = (it.sample_clean ?: 0L).toInt(),
+                )
+            } ?: com.sketchbook.repo.LibraryHealth.EMPTY
+        }
+
     override fun observeSamples(id: ProjectId): Flow<List<com.sketchbook.repo.SampleEntry>> =
         catalog.catalogQueries.selectSampleEntriesForProject(id.value)
             .asFlow()
