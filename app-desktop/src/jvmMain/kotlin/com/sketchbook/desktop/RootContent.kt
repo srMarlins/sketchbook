@@ -104,6 +104,7 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
         SettingsStateHolder(graph.settingsRepository, graph.appScope)
     }
     val scanner = graph.scanner
+    val sampleScanner = graph.sampleScanner
     // The catalog scanner is a cold Flow; we derive a single-state holder here so the UI can
     // bind to "current scan progress" without re-subscribing per recomposition. Scan kicks off
     // when a library root appears in settings; see the LaunchedEffect below.
@@ -135,15 +136,40 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
         // Track which roots we've already scanned so settings re-emissions (cache toggle, etc.)
         // don't spam re-scans. The scanner is idempotent (INSERT OR REPLACE) but a re-scan over
         // 1900+ files is wasteful.
-        val scanned = mutableSetOf<String>()
+        val scannedProjects = mutableSetOf<String>()
+        val scannedSamples = mutableSetOf<String>()
         settingsHolder.state.collect { settingsState ->
+            // Project scan first (loud, time-bounded, drives the visible scan ribbon).
             for (root in settingsState.libraryRoots) {
-                if (root is LibraryRoot.Projects && root.path !in scanned) {
-                    scanned += root.path
+                if (root is LibraryRoot.Projects && root.path !in scannedProjects) {
+                    scannedProjects += root.path
+                    val userSampleRoots = settingsState.libraryRoots
+                        .filterIsInstance<LibraryRoot.UserSamples>()
+                        .map { it.path }
                     graph.appScope.launch {
                         runScan(scanner, root.path, scanProgressState)
+                        // After the project scan finishes, walk every UserSamples root into the
+                        // `samples` corpus. This runs in the background — no progress UI for
+                        // v1 because the walk is fast (no parsing) and surfacing it would just
+                        // be noise after the louder project-scan ribbon.
+                        for (sampleRoot in userSampleRoots) {
+                            if (scannedSamples.add(sampleRoot)) {
+                                runCatching { sampleScanner.scan(sampleRoot) }
+                            }
+                        }
                     }
-                    break // one root at a time at v1
+                    break // one project root at a time at v1
+                }
+            }
+            // If the user has no project roots configured but does have sample roots (or the
+            // project scan already kicked off on a previous emission), still pick up newly-added
+            // sample roots so the corpus stays fresh.
+            for (root in settingsState.libraryRoots) {
+                if (root is LibraryRoot.UserSamples && root.path !in scannedSamples) {
+                    scannedSamples += root.path
+                    graph.appScope.launch {
+                        runCatching { sampleScanner.scan(root.path) }
+                    }
                 }
             }
         }

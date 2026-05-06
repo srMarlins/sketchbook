@@ -3,6 +3,7 @@ package com.sketchbook.desktop
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.CatalogFts
 import com.sketchbook.catalog.CatalogHandle
+import com.sketchbook.catalog.JvmSampleScanner
 import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.actions.ProposalActionExecutor
@@ -63,6 +64,7 @@ interface DesktopAppGraph {
     val catalogFts: CatalogFts
     val syncStateStore: SyncStateStore
     val scanner: JvmScanner
+    val sampleScanner: JvmSampleScanner
     val projectRepository: ProjectRepository
     val journalRepository: JournalRepository
     val snapshotRepository: SnapshotRepository
@@ -91,6 +93,10 @@ interface DesktopAppGraph {
     @Provides @SingleIn(AppScope::class)
     fun provideJvmScanner(catalog: Catalog, fts: CatalogFts): JvmScanner =
         JvmScanner(catalog = catalog, fts = fts)
+
+    @Provides @SingleIn(AppScope::class)
+    fun provideJvmSampleScanner(catalog: Catalog): JvmSampleScanner =
+        JvmSampleScanner(catalog = catalog)
 
     @Provides @SingleIn(AppScope::class)
     fun provideSyncStateStore(catalog: Catalog): SyncStateStore = SyncStateStore(catalog)
