@@ -1,0 +1,17 @@
+-- v2 → v3: add repair_acks + proposal_acks. These were introduced in Catalog.sq alongside
+-- the Needs Attention / Proposals features but never had a migration, so any existing
+-- on-disk catalog at v2 (only the sync_state.updated_at column) is missing both tables and
+-- the app crashes at startup when those features query them.
+CREATE TABLE repair_acks (
+  scope        TEXT NOT NULL,
+  project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  payload      TEXT NOT NULL DEFAULT '',
+  acked_at     TEXT NOT NULL,
+  PRIMARY KEY (scope, project_id, payload)
+);
+
+CREATE TABLE proposal_acks (
+  proposal_key TEXT PRIMARY KEY,
+  status       TEXT NOT NULL,
+  decided_at   TEXT NOT NULL
+);

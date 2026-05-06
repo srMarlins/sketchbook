@@ -126,6 +126,7 @@ object CatalogDb {
                 // been applied. List in *ascending* order so the lowest missing marker wins.
                 val detected = when {
                     !columnExists(driver, "sync_state", "updated_at") -> 1L  // before 1.sqm
+                    !tableExists(driver, "repair_acks") -> 2L                // before 2.sqm
                     else -> target
                 }
                 if (detected < target) {
