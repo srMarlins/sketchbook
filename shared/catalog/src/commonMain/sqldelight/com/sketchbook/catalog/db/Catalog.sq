@@ -327,9 +327,12 @@ WHERE is_archived = 0
 ORDER BY mac_paths_count DESC, last_modified DESC;
 
 -- Repair findings: missing samples (cap at :limit). Joined to project name + path so the UI
--- doesn't run N+1 queries.
+-- doesn't run N+1 queries. `sample_size` is included so the SqlRepairRepository can do a
+-- filename+size lookup against the `samples` corpus (high-confidence auto-match) before falling
+-- back to filename-only candidates.
 selectMissingSamples:
-SELECT ps.project_id, ps.sample_path, p.path AS project_path, p.name AS project_name
+SELECT ps.project_id, ps.sample_path, ps.size_bytes AS sample_size,
+       p.path AS project_path, p.name AS project_name
 FROM project_samples ps
 JOIN projects p ON p.id = ps.project_id
 WHERE ps.is_missing = 1
@@ -376,3 +379,31 @@ SELECT * FROM proposal_acks WHERE proposal_key = :proposal_key;
 insertProposalAck:
 INSERT OR REPLACE INTO proposal_acks (proposal_key, status, decided_at)
 VALUES (:proposal_key, :status, :decided_at);
+
+-- samples corpus
+upsertSample:
+INSERT OR REPLACE INTO samples (path, filename, size_bytes, mtime, parent_dir)
+VALUES (:path, :filename, :size_bytes, :mtime, :parent_dir);
+
+deleteSamplesUnder:
+DELETE FROM samples WHERE parent_dir LIKE :parent_glob;
+
+selectSamplesByFilenameAndSize:
+SELECT * FROM samples WHERE filename = :filename AND size_bytes = :size_bytes
+ORDER BY mtime DESC LIMIT 5;
+
+selectSamplesByFilename:
+SELECT * FROM samples WHERE filename = :filename
+ORDER BY mtime DESC LIMIT 5;
+
+countSamples:
+SELECT COUNT(*) FROM samples;
+
+-- The user has decided this missing-sample reference points at this candidate. The .als itself
+-- will be rewritten when the writer ships; for now we record the mapping in project_samples and
+-- clear the missing flag. is_missing flips to 0; sample_path is rewritten to the candidate path
+-- so subsequent scans see it as found.
+applyMissingSampleMatch:
+UPDATE project_samples
+SET sample_path = :new_path, is_missing = 0
+WHERE project_id = :project_id AND sample_path = :old_path;
