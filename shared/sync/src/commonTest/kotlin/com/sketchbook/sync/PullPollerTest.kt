@@ -35,7 +35,7 @@ class PullPollerTest {
             Result.success(
                 com.sketchbook.repo.JournalEntry(
                     timestamp = Instant.fromEpochMilliseconds(0L),
-                    projectId = com.sketchbook.core.ProjectId(0L),
+                    projectId = com.sketchbook.core.ProjectId(1L),
                     action = com.sketchbook.repo.ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto"),
                 ),
             )

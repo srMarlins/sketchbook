@@ -91,12 +91,16 @@ class SqlSnapshotRepository(
                 )
             // Resolve the project_id for the JournalEntry. Snapshots key on project_uuid; the
             // journal keys on project_id (legacy v0.1 schema). project_identity is the bridge.
-            // We don't fail if it's missing — just default to 0L so the audit row still lands.
-            val projectId = catalog.catalogQueries
+            // Fall back to 1L when the identity row is missing — `ProjectId(0)` would fail the
+            // value-class precondition and crash the journal append. The "orphan" case (snapshot
+            // without an identity row) shouldn't happen in practice, but a synthetic-1 audit row
+            // is preferable to a thrown exception for a label-edit hotpath.
+            val resolvedProjectId = catalog.catalogQueries
                 .selectIdentityByUuid(uuid.value)
                 .executeAsOneOrNull()
                 ?.project_id
-                ?: 0L
+                ?.takeIf { it > 0L }
+                ?: 1L
             catalog.transaction {
                 catalog.catalogQueries.updateSnapshotLabel(
                     label = label,
@@ -106,7 +110,7 @@ class SqlSnapshotRepository(
             }
             val entry = JournalEntry(
                 timestamp = clock.now(),
-                projectId = ProjectId(projectId),
+                projectId = ProjectId(resolvedProjectId),
                 action = ActionRecord.SnapshotRelabeled(
                     rev = rev.value,
                     labelBefore = before.label,
