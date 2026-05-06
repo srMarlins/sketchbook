@@ -1,14 +1,9 @@
 package com.sketchbook.featureproposals
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,7 +34,6 @@ import com.sketchbook.uishared.components.FilterChipOption
 import com.sketchbook.uishared.components.FilterChipRow
 import com.sketchbook.uishared.components.GroupCard
 import com.sketchbook.uishared.components.GroupRow
-import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.components.TextField
@@ -62,17 +56,15 @@ import kotlin.time.Instant
  * the dispatch surface and the proposal id only.
  */
 @Composable
-fun ProposalsScreen(
+fun ProposalsBody(
     vm: ProposalsViewModel,
+    onOpen: (proposalId: String) -> Unit,
     modifier: Modifier = Modifier,
-    detailPane: @Composable ((proposalId: String, dismiss: () -> Unit) -> Unit)? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    var openId by remember { mutableStateOf<String?>(null) }
     var resolvedExpanded by remember { mutableStateOf(false) }
     val expanded = remember { mutableStateMapOf<ProposalsViewModel.ProposalCategory, Boolean>() }
 
-    val pendingCount = remember(state.pending) { state.pending.size }
     val approve: (String) -> Unit = remember(vm) {
         { id -> vm.dispatch(ProposalsViewModel.Intent.Approve(id)) }
     }
@@ -86,71 +78,54 @@ fun ProposalsScreen(
         { f -> vm.dispatch(ProposalsViewModel.Intent.SetSourceFilter(f)) }
     }
 
-    Row(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(AppTheme.colors.surfacePage)
-                .padding(PaddingValues(AppTheme.spacing.md)),
-            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-        ) {
-            PageHeader(
-                title = "Proposals",
-                subtitle = "$pendingCount pending",
-                actions = {
-                    FilterChipRow(
-                        options = SOURCE_FILTER_OPTIONS,
-                        selected = state.sourceFilter,
-                        onSelected = onSourceFilter,
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+    ) {
+        FilterChipRow(
+            options = SOURCE_FILTER_OPTIONS,
+            selected = state.sourceFilter,
+            onSelected = onSourceFilter,
+        )
+        TextField(
+            value = state.search,
+            onChange = onSearch,
+            placeholder = "Search rationale or paths…",
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (state.groups.isEmpty() && state.resolved.isEmpty()) {
+            EmptyState(
+                title = if (state.loading) "Loading…" else "No proposals",
+                hint = "Claude submits a proposal via the MCP server when it wants to make a write.",
+            )
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)) {
+                items(state.groups, key = { "g-${it.category}" }) { group ->
+                    ProposalGroupCard(
+                        group = group,
+                        projectNamesById = state.projectNamesById,
+                        expanded = expanded[group.category] ?: true,
+                        onToggle = {
+                            expanded[group.category] = !(expanded[group.category] ?: true)
+                        },
+                        vm = vm,
+                        onOpen = onOpen,
+                        onApprove = approve,
+                        onReject = reject,
                     )
-                },
-            )
-            TextField(
-                value = state.search,
-                onChange = onSearch,
-                placeholder = "Search rationale or paths…",
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            if (state.groups.isEmpty() && state.resolved.isEmpty()) {
-                EmptyState(
-                    title = if (state.loading) "Loading…" else "No proposals",
-                    hint = "Claude submits a proposal via the MCP server when it wants to make a write.",
-                )
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)) {
-                    items(state.groups, key = { "g-${it.category}" }) { group ->
-                        ProposalGroupCard(
-                            group = group,
+                }
+                if (state.resolved.isNotEmpty()) {
+                    item(key = "resolved-card") {
+                        ResolvedCard(
+                            resolved = state.resolved,
                             projectNamesById = state.projectNamesById,
-                            expanded = expanded[group.category] ?: true,
-                            onToggle = {
-                                expanded[group.category] = !(expanded[group.category] ?: true)
-                            },
-                            vm = vm,
-                            onOpen = { openId = it },
-                            onApprove = approve,
-                            onReject = reject,
+                            expanded = resolvedExpanded,
+                            onToggle = { resolvedExpanded = !resolvedExpanded },
+                            onOpen = onOpen,
                         )
-                    }
-                    if (state.resolved.isNotEmpty()) {
-                        item(key = "resolved-card") {
-                            ResolvedCard(
-                                resolved = state.resolved,
-                                projectNamesById = state.projectNamesById,
-                                expanded = resolvedExpanded,
-                                onToggle = { resolvedExpanded = !resolvedExpanded },
-                                onOpen = { openId = it },
-                            )
-                        }
                     }
                 }
             }
-        }
-        val id = openId
-        if (id != null && detailPane != null) {
-            detailPane(id) { openId = null }
         }
     }
 }

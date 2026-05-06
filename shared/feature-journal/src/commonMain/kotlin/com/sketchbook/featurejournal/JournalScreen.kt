@@ -1,14 +1,9 @@
 package com.sketchbook.featurejournal
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,7 +32,6 @@ import com.sketchbook.uishared.components.FilterChipOption
 import com.sketchbook.uishared.components.FilterChipRow
 import com.sketchbook.uishared.components.GroupCard
 import com.sketchbook.uishared.components.GroupRow
-import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.components.TextField
@@ -58,13 +52,12 @@ import kotlin.time.Instant
  * @Immutable view so Compose skips unchanged rows on parent recomposition.
  */
 @Composable
-fun JournalScreen(
+fun JournalBody(
     vm: JournalViewModel,
+    onOpen: (entry: JournalEntry, projectName: String) -> Unit,
     modifier: Modifier = Modifier,
-    detailPane: @Composable ((entry: JournalEntry, projectName: String, dismiss: () -> Unit) -> Unit)? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    var openEntry by remember { mutableStateOf<JournalEntry?>(null) }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
 
     val onSearch: (String) -> Unit = remember(vm) {
@@ -79,73 +72,61 @@ fun JournalScreen(
     val onUndo: (JournalEntry) -> Unit = remember(vm) {
         { e -> vm.dispatch(JournalViewModel.Intent.UndoOne(e)) }
     }
-
-    Row(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(AppTheme.colors.surfacePage)
-                .padding(PaddingValues(AppTheme.spacing.md)),
-            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-        ) {
-            PageHeader(
-                title = "Journal",
-                actions = {
-                    FilterChipRow(
-                        options = DATE_RANGE_OPTIONS,
-                        selected = state.dateRange,
-                        onSelected = onDateRange,
-                    )
-                },
-            )
-            FilterChipRow(
-                options = ACTION_TYPE_OPTIONS,
-                selected = state.actionTypeFilter,
-                onSelected = onAction,
-            )
-            TextField(
-                value = state.search,
-                onChange = onSearch,
-                placeholder = "Search project name, paths, tags…",
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            if (state.rows.isEmpty()) {
-                EmptyState(
-                    title = if (state.loading) "Loading…" else "No entries",
-                    hint = "Move/rename/archive/tag actions land here.",
-                )
-                return@Column
-            }
-
-            val showBulkUndoOnFirstDay = state.isNarrowed && state.invertibleEntries.isNotEmpty()
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)) {
-                itemsIndexed(
-                    items = state.days,
-                    key = { _, day -> "g-${day.label}" },
-                ) { idx, day ->
-                    DayGroupCard(
-                        label = day.label,
-                        rows = day.rows,
-                        expanded = expanded[day.label] ?: true,
-                        onToggle = { expanded[day.label] = !(expanded[day.label] ?: true) },
-                        onOpen = { openEntry = it },
-                        onUndo = onUndo,
-                        showBulkUndo = showBulkUndoOnFirstDay && idx == 0,
-                        bulkUndoCount = state.invertibleEntries.size,
-                        onBulkUndo = {
-                            vm.dispatch(JournalViewModel.Intent.BulkUndo(state.invertibleEntries))
-                        },
-                    )
-                }
-            }
+    val onOpenWithName: (JournalEntry) -> Unit = remember(onOpen, state.rows) {
+        { e ->
+            val name = state.rows.firstOrNull { it.entry == e }?.projectName
+                ?: "project #${e.projectId.value}"
+            onOpen(e, name)
         }
-        val entry = openEntry
-        if (entry != null && detailPane != null) {
-            val name = state.rows.firstOrNull { it.entry == entry }?.projectName
-                ?: "project #${entry.projectId.value}"
-            detailPane(entry, name) { openEntry = null }
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+    ) {
+        FilterChipRow(
+            options = DATE_RANGE_OPTIONS,
+            selected = state.dateRange,
+            onSelected = onDateRange,
+        )
+        FilterChipRow(
+            options = ACTION_TYPE_OPTIONS,
+            selected = state.actionTypeFilter,
+            onSelected = onAction,
+        )
+        TextField(
+            value = state.search,
+            onChange = onSearch,
+            placeholder = "Search project name, paths, tags…",
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (state.rows.isEmpty()) {
+            EmptyState(
+                title = if (state.loading) "Loading…" else "No entries",
+                hint = "Move/rename/archive/tag actions land here.",
+            )
+            return@Column
+        }
+        val showBulkUndoOnFirstDay = state.isNarrowed && state.invertibleEntries.isNotEmpty()
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)) {
+            itemsIndexed(
+                items = state.days,
+                key = { _, day -> "g-${day.label}" },
+            ) { idx, day ->
+                DayGroupCard(
+                    label = day.label,
+                    rows = day.rows,
+                    expanded = expanded[day.label] ?: true,
+                    onToggle = { expanded[day.label] = !(expanded[day.label] ?: true) },
+                    onOpen = onOpenWithName,
+                    onUndo = onUndo,
+                    showBulkUndo = showBulkUndoOnFirstDay && idx == 0,
+                    bulkUndoCount = state.invertibleEntries.size,
+                    onBulkUndo = {
+                        vm.dispatch(JournalViewModel.Intent.BulkUndo(state.invertibleEntries))
+                    },
+                )
+            }
         }
     }
 }

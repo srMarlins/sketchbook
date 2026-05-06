@@ -16,10 +16,8 @@ internal val NavSavedStateConfig: SavedStateConfiguration = SavedStateConfigurat
             subclass(Screen.Projects::class)
             subclass(Screen.ProjectDetail::class)
             subclass(Screen.Timeline::class)
-            subclass(Screen.Proposals::class)
-            subclass(Screen.NeedsAttention::class)
+            subclass(Screen.Inbox::class)
             subclass(Screen.Settings::class)
-            subclass(Screen.Journal::class)
         }
     }
 }

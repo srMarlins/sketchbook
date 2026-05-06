@@ -59,7 +59,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import com.sketchbook.featuredetail.ProjectDetailScreen
 import com.sketchbook.featuredetail.ProjectDetailViewModel
-import com.sketchbook.featurejournal.JournalScreen
 import com.sketchbook.featurejournal.JournalViewModel
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
@@ -67,11 +66,9 @@ import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.Text
 import java.io.File
 import javax.swing.JFileChooser
-import com.sketchbook.featureneedsattention.NeedsAttentionScreen
 import com.sketchbook.featureneedsattention.NeedsAttentionViewModel
 import com.sketchbook.featureprojects.ProjectListScreen
 import com.sketchbook.featureprojects.ProjectListViewModel
-import com.sketchbook.featureproposals.ProposalsScreen
 import com.sketchbook.featureproposals.ProposalsViewModel
 import com.sketchbook.featuresettings.SettingsScreen
 import com.sketchbook.featuresettings.SettingsViewModel
@@ -305,36 +302,12 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                     LaunchedEffect(current.uuid) { vm.load(current.uuid) }
                                     TimelineScreen(vm)
                                 }
-                                Screen.Proposals -> {
-                                    val vm: com.sketchbook.featureproposals.ProposalsViewModel = metroViewModel()
-                                    ProposalsScreen(
-                                        vm = vm,
-                                        detailPane = { proposalId, dismiss ->
-                                            com.sketchbook.featureproposals.ProposalDetailPane(
-                                                proposalId = proposalId,
-                                                vm = vm,
-                                                onDismiss = dismiss,
-                                            )
-                                        },
-                                    )
-                                }
-                                Screen.NeedsAttention -> {
-                                    val vm: com.sketchbook.featureneedsattention.NeedsAttentionViewModel = metroViewModel()
-                                    NeedsAttentionScreen(
-                                        vm = vm,
-                                        detailPane = { target, dismiss ->
-                                            com.sketchbook.featureneedsattention.NeedsAttentionDetailPane(
-                                                target = target,
-                                                vm = vm,
-                                                onDismiss = dismiss,
-                                            )
-                                        },
-                                    )
-                                }
-                                Screen.Journal -> {
-                                    val vm: JournalViewModel = metroViewModel()
-                                    LaunchedEffect(vm) {
-                                        vm.effects.collect { e ->
+                                is Screen.Inbox -> {
+                                    val proposalsVm: com.sketchbook.featureproposals.ProposalsViewModel = metroViewModel()
+                                    val needsAttentionVm: com.sketchbook.featureneedsattention.NeedsAttentionViewModel = metroViewModel()
+                                    val journalVm: JournalViewModel = metroViewModel()
+                                    LaunchedEffect(journalVm) {
+                                        journalVm.effects.collect { e ->
                                             when (e) {
                                                 is JournalViewModel.Effect.NavigateToProject ->
                                                     backStack.add(Screen.ProjectDetail(e.projectId))
@@ -344,16 +317,11 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                             }
                                         }
                                     }
-                                    JournalScreen(
-                                        vm = vm,
-                                        detailPane = { entry, projectName, dismiss ->
-                                            com.sketchbook.featurejournal.JournalDetailPane(
-                                                entry = entry,
-                                                projectName = projectName,
-                                                vm = vm,
-                                                onDismiss = dismiss,
-                                            )
-                                        },
+                                    com.sketchbook.desktop.inbox.InboxScreen(
+                                        proposalsVm = proposalsVm,
+                                        needsAttentionVm = needsAttentionVm,
+                                        journalVm = journalVm,
+                                        initialTab = current.tab,
                                     )
                                 }
                                 Screen.Settings -> {
@@ -527,26 +495,15 @@ private fun sidebarItems(
         active = current is Screen.Projects || current is Screen.ProjectDetail || current is Screen.Timeline,
     ),
     SidebarItem(
-        id = "proposals",
-        label = "Proposals",
-        active = current == Screen.Proposals,
-        badge = countBadge(proposalCount),
-    ),
-    SidebarItem(
-        id = "needs-attention",
-        label = "Needs attention",
-        active = current == Screen.NeedsAttention,
-        badge = countBadge(attentionCount),
+        id = "inbox",
+        label = "Inbox",
+        active = current is Screen.Inbox,
+        badge = countBadge(proposalCount + attentionCount),
     ),
     SidebarItem(
         id = "settings",
         label = "Settings",
         active = current == Screen.Settings,
-    ),
-    SidebarItem(
-        id = "journal",
-        label = "Journal",
-        active = current == Screen.Journal,
     ),
 )
 
@@ -559,10 +516,8 @@ private fun countBadge(n: Int): String? = when {
 
 private fun screenForId(id: String): Screen = when (id) {
     "projects" -> Screen.Projects
-    "proposals" -> Screen.Proposals
-    "needs-attention" -> Screen.NeedsAttention
+    "inbox" -> Screen.Inbox()
     "settings" -> Screen.Settings
-    "journal" -> Screen.Journal
     else -> Screen.Projects
 }
 

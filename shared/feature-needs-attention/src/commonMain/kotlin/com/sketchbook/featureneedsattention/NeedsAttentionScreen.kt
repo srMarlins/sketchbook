@@ -1,15 +1,10 @@
 package com.sketchbook.featureneedsattention
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -37,7 +32,6 @@ import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.EmptyState
 import com.sketchbook.uishared.components.GroupCard
 import com.sketchbook.uishared.components.GroupRow
-import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.SubGroupHeader
 import com.sketchbook.uishared.components.Text
@@ -59,23 +53,22 @@ import com.sketchbook.uishared.theme.AppTheme
  * `detailPane` is an optional slot the host wires (RootContent owns navigation).
  */
 @Composable
-fun NeedsAttentionScreen(
+fun NeedsAttentionBody(
     vm: NeedsAttentionViewModel,
+    onOpen: (target: NeedsAttentionDetailTarget) -> Unit,
     modifier: Modifier = Modifier,
-    detailPane: @Composable ((target: NeedsAttentionDetailTarget, dismiss: () -> Unit) -> Unit)? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    var openTarget by remember { mutableStateOf<NeedsAttentionDetailTarget?>(null) }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
 
     val onRepair: (ProjectId) -> Unit = remember(vm) {
         { id -> vm.dispatch(NeedsAttentionViewModel.Intent.RepairMacPaths(id)) }
     }
-    val onOpenMac: (MacImportFinding) -> Unit = remember(vm) {
-        { f -> openTarget = NeedsAttentionDetailTarget.Mac(f) }
+    val onOpenMac: (MacImportFinding) -> Unit = remember(onOpen) {
+        { f -> onOpen(NeedsAttentionDetailTarget.Mac(f)) }
     }
-    val onOpenMissing: (MissingSampleFinding) -> Unit = remember(vm) {
-        { f -> openTarget = NeedsAttentionDetailTarget.Missing(f) }
+    val onOpenMissing: (MissingSampleFinding) -> Unit = remember(onOpen) {
+        { f -> onOpen(NeedsAttentionDetailTarget.Missing(f)) }
     }
     val macIds by remember {
         derivedStateOf { state.macEntries.map { it.finding.projectId } }
@@ -84,65 +77,53 @@ fun NeedsAttentionScreen(
         { vm.dispatch(NeedsAttentionViewModel.Intent.BulkRepairMacPaths(macIds)) }
     }
 
-    Row(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(AppTheme.colors.surfacePage)
-                .padding(PaddingValues(AppTheme.spacing.md)),
-            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-        ) {
-            PageHeader(title = "Needs attention")
-            val hasMissing = state.missingByConfidence.autoMatch.isNotEmpty() ||
-                state.missingByConfidence.multiCandidate.isNotEmpty() ||
-                state.missingByConfidence.noCandidate.isNotEmpty()
-            if (state.macEntries.isEmpty() && !hasMissing) {
-                EmptyState(
-                    title = if (state.loading) "Scanning…" else "All clear",
-                    hint = "No Mac-imported projects or missing samples found.",
+    val hasMissing = state.missingByConfidence.autoMatch.isNotEmpty() ||
+        state.missingByConfidence.multiCandidate.isNotEmpty() ||
+        state.missingByConfidence.noCandidate.isNotEmpty()
+    if (state.macEntries.isEmpty() && !hasMissing) {
+        EmptyState(
+            title = if (state.loading) "Scanning…" else "All clear",
+            hint = "No Mac-imported projects or missing samples found.",
+            modifier = modifier,
+        )
+        return
+    }
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg),
+    ) {
+        if (state.macEntries.isNotEmpty()) {
+            item(key = "mac-card") {
+                MacImportCard(
+                    entries = state.macEntries,
+                    pending = state.pendingMacRepairs,
+                    expanded = expanded["mac"] ?: true,
+                    onToggle = { expanded["mac"] = !(expanded["mac"] ?: true) },
+                    onBulkRepair = onBulkRepair,
+                    onRepair = onRepair,
+                    onOpen = onOpenMac,
                 )
-                return@Column
-            }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)) {
-                if (state.macEntries.isNotEmpty()) {
-                    item(key = "mac-card") {
-                        MacImportCard(
-                            entries = state.macEntries,
-                            pending = state.pendingMacRepairs,
-                            expanded = expanded["mac"] ?: true,
-                            onToggle = { expanded["mac"] = !(expanded["mac"] ?: true) },
-                            onBulkRepair = onBulkRepair,
-                            onRepair = onRepair,
-                            onOpen = onOpenMac,
-                        )
-                    }
-                }
-                if (hasMissing) {
-                    item(key = "missing-card") {
-                        MissingSamplesCard(
-                            buckets = state.missingByConfidence,
-                            shown = state.missingSamples.size,
-                            total = state.missingSamplesTotal,
-                            truncated = state.missingSamplesTruncated,
-                            pending = state.pendingMissingApplies,
-                            expanded = expanded["missing"] ?: true,
-                            onToggle = { expanded["missing"] = !(expanded["missing"] ?: true) },
-                            onOpen = onOpenMissing,
-                            onBulkApply = { findings ->
-                                vm.dispatch(NeedsAttentionViewModel.Intent.BulkApplyAutoMatch(findings))
-                            },
-                            onBulkDismiss = { findings ->
-                                vm.dispatch(NeedsAttentionViewModel.Intent.BulkDismiss(findings))
-                            },
-                        )
-                    }
-                }
             }
         }
-        val target = openTarget
-        if (target != null && detailPane != null) {
-            detailPane(target) { openTarget = null }
+        if (hasMissing) {
+            item(key = "missing-card") {
+                MissingSamplesCard(
+                    buckets = state.missingByConfidence,
+                    shown = state.missingSamples.size,
+                    total = state.missingSamplesTotal,
+                    truncated = state.missingSamplesTruncated,
+                    pending = state.pendingMissingApplies,
+                    expanded = expanded["missing"] ?: true,
+                    onToggle = { expanded["missing"] = !(expanded["missing"] ?: true) },
+                    onOpen = onOpenMissing,
+                    onBulkApply = { findings ->
+                        vm.dispatch(NeedsAttentionViewModel.Intent.BulkApplyAutoMatch(findings))
+                    },
+                    onBulkDismiss = { findings ->
+                        vm.dispatch(NeedsAttentionViewModel.Intent.BulkDismiss(findings))
+                    },
+                )
+            }
         }
     }
 }
