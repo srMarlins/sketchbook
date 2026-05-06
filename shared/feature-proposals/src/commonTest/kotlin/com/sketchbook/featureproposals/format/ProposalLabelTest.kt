@@ -1,6 +1,7 @@
 package com.sketchbook.featureproposals.format
 
 import com.sketchbook.repo.ProposalAction
+import com.sketchbook.uishared.components.VerbTint
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive

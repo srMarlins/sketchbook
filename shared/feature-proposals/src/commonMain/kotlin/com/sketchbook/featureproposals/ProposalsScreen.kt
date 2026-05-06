@@ -28,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.sketchbook.featureproposals.format.VerbTint
 import com.sketchbook.featureproposals.format.proposalLabel
 import com.sketchbook.repo.Proposal
 import com.sketchbook.repo.ProposalStatus
@@ -44,6 +43,8 @@ import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.components.TextField
+import com.sketchbook.uishared.components.VerbPill
+import com.sketchbook.uishared.components.VerbTint
 import com.sketchbook.uishared.theme.AppTheme
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -343,22 +344,6 @@ private fun ResolvedRow(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-        }
-    }
-}
-
-@Composable
-private fun VerbPill(verb: String, tint: VerbTint) {
-    val bg = when (tint) {
-        VerbTint.Action -> AppTheme.colors.tintBlue
-        VerbTint.Add -> AppTheme.colors.tintSage
-        VerbTint.Remove -> AppTheme.colors.tintRose
-        VerbTint.Repair -> AppTheme.colors.tintCream
-        VerbTint.Neutral -> AppTheme.colors.surfaceSunken
-    }
-    Badge(color = bg) {
-        ProvideContentColor(AppTheme.colors.inkPrimary) {
-            Text(verb.uppercase(), style = AppTheme.typography.caption)
         }
     }
 }

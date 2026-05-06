@@ -15,10 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.sketchbook.featureproposals.format.VerbTint
 import com.sketchbook.featureproposals.format.proposalLabel
 import com.sketchbook.repo.ProposalAction
-import com.sketchbook.uishared.components.Badge
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.DetailPane
@@ -26,6 +24,7 @@ import com.sketchbook.uishared.components.DetailPaneEmpty
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.Tag
 import com.sketchbook.uishared.components.Text
+import com.sketchbook.uishared.components.VerbPill
 import com.sketchbook.uishared.theme.AppTheme
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -153,22 +152,6 @@ private fun ActionDetail(
             ProvideContentColor(AppTheme.colors.inkSecondary) {
                 Text(action.args.toString(), style = AppTheme.typography.mono)
             }
-        }
-    }
-}
-
-@Composable
-private fun VerbPill(verb: String, tint: VerbTint) {
-    val bg = when (tint) {
-        VerbTint.Action -> AppTheme.colors.tintBlue
-        VerbTint.Add -> AppTheme.colors.tintSage
-        VerbTint.Remove -> AppTheme.colors.tintRose
-        VerbTint.Repair -> AppTheme.colors.tintCream
-        VerbTint.Neutral -> AppTheme.colors.surfaceSunken
-    }
-    Badge(color = bg) {
-        ProvideContentColor(AppTheme.colors.inkPrimary) {
-            Text(verb.uppercase(), style = AppTheme.typography.caption)
         }
     }
 }

@@ -21,8 +21,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.sketchbook.featurejournal.format.humanReadable
+import com.sketchbook.featurejournal.format.JournalLabel
+import com.sketchbook.featurejournal.format.journalLabel
 import com.sketchbook.repo.JournalEntry
+import com.sketchbook.uishared.components.Badge
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.EmptyState
@@ -34,6 +36,7 @@ import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.components.TextField
+import com.sketchbook.uishared.components.VerbPill
 import com.sketchbook.uishared.theme.AppTheme
 import kotlin.time.Instant
 
@@ -197,19 +200,21 @@ private fun DayGroupCard(
 
 /**
  * Pure-data view of a row. Computed once per row identity so the row composable's args stay
- * stable across parent recompositions that don't touch this entry.
+ * stable across parent recompositions that don't touch this entry. Mirrors the proposals queue's
+ * `ProposalRowData` shape — verb pill + bold target + caption detail — so the two surfaces look
+ * and read the same way.
  */
 @Immutable
 private data class JournalRowData(
     val entry: JournalEntry,
-    val text: String,
+    val label: JournalLabel,
     val projectName: String,
     val time: String,
 )
 
 private fun rowDataFor(row: JournalViewModel.JournalRow): JournalRowData = JournalRowData(
     entry = row.entry,
-    text = humanReadable(row.entry.action),
+    label = journalLabel(row.entry.action),
     projectName = row.projectName,
     time = shortTime(row.entry.timestamp),
 )
@@ -221,24 +226,30 @@ private fun JournalRowItem(
     onOpen: (JournalEntry) -> Unit,
 ) {
     val entry = data.entry
+    val label = data.label
     GroupRow(onClick = { onOpen(entry) }, last = last) {
-        Column(modifier = Modifier.weight(1f)) {
+        VerbPill(label.verb, label.tintHint)
+        Badge(color = AppTheme.colors.tintCream) {
             ProvideContentColor(AppTheme.colors.inkPrimary) {
-                Text(
-                    data.text,
-                    style = AppTheme.typography.body,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Text(data.projectName, style = AppTheme.typography.caption, maxLines = 1)
             }
+        }
+        ProvideContentColor(AppTheme.colors.inkPrimary) {
+            Text(
+                label.target.ifEmpty { "—" },
+                style = AppTheme.typography.bodyEmphasis,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (label.detail != null) {
             ProvideContentColor(AppTheme.colors.inkMuted) {
-                Text(
-                    "${data.projectName} · ${data.time}",
-                    style = AppTheme.typography.caption,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Text(label.detail, style = AppTheme.typography.caption, maxLines = 1)
             }
+        }
+        ProvideContentColor(AppTheme.colors.inkMuted) {
+            Text(data.time, style = AppTheme.typography.caption, maxLines = 1)
         }
     }
 }

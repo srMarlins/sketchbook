@@ -41,6 +41,8 @@ import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.SubGroupHeader
 import com.sketchbook.uishared.components.Text
+import com.sketchbook.uishared.components.VerbPill
+import com.sketchbook.uishared.components.VerbTint
 import com.sketchbook.uishared.theme.AppTheme
 
 /**
@@ -299,6 +301,7 @@ private fun MacImportRow(
 ) {
     if (isProjectBoundary) Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
     GroupRow(onClick = { if (!isPending) onOpen() }, last = isLast) {
+        VerbPill("Repair", VerbTint.Repair)
         ProvideContentColor(if (isPending) AppTheme.colors.inkMuted else AppTheme.colors.inkPrimary) {
             Text(
                 name,
@@ -344,6 +347,7 @@ private fun MissingSampleRow(
 ) {
     if (isProjectBoundary) Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
     GroupRow(onClick = { if (!isPending) onOpen() }, last = isLast) {
+        VerbPill("Sample", VerbTint.Repair)
         Badge(color = AppTheme.colors.tintCream) {
             ProvideContentColor(AppTheme.colors.inkPrimary) {
                 Text(projectName, style = AppTheme.typography.caption, maxLines = 1)

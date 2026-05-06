@@ -1,17 +1,16 @@
 package com.sketchbook.featureproposals.format
 
 import com.sketchbook.repo.ProposalAction
+import com.sketchbook.uishared.components.VerbTint
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
 /**
  * Structured label for a proposal action — splits the verb from the target identifier so the
- * row UI can render the verb as a colored pill and the target as bold body. Falls back to the
- * unknown-type case with `verb = action.type` and a blank target.
- *
- * `tintHint` is a stable, non-themed identifier the row UI maps to a real `AppColors` token; this
- * formatter doesn't depend on Compose UI types so colors stay in the screen layer.
+ * row UI can render the verb as a colored [com.sketchbook.uishared.components.VerbPill] and the
+ * target as bold body. Falls back to the unknown-type case with `verb = action.type` and a
+ * blank target.
  */
 data class ProposalLabel(
     val verb: String,
@@ -19,8 +18,6 @@ data class ProposalLabel(
     val detail: String? = null,
     val tintHint: VerbTint = VerbTint.Neutral,
 )
-
-enum class VerbTint { Action, Add, Remove, Neutral, Repair }
 
 /**
  * Wire-format types match `ProposalActionExecutor`'s switch — PascalCase `@SerialName` values
