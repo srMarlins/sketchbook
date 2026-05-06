@@ -125,6 +125,8 @@ object CatalogDb {
                     !columnExists(driver, "sync_state", "updated_at") -> 1L  // before 1.sqm
                     !tableExists(driver, "repair_acks") -> 2L                // before 2.sqm
                     !tableExists(driver, "journal_entries") -> 3L            // before 3.sqm
+                    !indexExists(driver, "idx_projects_key") -> 4L           // before 4.sqm
+                    !columnExists(driver, "project_plugins", "is_installed") -> 5L  // before 5.sqm
                     else -> target
                 }
                 if (detected < target) {
@@ -157,6 +159,20 @@ object CatalogDb {
             },
             parameters = 0,
         )
+        return found
+    }
+
+    private fun indexExists(driver: SqlDriver, name: String): Boolean {
+        var found = false
+        driver.executeQuery(
+            identifier = null,
+            sql = "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ? LIMIT 1",
+            mapper = { c: SqlCursor ->
+                if (c.next().value) found = true
+                QueryResult.Unit
+            },
+            parameters = 1,
+        ) { bindString(0, name) }
         return found
     }
 
