@@ -140,6 +140,42 @@ class SqlProjectRepository(
         else -> com.sketchbook.core.PluginFormat.Unknown
     }
 
+    // Inverse of pluginFormatFor — maps the typed enum back to the lowercase string the parser
+    // writes into project_plugins.plugin_type. Kept private to this file so the SQL string
+    // representation stays an implementation detail.
+    private fun pluginTypeStringFor(format: com.sketchbook.core.PluginFormat): String? = when (format) {
+        com.sketchbook.core.PluginFormat.Vst2 -> "vst2"
+        com.sketchbook.core.PluginFormat.Vst3 -> "vst3"
+        com.sketchbook.core.PluginFormat.Au -> "au"
+        com.sketchbook.core.PluginFormat.AbletonNative -> "abletonnative"
+        // Unknown is a UI-side fallback for parser misses; it's never written into the catalog,
+        // so passing it through as a filter would always return zero rows. Treat it as "any".
+        com.sketchbook.core.PluginFormat.Unknown -> null
+    }
+
+    override fun observeProjectsUsing(
+        pluginName: String,
+        format: com.sketchbook.core.PluginFormat?,
+        excludeProjectId: ProjectId?,
+    ): Flow<List<com.sketchbook.repo.PluginUsage>> =
+        catalog.catalogQueries.selectProjectsUsingPlugin(
+            plugin_name = pluginName,
+            plugin_type = format?.let { pluginTypeStringFor(it) },
+            exclude_id = excludeProjectId?.value,
+        )
+            .asFlow()
+            .mapToList(ioDispatcher)
+            .map { rows ->
+                rows.map { r ->
+                    com.sketchbook.repo.PluginUsage(
+                        id = ProjectId(r.id),
+                        name = r.name,
+                        path = r.path,
+                        lastModified = r.last_modified,
+                    )
+                }
+            }
+
     override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> =
         mutate(id) { row ->
             val pathBefore = row.path

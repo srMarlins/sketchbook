@@ -297,6 +297,23 @@ INSERT INTO project_samples (project_id, sample_path) VALUES (:project_id, :samp
 selectPluginsForProject:
 SELECT plugin_name, plugin_type, track_name FROM project_plugins WHERE project_id = :project_id;
 
+-- PR-AA: inverse plugin lookup. "What other projects also use this plugin?" The format-tolerant
+-- mode (`:plugin_type` is NULL) matches any format the user has on file for that plugin name —
+-- producers think of "Serum" as one thing even when scattered across VST2/VST3/AU. The format-
+-- specific mode narrows to that exact format. The `:exclude_id` arg lets the caller hide the
+-- project the user is currently viewing — otherwise the popover always lists at least one row
+-- (the current project) which is noise. DISTINCT collapses projects that load the plugin on
+-- multiple tracks into a single row.
+selectProjectsUsingPlugin:
+SELECT DISTINCT p.id, p.name, p.path, p.last_modified
+FROM projects p
+JOIN project_plugins pp ON pp.project_id = p.id
+WHERE pp.plugin_name = :plugin_name
+  AND (:plugin_type IS NULL OR pp.plugin_type = :plugin_type)
+  AND (:exclude_id IS NULL OR p.id != :exclude_id)
+  AND p.is_archived = 0
+ORDER BY p.last_modified DESC;
+
 selectSamplesForProject:
 SELECT sample_path FROM project_samples WHERE project_id = :project_id;
 

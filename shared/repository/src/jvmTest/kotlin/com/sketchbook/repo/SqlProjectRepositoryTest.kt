@@ -173,4 +173,130 @@ class SqlProjectRepositoryTest {
             cancelAndIgnoreRemainingEvents()
         }
     }
+
+    // ------------------------------------------------------------------------
+    // PR-AA: inverse plugin lookup
+    // ------------------------------------------------------------------------
+
+    private fun seedPlugin(
+        catalog: com.sketchbook.catalog.db.Catalog,
+        projectId: Long,
+        name: String,
+        type: String,
+        track: String? = null,
+    ) {
+        catalog.catalogQueries.insertProjectPlugin(
+            project_id = projectId,
+            plugin_name = name,
+            plugin_type = type,
+            track_name = track,
+        )
+    }
+
+    @Test
+    fun observeProjectsUsingReturnsAnyFormatWhenFormatNull() = runTest {
+        val (catalog, fts, repo) = setup()
+        // A: Serum on VST2; B: Serum on VST3; C: Vital — only A+B should match "Serum".
+        val a = seed(catalog, fts, "track_a", "/lib", lastModified = 3.0)
+        val b = seed(catalog, fts, "track_b", "/lib", lastModified = 2.0)
+        val c = seed(catalog, fts, "track_c", "/lib", lastModified = 1.0)
+        seedPlugin(catalog, a, "Serum", "vst2")
+        seedPlugin(catalog, b, "Serum", "vst3")
+        seedPlugin(catalog, c, "Vital", "vst3")
+
+        repo.observeProjectsUsing("Serum", format = null, excludeProjectId = null).test {
+            val rows = awaitItem()
+            assertEquals(listOf("track_a", "track_b"), rows.map { it.name })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun observeProjectsUsingFiltersByFormat() = runTest {
+        val (catalog, fts, repo) = setup()
+        val a = seed(catalog, fts, "track_a", "/lib", lastModified = 3.0)
+        val b = seed(catalog, fts, "track_b", "/lib", lastModified = 2.0)
+        seedPlugin(catalog, a, "Serum", "vst2")
+        seedPlugin(catalog, b, "Serum", "vst3")
+
+        // Narrow to VST2 → only A. (Substitutes for "version 1.35 only" since the catalog has
+        // no plugin-version column; format is the closest analog the schema captures.)
+        repo.observeProjectsUsing(
+            "Serum",
+            format = com.sketchbook.core.PluginFormat.Vst2,
+            excludeProjectId = null,
+        ).test {
+            val rows = awaitItem()
+            assertEquals(listOf("track_a"), rows.map { it.name })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun observeProjectsUsingExcludesCurrentProject() = runTest {
+        val (catalog, fts, repo) = setup()
+        val a = seed(catalog, fts, "current", "/lib", lastModified = 3.0)
+        val b = seed(catalog, fts, "other", "/lib", lastModified = 2.0)
+        seedPlugin(catalog, a, "Serum", "vst3")
+        seedPlugin(catalog, b, "Serum", "vst3")
+
+        repo.observeProjectsUsing(
+            "Serum",
+            format = null,
+            excludeProjectId = ProjectId(a),
+        ).test {
+            val rows = awaitItem()
+            assertEquals(listOf("other"), rows.map { it.name })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun observeProjectsUsingDistinctsMultiTrackUse() = runTest {
+        val (catalog, fts, repo) = setup()
+        val a = seed(catalog, fts, "multi", "/lib", lastModified = 1.0)
+        // Same plugin loaded on three tracks — the popover should still show the project once.
+        seedPlugin(catalog, a, "Serum", "vst3", track = "kick")
+        seedPlugin(catalog, a, "Serum", "vst3", track = "snare")
+        seedPlugin(catalog, a, "Serum", "vst3", track = "lead")
+
+        repo.observeProjectsUsing("Serum", format = null, excludeProjectId = null).test {
+            val rows = awaitItem()
+            assertEquals(1, rows.size)
+            assertEquals("multi", rows[0].name)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun observeProjectsUsingSkipsArchivedProjects() = runTest {
+        val (catalog, fts, repo) = setup()
+        val a = seed(catalog, fts, "live_one", "/lib", lastModified = 2.0)
+        val b = seed(catalog, fts, "shelved", "/lib", lastModified = 1.0)
+        seedPlugin(catalog, a, "Serum", "vst3")
+        seedPlugin(catalog, b, "Serum", "vst3")
+        catalog.catalogQueries.setArchived(archived = 1, id = b)
+
+        repo.observeProjectsUsing("Serum", format = null, excludeProjectId = null).test {
+            val rows = awaitItem()
+            assertEquals(listOf("live_one"), rows.map { it.name })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun observeProjectsUsingEmptyWhenNoMatch() = runTest {
+        val (catalog, fts, repo) = setup()
+        val a = seed(catalog, fts, "only_one", "/lib")
+        seedPlugin(catalog, a, "Pro-Q 3", "vst3")
+        repo.observeProjectsUsing(
+            "Serum",
+            format = null,
+            excludeProjectId = ProjectId(a),
+        ).test {
+            val rows = awaitItem()
+            assertTrue(rows.isEmpty())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
 }

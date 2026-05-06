@@ -41,6 +41,27 @@ interface ProjectRepository {
     /** Plugins extracted by the parser for [id]. Empty when the project hasn't parsed yet. */
     fun observePlugins(id: ProjectId): Flow<List<PluginRef>> = kotlinx.coroutines.flow.flowOf(emptyList())
 
+    /**
+     * Inverse plugin lookup: "what other projects also use this plugin?" Drives the always-on
+     * pivot popover on the Plugins tab.
+     *
+     * - [pluginName] — exact match against `project_plugins.plugin_name`.
+     * - [format] — when null, matches any format the user has the plugin loaded under (the user
+     *   thinks of "Serum" as one thing even if scattered VST2/VST3/AU). When set, narrows to
+     *   that exact format.
+     * - [excludeProjectId] — optional. Excludes the project the user is currently viewing so the
+     *   popover lists only *other* consumers (otherwise the list always has at least one row
+     *   which is just noise).
+     *
+     * Results are non-archived projects, distinct (a project loading the same plugin on three
+     * tracks is one row), ordered by `last_modified DESC`.
+     */
+    fun observeProjectsUsing(
+        pluginName: String,
+        format: com.sketchbook.core.PluginFormat? = null,
+        excludeProjectId: ProjectId? = null,
+    ): Flow<List<PluginUsage>> = kotlinx.coroutines.flow.flowOf(emptyList())
+
     /** Sample refs the parser found, with their resolved missing/found status. */
     fun observeSamples(id: ProjectId): Flow<List<SampleEntry>> = kotlinx.coroutines.flow.flowOf(emptyList())
 
@@ -71,6 +92,20 @@ data class SampleEntry(
     val displayName: String
         get() = rawPath.substringAfterLast('/').substringAfterLast('\\').ifEmpty { rawPath }
 }
+
+/**
+ * Lightweight projection of a project that consumes a particular plugin. Carries just enough to
+ * render a row in the pivot popover (name + path + last-modified for the relative-time label) and
+ * navigate on click. Distinct from [com.sketchbook.core.ProjectRow] because the popover doesn't
+ * need tags / sample counts / sync state — keeping the row narrow keeps the inverse query fast.
+ */
+data class PluginUsage(
+    val id: ProjectId,
+    val name: String,
+    val path: String,
+    /** Epoch seconds (matches the `projects.last_modified` REAL column). */
+    val lastModified: Double,
+)
 
 /** Convenience: report a [SketchbookError] as a `Result.failure`. */
 internal fun <T> failed(error: SketchbookError): Result<T> = Result.failure(error)

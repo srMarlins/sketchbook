@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -386,6 +387,18 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
                                                 val uuid = graph.syncStateStore.identityFor(pid)
                                                 backStack.add(Screen.Timeline(uuid))
                                             },
+                                            // PR-AA: hand the Plugins tab the inverse query + a hook to swap the
+                                            // panel's project on click. Reusing the same projectDetailHolder.load
+                                            // path keeps the side-panel-vs-back-stack semantics consistent — the
+                                            // user stays in the side-panel context, just on a different project.
+                                            pluginUsageFlow = { name, format, exclude ->
+                                                graph.projectRepository.observeProjectsUsing(name, format, exclude)
+                                            },
+                                            onSelectProject = { pid ->
+                                                projectListHolder.dispatch(
+                                                    ProjectListStateHolder.Intent.OpenDetail(pid),
+                                                )
+                                            },
                                         )
                                     },
                                 )
@@ -632,6 +645,14 @@ private fun DetailPanelContent(
     onPushNow: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
     conflictMessageFor: ((com.sketchbook.core.ProjectId) -> String?)? = null,
     onOpenTimeline: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
+    /**
+     * PR-AA: inverse plugin lookup. When wired by the host, the Plugins tab gets a click-to-pivot
+     * popover on each row showing other projects that load the same plugin. `null` keeps the tab
+     * read-only (test/preview callers don't need to thread a repository).
+     */
+    pluginUsageFlow: ((String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -> kotlinx.coroutines.flow.Flow<List<com.sketchbook.repo.PluginUsage>>)? = null,
+    /** PR-AA: clicking a popover row swaps the detail panel to that project. */
+    onSelectProject: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
 ) {
     val state by holder.state.collectAsState()
     val theme = com.sketchbook.uishared.theme.AppTheme
@@ -809,7 +830,13 @@ private fun DetailPanelContent(
                         )
                         DetailTab.Tracks -> DetailTracksTab(row, theme)
                         DetailTab.Samples -> DetailSamplesTab(state.samples, theme)
-                        DetailTab.Plugins -> DetailPluginsTab(state.plugins, theme)
+                        DetailTab.Plugins -> DetailPluginsTab(
+                            plugins = state.plugins,
+                            theme = theme,
+                            currentProjectId = row.id,
+                            pluginUsageFlow = pluginUsageFlow,
+                            onSelectProject = onSelectProject,
+                        )
                         DetailTab.History -> DetailHistoryTab(state, theme)
                     }
                 }
@@ -1560,7 +1587,15 @@ private fun DetailSamplesTab(
 private fun DetailPluginsTab(
     plugins: List<com.sketchbook.core.PluginRef>,
     theme: com.sketchbook.uishared.theme.AppTheme,
+    currentProjectId: com.sketchbook.core.ProjectId? = null,
+    pluginUsageFlow: ((String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -> kotlinx.coroutines.flow.Flow<List<com.sketchbook.repo.PluginUsage>>)? = null,
+    onSelectProject: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
 ) {
+    // Identify which row owns the open popover by (track, name, format) — plugin entries don't
+    // carry a stable id from the parser, so we synthesize a key from the visible fields. This
+    // matches the user's mental model: clicking the same row twice toggles the same popover.
+    var openKey by remember { mutableStateOf<String?>(null) }
+
     Section("Plugins (${plugins.size})", theme) {
         if (plugins.isEmpty()) {
             ProvideContentColor(theme.colors.inkMuted) {
@@ -1584,38 +1619,248 @@ private fun DetailPluginsTab(
                 )
             }
             for (p in list) {
-                androidx.compose.foundation.layout.Row(
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp, horizontal = 4.dp),
-                ) {
-                    val (badgeBg, badgeFg, label) = when (p.format) {
-                        com.sketchbook.core.PluginFormat.Vst3 -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "VST3")
-                        com.sketchbook.core.PluginFormat.Vst2 -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "VST")
-                        com.sketchbook.core.PluginFormat.Au -> Triple(theme.colors.tintRose, theme.colors.inkPrimary, "AU")
-                        com.sketchbook.core.PluginFormat.AbletonNative -> Triple(theme.colors.tintCream, theme.colors.inkPrimary, "LIVE")
-                        com.sketchbook.core.PluginFormat.Unknown -> Triple(theme.colors.surfaceSunken, theme.colors.inkMuted, "?")
-                    }
-                    androidx.compose.foundation.layout.Box(
+                val rowKey = "$track::${p.name}::${p.format}"
+                val pivotEnabled = pluginUsageFlow != null
+                androidx.compose.foundation.layout.Box {
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
                         modifier = Modifier
-                            .background(badgeBg, androidx.compose.foundation.shape.RoundedCornerShape(50))
-                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                            .fillMaxWidth()
+                            .let { if (pivotEnabled) it.clickable { openKey = if (openKey == rowKey) null else rowKey } else it }
+                            .padding(vertical = 2.dp, horizontal = 4.dp),
                     ) {
-                        ProvideContentColor(badgeFg) {
-                            Text(
-                                label,
-                                style = theme.typography.mono.copy(
-                                    fontSize = androidx.compose.ui.unit.TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
-                                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
-                                ),
-                            )
+                        val (badgeBg, badgeFg, label) = when (p.format) {
+                            com.sketchbook.core.PluginFormat.Vst3 -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "VST3")
+                            com.sketchbook.core.PluginFormat.Vst2 -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "VST")
+                            com.sketchbook.core.PluginFormat.Au -> Triple(theme.colors.tintRose, theme.colors.inkPrimary, "AU")
+                            com.sketchbook.core.PluginFormat.AbletonNative -> Triple(theme.colors.tintCream, theme.colors.inkPrimary, "LIVE")
+                            com.sketchbook.core.PluginFormat.Unknown -> Triple(theme.colors.surfaceSunken, theme.colors.inkMuted, "?")
+                        }
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier
+                                .background(badgeBg, androidx.compose.foundation.shape.RoundedCornerShape(50))
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                        ) {
+                            ProvideContentColor(badgeFg) {
+                                Text(
+                                    label,
+                                    style = theme.typography.mono.copy(
+                                        fontSize = androidx.compose.ui.unit.TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                        letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                    ),
+                                )
+                            }
+                        }
+                        ProvideContentColor(theme.colors.inkPrimary) {
+                            Text(p.name, style = theme.typography.body, modifier = Modifier.weight(1f))
+                        }
+                        // Trailing chevron — text-only so we don't pull in a new icon. Reuses
+                        // the muted-ink + mono pattern from the rest of the detail panel.
+                        if (pivotEnabled) {
+                            ProvideContentColor(theme.colors.inkMuted) {
+                                Text(
+                                    "›",
+                                    style = theme.typography.mono.copy(
+                                        fontSize = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                    ),
+                                )
+                            }
                         }
                     }
-                    ProvideContentColor(theme.colors.inkPrimary) {
-                        Text(p.name, style = theme.typography.body, modifier = Modifier.weight(1f))
+                    if (pluginUsageFlow != null && openKey == rowKey) {
+                        androidx.compose.ui.window.Popup(
+                            onDismissRequest = { openKey = null },
+                            properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+                        ) {
+                            PluginPivotPopup(
+                                pluginName = p.name,
+                                pluginFormat = p.format,
+                                currentProjectId = currentProjectId,
+                                pluginUsageFlow = pluginUsageFlow,
+                                onSelect = { id ->
+                                    openKey = null
+                                    onSelectProject?.invoke(id)
+                                },
+                                theme = theme,
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * Pivot popover anchored to a plugin row. Lists up to 10 *other* projects that also load this
+ * plugin, with a small toggle pill for "any format vs this format only" — the closest analog the
+ * catalog offers to the spec's "any version vs this version only" since the schema doesn't track
+ * plugin versions (only `plugin_type` ∈ {vst2, vst3, au, abletonnative}).
+ *
+ * Styling deliberately mirrors PR-X's TempoFilterPopup / KeyFilterPopup: surfaceCard background,
+ * ruleLineStrong border, RoundedCornerShape, no new colors.
+ */
+@Composable
+private fun PluginPivotPopup(
+    pluginName: String,
+    pluginFormat: com.sketchbook.core.PluginFormat,
+    currentProjectId: com.sketchbook.core.ProjectId?,
+    pluginUsageFlow: (String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -> kotlinx.coroutines.flow.Flow<List<com.sketchbook.repo.PluginUsage>>,
+    onSelect: (com.sketchbook.core.ProjectId) -> Unit,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    var formatOnly by remember(pluginName, pluginFormat) { mutableStateOf(false) }
+    val flow = remember(pluginName, pluginFormat, currentProjectId, formatOnly) {
+        pluginUsageFlow(pluginName, if (formatOnly) pluginFormat else null, currentProjectId)
+    }
+    val usages: List<com.sketchbook.repo.PluginUsage> by flow.collectAsState(initial = emptyList())
+
+    val formatLabel = when (pluginFormat) {
+        com.sketchbook.core.PluginFormat.Vst3 -> "VST3 only"
+        com.sketchbook.core.PluginFormat.Vst2 -> "VST only"
+        com.sketchbook.core.PluginFormat.Au -> "AU only"
+        com.sketchbook.core.PluginFormat.AbletonNative -> "Live only"
+        com.sketchbook.core.PluginFormat.Unknown -> "this format"
+    }
+
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier
+            .widthIn(min = 280.dp, max = 360.dp)
+            .heightIn(max = 360.dp)
+            .clip(RoundedCornerShape(theme.spacing.cornerCard))
+            .background(theme.colors.surfaceCard)
+            .border(1.dp, theme.colors.ruleLineStrong, RoundedCornerShape(theme.spacing.cornerCard)),
+    ) {
+        // Two-layer header.
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier.padding(horizontal = theme.spacing.md, vertical = theme.spacing.sm),
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+        ) {
+            ProvideContentColor(theme.colors.inkSecondary) {
+                Text(
+                    "Other projects using $pluginName",
+                    style = theme.typography.body,
+                )
+            }
+            androidx.compose.foundation.layout.Row(
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                PivotTogglePill(label = "Any format", active = !formatOnly, onClick = { formatOnly = false }, theme = theme)
+                PivotTogglePill(label = formatLabel, active = formatOnly, onClick = { formatOnly = true }, theme = theme)
+            }
+        }
+        // Divider via a thin ruled box — same trick the rest of the panel uses.
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(theme.colors.ruleLineStrong),
+        )
+        if (usages.isEmpty()) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier.fillMaxWidth().padding(theme.spacing.md),
+            ) {
+                ProvideContentColor(theme.colors.inkMuted) {
+                    Text(
+                        "No other projects use this plugin.",
+                        style = theme.typography.body,
+                    )
+                }
+            }
+        } else {
+            // Cap at 10 rows per the spec — keeps the popover a glance, not a list to scroll.
+            val capped = usages.take(10)
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
+                for (u in capped) {
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(u.id) }
+                            .padding(horizontal = theme.spacing.md, vertical = 6.dp),
+                    ) {
+                        ProvideContentColor(theme.colors.inkPrimary) {
+                            Text(
+                                u.name,
+                                style = theme.typography.body,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                        }
+                        ProvideContentColor(theme.colors.inkMuted) {
+                            Text(
+                                relativeFromSeconds(u.lastModified),
+                                style = theme.typography.mono.copy(
+                                    fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                ),
+                            )
+                        }
+                    }
+                }
+                if (usages.size > capped.size) {
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = theme.spacing.md, vertical = 4.dp),
+                    ) {
+                        ProvideContentColor(theme.colors.inkMuted) {
+                            Text(
+                                "+${usages.size - capped.size} more",
+                                style = theme.typography.caption,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Reuses PR-X FilterChip geometry: pill border, tintCream when active, no new colors. */
+@Composable
+private fun PivotTogglePill(
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    val borderColor = if (active) theme.colors.accentSecondary else theme.colors.ruleLineStrong
+    val tint = if (active) theme.colors.tintCream else theme.colors.surfaceCard
+    androidx.compose.foundation.layout.Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(tint)
+            .border(1.dp, borderColor, RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        ProvideContentColor(if (active) theme.colors.inkPrimary else theme.colors.inkSecondary) {
+            Text(
+                label.uppercase(),
+                style = theme.typography.mono.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.7f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ),
+            )
+        }
+    }
+}
+
+/** Relative-time string from epoch *seconds* (matches `projects.last_modified` REAL column). */
+private fun relativeFromSeconds(seconds: Double): String {
+    val nowSec = kotlin.time.Clock.System.now().toEpochMilliseconds() / 1000.0
+    val deltaSec = (nowSec - seconds).coerceAtLeast(0.0)
+    val days = (deltaSec / (24.0 * 3600.0)).toLong()
+    return when {
+        days < 1 -> "today"
+        days < 2 -> "yesterday"
+        days < 7 -> "${days}d ago"
+        days < 30 -> "${days / 7}w ago"
+        days < 365 -> "${days / 30}mo ago"
+        else -> "${days / 365}y ago"
     }
 }
