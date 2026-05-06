@@ -166,10 +166,10 @@ fun ProjectListScreen(
                         keyFilter = state.keyFilter,
                         distinctKeys = state.distinctKeys,
                         onTempoChange = { range ->
-                            dispatch(ProjectListStateHolder.Intent.SetTempoRange(range))
+                            dispatch(ProjectListViewModel.Intent.SetTempoRange(range))
                         },
                         onKeyChange = { key ->
-                            dispatch(ProjectListStateHolder.Intent.SetKeyFilter(key))
+                            dispatch(ProjectListViewModel.Intent.SetKeyFilter(key))
                         },
                     )
                     ScanIndicator(

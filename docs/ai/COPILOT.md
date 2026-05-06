@@ -12,7 +12,6 @@ You are an inline coauthor in the editor. Lower trust by default. Your suggestio
 - New `expect/actual` declarations.
 - New module dependencies (don't `import` from a module the file has never imported before).
 - New libraries — they must enter via `gradle/libs.versions.toml`, with justification in a PR body. Suggesting a `import com.someotherlib…` will fail review.
-- MVIKotlin, Decompose, Roborazzi, KAPT, Anvil, Realm Kotlin, Moko-resources, `androidx.lifecycle:viewmodel-compose` (Android-only — the JetBrains KMP fork `org.jetbrains.androidx.lifecycle:*` is the acceptable alternative), Koin, Room. Explicitly avoided. See `docs/ai/CLAUDE.md`.
 
 ## Style anchors
 

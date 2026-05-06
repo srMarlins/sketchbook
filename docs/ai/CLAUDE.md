@@ -14,21 +14,9 @@ This file is for things you *can't* observe: war stories and don't-rules that ar
 - **GCS scope is `devstorage.read_write`, not `cloud-platform`.** The JWT scope is the second IAM gate; narrow it.
 - **GCS IAM is bucket-scoped, not project-scoped.** `roles/storage.objectAdmin` + `roles/storage.legacyBucketReader` on the data bucket only. Project-level bindings are wrong.
 
-## Libraries we've rejected and why
-
-If you reach for any of these, stop:
-
-- **MVIKotlin / Decompose** — vocabulary on top of plain `StateFlow` we don't need.
-- **Roborazzi** — visual review happens in PR screenshots; snapshot tests aren't worth the maintenance.
-- **KAPT / Anvil** — Metro is the DI; KAPT pulls heavy JVM-only annotation processing.
-- **Realm Kotlin / Room** — SQLDelight wins for FTS5 + KMP. Room's `@Fts5` is Android-only.
-- **Koin** — Metro is compile-time-checked.
-- **Moko-resources** — couples to Android-isms.
-- **`androidx.lifecycle:viewmodel-compose`** — Android-only. The JetBrains KMP fork (`org.jetbrains.androidx.lifecycle:*`) is the only acceptable lifecycle/ViewModel surface. Don't substitute one for the other.
+## State holders + DI
 
 State holders are KMP `ViewModel`s contributed with `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject` and acquired per screen with `metroViewModel<VM>()`. Full DI policy in `docs/architecture/dependency-injection.md`.
-
-If the user explicitly approves an exception, follow it.
 
 ## Cloud + release gotchas
 

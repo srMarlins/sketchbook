@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
@@ -19,14 +20,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.ui.NavDisplay
-import dev.zacsweers.metrox.viewmodel.LocalMetroViewModelFactory
 import dev.zacsweers.metrox.viewmodel.metroViewModel
-import kotlinx.coroutines.flow.map
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -81,14 +79,10 @@ import com.sketchbook.featuretimeline.TimelineScreen
 import com.sketchbook.featuretimeline.TimelineViewModel
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.ProjectSyncState
-import com.sketchbook.repo.SyncQueueState
-import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.uishared.components.ActivityBar
 import com.sketchbook.uishared.components.ActivityState
 import com.sketchbook.uishared.components.InkLoading
 import com.sketchbook.core.ProjectId
-import com.sketchbook.sync.ForceSnapshotPipeline
-import com.sketchbook.sync.ForceSnapshotUseCase
 import com.sketchbook.uishared.components.NotebookSidebar
 import com.sketchbook.uishared.components.PaperPage
 import com.sketchbook.uishared.components.SidebarItem
@@ -109,39 +103,19 @@ import kotlinx.coroutines.launch
  * keeps a slide accent; the back-stack's depth tells us which is happening.
  */
 @Composable
-fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
-    CompositionLocalProvider(LocalMetroViewModelFactory provides graph.metroViewModelFactory) {
-        RootContentBody(graph = graph, backStack = backStack)
-    }
-}
-
-@Composable
-private fun RootContentBody(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
-    // No ViewModels live at this scope. Each VM is acquired via `metroViewModel<X>()` inside the
-    // `NavEntry` that needs it; this composable only reads cross-screen state for the sidebar
-    // (badges, scan/sync ribbon) and routes a couple of nav-scoped lambdas.
-    val syncQueue = graph.syncQueue
-    val syncState by syncQueue.observe().collectAsStateWithLifecycle(initialValue = SyncQueueState())
-    val syncImpl = syncQueue as? SwappableSyncQueue
+fun RootContent(backStack: NavBackStack<NavKey>) {
+    // Cross-cutting chrome state is owned by [RootChromeViewModel]; this composable injects it
+    // via Metro and stays a pure consumer. Per-screen VMs are acquired in their NavEntry below.
+    val chrome: RootChromeViewModel = metroViewModel()
+    val syncState by chrome.syncState.collectAsStateWithLifecycle()
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-    // Z3 quick-capture: Ctrl/Cmd+Shift+S forces a Named snapshot of the current project. Only
-    // armed when a project is in focus (Detail screen or Projects-detail-panel open). The use
-    // case routes through the live SwappableSyncQueue, which delegates to the GcsSyncQueue when
-    // cloud is configured and surfaces a clear failure otherwise.
-    val forceSnapshotUseCase = remember(syncImpl) {
-        val pipeline: ForceSnapshotPipeline = syncImpl
-            ?: object : ForceSnapshotPipeline {
-                override suspend fun recordForcedNamed(
-                    uuid: com.sketchbook.core.ProjectUuid,
-                    label: String,
-                ): Result<com.sketchbook.core.SnapshotRev> = Result.failure(
-                    IllegalStateException("Cloud sync isn't configured — set credentials in Settings first."),
-                )
-            }
-        ForceSnapshotUseCase(pipeline)
-    }
     var quickCaptureProjectId by remember { mutableStateOf<ProjectId?>(null) }
     var quickCaptureError by remember { mutableStateOf<String?>(null) }
+    // Side-panel-open project tracker — the panel calls `onPanelProjectChange(id)` on open and
+    // `onPanelProjectChange(null)` on dismiss, so the Ctrl+Shift+S handler can still resolve a
+    // project even when the user is on the dashboard with the panel open. Avoids reaching back
+    // into the (now NavEntry-scoped) ProjectListViewModel from this scope.
+    var panelProjectId by remember { mutableStateOf<ProjectId?>(null) }
     val rootFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         // Reach for focus once at startup so the preview-key handler actually receives keystrokes
@@ -149,25 +123,10 @@ private fun RootContentBody(graph: DesktopAppGraph, backStack: NavBackStack<NavK
         // re-claims it via the focusable() chain below.
         runCatching { rootFocusRequester.requestFocus() }
     }
-    val projectListState by projectListHolder.state.collectAsState()
-    val projectDetailState by projectDetailHolder.state.collectAsState()
-    // PR-BB: library health stream → chip at the bottom of the sidebar. The repo combines the
-    // SQL aggregate flow with the journal tail so any catalog mutation (archive, sync, scan)
-    // flows back into a fresh percentage without manual invalidation.
-    val libraryHealth by graph.projectRepository.observeLibraryHealth()
-        .collectAsState(initial = com.sketchbook.repo.LibraryHealth.EMPTY)
-
-    // Scan kickoff is owned by [LibraryScanCoordinator] — started once in `Main`. Just observe
-    // the progress here.
-    val scanProgress by graph.libraryScanCoordinator.progress.collectAsStateWithLifecycle()
-
-    // Sidebar badges read from the repositories directly — cross-screen counters; no VM needed.
-    val proposalCount by graph.proposalsRepository.observe()
-        .map { proposals -> proposals.count { it.status == com.sketchbook.repo.ProposalStatus.Pending } }
-        .collectAsStateWithLifecycle(initialValue = 0)
-    val attentionCount by graph.repairRepository.observeFindings()
-        .map { it.macImports.size + it.missingSamplesTotal }
-        .collectAsStateWithLifecycle(initialValue = 0)
+    val libraryHealth by chrome.libraryHealth.collectAsStateWithLifecycle()
+    val scanProgress by chrome.scanProgress.collectAsStateWithLifecycle()
+    val proposalCount by chrome.proposalCount.collectAsStateWithLifecycle()
+    val attentionCount by chrome.attentionCount.collectAsStateWithLifecycle()
 
     val current = backStack.lastOrNull() ?: Screen.Projects
     val items = sidebarItems(current, proposalCount, attentionCount)
@@ -208,11 +167,10 @@ private fun RootContentBody(graph: DesktopAppGraph, backStack: NavBackStack<NavK
 
     val currentProjectId: () -> ProjectId? = {
         // Resolve "what project is the user looking at" in the same priority order as the visible
-        // panels: explicit Detail screen on the back stack first, then the side-panel on Projects.
+        // panels: explicit Detail screen on the back stack first, then the open side-panel.
         when (val cur = backStack.lastOrNull()) {
             is Screen.ProjectDetail -> cur.id
-            else -> projectListState.openDetailId
-                ?: projectDetailState.row?.id
+            else -> panelProjectId
         }
     }
     PaperPage {
@@ -289,8 +247,15 @@ private fun RootContentBody(graph: DesktopAppGraph, backStack: NavBackStack<NavK
                                         vm = vm,
                                         scanLabel = scanIndicatorLabel,
                                         scanActive = scanIndicatorActive,
-                                        syncStateFor = syncImpl?.let { impl -> { id -> impl.snapshotFor(id) } },
+                                        syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
                                         detailPanel = { id, dismiss ->
+                                            // Track which project the side-panel is showing so the
+                                            // root quick-capture handler can resolve it without
+                                            // reaching into the NavEntry-scoped VM.
+                                            DisposableEffect(id) {
+                                                panelProjectId = id
+                                                onDispose { panelProjectId = null }
+                                            }
                                             val detailVm: com.sketchbook.featuredetail.ProjectDetailViewModel =
                                                 metroViewModel()
                                             LaunchedEffect(id) { detailVm.load(id) }
@@ -308,23 +273,20 @@ private fun RootContentBody(graph: DesktopAppGraph, backStack: NavBackStack<NavK
                                             DetailPanelContent(
                                                 vm = detailVm,
                                                 onDismiss = dismiss,
-                                                syncStateFor = syncImpl?.let { impl -> { pid -> impl.snapshotFor(pid) } },
-                                                onPushNow = syncImpl?.let { impl -> { pid ->
-                                                    coroutineScope.launch { impl.pushNowById(pid) }
-                                                } },
-                                                conflictMessageFor = syncImpl?.let { impl -> { pid -> impl.conflictMessage(pid) } },
+                                                syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
+                                                onPushNow = if (chrome.syncWired) {
+                                                    { pid -> coroutineScope.launch { chrome.pushNow(pid) } }
+                                                } else null,
+                                                conflictMessageFor = if (chrome.syncWired) chrome::conflictMessage else null,
                                                 onOpenTimeline = { pid ->
-                                                    val uuid = graph.syncStateStore.identityFor(pid)
-                                                    backStack.add(Screen.Timeline(uuid))
+                                                    backStack.add(Screen.Timeline(chrome.timelineUuidFor(pid)))
                                                 },
                                                 // PR-AA: hand the Plugins tab the inverse query + a hook to swap
                                                 // the panel's project on click. Reusing the same `detailVm.load`
                                                 // path keeps the side-panel-vs-back-stack semantics consistent —
                                                 // the user stays in the side-panel context, just on a different
                                                 // project.
-                                                pluginUsageFlow = { name, format, exclude ->
-                                                    graph.projectRepository.observeProjectsUsing(name, format, exclude)
-                                                },
+                                                pluginUsageFlow = chrome::observeProjectsUsing,
                                                 onSelectProject = { pid ->
                                                     vm.dispatch(ProjectListViewModel.Intent.OpenDetail(pid))
                                                 },
@@ -394,8 +356,8 @@ private fun RootContentBody(graph: DesktopAppGraph, backStack: NavBackStack<NavK
                 },
                 onSave = { typed ->
                     coroutineScope.launch {
-                        val uuid = graph.syncStateStore.identityFor(pid)
-                        val result = forceSnapshotUseCase.invoke(uuid, typed)
+                        val uuid = chrome.timelineUuidFor(pid)
+                        val result = chrome.forceSnapshotUseCase.invoke(uuid, typed)
                         if (result.isSuccess) {
                             quickCaptureProjectId = null
                             quickCaptureError = null
@@ -1657,7 +1619,7 @@ private fun PluginPivotPopup(
     val flow = remember(pluginName, pluginFormat, currentProjectId, formatOnly) {
         pluginUsageFlow(pluginName, if (formatOnly) pluginFormat else null, currentProjectId)
     }
-    val usages: List<com.sketchbook.repo.PluginUsage> by flow.collectAsState(initial = emptyList())
+    val usages: List<com.sketchbook.repo.PluginUsage> by flow.collectAsStateWithLifecycle(initialValue = emptyList())
 
     val formatLabel = when (pluginFormat) {
         com.sketchbook.core.PluginFormat.Vst3 -> "VST3 only"

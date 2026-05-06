@@ -97,7 +97,7 @@ class TimelineViewModel(
 
     private fun relabel(rev: SnapshotRev, newLabel: String?) {
         val uuid = selectedUuid.value ?: return
-        scope.launch {
+        viewModelScope.launch {
             // Trim before passing through; treat blank-after-trim as a clear gesture so
             // accidental whitespace doesn't masquerade as a label. We intentionally do NOT
             // round-trip the result back into local state — the SQL update flows through
