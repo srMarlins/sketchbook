@@ -57,67 +57,76 @@
       --shadow-pin:  0 1px 3px rgba(0, 0, 0, 0.4);
     }
 
-    /* Wood-grain desk approximation. The design doc calls for raster rasters
-       (paper-grain.webp, wood-grain.webp); until those are produced, layered
-       gradients carry the same warm walnut feel. */
+    /* Wood-grain desk: walnut base + SVG turbulence noise overlay (real organic
+       grain, not a striped gradient) + a warm key light + a deep corner shadow.
+       The svg data URLs use feTurbulence which gives every page load the same
+       seed (deterministic). */
     body {
       background-color: var(--wood-walnut-500);
       background-image:
-        repeating-linear-gradient(
-          90deg,
-          rgba(74, 48, 27, 0.0) 0px,
-          rgba(74, 48, 27, 0.10) 2px,
-          rgba(255, 220, 180, 0.04) 4px,
-          rgba(74, 48, 27, 0.0) 7px,
-          rgba(74, 48, 27, 0.06) 11px
-        ),
-        radial-gradient(circle at 20% 30%, rgba(255, 200, 150, 0.10), transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(40, 22, 10, 0.30), transparent 60%);
+        /* warm key light, top-left */
+        radial-gradient(ellipse 60% 50% at 18% 8%, rgba(255, 210, 160, 0.18), transparent 70%),
+        /* deep shadow, bottom-right */
+        radial-gradient(ellipse 70% 60% at 95% 110%, rgba(20, 10, 4, 0.45), transparent 65%),
+        /* coarse grain — long horizontal streaks */
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='600'><filter id='w'><feTurbulence type='fractalNoise' baseFrequency='0.012 0.32' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.10  0 0 0 0 0.04  0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>"),
+        /* fine grain — texture */
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='w2'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.02  0 0 0 0 0  0 0 0 0.18 0'/></filter><rect width='100%25' height='100%25' filter='url(%23w2)'/></svg>");
+      background-blend-mode: normal, normal, multiply, multiply;
       color: var(--ink-graphite-700);
       font-family: 'Inter', system-ui, sans-serif;
       min-height: 100vh;
     }
 
-    /* Notebook page surface — cream paper with horizontal rules. */
+    /* Notebook page: cream base + SVG paper-fiber turbulence + handwritten-style
+       blue rule lines (slight wobble in the path keeps them from looking ruled
+       by a machine) + faint margin red rule + worn corners. */
     .notebook-page {
+      position: relative;
       background-color: var(--paper-cream-100);
       background-image:
-        repeating-linear-gradient(
-          0deg,
-          transparent 0,
-          transparent 31px,
-          var(--rule-line) 31px,
-          var(--rule-line) 32px
-        );
-      box-shadow: var(--shadow-page);
+        /* paper fiber */
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='480'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='1.6' numOctaves='2' seed='11'/><feColorMatrix values='0 0 0 0 0.20  0 0 0 0 0.16  0 0 0 0 0.10  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>"),
+        /* horizontal blue rule lines, slightly imperfect via SVG path */
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='32' preserveAspectRatio='none'><path d='M0 28 Q 200 27.4 400 28 T 800 28' stroke='%23628fb8' stroke-width='1' fill='none' opacity='0.34'/></svg>"),
+        /* faint paper warmth toward edges */
+        radial-gradient(ellipse 110% 80% at 50% 50%, transparent 60%, rgba(120, 80, 40, 0.06) 100%);
+      background-size: 480px 480px, 100% 32px, auto;
+      background-repeat: repeat, repeat-y, no-repeat;
+      background-blend-mode: multiply, normal, normal;
+      box-shadow:
+        inset 0 0 60px rgba(140, 90, 50, 0.08),
+        var(--shadow-page);
       transform: rotate(-0.15deg);
     }
+    /* Red margin rule — the vertical line common in lined notebooks */
+    .notebook-page::before {
+      content: '';
+      position: absolute;
+      left: 56px; top: 0; bottom: 0;
+      width: 1px;
+      background: linear-gradient(to bottom, transparent 0, rgba(200, 70, 70, 0.32) 6%, rgba(200, 70, 70, 0.32) 94%, transparent 100%);
+      pointer-events: none;
+    }
+    /* Worn upper-right corner — slight darkening, fades inward */
+    .notebook-page::after {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 120px; height: 120px;
+      background: radial-gradient(circle at 100% 0%, rgba(110, 70, 30, 0.18), transparent 70%);
+      pointer-events: none;
+    }
 
-    /* Spiral binding — left margin holes punched into the page edge. */
+    /* Spiral binding: SVG with proper rings (highlight + shadow on each loop)
+       instead of flat black radial gradients. The ring positions repeat every
+       64px down the page; the binding stretches the full page height. */
     .spiral-binding {
-      background:
-        radial-gradient(circle at 14px 22px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 86px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 150px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 214px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 278px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 342px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 406px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 470px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 534px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 598px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 662px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 726px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 790px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 854px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 14px 918px, rgba(0,0,0,0.45) 0 5px, transparent 6px),
-        repeating-linear-gradient(
-          90deg,
-          transparent 0,
-          transparent 4px,
-          rgba(0,0,0,0.08) 4px,
-          rgba(0,0,0,0.08) 5px
-        );
+      background-image:
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='64' viewBox='0 0 28 64'><defs><linearGradient id='m' x1='0' x2='1'><stop offset='0' stop-color='%23807060'/><stop offset='0.45' stop-color='%23d8c9b0'/><stop offset='0.55' stop-color='%23b8a48a'/><stop offset='1' stop-color='%23665545'/></linearGradient></defs><rect x='0' y='0' width='28' height='64' fill='%23000' fill-opacity='0.06'/><ellipse cx='14' cy='22' rx='8' ry='5' fill='none' stroke='url(%23m)' stroke-width='3'/><ellipse cx='14' cy='22' rx='4.5' ry='2' fill='%23241a10' fill-opacity='0.85'/></svg>");
+      background-repeat: repeat-y;
+      background-size: 28px 64px;
+      background-position: 0 12px;
     }
 
     /* Brand wordmark — colored construction-paper letters, pinned at angles. */
@@ -143,12 +152,27 @@
     .wordmark span:nth-child(9) { background: #F2C73D; color: #5A4A1F; text-shadow: 0 2px 0 rgba(255,255,255,0.4); transform: rotate(-3deg); }
     .wordmark span:nth-child(10) { background: #4FB373; transform: rotate(2deg); }
 
-    /* Song-strip mockup — colored construction paper with washi tape across the top. */
+    /* Song-strip mockup — colored construction paper with washi tape across the top.
+       Torn edges via a denser polygon (more vertices, smaller deltas) so the
+       silhouette reads as fibrous tear, not pinking-shears. */
     .song-strip {
       position: relative;
       padding: 18px 22px 18px 22px;
       box-shadow: var(--shadow-lift);
-      clip-path: polygon(0% 4%, 2% 2%, 8% 5%, 16% 1%, 30% 4%, 50% 1%, 72% 4%, 88% 1%, 96% 4%, 100% 6%, 100% 96%, 96% 99%, 84% 96%, 66% 99%, 44% 96%, 24% 99%, 10% 96%, 2% 99%, 0% 95%);
+      clip-path: polygon(
+        0% 7%, 3% 4%, 6% 6%, 10% 3%, 14% 5%, 19% 2%, 24% 5%, 29% 3%, 34% 6%, 40% 3%,
+        46% 5%, 52% 2%, 58% 5%, 64% 3%, 70% 6%, 76% 3%, 82% 5%, 88% 2%, 93% 5%, 97% 3%, 100% 6%,
+        100% 94%, 97% 97%, 93% 95%, 88% 98%, 82% 95%, 76% 97%, 70% 94%, 64% 97%, 58% 95%, 52% 98%,
+        46% 95%, 40% 97%, 34% 94%, 29% 97%, 24% 95%, 19% 98%, 14% 95%, 10% 97%, 6% 94%, 3% 96%, 0% 93%
+      );
+    }
+    /* Subtle paper grain on the strip itself */
+    .song-strip > .strip-grain {
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='s'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' seed='5'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23s)'/></svg>");
+      mix-blend-mode: multiply;
+      pointer-events: none;
     }
     .washi-tape {
       position: absolute;
@@ -206,6 +230,57 @@
     .marker { font-family: 'Permanent Marker', cursive; letter-spacing: 0.3px; }
     .data { font-family: 'Space Mono', monospace; }
 
+    /* Margin doodles — small handwritten marks in the left margin and corners.
+       Absolute-positioned, pointer-events:none, opacity tuned to read as faint
+       pencil/pen ink rather than UI. Hidden on small screens to avoid clutter. */
+    .doodle { position: absolute; pointer-events: none; opacity: 0.55; }
+    @media (max-width: 640px) { .doodle { display: none; } }
+    .doodle-star  { top: 80px; left: 12px; transform: rotate(-12deg); color: #c2802a; }
+    .doodle-arrow { top: 260px; left: 8px;  transform: rotate(8deg);   color: #4a6b8c; }
+    .doodle-check { top: 470px; left: 14px; transform: rotate(-4deg);  color: #6a8a4e; }
+    .doodle-dots  { bottom: 90px; left: 14px; opacity: 0.4;             color: #5a534d; }
+
+    /* Coffee ring — faint brown stain, off to the side. The double ring (outer
+       darker than inner) is the classic capillary deposit pattern. */
+    .coffee-ring {
+      position: absolute;
+      right: 60px; top: 220px;
+      width: 110px; height: 110px;
+      pointer-events: none;
+      opacity: 0.32;
+      background:
+        radial-gradient(circle at 50% 50%,
+          transparent 0,
+          transparent 38%,
+          rgba(120, 70, 30, 0.55) 41%,
+          rgba(140, 85, 40, 0.35) 44%,
+          transparent 48%,
+          transparent 52%,
+          rgba(120, 70, 30, 0.25) 54%,
+          transparent 58%);
+      transform: rotate(8deg);
+      filter: blur(0.4px);
+      mix-blend-mode: multiply;
+    }
+    .coffee-ring::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='110' height='110'><filter id='c'><feTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 0.45  0 0 0 0 0.25  0 0 0 0 0.10  0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23c)'/></svg>");
+      mix-blend-mode: multiply;
+      mask: radial-gradient(circle at 50% 50%, transparent 38%, black 41%, black 58%, transparent 60%);
+      -webkit-mask: radial-gradient(circle at 50% 50%, transparent 38%, black 41%, black 58%, transparent 60%);
+    }
+
+    /* Pencil scribble — a thin, slightly transparent stroke that looks like
+       someone tested a pencil tip in the corner. */
+    .pencil-mark {
+      position: absolute;
+      pointer-events: none;
+      opacity: 0.5;
+      mix-blend-mode: multiply;
+    }
+
     /* Reduced-motion contract from design doc §6 */
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; animation: none !important; }
@@ -234,6 +309,33 @@
         <!-- Spiral binding -->
         <div class="spiral-binding absolute left-0 top-0 bottom-0 w-7" aria-hidden="true"></div>
 
+        <!-- Margin doodles (decorative; aria-hidden) -->
+        <svg class="doodle doodle-star" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3 L13.6 9.4 L20 10 L15 14.2 L16.5 20.4 L12 17 L7.5 20.4 L9 14.2 L4 10 L10.4 9.4 Z" />
+        </svg>
+        <svg class="doodle doodle-arrow" width="36" height="20" viewBox="0 0 36 20" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 11 Q 12 4 24 12 L 30 8 M 24 12 L 28 17" />
+        </svg>
+        <svg class="doodle doodle-check" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 13 Q 7 14 9 16 Q 13 9 21 5" />
+        </svg>
+        <svg class="doodle doodle-dots" width="14" height="40" viewBox="0 0 14 40" aria-hidden="true" fill="currentColor" aria-label="">
+          <circle cx="7" cy="6"  r="1.4"/>
+          <circle cx="7" cy="14" r="1.2"/>
+          <circle cx="7" cy="22" r="1.4"/>
+          <circle cx="7" cy="30" r="1.1"/>
+          <circle cx="7" cy="37" r="1.3"/>
+        </svg>
+
+        <!-- Faint coffee ring stain -->
+        <div class="coffee-ring" aria-hidden="true"></div>
+
+        <!-- Pencil test scribble in lower-right corner -->
+        <svg class="pencil-mark" style="right: 28px; bottom: 24px;" width="64" height="20" viewBox="0 0 64 20" aria-hidden="true" stroke="#3a342e" fill="none" stroke-width="0.8" stroke-linecap="round">
+          <path d="M2 14 Q 8 6 14 12 T 26 10 T 38 12 T 50 9 T 62 11" />
+          <path d="M3 17 Q 10 13 18 16 T 34 14 T 50 16" opacity="0.6"/>
+        </svg>
+
         <!-- Hero copy -->
         <header class="mb-10">
           <h1 class="marker text-4xl sm:text-5xl leading-tight" style="color: var(--ink-graphite-700);">
@@ -247,6 +349,7 @@
         <!-- Sample song-strip — show what your library will look like in-app -->
         <div class="mb-10 ml-2">
           <div class="song-strip data" style="background: var(--als-9);">
+            <div class="strip-grain" aria-hidden="true"></div>
             <div class="washi-tape" aria-hidden="true"></div>
             <div class="flex items-baseline justify-between gap-6">
               <span class="text-lg" style="color: rgba(0,0,0,0.78);">2026-04-Kyoto-trap-sketch.als</span>
