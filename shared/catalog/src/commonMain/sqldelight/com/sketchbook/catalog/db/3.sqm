@@ -6,9 +6,9 @@ CREATE TABLE journal_entries (
   occurred_at  INTEGER NOT NULL,
   actor        TEXT    NOT NULL,
   action_type  TEXT    NOT NULL,
-  -- no FK: audit entries outlive their project; projects.id is AUTOINCREMENT so the int
-  -- never gets reused.
-  project_id   INTEGER,
+  -- NOT NULL but intentionally no FK: audit entries outlive their project; projects.id is
+  -- AUTOINCREMENT so the int never gets reused, so a stale project_id stays meaningful.
+  project_id   INTEGER NOT NULL,
   payload_json TEXT    NOT NULL DEFAULT '{}'
 );
 CREATE INDEX journal_entries_project_idx ON journal_entries(project_id, occurred_at DESC);

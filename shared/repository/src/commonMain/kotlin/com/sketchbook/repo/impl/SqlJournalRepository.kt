@@ -20,8 +20,10 @@ import kotlin.time.Instant
 /**
  * SQLDelight-backed [JournalRepository] persisting into the `journal_entries` table from
  * migration 3.sqm. Each [ActionRecord] variant is serialized via kotlinx.serialization into the
- * `payload_json` column with the variant's `simpleName` written to `action_type`, so the column
- * is human-readable and SQL filters (`action_type = 'Move'`) work without parsing JSON.
+ * `payload_json` column with the variant's [ActionRecord.typeKey] written to `action_type`, so
+ * the column is human-readable and SQL filters (`action_type = 'Move'`) work without parsing
+ * JSON. The keys are stable strings declared on the sealed hierarchy itself — see the contract
+ * doc on [ActionRecord] — so they survive R8/ProGuard renames if those ever land.
  *
  * Mirrors [SqlProjectRepository]'s style: constructor-injected [Catalog], `withContext(ioDispatcher)`
  * around blocking JDBC calls, and `transactionWithResult { }` so the insert + the
@@ -46,7 +48,7 @@ class SqlJournalRepository(
                     catalog.catalogQueries.insertJournalEntry(
                         occurred_at = entry.timestamp.toEpochMilliseconds(),
                         actor = entry.actor,
-                        action_type = entry.action::class.simpleName!!,
+                        action_type = entry.action.typeKey,
                         project_id = entry.projectId.value,
                         payload_json = json.encodeToString(
                             ActionRecordSerializer,
@@ -83,7 +85,7 @@ class SqlJournalRepository(
 
     private fun toDomain(row: Journal_entries): JournalEntry = JournalEntry(
         timestamp = Instant.fromEpochMilliseconds(row.occurred_at),
-        projectId = ProjectId(row.project_id ?: 0L),
+        projectId = ProjectId(row.project_id),
         action = json.decodeFromString(ActionRecordSerializer, row.payload_json),
         sequence = row.id,
         actor = row.actor,

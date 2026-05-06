@@ -469,9 +469,9 @@ CREATE TABLE journal_entries (
   occurred_at  INTEGER NOT NULL,
   actor        TEXT    NOT NULL,
   action_type  TEXT    NOT NULL,
-  -- no FK: audit entries outlive their project; projects.id is AUTOINCREMENT so the int
-  -- never gets reused.
-  project_id   INTEGER,
+  -- NOT NULL but intentionally no FK: audit entries outlive their project; projects.id is
+  -- AUTOINCREMENT so the int never gets reused, so a stale project_id stays meaningful.
+  project_id   INTEGER NOT NULL,
   payload_json TEXT    NOT NULL DEFAULT '{}'
 );
 CREATE INDEX journal_entries_project_idx ON journal_entries(project_id, occurred_at DESC);
@@ -481,12 +481,14 @@ insertJournalEntry:
 INSERT INTO journal_entries(occurred_at, actor, action_type, project_id, payload_json)
 VALUES (:occurred_at, :actor, :action_type, :project_id, :payload_json);
 
+-- ORDER BY (occurred_at, id) DESC — id is the secondary key so events that land in the same
+-- millisecond still come back in insertion order. undoLast() relies on this for determinism.
 selectJournalRecent:
-SELECT * FROM journal_entries ORDER BY occurred_at DESC LIMIT :limit_;
+SELECT * FROM journal_entries ORDER BY occurred_at DESC, id DESC LIMIT :limit_;
 
 selectJournalForProject:
 SELECT * FROM journal_entries WHERE project_id = :project_id
-ORDER BY occurred_at DESC LIMIT :limit_;
+ORDER BY occurred_at DESC, id DESC LIMIT :limit_;
 
 countJournalEntries:
 SELECT COUNT(*) FROM journal_entries;

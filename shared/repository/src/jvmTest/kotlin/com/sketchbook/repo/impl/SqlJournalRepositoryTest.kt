@@ -13,6 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
@@ -130,6 +131,45 @@ class SqlJournalRepositoryTest {
             assertEquals(variants, roundTripped)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun actionTypeColumnUsesStableTypeKeyNotClassName() = runTest {
+        // Asserts that what lands in `action_type` is the variant's declared `typeKey`, not
+        // ::class.simpleName. Lock both halves: the read-back through the repo (typeKey-driven
+        // deserialization) and the raw column value (so an SQL filter `WHERE action_type =
+        // 'Move'` keeps working under future R8/ProGuard renames).
+        val (catalog, repo) = setup()
+        repo.append(entry(offsetMs = 0L, projectId = 1L, action = ActionRecord.Move("/a", "/b")))
+        repo.append(entry(offsetMs = 1L, projectId = 1L, action = ActionRecord.SetTags(emptyList(), listOf("wip"))))
+
+        val rawTypes = catalog.catalogQueries.selectJournalRecent(10L).executeAsList()
+            .map { it.action_type }
+        // Newest first.
+        assertEquals(listOf("SetTags", "Move"), rawTypes)
+    }
+
+    @Test
+    fun selectJournalRecentIsDeterministicWhenTimestampsCollide() = runTest {
+        // Two entries in the same millisecond: the secondary `id DESC` sort key in
+        // `selectJournalRecent` is what makes `undoLast` always pop the most-recently-inserted
+        // row, not whichever the storage engine happened to lay down first.
+        val (catalog, repo) = setup()
+        val collidedMs = 0L
+        repo.append(entry(offsetMs = collidedMs, projectId = 1L, action = ActionRecord.Rename("a", "b")))
+        repo.append(entry(offsetMs = collidedMs, projectId = 2L, action = ActionRecord.Rename("c", "d")))
+        repo.append(entry(offsetMs = collidedMs, projectId = 3L, action = ActionRecord.Rename("e", "f")))
+
+        // All three share the same occurred_at; expect newest insertion (project 3) at head.
+        val rows = catalog.catalogQueries.selectJournalRecent(10L).executeAsList()
+        assertEquals(3, rows.size)
+        assertEquals(3L, rows[0].project_id)
+        assertEquals(2L, rows[1].project_id)
+        assertEquals(1L, rows[2].project_id)
+
+        // undoLast reads the same head, so it pops project 3.
+        val popped = repo.undoLast().getOrThrow()
+        assertEquals(ProjectId(3L), popped.projectId)
     }
 
     @Test
