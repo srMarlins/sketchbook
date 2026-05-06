@@ -36,6 +36,7 @@ class NeedsAttentionStateHolderTest {
         val flow = MutableStateFlow(initial)
         var ackedProjectId: ProjectId? = null
         var dismissedKey: Pair<ProjectId, String>? = null
+        var appliedMatch: Triple<ProjectId, String, String>? = null
         override fun observeFindings(projectId: ProjectId?, limit: Int): Flow<RepairFindings> = flow
         override suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit> {
             ackedProjectId = projectId
@@ -43,6 +44,14 @@ class NeedsAttentionStateHolderTest {
         }
         override suspend fun dismissMissingSample(projectId: ProjectId, missingPath: String): Result<Unit> {
             dismissedKey = projectId to missingPath
+            return Result.success(Unit)
+        }
+        override suspend fun applyMissingSampleMatch(
+            projectId: ProjectId,
+            missingPath: String,
+            candidatePath: String,
+        ): Result<Unit> {
+            appliedMatch = Triple(projectId, missingPath, candidatePath)
             return Result.success(Unit)
         }
     }
@@ -77,6 +86,25 @@ class NeedsAttentionStateHolderTest {
             assertTrue(effect is NeedsAttentionStateHolder.Effect.Acknowledged)
             assertEquals("ack", effect.kind)
             assertEquals(macFinding.projectId, repo.ackedProjectId)
+        }
+    }
+
+    @Test
+    fun applyMatchIntentRoutesToRepoAndEmitsEffect() = runTest {
+        val repo = FakeRepo(RepairFindings(emptyList(), listOf(missingFinding), 1, false))
+        val holder = NeedsAttentionStateHolder(repo, backgroundScope)
+        holder.effects.test {
+            holder.dispatch(NeedsAttentionStateHolder.Intent.ApplyMatch(
+                projectId = missingFinding.projectId,
+                missingPath = missingFinding.missingPath,
+                candidatePath = "/Volumes/Library/Samples/k.wav",
+            ))
+            val effect = awaitItem()
+            assertTrue(effect is NeedsAttentionStateHolder.Effect.MatchApplied)
+            assertEquals(
+                Triple(missingFinding.projectId, missingFinding.missingPath, "/Volumes/Library/Samples/k.wav"),
+                repo.appliedMatch,
+            )
         }
     }
 

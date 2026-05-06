@@ -12,10 +12,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
+import com.sketchbook.repo.SampleCandidate
 import com.sketchbook.uishared.components.Badge
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
@@ -99,23 +103,63 @@ private fun MacImportCard(f: MacImportFinding, holder: NeedsAttentionStateHolder
 
 @Composable
 private fun MissingSampleCard(f: MissingSampleFinding, holder: NeedsAttentionStateHolder) {
+    // Local expand toggle for the "N possible matches" affordance — kept inline (per
+    // feedback_layer_dont_redesign) rather than spawning a modal/picker.
+    var picking by remember(f.projectId.value, f.missingPath) { mutableStateOf(false) }
     Surface(color = AppTheme.colors.surfacePanel) {
         Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
             Text(f.projectName, style = AppTheme.typography.bodyEmphasis)
             Text(f.missingPath, style = AppTheme.typography.mono)
+            // High-confidence: filename+size matches a single sample. Inline chip + Apply.
             f.autoMatch?.let { match ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+                ) {
                     Badge(color = AppTheme.colors.pinGreen) {
                         Text("auto-match", style = AppTheme.typography.caption)
                     }
-                    Text(match.path, style = AppTheme.typography.caption)
+                    Text(
+                        match.path,
+                        style = AppTheme.typography.caption,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Button(
+                        onClick = {
+                            holder.dispatch(
+                                NeedsAttentionStateHolder.Intent.ApplyMatch(
+                                    projectId = f.projectId,
+                                    missingPath = f.missingPath,
+                                    candidatePath = match.path,
+                                ),
+                            )
+                        },
+                        variant = ButtonVariant.Ghost,
+                    ) { Text("Apply") }
                 }
             }
-            if (f.candidates.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)) {
-                    Text("${f.candidates.size} candidates", style = AppTheme.typography.caption)
-                    f.candidates.take(3).forEach { c ->
-                        Text("• ${c.path}", style = AppTheme.typography.caption)
+            // Low-confidence: candidates without an auto-match. Show a count + an inline expand
+            // affordance to pick one. We don't auto-apply because filename collisions are common
+            // in sample libraries (ten different "kick.wav"s).
+            if (f.autoMatch == null && f.candidates.isNotEmpty()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+                ) {
+                    Text(
+                        "${f.candidates.size} possible match${if (f.candidates.size == 1) "" else "es"}",
+                        style = AppTheme.typography.caption,
+                    )
+                    Button(
+                        onClick = { picking = !picking },
+                        variant = ButtonVariant.Ghost,
+                    ) { Text(if (picking) "Hide" else "Show") }
+                }
+                if (picking) {
+                    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)) {
+                        f.candidates.take(5).forEach { c ->
+                            CandidatePickRow(f, c, holder)
+                        }
                     }
                 }
             }
@@ -130,5 +174,36 @@ private fun MissingSampleCard(f: MissingSampleFinding, holder: NeedsAttentionSta
                 ) { Text("Dismiss") }
             }
         }
+    }
+}
+
+@Composable
+private fun CandidatePickRow(
+    finding: MissingSampleFinding,
+    candidate: SampleCandidate,
+    holder: NeedsAttentionStateHolder,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+    ) {
+        Text(
+            "• ${candidate.path}",
+            style = AppTheme.typography.caption,
+            modifier = Modifier.weight(1f),
+        )
+        Button(
+            onClick = {
+                holder.dispatch(
+                    NeedsAttentionStateHolder.Intent.ApplyMatch(
+                        projectId = finding.projectId,
+                        missingPath = finding.missingPath,
+                        candidatePath = candidate.path,
+                    ),
+                )
+            },
+            variant = ButtonVariant.Ghost,
+        ) { Text("Pick") }
     }
 }

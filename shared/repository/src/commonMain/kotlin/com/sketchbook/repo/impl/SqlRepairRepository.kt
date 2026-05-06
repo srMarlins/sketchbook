@@ -8,6 +8,7 @@ import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.RepairFindings
 import com.sketchbook.repo.RepairRepository
+import com.sketchbook.repo.SampleCandidate
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,9 +32,11 @@ import kotlin.time.Clock
  *    count query — `selectMissingSamples` caps at `limit` and `countMissingSamples` is a
  *    separate aggregate.
  *
- * Auto-match suggestions for missing samples (the [MissingSampleFinding.autoMatch] /
- * `candidates` fields) are not yet computed here — they need a `samples` corpus query that
- * walks user library roots, which the v1 scanner doesn't populate. PR-C.2 will wire that.
+ *  - **Auto-match candidates** for missing-sample findings, derived from the `samples` corpus
+ *    populated by `JvmSampleScanner` over `LibraryRoot.UserSamples` roots. Filename+size is the
+ *    high-confidence path; an exact-1 hit there flips on `autoMatch` and the UI offers a
+ *    one-click apply. Filename-only is the fallback (multiple "kick.wav" files are common in
+ *    sample libraries — we surface them as `candidates` but never auto-pick).
  */
 class SqlRepairRepository(
     private val catalog: Catalog,
@@ -69,13 +72,35 @@ class SqlRepairRepository(
                     projectInfoMissing = (row.has_project_info ?: 1L) == 0L,
                 )
             }
-            val missingFindings = miss.map { row ->
-                MissingSampleFinding(
-                    projectId = ProjectId(row.project_id),
-                    projectPath = row.project_path,
-                    projectName = row.project_name,
-                    missingPath = row.sample_path,
-                )
+            val missingFindings = withContext(ioDispatcher) {
+                miss.map { row ->
+                    val filename = row.sample_path
+                        .substringAfterLast('/')
+                        .substringAfterLast('\\')
+                    val sized = row.sample_size?.takeIf { it > 0 }?.let { size ->
+                        catalog.catalogQueries
+                            .selectSamplesByFilenameAndSize(filename = filename, size_bytes = size)
+                            .executeAsList()
+                    } ?: emptyList()
+                    val raw = if (sized.isNotEmpty()) sized
+                    else catalog.catalogQueries.selectSamplesByFilename(filename).executeAsList()
+                    val candidates = raw.take(5).map {
+                        SampleCandidate(path = it.path, filename = it.filename, sizeBytes = it.size_bytes)
+                    }
+                    // Only flip on the auto-match chip when the corpus uniquely identifies a
+                    // file by filename+size — multiple matches are too ambiguous to auto-apply.
+                    // (The user can still expand the candidates list and pick one manually.)
+                    val autoMatch = candidates.firstOrNull()
+                        ?.takeIf { sized.isNotEmpty() && raw.size == 1 }
+                    MissingSampleFinding(
+                        projectId = ProjectId(row.project_id),
+                        projectPath = row.project_path,
+                        projectName = row.project_name,
+                        missingPath = row.sample_path,
+                        autoMatch = autoMatch,
+                        candidates = candidates,
+                    )
+                }
             }
             val total = withContext(ioDispatcher) {
                 catalog.catalogQueries.countMissingSamples().executeAsOne().toInt()
@@ -117,6 +142,27 @@ class SqlRepairRepository(
                     acked_at = Clock.System.now().toString(),
                 )
             }
+            ackTick.value = ackTick.value + 1
+        }
+    }
+
+    override suspend fun applyMissingSampleMatch(
+        projectId: ProjectId,
+        missingPath: String,
+        candidatePath: String,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            catalog.transaction {
+                catalog.catalogQueries.applyMissingSampleMatch(
+                    new_path = candidatePath,
+                    project_id = projectId.value,
+                    old_path = missingPath,
+                )
+            }
+            // Re-emit findings so the row drops out of Needs Attention immediately. The
+            // underlying SQLDelight Flow does observe project_samples writes, but bouncing the
+            // tick here keeps the timing tight (no relying on whether the asFlow() observer has
+            // landed yet).
             ackTick.value = ackTick.value + 1
         }
     }

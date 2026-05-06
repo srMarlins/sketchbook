@@ -21,6 +21,19 @@ interface RepairRepository {
 
     /** Drop a missing-sample finding from the queue without changing on-disk state. */
     suspend fun dismissMissingSample(projectId: ProjectId, missingPath: String): Result<Unit>
+
+    /**
+     * Map a missing sample to a candidate the user picked. The .als isn't rewritten here — the
+     * catalog records the decision (`project_samples.sample_path` is rewritten and `is_missing`
+     * flips to 0) so a future "rewrite .als" pass can act on the ledger. From the user's POV
+     * the row drops out of Needs Attention; the next project parse will see the new path on
+     * disk.
+     */
+    suspend fun applyMissingSampleMatch(
+        projectId: ProjectId,
+        missingPath: String,
+        candidatePath: String,
+    ): Result<Unit>
 }
 
 data class RepairFindings(
