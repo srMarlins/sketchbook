@@ -1,9 +1,11 @@
 package com.sketchbook.featurejournal
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
@@ -15,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import com.sketchbook.featurejournal.format.JournalLabel
 import com.sketchbook.featurejournal.format.journalLabel
@@ -164,7 +165,7 @@ private fun DayGroupCard(
         actions = {
             if (showBulkUndo) {
                 Button(onClick = onBulkUndo, variant = ButtonVariant.Secondary) {
-                    Text("Undo $bulkUndoCount")
+                    Text("Undo $bulkUndoCount", softWrap = false, maxLines = 1)
                 }
             }
         },
@@ -225,14 +226,22 @@ private fun JournalRowItem(
                 Text(data.projectName, style = AppTheme.typography.caption, maxLines = 1)
             }
         }
-        ProvideContentColor(AppTheme.colors.inkPrimary) {
-            Text(
-                label.target.ifEmpty { "—" },
-                style = AppTheme.typography.bodyEmphasis,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+        if (label.target.isNotEmpty()) {
+            ProvideContentColor(AppTheme.colors.inkPrimary) {
+                Text(
+                    label.target,
+                    style = AppTheme.typography.bodyEmphasis,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        } else {
+            // Archive/Unarchive rows have no separate target — the project chip already says
+            // which project; no need for a "—" placeholder. Spacer keeps the trailing time +
+            // undo aligned to the right edge.
+            Spacer(modifier = Modifier.weight(1f))
         }
         if (label.detail != null) {
             ProvideContentColor(AppTheme.colors.inkMuted) {
@@ -243,21 +252,26 @@ private fun JournalRowItem(
             Text(data.time, style = AppTheme.typography.caption, maxLines = 1)
         }
         if (data.isInvertible) {
-            IconAction(glyph = "↩", color = AppTheme.colors.accentAction) { onUndo(entry) }
+            UndoButton(onClick = { onUndo(entry) })
         }
     }
 }
 
+/**
+ * Inline undo affordance — a tinted pill so the action is visible at row scan rather than
+ * disappearing into the muted-glyph noise. Matches the proposals queue's ✓/✗ density.
+ */
 @Composable
-private fun IconAction(glyph: String, color: Color, onClick: () -> Unit) {
+private fun UndoButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
+            .background(AppTheme.colors.tintCream)
             .clickable(onClick = onClick)
             .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
     ) {
-        ProvideContentColor(color) {
-            Text(glyph, style = AppTheme.typography.bodyEmphasis)
+        ProvideContentColor(AppTheme.colors.accentAction) {
+            Text("↶ Undo", style = AppTheme.typography.caption)
         }
     }
 }

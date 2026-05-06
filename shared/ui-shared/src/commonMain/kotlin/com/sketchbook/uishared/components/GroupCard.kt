@@ -64,11 +64,11 @@ fun GroupCard(
                     Text(if (expanded) "▾" else "▸", style = AppTheme.typography.mono)
                 }
                 ProvideContentColor(AppTheme.colors.inkPrimary) {
-                    Text(title, style = AppTheme.typography.bodyEmphasis)
+                    Text(title, style = AppTheme.typography.bodyEmphasis, softWrap = false, maxLines = 1)
                 }
                 Badge(color = AppTheme.colors.surfaceCard) {
                     ProvideContentColor(AppTheme.colors.inkSecondary) {
-                        Text(count.toString(), style = AppTheme.typography.caption)
+                        Text(count.toString(), style = AppTheme.typography.caption, softWrap = false, maxLines = 1)
                     }
                 }
                 Row(
@@ -112,10 +112,10 @@ fun SubGroupHeader(
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
         ProvideContentColor(AppTheme.colors.inkPrimary) {
-            Text(title.uppercase(), style = AppTheme.typography.caption)
+            Text(title.uppercase(), style = AppTheme.typography.caption, softWrap = false, maxLines = 1)
         }
         ProvideContentColor(AppTheme.colors.inkMuted) {
-            Text("· $count", style = AppTheme.typography.caption)
+            Text("· $count", style = AppTheme.typography.caption, softWrap = false, maxLines = 1)
         }
         Row(
             modifier = Modifier.weight(1f),

@@ -3,9 +3,11 @@ package com.sketchbook.uishared.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,8 +37,10 @@ fun <T> FilterChipRow(
     onSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Horizontal scroll so chip rows never wrap into a second line and chip labels never break
+    // mid-word when the parent column squeezes (the inbox columns can shrink to ~250dp).
     Row(
-        modifier = modifier,
+        modifier = modifier.horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -56,9 +60,9 @@ fun <T> FilterChipRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ProvideContentColor(fg) {
-                    Text(opt.label, style = AppTheme.typography.body)
+                    Text(opt.label, style = AppTheme.typography.body, softWrap = false, maxLines = 1)
                     if (opt.count != null) {
-                        Text("(${opt.count})", style = AppTheme.typography.caption)
+                        Text("(${opt.count})", style = AppTheme.typography.caption, softWrap = false, maxLines = 1)
                     }
                 }
             }

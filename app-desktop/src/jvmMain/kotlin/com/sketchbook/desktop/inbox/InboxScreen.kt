@@ -4,8 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -25,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.featurejournal.JournalDetailPane
@@ -49,17 +49,13 @@ import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
 
 /**
- * Unified Inbox surface — all three queues visible at once. Vertical layout: each expanded
- * section takes equal share of the available height (`weight(1f)`) with its own internal
- * scroll, so the user sees Proposals, Needs Attention, and Journal simultaneously without
- * digging. Collapsed sections shrink to just their header bar; the freed vertical space
- * redistributes to the remaining expanded sections.
+ * Unified Inbox surface — three columns side-by-side, each with its own scroll. The columns are:
+ *  - **Suggested** — AI/code-proposed actions awaiting approve/reject (proposals queue).
+ *  - **Issues** — auto-detected problems (Mac-imported projects, missing samples) awaiting repair.
+ *  - **History** — chronological log of completed actions, with single + bulk undo.
  *
- * Each section's header always shows title + count + collapse toggle, so even when collapsed
- * the user sees what's in each queue at a glance.
- *
- * `initialTab` deep-links from File-menu / external nav: that tab is forced expanded on entry,
- * other tabs keep their default state.
+ * Suggested vs Issues stay separate because the user's mental model differs: "should this happen?"
+ * (decide) vs "how do I unbreak this?" (fix). Inline affordances also differ (✓/✗ vs ↻ Repair).
  */
 @Composable
 fun InboxScreen(
@@ -148,123 +144,259 @@ fun InboxScreen(
         attentionState.missingByConfidence.noCandidate.size
     val journalCount = journalState.rows.size
 
-    Row(modifier = modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(AppTheme.colors.surfacePage)
-                .padding(PaddingValues(AppTheme.spacing.md)),
-            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-        ) {
-            PageHeader(title = "Inbox")
-            Row(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        // Above WIDE_THRESHOLD we have room for 3 columns + a docked detail pane side-by-side.
+        // Below it (or whenever the detail pane wouldn't leave columns at least 600dp), the
+        // detail pane covers the columns area as a right-anchored sheet with a tap-to-dismiss
+        // scrim — keeping all three columns reachable as soon as the user closes the detail.
+        val totalWidth = maxWidth
+        val canDockDetail = totalWidth >= WIDE_THRESHOLD
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(AppTheme.colors.surfacePage)
+                    .padding(PaddingValues(AppTheme.spacing.md)),
+                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
             ) {
-                Column(
-                    modifier = Modifier.fillMaxHeight().weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+                PageHeader(title = "Inbox")
+                Row(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
                 ) {
-                    ColumnHeader(title = "Proposals", count = pendingProposals)
-                    ProposalsFilterBar(
+                    SuggestedColumn(
+                        modifier = Modifier.fillMaxHeight().weight(1f),
                         state = proposalsState,
+                        groupExpanded = proposalGroupExpanded,
+                        resolvedExpanded = resolvedExpanded,
+                        onResolvedToggle = onResolvedToggle,
+                        vm = proposalsVm,
+                        onOpen = onOpenProposal,
+                        onApprove = onApprove,
+                        onReject = onReject,
                         onSourceFilter = onSourceFilter,
                         onSearch = onProposalsSearch,
+                        count = pendingProposals,
                     )
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-                    ) {
-                        proposalsItems(
-                            state = proposalsState,
-                            groupExpanded = proposalGroupExpanded,
-                            resolvedExpanded = resolvedExpanded,
-                            onResolvedToggle = onResolvedToggle,
-                            vm = proposalsVm,
-                            onOpen = onOpenProposal,
-                            onApprove = onApprove,
-                            onReject = onReject,
-                        )
-                    }
-                }
-                Column(
-                    modifier = Modifier.fillMaxHeight().weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-                ) {
-                    ColumnHeader(title = "Needs Attention", count = pendingAttention)
-                    NeedsAttentionFilterBar(
+                    IssuesColumn(
+                        modifier = Modifier.fillMaxHeight().weight(1f),
                         state = attentionState,
+                        cardExpanded = attentionCardExpanded,
+                        onOpen = onOpenAttention,
+                        onRepair = onRepair,
+                        onBulkRepair = onBulkRepair,
+                        onBulkApply = onBulkApply,
+                        onBulkDismiss = onBulkDismiss,
                         onSearch = onAttentionSearch,
+                        count = pendingAttention,
                     )
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-                    ) {
-                        needsAttentionItems(
-                            state = attentionState,
-                            cardExpanded = attentionCardExpanded,
-                            onOpen = onOpenAttention,
-                            onRepair = onRepair,
-                            onBulkRepair = onBulkRepair,
-                            onBulkApply = onBulkApply,
-                            onBulkDismiss = onBulkDismiss,
-                        )
-                    }
-                }
-                Column(
-                    modifier = Modifier.fillMaxHeight().weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-                ) {
-                    ColumnHeader(title = "Journal", count = journalCount)
-                    JournalFilterBar(
+                    HistoryColumn(
+                        modifier = Modifier.fillMaxHeight().weight(1f),
                         state = journalState,
+                        dayExpanded = journalDayExpanded,
+                        onOpen = onOpenJournal,
+                        onUndo = onUndoOne,
+                        onBulkUndo = onBulkUndo,
                         onSearch = onJournalSearch,
                         onActionFilter = onActionFilter,
                         onDateRange = onDateRange,
+                        count = journalCount,
                     )
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-                    ) {
-                        journalItems(
-                            state = journalState,
-                            dayExpanded = journalDayExpanded,
-                            onOpen = onOpenJournal,
-                            onUndo = onUndoOne,
-                            onBulkUndo = onBulkUndo,
-                        )
-                    }
                 }
             }
+            val d = detail
+            if (d != null && canDockDetail) {
+                DetailPaneSwitch(
+                    detail = d,
+                    proposalsVm = proposalsVm,
+                    needsAttentionVm = needsAttentionVm,
+                    journalVm = journalVm,
+                    onDismiss = dismissDetail,
+                )
+            }
         }
-        when (val d = detail) {
-            is InboxDetailTarget.Proposal -> ProposalDetailPane(
-                proposalId = d.proposalId,
-                vm = proposalsVm,
-                onDismiss = dismissDetail,
+        val d = detail
+        if (d != null && !canDockDetail) {
+            // Scrim catches taps outside the sheet to dismiss — same gesture as the ✕ button.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.32f))
+                    .clickable(onClick = dismissDetail),
             )
-            is InboxDetailTarget.Attention -> NeedsAttentionDetailPane(
-                target = d.target,
-                vm = needsAttentionVm,
-                onDismiss = dismissDetail,
-            )
-            is InboxDetailTarget.JournalEntry -> JournalDetailPane(
-                entry = d.entry,
-                projectName = d.projectName,
-                vm = journalVm,
-                onDismiss = dismissDetail,
-            )
-            null -> Unit
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f)) // empty space catches the scrim taps
+                DetailPaneSwitch(
+                    detail = d,
+                    proposalsVm = proposalsVm,
+                    needsAttentionVm = needsAttentionVm,
+                    journalVm = journalVm,
+                    onDismiss = dismissDetail,
+                )
+            }
         }
     }
 }
 
 /**
- * Per-column header — sits above each queue with the queue title and a count badge. No
- * collapse toggle in this layout: with three side-by-side columns, "collapse" doesn't free
- * useful real estate (the column would just go to 0 width). User scrolls within each column
- * to see all rows.
+ * Dispatch a [InboxDetailTarget] to the right per-feature pane. Extracted so the docked and
+ * overlay placements share a single rendering site.
+ */
+@Composable
+private fun DetailPaneSwitch(
+    detail: InboxDetailTarget,
+    proposalsVm: ProposalsViewModel,
+    needsAttentionVm: NeedsAttentionViewModel,
+    journalVm: JournalViewModel,
+    onDismiss: () -> Unit,
+) {
+    when (detail) {
+        is InboxDetailTarget.Proposal -> ProposalDetailPane(
+            proposalId = detail.proposalId,
+            vm = proposalsVm,
+            onDismiss = onDismiss,
+        )
+        is InboxDetailTarget.Attention -> NeedsAttentionDetailPane(
+            target = detail.target,
+            vm = needsAttentionVm,
+            onDismiss = onDismiss,
+        )
+        is InboxDetailTarget.JournalEntry -> JournalDetailPane(
+            entry = detail.entry,
+            projectName = detail.projectName,
+            vm = journalVm,
+            onDismiss = onDismiss,
+        )
+    }
+}
+
+/**
+ * Width threshold for docking the detail pane next to the columns. Chosen so each column gets
+ * at least ~200dp after the detail pane's max width (420dp) is subtracted: 3*200 + 420 ≈ 1020.
+ * Below this the detail pane overlays the columns instead of squishing them.
+ */
+private val WIDE_THRESHOLD = 1080.dp
+
+@Composable
+private fun SuggestedColumn(
+    modifier: Modifier,
+    state: ProposalsViewModel.State,
+    groupExpanded: SnapshotStateMap<ProposalsViewModel.ProposalCategory, Boolean>,
+    resolvedExpanded: Boolean,
+    onResolvedToggle: () -> Unit,
+    vm: ProposalsViewModel,
+    onOpen: (String) -> Unit,
+    onApprove: (String) -> Unit,
+    onReject: (String) -> Unit,
+    onSourceFilter: (ProposalsViewModel.SourceFilter) -> Unit,
+    onSearch: (String) -> Unit,
+    count: Int,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+    ) {
+        ColumnHeader(title = "Suggested", count = count)
+        ProposalsFilterBar(state = state, onSourceFilter = onSourceFilter, onSearch = onSearch)
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+        ) {
+            proposalsItems(
+                state = state,
+                groupExpanded = groupExpanded,
+                resolvedExpanded = resolvedExpanded,
+                onResolvedToggle = onResolvedToggle,
+                vm = vm,
+                onOpen = onOpen,
+                onApprove = onApprove,
+                onReject = onReject,
+            )
+        }
+    }
+}
+
+@Composable
+private fun IssuesColumn(
+    modifier: Modifier,
+    state: NeedsAttentionViewModel.State,
+    cardExpanded: SnapshotStateMap<String, Boolean>,
+    onOpen: (NeedsAttentionDetailTarget) -> Unit,
+    onRepair: (com.sketchbook.core.ProjectId) -> Unit,
+    onBulkRepair: () -> Unit,
+    onBulkApply: (List<MissingSampleFinding>) -> Unit,
+    onBulkDismiss: (List<MissingSampleFinding>) -> Unit,
+    onSearch: (String) -> Unit,
+    count: Int,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+    ) {
+        ColumnHeader(title = "Issues", count = count)
+        NeedsAttentionFilterBar(state = state, onSearch = onSearch)
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+        ) {
+            needsAttentionItems(
+                state = state,
+                cardExpanded = cardExpanded,
+                onOpen = onOpen,
+                onRepair = onRepair,
+                onBulkRepair = onBulkRepair,
+                onBulkApply = onBulkApply,
+                onBulkDismiss = onBulkDismiss,
+            )
+        }
+    }
+}
+
+@Composable
+private fun HistoryColumn(
+    modifier: Modifier,
+    state: JournalViewModel.State,
+    dayExpanded: SnapshotStateMap<String, Boolean>,
+    onOpen: (JournalEntry, String) -> Unit,
+    onUndo: (JournalEntry) -> Unit,
+    onBulkUndo: () -> Unit,
+    onSearch: (String) -> Unit,
+    onActionFilter: (JournalViewModel.ActionTypeFilter) -> Unit,
+    onDateRange: (JournalViewModel.DateRange) -> Unit,
+    count: Int,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+    ) {
+        ColumnHeader(title = "History", count = count)
+        JournalFilterBar(
+            state = state,
+            onSearch = onSearch,
+            onActionFilter = onActionFilter,
+            onDateRange = onDateRange,
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+        ) {
+            journalItems(
+                state = state,
+                dayExpanded = dayExpanded,
+                onOpen = onOpen,
+                onUndo = onUndo,
+                onBulkUndo = onBulkUndo,
+            )
+        }
+    }
+}
+
+/**
+ * Per-column header — queue title + count badge. No collapse toggle: in 3-up mode collapsing
+ * doesn't free useful real estate, and in horizontal-scroll mode the user already needs to
+ * scroll, so collapsing would be one more axis of state to manage for no win.
  */
 @Composable
 private fun ColumnHeader(title: String, count: Int) {

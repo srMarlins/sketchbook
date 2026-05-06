@@ -27,7 +27,7 @@ fun VerbPill(verb: String, tint: VerbTint) {
     }
     Badge(color = bg) {
         ProvideContentColor(AppTheme.colors.inkPrimary) {
-            Text(verb.uppercase(), style = AppTheme.typography.caption)
+            Text(verb.uppercase(), style = AppTheme.typography.caption, softWrap = false, maxLines = 1)
         }
     }
 }

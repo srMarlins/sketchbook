@@ -30,8 +30,6 @@ import com.sketchbook.uishared.components.GroupRow
 import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.SubGroupHeader
 import com.sketchbook.uishared.components.Text
-import com.sketchbook.uishared.components.VerbPill
-import com.sketchbook.uishared.components.VerbTint
 import com.sketchbook.uishared.theme.AppTheme
 
 /**
@@ -138,7 +136,9 @@ private fun MacImportCard(
         expanded = expanded,
         onToggle = onToggle,
         actions = {
-            Button(onClick = onBulkRepair, variant = ButtonVariant.Primary) { Text("Repair all") }
+            Button(onClick = onBulkRepair, variant = ButtonVariant.Primary) {
+                Text("Repair all", softWrap = false, maxLines = 1)
+            }
         },
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -208,11 +208,11 @@ private fun MissingSamplesCard(
                                 MissingKind.Auto -> Button(
                                     onClick = { onBulkApply(findings) },
                                     variant = ButtonVariant.Primary,
-                                ) { Text("Apply ${section.entries.size}") }
+                                ) { Text("Apply ${section.entries.size}", softWrap = false, maxLines = 1) }
                                 MissingKind.None -> Button(
                                     onClick = { onBulkDismiss(findings) },
                                     variant = ButtonVariant.Ghost,
-                                ) { Text("Dismiss ${section.entries.size}") }
+                                ) { Text("Dismiss ${section.entries.size}", softWrap = false, maxLines = 1) }
                                 MissingKind.Multi -> Unit
                             }
                         },
@@ -275,8 +275,9 @@ private fun MacImportRow(
     onRepair: () -> Unit,
 ) {
     if (isProjectBoundary) Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
+    // Verb pill suppressed — the card title ("Mac-imported") already conveys the action class.
+    // Trailing chevron suppressed — there's no detail pane to drill into in the column layout.
     GroupRow(onClick = { if (!isPending) onOpen() }, last = isLast) {
-        VerbPill("Repair", VerbTint.Repair)
         ProvideContentColor(if (isPending) AppTheme.colors.inkMuted else AppTheme.colors.inkPrimary) {
             Text(
                 name,
@@ -302,9 +303,6 @@ private fun MacImportRow(
             }
             IconAction(glyph = "↻", color = AppTheme.colors.accentAction, onClick = onRepair)
         }
-        ProvideContentColor(AppTheme.colors.inkFaint) {
-            Text("›", style = AppTheme.typography.body)
-        }
     }
 }
 
@@ -321,8 +319,8 @@ private fun MissingSampleRow(
     onOpen: () -> Unit,
 ) {
     if (isProjectBoundary) Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
+    // Verb pill suppressed — "Missing samples" card title already conveys the action class.
     GroupRow(onClick = { if (!isPending) onOpen() }, last = isLast) {
-        VerbPill("Sample", VerbTint.Repair)
         Badge(color = AppTheme.colors.tintCream) {
             ProvideContentColor(AppTheme.colors.inkPrimary) {
                 Text(projectName, style = AppTheme.typography.caption, maxLines = 1)
@@ -363,9 +361,6 @@ private fun MissingSampleRow(
                     Text("no match", style = AppTheme.typography.caption)
                 }
             }
-        }
-        ProvideContentColor(AppTheme.colors.inkFaint) {
-            Text("›", style = AppTheme.typography.body)
         }
     }
 }

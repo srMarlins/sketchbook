@@ -9,7 +9,7 @@ import com.sketchbook.uishared.theme.AppTheme
 
 /**
  * Plain text wrapper. Defaults to `body` typography + `LocalContentColor` so callers don't
- * have to wire color/style every time. Forwards `overflow` / `maxLines` to BasicText.
+ * have to wire color/style every time. Forwards `overflow` / `maxLines` / `softWrap` to BasicText.
  */
 @Composable
 fun Text(
@@ -18,6 +18,7 @@ fun Text(
     style: TextStyle = AppTheme.typography.body,
     overflow: TextOverflow = TextOverflow.Clip,
     maxLines: Int = Int.MAX_VALUE,
+    softWrap: Boolean = true,
 ) {
     val color = LocalContentColor.current
     BasicText(
@@ -26,5 +27,6 @@ fun Text(
         style = style.copy(color = color),
         overflow = overflow,
         maxLines = maxLines,
+        softWrap = softWrap,
     )
 }

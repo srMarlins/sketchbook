@@ -165,11 +165,11 @@ private fun ProposalGroupCard(
             Button(
                 onClick = { vm.dispatch(ProposalsViewModel.Intent.BulkApprove(ids)) },
                 variant = ButtonVariant.Primary,
-            ) { Text("Approve ${group.proposals.size}") }
+            ) { Text("Approve ${group.proposals.size}", softWrap = false, maxLines = 1) }
             Button(
                 onClick = { vm.dispatch(ProposalsViewModel.Intent.BulkReject(ids)) },
                 variant = ButtonVariant.Ghost,
-            ) { Text("Reject") }
+            ) { Text("Reject", softWrap = false, maxLines = 1) }
         },
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -204,7 +204,6 @@ private data class ProposalRowData(
     val target: String,
     val detail: String?,
     val extraActionCount: Int,
-    val actor: String,
     val submittedAt: Instant,
 )
 
@@ -218,7 +217,6 @@ private fun rowDataFor(p: Proposal, names: Map<Long, String>): ProposalRowData {
         target = label?.target.orEmpty().ifEmpty { "(empty)" },
         detail = label?.detail,
         extraActionCount = (p.actions.size - 1).coerceAtLeast(0),
-        actor = p.actor,
         submittedAt = p.submittedAt,
     )
 }
@@ -232,8 +230,9 @@ private fun ProposalListRow(
     onReject: (String) -> Unit,
 ) {
     val id = data.proposalId
+    // Verb pill suppressed — every row in a group has the same verb (group title says "Move (5)").
+    // Actor suppressed — almost always "sketchbook"; the trailing relative time is the useful bit.
     GroupRow(onClick = { onOpen(id) }, last = last) {
-        if (data.verb.isNotEmpty()) VerbPill(data.verb, data.verbTint)
         ProvideContentColor(AppTheme.colors.inkPrimary) {
             Text(
                 data.target,
@@ -254,11 +253,7 @@ private fun ProposalListRow(
             }
         }
         ProvideContentColor(AppTheme.colors.inkMuted) {
-            Text(
-                "${data.actor} · ${relativeTime(data.submittedAt)}",
-                style = AppTheme.typography.caption,
-                maxLines = 1,
-            )
+            Text(relativeTime(data.submittedAt), style = AppTheme.typography.caption, maxLines = 1)
         }
         IconAction(glyph = "✓", color = AppTheme.colors.accentPositive) { onApprove(id) }
         IconAction(glyph = "✗", color = AppTheme.colors.accentDanger) { onReject(id) }
@@ -342,13 +337,22 @@ private fun IconAction(glyph: String, color: Color, onClick: () -> Unit) {
     }
 }
 
+/**
+ * Compact relative-time: `12s`, `5m`, `3h`, `4d`, `2w`, `8mo`, `3y`. Drops the " ago" suffix —
+ * with a column header right above and a list of timestamps below it, the suffix is implied and
+ * just eats horizontal space. Capped at the largest unit so a 9-year-old proposal is `9y`,
+ * not `3287d`.
+ */
 private fun relativeTime(instant: Instant): String {
     val nowMs = Clock.System.now().toEpochMilliseconds()
     val deltaSec = (nowMs - instant.toEpochMilliseconds()) / 1000L
     return when {
-        deltaSec < 60 -> "${deltaSec}s ago"
-        deltaSec < 3600 -> "${deltaSec / 60}m ago"
-        deltaSec < 86_400 -> "${deltaSec / 3600}h ago"
-        else -> "${deltaSec / 86_400}d ago"
+        deltaSec < 60 -> "${deltaSec}s"
+        deltaSec < 3600 -> "${deltaSec / 60}m"
+        deltaSec < 86_400 -> "${deltaSec / 3600}h"
+        deltaSec < 604_800 -> "${deltaSec / 86_400}d"
+        deltaSec < 2_592_000 -> "${deltaSec / 604_800}w"
+        deltaSec < 31_536_000 -> "${deltaSec / 2_592_000}mo"
+        else -> "${deltaSec / 31_536_000}y"
     }
 }
