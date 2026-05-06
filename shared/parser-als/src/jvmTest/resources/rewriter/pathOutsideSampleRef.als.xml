@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="5">
+  <LiveSet>
+    <BrowserSelection>
+      <Path Value="/old/missing.wav"/>
+    </BrowserSelection>
+    <Tracks>
+      <AudioTrack>
+        <SampleRef>
+          <FileRef>
+            <Name Value="kick.wav"/>
+            <Path Value="/old/missing.wav"/>
+            <RelativePath Value="rel/missing.wav"/>
+          </FileRef>
+        </SampleRef>
+      </AudioTrack>
+    </Tracks>
+  </LiveSet>
+</Ableton>

@@ -6,6 +6,7 @@ import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -77,5 +78,37 @@ class AlsRewriterTest {
         val text = ungzipToString(rewritten)
         assertContains(text, """<Path Value="/old/missing.wav"""")
         assertFalse("/anything.wav" in text)
+    }
+
+    @Test
+    fun `rewrites SampleRef RelativePath Value`() {
+        val original = gzipBytesOf("rewriter/oneSampleRef.als.xml")
+        val rewritten = AlsRewriter.rewriteSamplePaths(
+            original,
+            mapping = mapOf("rel/missing.wav" to "rel/found.wav"),
+        )
+        val text = ungzipToString(rewritten)
+        assertContains(text, """<RelativePath Value="rel/found.wav"""")
+        assertFalse("rel/missing.wav" in text)
+    }
+
+    @Test
+    fun `does not rewrite Path Value outside SampleRef subtree`() {
+        val original = gzipBytesOf("rewriter/pathOutsideSampleRef.als.xml")
+        val rewritten = AlsRewriter.rewriteSamplePaths(
+            original,
+            mapping = mapOf("/old/missing.wav" to "/new/found.wav"),
+        )
+        val text = ungzipToString(rewritten)
+        // Inside SampleRef: rewritten.
+        assertContains(text, """<SampleRef>""")
+        // BrowserSelection's Path stayed put.
+        assertContains(text, """<BrowserSelection>""")
+        // Original had 2 occurrences of /old/missing.wav (BrowserSelection + SampleRef);
+        // post-rewrite, exactly 1 should remain (BrowserSelection) and exactly 1 of /new/found.wav.
+        val oldNeedle = "/old/missing.wav"
+        val newNeedle = "/new/found.wav"
+        assertEquals(1, text.windowed(size = oldNeedle.length).count { it == oldNeedle })
+        assertEquals(1, text.windowed(size = newNeedle.length).count { it == newNeedle })
     }
 }

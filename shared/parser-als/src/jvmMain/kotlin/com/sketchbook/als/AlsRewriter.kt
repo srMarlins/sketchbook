@@ -10,6 +10,15 @@ import javax.xml.stream.XMLStreamConstants
 import javax.xml.stream.XMLStreamReader
 import javax.xml.stream.XMLStreamWriter
 
+private val INPUT_FACTORY: XMLInputFactory = XMLInputFactory.newFactory().apply {
+    // Coalesce adjacent text events so we can echo CHARACTERS verbatim.
+    setProperty(XMLInputFactory.IS_COALESCING, true)
+    setProperty(XMLInputFactory.SUPPORT_DTD, false)
+    setProperty("javax.xml.stream.isSupportingExternalEntities", false)
+}
+
+private val OUTPUT_FACTORY: XMLOutputFactory = XMLOutputFactory.newFactory()
+
 /**
  * Pure transform that rewrites `<SampleRef>/<FileRef>/<Path Value="..."/>` (and `RelativePath`)
  * attribute values inside a gzipped `.als` document, preserving everything else byte-for-shape
@@ -35,22 +44,21 @@ object AlsRewriter {
         val outBuf = ByteArrayOutputStream(gzipped.size + 1024)
         GZIPOutputStream(outBuf).use { gzOut ->
             GZIPInputStream(ByteArrayInputStream(gzipped)).use { gzIn ->
-                val factoryIn = XMLInputFactory.newFactory().apply {
-                    // Coalesce adjacent text events so we can echo CHARACTERS verbatim.
-                    setProperty(XMLInputFactory.IS_COALESCING, true)
-                    setProperty(XMLInputFactory.SUPPORT_DTD, false)
-                    setProperty("javax.xml.stream.isSupportingExternalEntities", false)
-                }
-                val factoryOut = XMLOutputFactory.newFactory()
-                val reader = factoryIn.createXMLStreamReader(gzIn, "UTF-8")
-                val writer = factoryOut.createXMLStreamWriter(gzOut, "UTF-8")
+                val reader = INPUT_FACTORY.createXMLStreamReader(gzIn, "UTF-8")
+                val writer = OUTPUT_FACTORY.createXMLStreamWriter(gzOut, "UTF-8")
                 try {
                     identityWithRewrite(reader, writer, mapping)
                     writer.flush()
-                } finally {
-                    writer.close()
-                    reader.close()
+                } catch (t: Throwable) {
+                    // On failure: do NOT flush partial output. Close reader/writer best-effort
+                    // (any close() exceptions are recorded as suppressed) and rethrow so the
+                    // caller never sees a half-written ByteArray + gzip trailer.
+                    runCatching { writer.close() }.exceptionOrNull()?.let(t::addSuppressed)
+                    runCatching { reader.close() }.exceptionOrNull()?.let(t::addSuppressed)
+                    throw t
                 }
+                writer.close()
+                reader.close()
             }
         }
         return outBuf.toByteArray()
