@@ -17,7 +17,7 @@ class FixturesTest {
     @Test
     fun cleanFixtureParsesOk() {
         val projectDir = Fixtures.writeCleanProject(tmp.resolve("clean"))
-        val md = AlsParser.parse(projectDir.resolve("Project.als"))
+        val md = AlsParser.parse(projectDir.resolve("clean.als"))
         assertEquals(0, md.macPathsCount)
         assertTrue(md.sampleRefs.size >= 1)
     }
@@ -28,7 +28,7 @@ class FixturesTest {
         val samplesDir = projectDir.resolve("Samples")
         // Exactly one sample present on disk, but the .als references two.
         val onDisk = Files.list(samplesDir).use { it.count() }
-        val md = AlsParser.parse(projectDir.resolve("Project.als"))
+        val md = AlsParser.parse(projectDir.resolve("missing_samples.als"))
         assertEquals(1L, onDisk)
         assertEquals(2, md.sampleRefs.size)
     }
@@ -36,7 +36,7 @@ class FixturesTest {
     @Test
     fun macPathsFixtureHasMacPaths() {
         val projectDir = Fixtures.writeMacPathsProject(tmp.resolve("mac"))
-        val md = AlsParser.parse(projectDir.resolve("Project.als"))
+        val md = AlsParser.parse(projectDir.resolve("mac_paths.als"))
         assertTrue(md.macPathsCount > 0, "expected mac_paths_count > 0, got ${md.macPathsCount}")
     }
 

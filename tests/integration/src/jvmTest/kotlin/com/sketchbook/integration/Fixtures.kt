@@ -43,7 +43,10 @@ object Fixtures {
               </LiveSet>
             $POSTAMBLE
         """.trimIndent()
-        writeGzippedAls(dir.resolve("Project.als"), xml)
+        // Live's "Project Folder" convention: the .als is named after the project, not "Project.als".
+        // The scanner derives `projects.name` from the .als filename, so naming it after the
+        // fixture's `name` keeps each project distinguishable post-scan.
+        writeGzippedAls(dir.resolve("$name.als"), xml)
         return dir
     }
 
@@ -76,7 +79,7 @@ object Fixtures {
               </LiveSet>
             $POSTAMBLE
         """.trimIndent()
-        writeGzippedAls(dir.resolve("Project.als"), xml)
+        writeGzippedAls(dir.resolve("$name.als"), xml)
         return dir
     }
 
@@ -97,7 +100,7 @@ object Fixtures {
               </LiveSet>
             $POSTAMBLE
         """.trimIndent()
-        writeGzippedAls(dir.resolve("Project.als"), xml)
+        writeGzippedAls(dir.resolve("$name.als"), xml)
         return dir
     }
 
