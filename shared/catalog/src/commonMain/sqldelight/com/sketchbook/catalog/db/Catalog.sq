@@ -147,6 +147,25 @@ CREATE TABLE pending_uploads (
   attempts     INTEGER NOT NULL DEFAULT 0
 );
 
+-- Persistent dismissals for Needs Attention findings + Proposals decisions. The catalog
+-- re-derives findings on every scan; without these tables a dismissed mac-import would come
+-- back the next time the user opens the app. Acks survive restart.
+CREATE TABLE repair_acks (
+  scope        TEXT NOT NULL,            -- 'mac_import' | 'missing_sample'
+  project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  payload      TEXT NOT NULL DEFAULT '', -- empty for mac_import; missing_path for missing_sample
+  acked_at     TEXT NOT NULL,
+  PRIMARY KEY (scope, project_id, payload)
+);
+
+-- Stable hash of (kind, project_id, primary arg) so an approved/rejected proposal doesn't
+-- reappear after the next scan.
+CREATE TABLE proposal_acks (
+  proposal_key TEXT PRIMARY KEY,
+  status       TEXT NOT NULL,            -- 'approved' | 'rejected'
+  decided_at   TEXT NOT NULL
+);
+
 -- ============================================================================
 -- Queries
 -- ============================================================================
@@ -209,6 +228,17 @@ SELECT t.name FROM tags t
 JOIN project_tags pt ON pt.tag_id = t.id
 WHERE pt.project_id = :project_id
 ORDER BY t.name;
+
+selectAllProjectTagPairs:
+SELECT pt.project_id, t.name FROM project_tags pt
+JOIN tags t ON t.id = pt.tag_id
+ORDER BY pt.project_id, t.name;
+
+selectTagPairsForProjects:
+SELECT pt.project_id, t.name FROM project_tags pt
+JOIN tags t ON t.id = pt.tag_id
+WHERE pt.project_id IN :ids
+ORDER BY pt.project_id, t.name;
 
 clearTagsForProject:
 DELETE FROM project_tags WHERE project_id = :project_id;
@@ -286,3 +316,63 @@ SELECT * FROM sync_state;
 
 selectIdentityByUuid:
 SELECT * FROM project_identity WHERE uuid = :uuid;
+
+-- Repair findings: mac-imported projects.
+selectMacImportProjects:
+SELECT id, path, name, parent_dir, mac_paths_count, has_project_info
+FROM projects
+WHERE is_archived = 0
+  AND (COALESCE(mac_paths_count, 0) > 0 OR COALESCE(has_project_info, 1) = 0)
+  AND id NOT IN (SELECT project_id FROM repair_acks WHERE scope = 'mac_import')
+ORDER BY mac_paths_count DESC, last_modified DESC;
+
+-- Repair findings: missing samples (cap at :limit). Joined to project name + path so the UI
+-- doesn't run N+1 queries.
+selectMissingSamples:
+SELECT ps.project_id, ps.sample_path, p.path AS project_path, p.name AS project_name
+FROM project_samples ps
+JOIN projects p ON p.id = ps.project_id
+WHERE ps.is_missing = 1
+  AND p.is_archived = 0
+  AND NOT EXISTS (
+    SELECT 1 FROM repair_acks ra
+    WHERE ra.scope = 'missing_sample'
+      AND ra.project_id = ps.project_id
+      AND ra.payload = ps.sample_path
+  )
+ORDER BY p.last_modified DESC
+LIMIT :limit;
+
+countMissingSamples:
+SELECT COUNT(*)
+FROM project_samples ps
+JOIN projects p ON p.id = ps.project_id
+WHERE ps.is_missing = 1
+  AND p.is_archived = 0
+  AND NOT EXISTS (
+    SELECT 1 FROM repair_acks ra
+    WHERE ra.scope = 'missing_sample'
+      AND ra.project_id = ps.project_id
+      AND ra.payload = ps.sample_path
+  );
+
+insertRepairAck:
+INSERT OR REPLACE INTO repair_acks (scope, project_id, payload, acked_at)
+VALUES (:scope, :project_id, :payload, :acked_at);
+
+-- Proposals: archive candidates (untouched > 18mo, no color).
+selectArchiveCandidates:
+SELECT id, path, name, parent_dir, last_modified
+FROM projects
+WHERE is_archived = 0
+  AND color_tag IS NULL
+  AND last_modified < :cutoff
+ORDER BY last_modified ASC
+LIMIT 50;
+
+selectProposalAck:
+SELECT * FROM proposal_acks WHERE proposal_key = :proposal_key;
+
+insertProposalAck:
+INSERT OR REPLACE INTO proposal_acks (proposal_key, status, decided_at)
+VALUES (:proposal_key, :status, :decided_at);

@@ -148,7 +148,14 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     // hands it the project repository at construction. The UI just observes; it never feeds.)
 
     val current = backStack.lastOrNull() ?: Screen.Projects
-    val items = sidebarItems(current)
+    val proposalsState by proposalsHolder.state.collectAsState()
+    val needsAttentionState by needsAttentionHolder.state.collectAsState()
+    // Sidebar badges count *unresolved* items only — pending proposals + open findings — so the
+    // user sees "stuff that wants me" rather than a total that never goes down. mac-import +
+    // missing-sample collapse to a single integer because the screen merges them on arrival.
+    val proposalCount = proposalsState.pending.size
+    val attentionCount = needsAttentionState.macImports.size + needsAttentionState.missingSamplesTotal
+    val items = sidebarItems(current, proposalCount, attentionCount)
     // Sidebar caption priority: scan first (most acute, time-bounded), then sync (slower
     // background activity), then offline marker, else nothing.
     val scanCaption = when (val p = scanProgress) {
@@ -290,7 +297,11 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     }
 }
 
-private fun sidebarItems(current: NavKey): List<SidebarItem> = listOf(
+private fun sidebarItems(
+    current: NavKey,
+    proposalCount: Int,
+    attentionCount: Int,
+): List<SidebarItem> = listOf(
     SidebarItem(
         id = "projects",
         label = "Projects",
@@ -300,11 +311,13 @@ private fun sidebarItems(current: NavKey): List<SidebarItem> = listOf(
         id = "proposals",
         label = "Proposals",
         active = current == Screen.Proposals,
+        badge = countBadge(proposalCount),
     ),
     SidebarItem(
         id = "needs-attention",
         label = "Needs attention",
         active = current == Screen.NeedsAttention,
+        badge = countBadge(attentionCount),
     ),
     SidebarItem(
         id = "settings",
@@ -312,6 +325,13 @@ private fun sidebarItems(current: NavKey): List<SidebarItem> = listOf(
         active = current == Screen.Settings,
     ),
 )
+
+// Cap at 99 so the binding doesn't get pushed off the row by a big "missing samples" count.
+private fun countBadge(n: Int): String? = when {
+    n <= 0 -> null
+    n > 99 -> "99+"
+    else -> n.toString()
+}
 
 private fun screenForId(id: String): Screen = when (id) {
     "projects" -> Screen.Projects
