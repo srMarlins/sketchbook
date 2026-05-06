@@ -111,6 +111,32 @@ class SyncStateStore(private val catalog: Catalog) {
         version.value = version.value + 1
     }
 
+    /**
+     * Advance `cloud_head_rev` on the sync_state row for [uuid]. Called by the PullPoller when
+     * a new manifest lands in the cloud. Idempotent — same rev twice is a no-op.
+     */
+    fun markCloudHead(uuid: ProjectUuid, rev: Long) {
+        val existing = stateOf(uuid)
+        if (existing != null && existing.cloudHeadRev >= rev) return
+        catalog.transaction {
+            catalog.catalogQueries.markSyncStateCloudHead(
+                project_uuid = uuid.value,
+                cloud_head_rev = rev,
+            )
+        }
+        version.value = version.value + 1
+    }
+
+    /**
+     * Live-emitting wrapper around [all]: emits once on subscribe, then on every successful
+     * write. Consumers (PullPoller wiring in DesktopAppGraph) use this to spawn one polling
+     * coroutine per project.
+     */
+    fun observeAll(): Flow<List<SyncStateRow>> = kotlinx.coroutines.flow.flow {
+        emit(all())
+        observeVersion().collect { emit(all()) }
+    }
+
     /** Set the per-project self-contained flag (no cross-project blob dedup for this uuid). */
     fun setSelfContained(uuid: ProjectUuid, value: Boolean) {
         val existing = stateOf(uuid)

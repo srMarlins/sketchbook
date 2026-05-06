@@ -8,7 +8,7 @@ import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.actions.ProposalActionExecutor
 import com.sketchbook.catalog.db.Catalog
-import com.sketchbook.desktop.repo.InMemoryLockRepository
+import com.sketchbook.desktop.repo.LeasedLockRepository
 import com.sketchbook.desktop.repo.PreferencesSettingsRepository
 import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.repo.JournalRepository
@@ -23,7 +23,10 @@ import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlProjectRepository
 import com.sketchbook.repo.impl.SqlProposalsRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
+import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.impl.SqlSnapshotRepository
+import com.sketchbook.sync.PullPoller
 import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
@@ -31,6 +34,12 @@ import dev.zacsweers.metro.createGraph
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -117,8 +126,24 @@ interface DesktopAppGraph {
     )
 
     @Provides @SingleIn(AppScope::class)
-    fun provideSnapshotRepository(catalog: Catalog): SnapshotRepository =
-        SqlSnapshotRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
+    fun provideSnapshotRepository(
+        catalog: Catalog,
+        syncQueue: SyncQueue,
+    ): SnapshotRepository = SqlSnapshotRepository(
+        catalog = catalog,
+        ioDispatcher = Dispatchers.IO,
+        materialize = { uuid, rev ->
+            // Delegates to the SwappableSyncQueue's currently-active materializer (built when
+            // cloud creds land). Returns a friendly failure when cloud is unconfigured so the
+            // Timeline rewind UI doesn't crash on first launch.
+            val swap = syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue
+            val mat = swap?.currentMaterializer
+                ?: return@SqlSnapshotRepository Result.failure(
+                    IllegalStateException("Configure cloud credentials in Settings before rewinding."),
+                )
+            mat.materialize(uuid, rev)
+        },
+    )
 
     @Provides @SingleIn(AppScope::class)
     fun provideProposalsRepository(catalog: Catalog): ProposalsRepository =
@@ -139,21 +164,38 @@ interface DesktopAppGraph {
     )
 
     @Provides @SingleIn(AppScope::class)
-    fun provideLockRepository(): LockRepository = InMemoryLockRepository()
+    fun provideLockRepository(
+        store: SyncStateStore,
+        scope: CoroutineScope,
+        syncQueue: SyncQueue,
+    ): LockRepository = LeasedLockRepository(
+        cloud = {
+            (syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue)?.currentCloud?.value
+        },
+        syncStateStore = store,
+        hostId = hostIdentity().id,
+        hostName = hostIdentity().name,
+        scope = scope,
+    )
 
     @Provides @SingleIn(AppScope::class)
     fun provideSyncQueue(
         settings: SettingsRepository,
         projects: ProjectRepository,
         store: SyncStateStore,
+        catalog: Catalog,
+        journal: JournalRepository,
         scope: CoroutineScope,
     ): SyncQueue = SwappableSyncQueue(
         settings = settings,
         projects = projects,
         syncStateStore = store,
+        catalog = catalog,
+        blobCacheRoot = catalogDbPath().parent.resolve("blob-cache"),
         scope = scope,
         hostId = hostIdentity().id,
         hostName = hostIdentity().name,
+        journal = journal,
     )
 }
 
@@ -182,6 +224,45 @@ abstract class AppScope private constructor()
 
 /** Builds the graph at runtime — Metro generates the impl class. */
 fun buildDesktopAppGraph(): DesktopAppGraph = createGraph<DesktopAppGraph>()
+
+/**
+ * Spawn the background pull-poll loop. One coroutine per project subscribes to
+ * [PullPoller.subscribe] and advances `sync_state.cloud_head_rev` as new manifests land. The
+ * outer `collectLatest` over [SyncStateStore.observeAll] re-spawns the per-project subscribers
+ * when projects appear or disappear.
+ *
+ * No-op while cloud is unconfigured ([SwappableSyncQueue.currentCloud] == null). The poller
+ * lives on the app scope; closing the app cancels everything.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+fun startBackgroundPull(graph: DesktopAppGraph) {
+    val swap = graph.syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue ?: return
+    val store = graph.syncStateStore
+    val snapshots = graph.snapshotRepository
+    graph.appScope.launch {
+        // Re-spawn the per-project pollers whenever the active cloud backend changes (creds
+        // come/go) so the long-running coroutines aren't bound to a torn-down http client.
+        swap.currentCloud.collectLatest { cloud ->
+            if (cloud == null) return@collectLatest
+            val poller = PullPoller(cloud = cloud, snapshots = snapshots)
+            store.observeAll().collectLatest { rows ->
+                // collectLatest cancels the previous block, including the per-project launches.
+                kotlinx.coroutines.coroutineScope {
+                    for (row in rows) {
+                        launch {
+                            poller.subscribe(
+                                uuid = row.uuid,
+                                startAfter = if (row.localRev > 0) SnapshotRev(row.localRev) else null,
+                            ).collect { newSnapshot ->
+                                store.markCloudHead(newSnapshot.projectUuid, newSnapshot.rev.value)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /**
  * Resolve the on-disk catalog DB path. Honors `SKETCHBOOK_DB_PATH` for tests and

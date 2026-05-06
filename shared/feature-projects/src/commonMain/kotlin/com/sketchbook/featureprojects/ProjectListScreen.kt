@@ -613,6 +613,9 @@ private fun ProjectSyncState.toBadge(): SongSyncBadge = when (this) {
     ProjectSyncState.Pending -> SongSyncBadge.Pending
     ProjectSyncState.Uploading -> SongSyncBadge.Uploading
     ProjectSyncState.Conflict -> SongSyncBadge.Conflict
+    // Remote ahead is "we owe a pull" — surface it as Pending in the song-strip badge so the
+    // user reads "this row needs sync attention" without introducing a new badge variant.
+    ProjectSyncState.RemoteAhead -> SongSyncBadge.Pending
     ProjectSyncState.LocalOnly -> SongSyncBadge.LocalOnly
     ProjectSyncState.Unknown -> SongSyncBadge.Unknown
 }

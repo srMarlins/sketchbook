@@ -6,10 +6,15 @@ import com.sketchbook.cloud.Generation
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SnapshotKind
+import com.sketchbook.repo.ActionRecord
+import com.sketchbook.repo.JournalEntry
+import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProjectSyncState
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
+import kotlin.time.Clock
 import com.sketchbook.sync.PipelineInput
 import com.sketchbook.sync.SnapshotPipeline
 import com.sketchbook.sync.SnapshotProgress
@@ -51,10 +56,17 @@ class GcsSyncQueue(
     private val syncState: SyncStateStore,
     private val projects: ProjectRepository,
     private val scope: CoroutineScope,
+    private val journal: JournalRepository? = null,
 ) : SyncQueue {
 
     private val uploading = MutableStateFlow<Set<ProjectUuid>>(emptySet())
     private val conflicts = MutableStateFlow<Set<ProjectUuid>>(emptySet())
+
+    /** Per-project last conflict message — surfaced inline on the detail panel. */
+    private val conflictMessages = MutableStateFlow<Map<ProjectUuid, String>>(emptyMap())
+
+    /** Read-side accessor for the detail-panel's conflict caption. */
+    fun conflictMessage(uuid: ProjectUuid): String? = conflictMessages.value[uuid]
 
     override fun observe(): Flow<SyncQueueState> {
         return combine(
@@ -86,6 +98,7 @@ class GcsSyncQueue(
                     when {
                         row == null -> ProjectSyncState.LocalOnly
                         row.dirty -> ProjectSyncState.Pending
+                        row.cloudHeadRev > row.localRev -> ProjectSyncState.RemoteAhead
                         row.localRev > 0 -> ProjectSyncState.Synced
                         else -> ProjectSyncState.LocalOnly
                     }
@@ -139,11 +152,15 @@ class GcsSyncQueue(
             )
 
             var savedRev: Long? = null
+            var savedKind: SnapshotKind? = null
             var failureReason: String? = null
             withContext(Dispatchers.IO) {
                 pipeline.run(input).collect { progress ->
                     when (progress) {
-                        is SnapshotProgress.Saved -> savedRev = progress.rev.value
+                        is SnapshotProgress.Saved -> {
+                            savedRev = progress.rev.value
+                            savedKind = progress.kind
+                        }
                         is SnapshotProgress.Failed -> failureReason = progress.reason
                         else -> Unit
                     }
@@ -152,9 +169,19 @@ class GcsSyncQueue(
             val finalRev = savedRev
             return if (finalRev != null) {
                 withContext(Dispatchers.IO) { syncState.markSynced(uuid, finalRev) }
+                // A saved branch means our push CAS-failed and we wrote a fork — surface it as
+                // Conflict with an inline message so the user can pull + re-push.
+                if (savedKind == SnapshotKind.Branch) {
+                    conflicts.value = conflicts.value + uuid
+                    conflictMessages.value = conflictMessages.value + (uuid to
+                        "Remote diverged — your work was saved as a branch. Pull + re-push to merge.")
+                    recordConflictJournal(pid, ourRev = finalRev, theirRev = finalRev - 1)
+                }
                 Result.success(Unit)
             } else {
                 conflicts.value = conflicts.value + uuid
+                conflictMessages.value = conflictMessages.value + (uuid to
+                    (failureReason ?: "Push failed — retry or check Settings → Cloud."))
                 Result.failure(IllegalStateException(failureReason ?: "pipeline did not complete"))
             }
         } catch (t: Throwable) {
@@ -162,6 +189,19 @@ class GcsSyncQueue(
             return Result.failure(t)
         } finally {
             uploading.value = uploading.value - uuid
+        }
+    }
+
+    private suspend fun recordConflictJournal(pid: ProjectId, ourRev: Long, theirRev: Long) {
+        val j = journal ?: return
+        runCatching {
+            j.append(
+                JournalEntry(
+                    timestamp = Clock.System.now(),
+                    projectId = pid,
+                    action = ActionRecord.PushConflict(ourRev = ourRev, theirRev = theirRev),
+                ),
+            )
         }
     }
 
@@ -179,6 +219,7 @@ class GcsSyncQueue(
                 when {
                     row == null -> ProjectSyncState.LocalOnly
                     row.dirty -> ProjectSyncState.Pending
+                    row.cloudHeadRev > row.localRev -> ProjectSyncState.RemoteAhead
                     row.localRev > 0 -> ProjectSyncState.Synced
                     else -> ProjectSyncState.LocalOnly
                 }

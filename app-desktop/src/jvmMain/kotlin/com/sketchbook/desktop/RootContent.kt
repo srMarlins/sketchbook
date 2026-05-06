@@ -284,6 +284,7 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
                                                     impl.pushNowById(pid)
                                                 }
                                             } },
+                                            conflictMessageFor = syncImpl?.let { impl -> { pid -> impl.conflictMessage(pid) } },
                                         )
                                     },
                                 )
@@ -391,6 +392,7 @@ private fun DetailPanelContent(
     onDismiss: () -> Unit,
     syncStateFor: ((com.sketchbook.core.ProjectId) -> ProjectSyncState)? = null,
     onPushNow: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
+    conflictMessageFor: ((com.sketchbook.core.ProjectId) -> String?)? = null,
 ) {
     val state by holder.state.collectAsState()
     val theme = com.sketchbook.uishared.theme.AppTheme
@@ -444,6 +446,15 @@ private fun DetailPanelContent(
                                 onClick = { onPushNow(row.id) },
                                 variant = com.sketchbook.uishared.components.ButtonVariant.Ghost,
                             ) { Text("Sync now") }
+                        }
+                    }
+                    // Inline conflict hint — small ghost text per memory
+                    // feedback_layer_dont_redesign. Only shown when the queue tracks one.
+                    val conflictMsg = conflictMessageFor?.invoke(row.id)
+                    if (conflictMsg != null && sync == ProjectSyncState.Conflict) {
+                        androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
+                        ProvideContentColor(theme.colors.inkMuted) {
+                            Text(conflictMsg, style = theme.typography.caption)
                         }
                     }
                 }
@@ -815,6 +826,7 @@ private fun SyncPill(state: ProjectSyncState, theme: com.sketchbook.uishared.the
         ProjectSyncState.Pending -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "PENDING")
         ProjectSyncState.Uploading -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "UPLOADING…")
         ProjectSyncState.Conflict -> Triple(theme.colors.tintRose, theme.colors.inkPrimary, "CONFLICT")
+        ProjectSyncState.RemoteAhead -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "REMOTE AHEAD")
         ProjectSyncState.LocalOnly -> Triple(theme.colors.surfaceSunken, theme.colors.inkSecondary, "LOCAL ONLY")
         ProjectSyncState.Unknown -> Triple(theme.colors.surfaceSunken, theme.colors.inkMuted, "—")
     }

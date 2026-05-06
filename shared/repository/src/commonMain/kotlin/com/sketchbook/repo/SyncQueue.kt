@@ -32,4 +32,13 @@ data class SyncQueueState(
     val online: Boolean = true,
 )
 
-enum class ProjectSyncState { Synced, Pending, Uploading, Conflict, LocalOnly, Unknown }
+enum class ProjectSyncState {
+    Synced,
+    Pending,
+    Uploading,
+    Conflict,
+    LocalOnly,
+    /** Cloud has manifests we haven't pulled yet — `cloud_head_rev > local_rev`. */
+    RemoteAhead,
+    Unknown,
+}

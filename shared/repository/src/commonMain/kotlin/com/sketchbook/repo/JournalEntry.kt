@@ -47,4 +47,21 @@ sealed interface ActionRecord {
         val before: List<String>,
         val after: List<String>,
     ) : ActionRecord
+
+    /** Force-take of a lease lock from another host. Carries the prior owner for audit. */
+    @Serializable
+    data class ForceTakeLock(
+        val priorOwnerHostName: String?,
+        val priorExpiresAtMs: Long?,
+    ) : ActionRecord
+
+    /**
+     * Push attempt CAS-failed because the cloud HEAD diverged. Surfaces in the journal so the
+     * user can see why a sync stalled, and so future telemetry can count divergence rates.
+     */
+    @Serializable
+    data class PushConflict(
+        val ourRev: Long,
+        val theirRev: Long,
+    ) : ActionRecord
 }

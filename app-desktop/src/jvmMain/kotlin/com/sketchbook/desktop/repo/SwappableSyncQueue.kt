@@ -13,13 +13,21 @@ import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
+import com.sketchbook.cloud.CloudBackend
+import com.sketchbook.repo.BlobCacheSettings
+import com.sketchbook.repo.JournalRepository
+import com.sketchbook.sync.JvmBlobCache
 import com.sketchbook.sync.SnapshotPipeline
+import com.sketchbook.syncio.ManifestMaterializer
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import java.nio.file.Path
+import java.nio.file.Paths
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -46,15 +54,36 @@ class SwappableSyncQueue(
     private val settings: SettingsRepository,
     private val projects: ProjectRepository,
     private val syncStateStore: SyncStateStore,
+    private val catalog: com.sketchbook.catalog.db.Catalog,
+    private val blobCacheRoot: Path,
     private val scope: CoroutineScope,
     private val hostId: String,
     private val hostName: String,
+    private val journal: JournalRepository? = null,
     private val httpClient: HttpClient = HttpClient(CIO),
     private val json: Json = Json { ignoreUnknownKeys = false },
 ) : SyncQueue {
 
     private val fallback = InMemorySyncQueue(projects = projects, scope = scope)
     private val delegate = MutableStateFlow<SyncQueue>(fallback)
+
+    /**
+     * The materializer for the current cloud config, or null when cloud isn't ready. Rebuilt
+     * alongside [delegate] in [buildGcsQueue]. Read by `SqlSnapshotRepository` via
+     * `materialize` lambda — Timeline rewind goes through this.
+     */
+    @Volatile
+    var currentMaterializer: ManifestMaterializer? = null
+        private set
+
+    /**
+     * The active cloud backend, or null when cloud isn't configured. Exposed so the desktop
+     * graph can spawn a [PullPoller] subscription per project — keeps PullPoller wiring out of
+     * SwappableSyncQueue's direct DI graph (the poller depends on [SnapshotRepository], which
+     * depends on this queue, which would otherwise be a cycle).
+     */
+    private val _currentCloud = MutableStateFlow<CloudBackend?>(null)
+    val currentCloud: kotlinx.coroutines.flow.StateFlow<CloudBackend?> = _currentCloud
 
     init {
         scope.launch {
@@ -63,10 +92,12 @@ class SwappableSyncQueue(
                 .distinctUntilChanged()
                 .collect { (ready, pair) ->
                     val (credJson, bucket) = pair
-                    delegate.value = if (ready && credJson != null && bucket != null) {
-                        buildGcsQueue(credJson, bucket)
+                    if (ready && credJson != null && bucket != null) {
+                        delegate.value = buildGcsQueue(credJson, bucket)
                     } else {
-                        fallback
+                        delegate.value = fallback
+                        currentMaterializer = null
+                        _currentCloud.value = null
                     }
                 }
         }
@@ -88,16 +119,46 @@ class SwappableSyncQueue(
                 hostId = hostId,
                 hostName = hostName,
             )
+            // Build the materializer alongside the queue so Timeline rewind works the moment
+            // creds land. Cache settings come from settings.observe() — we read once here; a
+            // cache-policy change forces the user to re-toggle creds today (rare, acceptable).
+            val cacheSettings: () -> BlobCacheSettings = {
+                kotlinx.coroutines.runBlocking { settings.observe().first() }.cacheSettings
+            }
+            val blobCache = JvmBlobCache(
+                catalog = catalog,
+                cacheRoot = blobCacheRoot,
+                cloud = backend,
+                cacheSettings = cacheSettings,
+            )
+            _currentCloud.value = backend
+            currentMaterializer = ManifestMaterializer(
+                cloud = backend,
+                blobCache = blobCache,
+                projectRoot = { uuid ->
+                    val pid = syncStateStore.projectIdFor(uuid)
+                        ?: throw IllegalStateException("no local project for uuid $uuid")
+                    val row = kotlinx.coroutines.runBlocking {
+                        projects.observeProject(pid).first()
+                    } ?: throw IllegalStateException("project row $pid not found")
+                    val parent = Paths.get(row.path.value).parent
+                        ?: throw IllegalStateException("project path has no parent: ${row.path.value}")
+                    parent
+                },
+            )
             GcsSyncQueue(
                 cloud = backend,
                 pipeline = pipeline,
                 syncState = syncStateStore,
                 projects = projects,
                 scope = scope,
+                journal = journal,
             )
         }.getOrElse {
             // Bad creds JSON or unsupported scheme — fall back to in-memory so the UI keeps
             // rendering. The error surfaces via Settings → Test connection.
+            currentMaterializer = null
+            _currentCloud.value = null
             fallback
         }
     }
@@ -126,6 +187,13 @@ class SwappableSyncQueue(
         is GcsSyncQueue -> current.snapshotFor(id)
         is InMemorySyncQueue -> current.snapshotFor(id)
         else -> ProjectSyncState.Unknown
+    }
+
+    /** Inline conflict message for the detail-panel hint. Null when none. */
+    fun conflictMessage(id: ProjectId): String? {
+        val current = delegate.value as? GcsSyncQueue ?: return null
+        val uuid = syncStateStore.identityFor(id)
+        return current.conflictMessage(uuid)
     }
 
     /** Whether the live queue is the real GCS impl (rather than the in-memory fallback). */
