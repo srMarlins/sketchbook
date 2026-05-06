@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -45,10 +46,22 @@ class SqlProjectRepository(
     override fun observeProjects(query: String): Flow<List<ProjectRow>> {
         val q = query.trim()
         return if (q.isEmpty()) {
-            catalog.catalogQueries.selectAllProjectsWithMissing()
-                .asFlow()
-                .mapToList(ioDispatcher)
-                .map { rows -> rows.map { it.toDomain() } }
+            // Combine the rows flow with a bulk tag-pairs flow. SQLDelight re-emits both whenever
+            // the underlying tables change, so a setTags() call in another component flows through
+            // to the chips on this list without a manual invalidation. The pairs query returns at
+            // most a few thousand rows on a 1,628-project library — bulk-grouping in memory is
+            // cheaper than a per-row tag query (1,628 round-trips vs 1).
+            combine(
+                catalog.catalogQueries.selectAllProjectsWithMissing()
+                    .asFlow()
+                    .mapToList(ioDispatcher),
+                catalog.catalogQueries.selectAllProjectTagPairs()
+                    .asFlow()
+                    .mapToList(ioDispatcher),
+            ) { rows, pairs ->
+                val tagsByProject = pairs.groupBy({ it.project_id }, { it.name })
+                rows.map { it.toDomain(tags = tagsByProject[it.id].orEmpty()) }
+            }
         } else {
             // FTS search produces a row-id list; map back to full rows. Re-runs whenever
             // ftsTrigger ticks (after writes that may invalidate prior search results). The
@@ -63,10 +76,14 @@ class SqlProjectRepository(
     }
 
     override fun observeProject(id: ProjectId): Flow<ProjectRow?> =
-        catalog.catalogQueries.selectProjectByIdWithMissing(id.value)
-            .asFlow()
-            .mapToOneOrNull(ioDispatcher)
-            .map { row -> row?.toDomain() }
+        combine(
+            catalog.catalogQueries.selectProjectByIdWithMissing(id.value)
+                .asFlow()
+                .mapToOneOrNull(ioDispatcher),
+            catalog.catalogQueries.selectTagsForProject(id.value)
+                .asFlow()
+                .mapToList(ioDispatcher),
+        ) { row, tags -> row?.toDomain(tags = tags) }
 
     override fun observePlugins(id: ProjectId): Flow<List<com.sketchbook.core.PluginRef>> =
         catalog.catalogQueries.selectPluginsForProject(id.value)
@@ -184,13 +201,20 @@ class SqlProjectRepository(
     }
 
     private fun loadByIds(ids: List<Long>): Flow<List<ProjectRow>> {
-        // Batch fetch + preserve relevance order from the FTS list.
-        return catalog.catalogQueries.selectProjectsByIds(ids)
-            .asFlow()
-            .mapToList(ioDispatcher)
-            .map { rows ->
-                val byId = rows.associateBy { it.id }
-                ids.mapNotNull { byId[it]?.toDomain() }
-            }
+        // Batch fetch + preserve relevance order from the FTS list. Tags are joined via the
+        // `selectTagPairsForProjects` IN-clause query so the chips populate on the search
+        // results too, not just the home dashboard.
+        return combine(
+            catalog.catalogQueries.selectProjectsByIds(ids)
+                .asFlow()
+                .mapToList(ioDispatcher),
+            catalog.catalogQueries.selectTagPairsForProjects(ids)
+                .asFlow()
+                .mapToList(ioDispatcher),
+        ) { rows, pairs ->
+            val byId = rows.associateBy { it.id }
+            val tagsByProject = pairs.groupBy({ it.project_id }, { it.name })
+            ids.mapNotNull { id -> byId[id]?.toDomain(tags = tagsByProject[id].orEmpty()) }
+        }
     }
 }

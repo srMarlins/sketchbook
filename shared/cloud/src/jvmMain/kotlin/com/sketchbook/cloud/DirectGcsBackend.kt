@@ -79,11 +79,20 @@ class DirectGcsBackend(
 
     override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) {
         val path = blobPath(hash, scope)
-        // Stream the source into the request body chunk-by-chunk. The previous implementation
-        // called `source.readAllBytes()` and held the full blob (up to several hundred MB on a
-        // real Live session) on the heap before sending it. With a streaming `WriteChannel`
-        // body the JVM only ever holds [STREAM_CHUNK_BYTES] at a time and the SocketChannel
-        // pulls bytes from us as fast as it can write to the wire.
+        if (size <= RESUMABLE_THRESHOLD) {
+            putBlobSingle(path, source, size)
+        } else {
+            putBlobResumable(path, source, size)
+        }
+    }
+
+    /**
+     * v1 single-PUT for small blobs. Already streams via [StreamingSourceContent]; the JVM only
+     * ever holds [STREAM_CHUNK_BYTES] at a time and the SocketChannel pulls bytes as fast as it
+     * can write to the wire. Suitable up to a few MB; larger blobs use [putBlobResumable] which
+     * can recover from network blips and isn't subject to GCS's single-request size cap.
+     */
+    private suspend fun putBlobSingle(path: String, source: RawSource, size: Long) {
         val response = http.post(uploadUrl()) {
             authHeader()
             parameter("uploadType", "media")
@@ -99,6 +108,119 @@ class DirectGcsBackend(
             HttpStatusCode.PreconditionFailed -> Unit // already present
             else -> throw remoteFailure(response, "PUT $path")
         }
+    }
+
+    /**
+     * GCS resumable upload session for blobs above [RESUMABLE_THRESHOLD]. Three phases:
+     *
+     *   1. **Stage** — drain the [source] to a temp file once. The source is consumed exactly
+     *      once (most callers pass us a stream-once Source from the local FS), and the temp
+     *      file gives us a seekable backing store for chunk PUTs.
+     *   2. **Initiate** — POST to `?uploadType=resumable` with the precondition header. The
+     *      server returns a session URL in the `Location` header.
+     *   3. **Chunks** — PUT [RESUMABLE_CHUNK_BYTES]-sized slices of the temp file with
+     *      `Content-Range: bytes <start>-<end>/<total>`. Non-final chunks return 308 Resume
+     *      Incomplete; the final chunk returns 200/201.
+     *
+     * On any failure we propagate; future work can add retry-with-resume where we re-issue the
+     * failing chunk after querying the server for the current upload offset (PUT with empty
+     * body + `Content-Range: bytes <asterisk-slash><total>`). Not in v1 because the desktop is
+     * single-process and the user can simply retry the snapshot.
+     */
+    private suspend fun putBlobResumable(path: String, source: RawSource, size: Long) {
+        val tmp = stageSourceToTempFile(source)
+        try {
+            val sessionUrl = initiateResumableSession(path, size)
+                ?: return // precondition already satisfied (412 on init)
+            var offset = 0L
+            while (offset < size) {
+                val chunkEnd = minOf(offset + RESUMABLE_CHUNK_BYTES, size) - 1
+                val complete = uploadResumableChunk(sessionUrl, tmp, offset, chunkEnd, size)
+                offset = chunkEnd + 1
+                if (complete) break
+            }
+        } finally {
+            runCatching { Files.deleteIfExists(tmp) }
+        }
+    }
+
+    /**
+     * POST the resumable upload session-init request. Returns the session URL on success, or
+     * `null` if the precondition rejected the upload (412 — a content-addressable blob that
+     * already exists). Throws on any other failure.
+     */
+    private suspend fun initiateResumableSession(path: String, size: Long): String? {
+        val response = http.post(uploadUrl()) {
+            authHeader()
+            parameter("uploadType", "resumable")
+            parameter("name", path)
+            headers {
+                append("x-goog-if-generation-match", "0")
+                append("X-Upload-Content-Type", "application/octet-stream")
+                append("X-Upload-Content-Length", size.toString())
+            }
+            contentType(ContentType.Application.Json)
+            setBody("{}")
+        }
+        return when (response.status) {
+            HttpStatusCode.OK -> response.headers[HttpHeaders.Location]
+                ?: throw SketchbookError.IntegrityError("missing Location header on resumable session init for $path")
+            HttpStatusCode.PreconditionFailed -> null // already present, content-addressed → noop
+            else -> throw remoteFailure(response, "POST resumable-init $path")
+        }
+    }
+
+    /**
+     * PUT one chunk of the temp-file-backed body to the resumable [sessionUrl]. Returns true if
+     * this was the final chunk (server responded 200/201), false if the upload should continue
+     * (308 Resume Incomplete).
+     */
+    private suspend fun uploadResumableChunk(
+        sessionUrl: String,
+        file: Path,
+        start: Long,
+        endInclusive: Long,
+        total: Long,
+    ): Boolean {
+        val length = endInclusive - start + 1
+        val response = http.put(sessionUrl) {
+            headers {
+                append("Content-Range", "bytes $start-$endInclusive/$total")
+            }
+            contentType(ContentType.Application.OctetStream)
+            setBody(FileRangeContent(file, start, length))
+        }
+        return when (response.status.value) {
+            200, 201 -> true
+            308 -> false
+            412 -> true // already exists — content-addressed
+            else -> throw remoteFailure(response, "PUT chunk $start-$endInclusive of $total")
+        }
+    }
+
+    /**
+     * Drain [source] into a temp file. Used by both the resumable-upload path and the GET path
+     * to keep blob bytes off the heap. The file is the caller's responsibility to delete.
+     */
+    private fun stageSourceToTempFile(source: RawSource): Path {
+        val tmp = Files.createTempFile("sketchbook-upload-", ".bin")
+        try {
+            Files.newOutputStream(tmp, StandardOpenOption.WRITE).use { out ->
+                val buffered = source.buffered()
+                val chunk = ByteArray(STREAM_CHUNK_BYTES)
+                while (true) {
+                    val read = buffered.readAtMostTo(chunk, 0, chunk.size)
+                    if (read <= 0) break
+                    out.write(chunk, 0, read)
+                }
+            }
+        } catch (t: Throwable) {
+            runCatching { Files.deleteIfExists(tmp) }
+            throw t
+        } finally {
+            source.close()
+        }
+        return tmp
     }
 
     override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource {
@@ -342,6 +464,21 @@ private class ByteArrayRawSource(private val bytes: ByteArray) : RawSource {
 private const val STREAM_CHUNK_BYTES = 64 * 1024
 
 /**
+ * Switch to GCS resumable upload above this size. Picked at the boundary where a single-PUT
+ * still completes before GCS's request timeout under typical home upload speeds (5–10 Mbps).
+ * Bigger blobs (a 543 MB Live session) MUST go through the resumable path or they OOM the
+ * remote idle timer and we lose the whole upload near completion.
+ */
+private const val RESUMABLE_THRESHOLD: Long = 8L * 1024 * 1024
+
+/**
+ * Per-chunk size for resumable uploads. GCS requires non-final chunks to be a multiple of
+ * 256 KB; 8 MB is a common sweet spot — large enough to amortize per-request overhead across
+ * the wire, small enough that a transient connection failure forfeits at most 8 MB of progress.
+ */
+private const val RESUMABLE_CHUNK_BYTES: Long = 8L * 1024 * 1024
+
+/**
  * Ktor `OutgoingContent` that streams a kotlinx.io [RawSource] into the request body without
  * ever materializing it in memory. `contentLength` is set so the precondition path on the
  * server (and any chunked-transfer fallback) sees the declared size up front.
@@ -371,6 +508,42 @@ private class StreamingSourceContent(
         require(totalSent == contentLength) {
             "size mismatch: declared=$contentLength, actually streamed=$totalSent"
         }
+    }
+}
+
+/**
+ * Streams [length] bytes starting at [offset] of [file] into a Ktor request body. Used by the
+ * resumable-upload path so each chunk PUT reads its slice straight off disk in 64 KB
+ * sub-chunks instead of holding the chunk in memory.
+ */
+private class FileRangeContent(
+    private val file: Path,
+    private val offset: Long,
+    override val contentLength: Long,
+) : OutgoingContent.WriteChannelContent() {
+
+    override val contentType: ContentType = ContentType.Application.OctetStream
+
+    override suspend fun writeTo(channel: ByteWriteChannel) {
+        val length = contentLength
+        Files.newByteChannel(file, StandardOpenOption.READ).use { fch ->
+            fch.position(offset)
+            val buffer = java.nio.ByteBuffer.allocate(STREAM_CHUNK_BYTES)
+            var remaining = length
+            while (remaining > 0) {
+                buffer.clear()
+                if (buffer.limit() > remaining) buffer.limit(remaining.toInt())
+                val read = fch.read(buffer)
+                if (read <= 0) break
+                buffer.flip()
+                val arr = ByteArray(read)
+                buffer.get(arr)
+                channel.writeFully(arr, 0, read)
+                remaining -= read
+            }
+        }
+        channel.flushAndClose()
+        require(length - 0 >= 0)
     }
 }
 

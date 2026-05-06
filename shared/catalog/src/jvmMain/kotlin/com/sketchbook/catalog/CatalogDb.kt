@@ -3,8 +3,12 @@ package com.sketchbook.catalog
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlCursor
 import app.cash.sqldelight.db.SqlDriver
+import app.cash.sqldelight.driver.jdbc.asJdbcDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.sketchbook.catalog.db.Catalog
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
+import org.sqlite.SQLiteDataSource
 import java.nio.file.Path
 import java.util.Properties
 
@@ -20,15 +24,71 @@ data class CatalogHandle(val catalog: Catalog, val driver: SqlDriver)
  * - [openOnDisk]: file-backed catalog at the given path. Used by `app-desktop` + `app-mcp`.
  * - [openInMemory]: ephemeral DB. Used in tests.
  *
- * Foreign keys are enabled; WAL is enabled for the disk driver to allow read-while-write
- * (the desktop app + MCP server share a catalog.db).
+ * **Disk driver pools connections.** SQLite in WAL mode lets readers run concurrently with the
+ * single writer, but only across *separate* JDBC connections. The previous setup used a single
+ * `JdbcSqliteDriver` connection, which serialized every read behind any in-flight write
+ * transaction (scanner, setTags, etc.). The disk driver wraps a [SQLiteDataSource] in HikariCP
+ * so SQLDelight's `Query.asFlow()` reads can run in parallel with the scanner's writer
+ * transactions.
+ *
+ * **Pragmas land on each connection.** `journal_mode = WAL` is sticky at the database level,
+ * but `synchronous`, `cache_size`, `mmap_size`, `temp_store`, and `foreign_keys` are
+ * per-connection — HikariCP's connection-init hook runs them on every new connection. The
+ * desktop app + MCP server share a single `catalog.db`, so each process pools its own
+ * connections; the WAL coordinates writes between them.
  */
 object CatalogDb {
 
+    /** Pool size for the disk driver. 1 writer + a few readers; SQLite WAL handles the rest. */
+    private const val MAX_POOL_SIZE: Int = 4
+
+    /** Per-connection PRAGMAs. Run on every new connection HikariCP opens. */
+    private val PER_CONNECTION_PRAGMAS: List<String> = listOf(
+        "PRAGMA foreign_keys = ON",
+        // synchronous=NORMAL is the recommended pairing with WAL: durable across process
+        // crashes (only loses the last in-flight transaction on a power cut), one fsync per
+        // checkpoint instead of per-commit.
+        "PRAGMA synchronous = NORMAL",
+        // 64 MB page cache (negative = KiB). Default 2 MB chokes on the FTS5 `MATCH` joins
+        // when the catalog passes a few thousand rows.
+        "PRAGMA cache_size = -65536",
+        // 256 MB mmap window. Lets the kernel page DB blocks without copying into the JVM
+        // heap on read-heavy paths (UI list refresh after scan).
+        "PRAGMA mmap_size = 268435456",
+        // Keep temp B-trees and intermediate sort buffers in memory.
+        "PRAGMA temp_store = MEMORY",
+        // Auto-checkpoint every 1,000 pages of WAL (~4 MB).
+        "PRAGMA wal_autocheckpoint = 1000",
+    )
+
     fun openOnDisk(path: Path): CatalogHandle {
-        val driver = JdbcSqliteDriver("jdbc:sqlite:${path.toAbsolutePath()}", Properties())
+        val sqliteDs = SQLiteDataSource().apply {
+            url = "jdbc:sqlite:${path.toAbsolutePath()}"
+        }
+        // Open one bootstrap connection through the raw DataSource to set sticky DB-level
+        // PRAGMAs (journal_mode=WAL) before any pooled connection sees the file. Doing this
+        // through HikariCP's connectionInitSql races with concurrent reads on cold pool warm-up.
+        sqliteDs.connection.use { conn ->
+            conn.createStatement().use { st ->
+                st.execute("PRAGMA journal_mode = WAL")
+                for (pragma in PER_CONNECTION_PRAGMAS) st.execute(pragma)
+            }
+        }
+        val hikariConfig = HikariConfig().apply {
+            dataSource = sqliteDs
+            maximumPoolSize = MAX_POOL_SIZE
+            minimumIdle = 1
+            poolName = "sketchbook-catalog"
+            // HikariCP runs this once per new connection; xerial's driver allows one statement
+            // per execute() call, so we configure pragmas via a Connection callback instead and
+            // leave connectionInitSql empty.
+        }
+        val hikari = HikariDataSource(hikariConfig)
+        // HikariCP doesn't expose a "after-acquire" hook directly; subclass the DataSource to
+        // run pragmas on every fresh connection. We do this by registering a wrapper.
+        val pooled = PerConnectionPragmaDataSource(hikari, PER_CONNECTION_PRAGMAS)
+        val driver = pooled.asJdbcDriver()
         ensureSchema(driver)
-        applyPragmas(driver, journalModeWal = true)
         return CatalogHandle(Catalog(driver), driver)
     }
 
@@ -37,7 +97,7 @@ object CatalogDb {
         // In-memory always starts at version 0; create unconditionally.
         Catalog.Schema.create(driver)
         writeUserVersion(driver, Catalog.Schema.version)
-        applyPragmas(driver, journalModeWal = false)
+        applyInMemoryPragmas(driver)
         return CatalogHandle(Catalog(driver), driver)
     }
 
@@ -102,28 +162,7 @@ object CatalogDb {
         driver.execute(null, "PRAGMA user_version = $version;", 0)
     }
 
-    private fun applyPragmas(driver: SqlDriver, journalModeWal: Boolean) {
+    private fun applyInMemoryPragmas(driver: SqlDriver) {
         driver.execute(null, "PRAGMA foreign_keys = ON;", 0)
-        if (journalModeWal) {
-            driver.execute(null, "PRAGMA journal_mode = WAL;", 0)
-            // synchronous=NORMAL is the recommended pairing with WAL: durable across process
-            // crashes (only loses the last in-flight transaction on a power cut), one fsync per
-            // checkpoint instead of per-commit. The scan loop touches ~1,628 rows in
-            // back-to-back transactions; FULL means ~1,628 fsyncs and is the single biggest
-            // cause of cold-scan time on spinning disks.
-            driver.execute(null, "PRAGMA synchronous = NORMAL;", 0)
-            // 64 MB page cache (negative = KiB). Default 2 MB chokes on the FTS5 `MATCH` joins
-            // when the catalog passes a few thousand rows.
-            driver.execute(null, "PRAGMA cache_size = -65536;", 0)
-            // 256 MB mmap window. Lets the kernel page DB blocks without copying into the JVM
-            // heap on read-heavy paths (UI list refresh after scan).
-            driver.execute(null, "PRAGMA mmap_size = 268435456;", 0)
-            // Keep temp B-trees and intermediate sort buffers in memory rather than spilling to
-            // a tempfile under %TEMP% / /tmp.
-            driver.execute(null, "PRAGMA temp_store = MEMORY;", 0)
-            // Auto-checkpoint every 1,000 pages of WAL (~4 MB) so the WAL doesn't grow
-            // unboundedly during a long scan.
-            driver.execute(null, "PRAGMA wal_autocheckpoint = 1000;", 0)
-        }
     }
 }
