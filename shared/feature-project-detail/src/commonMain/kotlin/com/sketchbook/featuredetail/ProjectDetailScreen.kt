@@ -12,9 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.core.PluginFormat
 import com.sketchbook.core.PluginRef
 import com.sketchbook.repo.LockStatus
@@ -47,7 +47,11 @@ fun ProjectDetailScreen(
             .padding(PaddingValues(AppTheme.spacing.md)),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
     ) {
-        Header(state, vm)
+        Header(
+            state = state,
+            onForceTakeLock = { vm.dispatch(ProjectDetailViewModel.Intent.ForceTakeLock) },
+            onOpenInLive = { vm.dispatch(ProjectDetailViewModel.Intent.OpenInLive) },
+        )
         Tabs(state.tab, onSelect = { vm.dispatch(ProjectDetailViewModel.Intent.SelectTab(it)) })
         when (state.tab) {
             ProjectDetailViewModel.Tab.Overview -> OverviewTab(state)
@@ -60,7 +64,11 @@ fun ProjectDetailScreen(
 }
 
 @Composable
-private fun Header(state: ProjectDetailViewModel.State, vm: ProjectDetailViewModel) {
+private fun Header(
+    state: ProjectDetailViewModel.State,
+    onForceTakeLock: () -> Unit,
+    onOpenInLive: () -> Unit,
+) {
     val row = state.row
     if (row == null) {
         Text(if (state.loading) "Loading…" else "Project not found", style = AppTheme.typography.title)
@@ -76,35 +84,39 @@ private fun Header(state: ProjectDetailViewModel.State, vm: ProjectDetailViewMod
             Text(row.name, style = AppTheme.typography.display)
             Text(row.path.value, style = AppTheme.typography.caption)
         }
-        LockSlot(state.lockStatus, vm)
+        LockSlot(state.lockStatus, onForceTakeLock = onForceTakeLock)
         Button(
-            onClick = { vm.dispatch(ProjectDetailViewModel.Intent.OpenInLive) },
+            onClick = onOpenInLive,
             variant = ButtonVariant.Primary,
         ) { Text("Open in Live") }
     }
 }
 
 @Composable
-private fun LockSlot(status: LockStatus, vm: ProjectDetailViewModel) {
+private fun LockSlot(status: LockStatus, onForceTakeLock: () -> Unit) {
     when (status) {
-        LockStatus.Free -> Unit // chrome stays clean when there's nothing to say
+        LockStatus.Free -> Unit
+
+        // chrome stays clean when there's nothing to say
         is LockStatus.Ours -> LockBadge(
             label = "editing here",
             color = AppTheme.colors.pinGreen,
         )
+
         is LockStatus.HeldByOther -> LockBadge(
             label = "locked",
             color = AppTheme.colors.accentSecondary,
             detail = status.ownerHostName,
             actionLabel = "Force-take",
-            onAction = { vm.dispatch(ProjectDetailViewModel.Intent.ForceTakeLock) },
+            onAction = onForceTakeLock,
         )
+
         is LockStatus.Stale -> LockBadge(
             label = "stale lock",
             color = AppTheme.colors.pinOrange,
             detail = status.ownerHostName,
             actionLabel = "Take",
-            onAction = { vm.dispatch(ProjectDetailViewModel.Intent.ForceTakeLock) },
+            onAction = onForceTakeLock,
         )
     }
 }
@@ -208,7 +220,7 @@ private fun PluginsTab(plugins: List<PluginRef>) {
             item(key = "track-$track") {
                 Text(track, style = AppTheme.typography.bodyEmphasis)
             }
-            items(list, key = { "${track}-${it.name}-${it.format}" }) { p ->
+            items(list, key = { "$track-${it.name}-${it.format}" }) { p ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,

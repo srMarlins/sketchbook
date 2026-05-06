@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>BinaryExpressionWrapping:TimelineScreen.kt:progress != null &amp;&amp; progress !is MaterializationProgress.Done &amp;&amp; progress !is MaterializationProgress.Failed</ID>
+    <ID>FunctionNaming:TimelineScreen.kt:@Composable fun TimelineScreen</ID>
+    <ID>FunctionNaming:TimelineScreen.kt:@Composable private fun ConfirmRewindDialog</ID>
+    <ID>FunctionNaming:TimelineScreen.kt:@Composable private fun EditableLabelCell</ID>
+    <ID>FunctionNaming:TimelineScreen.kt:@Composable private fun Header</ID>
+    <ID>FunctionNaming:TimelineScreen.kt:@Composable private fun ProgressLine</ID>
+    <ID>FunctionNaming:TimelineScreen.kt:@Composable private fun SnapshotRow</ID>
+    <ID>FunctionSignature:TimelineScreen.kt:@Composable fun TimelineScreen</ID>
+    <ID>FunctionSignature:TimelineScreen.kt:@Composable private fun Header</ID>
+    <ID>LambdaParameterEventTrailing:TimelineScreen.kt:onCommit: (String) -&gt; Unit</ID>
+    <ID>MagicNumber:TimelineScreen.kt:1024</ID>
+    <ID>MagicNumber:TimelineScreen.kt:1024L</ID>
+    <ID>ModifierWithoutDefault:TimelineScreen.kt:modifier: Modifier</ID>
+  </CurrentIssues>
+</SmellBaseline>

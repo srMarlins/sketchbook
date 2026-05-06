@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ClassSignature:JournalViewModel.kt:JournalViewModel : ViewModel</ID>
+    <ID>ClassSignature:JournalViewModel.kt:JournalViewModel$State</ID>
+    <ID>FunctionNaming:JournalScreen.kt:@Composable fun JournalScreen</ID>
+    <ID>FunctionNaming:JournalScreen.kt:@Composable private fun EntryRow</ID>
+    <ID>FunctionSignature:JournalScreen.kt:@Composable fun JournalScreen</ID>
+  </CurrentIssues>
+</SmellBaseline>

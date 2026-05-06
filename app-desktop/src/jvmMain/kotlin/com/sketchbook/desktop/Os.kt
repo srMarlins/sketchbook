@@ -31,8 +31,7 @@ object Os {
         return runCatching { Desktop.getDesktop().open(file) }.isSuccess
     }
 
-    fun pickDirectory(parent: Frame? = null, title: String = "Choose folder"): String? =
-        if (isMac) pickDirectoryMac(parent, title) else pickDirectorySwing(title)
+    fun pickDirectory(parent: Frame? = null, title: String = "Choose folder"): String? = if (isMac) pickDirectoryMac(parent, title) else pickDirectorySwing(title)
 
     fun pickFile(parent: Frame? = null, title: String = "Choose file"): String? {
         val dialog = FileDialog(parent, title, FileDialog.LOAD)
@@ -52,8 +51,11 @@ object Os {
             val file = dialog.file
             if (dir == null || file == null) null else File(dir, file).absolutePath
         } finally {
-            if (previous == null) System.clearProperty("apple.awt.fileDialogForDirectories")
-            else System.setProperty("apple.awt.fileDialogForDirectories", previous)
+            if (previous == null) {
+                System.clearProperty("apple.awt.fileDialogForDirectories")
+            } else {
+                System.setProperty("apple.awt.fileDialogForDirectories", previous)
+            }
         }
     }
 

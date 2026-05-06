@@ -59,6 +59,7 @@ value class BlobHash(val value: String) {
 
     companion object {
         const val PREFIX: String = "b3:"
+
         // BLAKE3 default 32-byte (256-bit) digest = 64 hex chars.
         const val DIGEST_HEX_LEN: Int = 64
     }
@@ -100,5 +101,4 @@ value class UserId(val value: String) {
 }
 
 /** Allowed characters for opaque ids that flow into URL paths. */
-private fun Char.isSafeIdChar(): Boolean =
-    this in '0'..'9' || this in 'a'..'z' || this in 'A'..'Z' || this == '-' || this == '_'
+private fun Char.isSafeIdChar(): Boolean = this in '0'..'9' || this in 'a'..'z' || this in 'A'..'Z' || this == '-' || this == '_'

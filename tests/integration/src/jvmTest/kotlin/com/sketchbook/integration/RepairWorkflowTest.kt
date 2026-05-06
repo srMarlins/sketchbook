@@ -5,12 +5,12 @@ import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.CatalogFts
 import com.sketchbook.catalog.JvmSampleScanner
 import com.sketchbook.catalog.JvmScanner
-import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.runTest
 import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
 import com.sketchbook.syncio.AlsPatcher
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
@@ -21,7 +21,10 @@ import kotlin.test.assertTrue
 class RepairWorkflowTest {
 
     private val tmp: Path = createTempDirectory("repair-")
-    @AfterTest fun cleanup() { tmp.toFile().deleteRecursively() }
+
+    @AfterTest fun cleanup() {
+        tmp.toFile().deleteRecursively()
+    }
 
     @Test
     fun missingSampleMatchAndMacAck() = runTest {

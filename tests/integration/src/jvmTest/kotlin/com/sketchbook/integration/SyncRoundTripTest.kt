@@ -23,7 +23,10 @@ import kotlin.time.Instant
 class SyncRoundTripTest {
 
     private val tmp: Path = createTempDirectory("sync-")
-    @AfterTest fun cleanup() { tmp.toFile().deleteRecursively() }
+
+    @AfterTest fun cleanup() {
+        tmp.toFile().deleteRecursively()
+    }
 
     private val now = Instant.parse("2026-05-06T10:00:00Z")
     private val uuid = ProjectUuid("01H-integration-test")
@@ -100,7 +103,8 @@ class SyncRoundTripTest {
         Files.newInputStream(path).use { input ->
             val buf = ByteArray(8192)
             while (true) {
-                val n = input.read(buf); if (n <= 0) break
+                val n = input.read(buf)
+                if (n <= 0) break
                 md.update(buf, 0, n)
             }
         }

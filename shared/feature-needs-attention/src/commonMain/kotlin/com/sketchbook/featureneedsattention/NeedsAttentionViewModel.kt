@@ -3,11 +3,11 @@ package com.sketchbook.featureneedsattention
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.RepairRepository
-import com.sketchbook.core.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
@@ -57,6 +57,7 @@ class NeedsAttentionViewModel(
                 val r = repository.acknowledgeMacImport(intent.projectId)
                 emitEffect(r.isSuccess, intent.projectId.value.toString(), "ack")
             }
+
             is Intent.RepairMacPaths -> viewModelScope.launch {
                 val r = repository.applyMacPathRepair(intent.projectId)
                 if (r.isSuccess) {
@@ -65,10 +66,12 @@ class NeedsAttentionViewModel(
                     _effects.tryEmit(Effect.Failed(intent.projectId.value.toString(), "repair failed"))
                 }
             }
+
             is Intent.DismissMissingSample -> viewModelScope.launch {
                 val r = repository.dismissMissingSample(intent.projectId, intent.missingPath)
                 emitEffect(r.isSuccess, intent.projectId.value.toString(), "dismiss")
             }
+
             is Intent.ApplyMatch -> viewModelScope.launch {
                 val r = repository.applyMissingSampleMatch(
                     projectId = intent.projectId,
@@ -85,8 +88,11 @@ class NeedsAttentionViewModel(
     }
 
     private fun emitEffect(success: Boolean, key: String, kind: String) {
-        if (success) _effects.tryEmit(Effect.Acknowledged(key, kind))
-        else _effects.tryEmit(Effect.Failed(key, "$kind failed"))
+        if (success) {
+            _effects.tryEmit(Effect.Acknowledged(key, kind))
+        } else {
+            _effects.tryEmit(Effect.Failed(key, "$kind failed"))
+        }
     }
 
     @Immutable

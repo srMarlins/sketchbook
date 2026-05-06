@@ -12,7 +12,6 @@ kotlin {
             implementation(project(":shared:repository"))
             implementation(project(":shared:ui-shared"))
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.datetime)
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(libs.metro.runtime)
@@ -25,7 +24,6 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
-            implementation(libs.kotlinx.datetime)
             implementation(libs.turbine)
         }
     }

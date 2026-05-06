@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:ProjectListViewModelTest.kt:ProjectListViewModelTest.FakeRepo$(emptyList())</ID>
+    <ID>BinaryExpressionWrapping:ProjectListViewModelTest.kt:ProjectListViewModelTest.FakeRepo$byQuery[query] ?: byQuery[""] ?: flowOf(emptyList())</ID>
+    <ID>FunctionSignature:ProjectListViewModelTest.kt:ProjectListViewModelTest.FakeRepo$override fun observeProjects: Flow&lt;List&lt;ProjectRow&gt;&gt;</ID>
+    <ID>FunctionSignature:ToSongStripDataTest.kt:ToSongStripDataTest$private fun row</ID>
+    <ID>ParameterListWrapping:ProjectListViewModelTest.kt:ProjectListViewModelTest.FakeRepo$(query: String)</ID>
+  </CurrentIssues>
+</SmellBaseline>

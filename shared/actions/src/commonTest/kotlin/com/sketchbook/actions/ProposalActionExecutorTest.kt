@@ -31,10 +31,8 @@ class ProposalActionExecutorTest {
         override fun observePlugins(id: ProjectId): Flow<List<PluginRef>> = flowOf(emptyList())
         override fun observeSamples(id: ProjectId): Flow<List<SampleEntry>> = flowOf(emptyList())
 
-        override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> =
-            throw NotImplementedError()
-        override suspend fun rename(id: ProjectId, newName: String): Result<JournalEntry> =
-            throw NotImplementedError()
+        override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> = throw NotImplementedError()
+        override suspend fun rename(id: ProjectId, newName: String): Result<JournalEntry> = throw NotImplementedError()
         override suspend fun archive(id: ProjectId, archived: Boolean): Result<JournalEntry> {
             archiveCalls += ArchiveCall(id, archived)
             return Result.success(stubEntry())

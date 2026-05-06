@@ -3,13 +3,13 @@ package com.sketchbook.featuretimeline
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.MaterializationProgress
 import com.sketchbook.repo.SnapshotRepository
-import com.sketchbook.core.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
@@ -127,11 +127,13 @@ class TimelineViewModel(
                         pendingRewind.update { null }
                         rewindProgress.update { null }
                     }
+
                     is MaterializationProgress.Failed -> {
                         _effects.tryEmit(Effect.RewindFailed(rev, progress.reason))
                         pendingRewind.update { null }
                         rewindProgress.update { null }
                     }
+
                     else -> Unit
                 }
             }
@@ -165,6 +167,7 @@ class TimelineViewModel(
         data class RequestRewind(val rev: SnapshotRev) : Intent
         data object CancelRewind : Intent
         data class ConfirmRewind(val rev: SnapshotRev) : Intent
+
         /** PR-Z Z2: edit a snapshot's label inline. `null` (or blank-after-trim) clears it. */
         data class RelabelSnapshot(val rev: SnapshotRev, val newLabel: String?) : Intent
     }

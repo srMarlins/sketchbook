@@ -43,7 +43,9 @@ class InMemorySyncQueue(
     private val perProject = MutableStateFlow<Map<ProjectId, ProjectSyncState>>(emptyMap())
     private val online = MutableStateFlow(true)
 
-    init { start() }
+    init {
+        start()
+    }
 
     /** Subscribe to the project list and assign a default state to any newly-seen id. */
     private fun start() {
@@ -73,8 +75,7 @@ class InMemorySyncQueue(
 
     override fun observe(): Flow<SyncQueueState> = queue
 
-    override fun observeProject(id: ProjectId): Flow<ProjectSyncState> =
-        perProject.map { it[id] ?: defaultStateFor(id) }
+    override fun observeProject(id: ProjectId): Flow<ProjectSyncState> = perProject.map { it[id] ?: defaultStateFor(id) }
 
     override suspend fun pushNow(uuid: ProjectUuid): Result<Unit> {
         // Without a uuid->id map at v1, treat pushNow as a no-op on aggregates. Per-row
@@ -98,14 +99,12 @@ class InMemorySyncQueue(
     }
 
     /** Read-through synchronous accessor for UI lookups inside non-suspending composables. */
-    fun snapshotFor(id: ProjectId): ProjectSyncState =
-        perProject.value[id] ?: defaultStateFor(id)
+    fun snapshotFor(id: ProjectId): ProjectSyncState = perProject.value[id] ?: defaultStateFor(id)
 
-    private fun defaultStateFor(id: ProjectId): ProjectSyncState =
-        when (id.value.mod(7)) {
-            4 -> ProjectSyncState.Pending
-            5 -> ProjectSyncState.Conflict
-            6 -> ProjectSyncState.LocalOnly
-            else -> ProjectSyncState.Synced
-        }
+    private fun defaultStateFor(id: ProjectId): ProjectSyncState = when (id.value.mod(7)) {
+        4 -> ProjectSyncState.Pending
+        5 -> ProjectSyncState.Conflict
+        6 -> ProjectSyncState.LocalOnly
+        else -> ProjectSyncState.Synced
+    }
 }

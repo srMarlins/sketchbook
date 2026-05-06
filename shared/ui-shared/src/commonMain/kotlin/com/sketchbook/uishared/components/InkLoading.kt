@@ -7,7 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size as layoutSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -18,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.sketchbook.uishared.theme.AppTheme
 import kotlin.math.PI
 import kotlin.math.cos
+import androidx.compose.foundation.layout.size as layoutSize
 
 /**
  * Three-dot ink-pulse loading indicator. Each dot does three things in concert:

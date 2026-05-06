@@ -40,14 +40,17 @@ suspend fun runScan(
                 is ScanProgress.Started -> {
                     out.value = ScanUiState.Scanning(total = p.total, done = 0)
                 }
+
                 is ScanProgress.ProjectIndexed -> {
                     indexed++
                     out.value = ScanUiState.Scanning(total = p.total, done = p.done)
                 }
+
                 is ScanProgress.ProjectFailed -> {
                     failed++
                     out.value = ScanUiState.Scanning(total = p.total, done = p.done)
                 }
+
                 is ScanProgress.Finished -> {
                     out.value = ScanUiState.Done(indexed = indexed, failed = failed)
                 }

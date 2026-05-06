@@ -14,7 +14,6 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -22,14 +21,20 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TimelineViewModelTest {
 
     private val mainDispatcher = StandardTestDispatcher()
 
-    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
-    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
+    @BeforeTest fun setUpMain() {
+        Dispatchers.setMain(mainDispatcher)
+    }
+
+    @AfterTest fun tearDownMain() {
+        Dispatchers.resetMain()
+    }
 
     private val uuid = ProjectUuid("01H-tl")
 
@@ -72,14 +77,12 @@ class TimelineViewModelTest {
                 ),
             )
         }
-        override suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> {
-            return if (failNext) {
-                failNext = false
-                Result.failure(IllegalStateException("disk full"))
-            } else {
-                rewoundTo = rev
-                Result.success(Unit)
-            }
+        override suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> = if (failNext) {
+            failNext = false
+            Result.failure(IllegalStateException("disk full"))
+        } else {
+            rewoundTo = rev
+            Result.success(Unit)
         }
     }
 

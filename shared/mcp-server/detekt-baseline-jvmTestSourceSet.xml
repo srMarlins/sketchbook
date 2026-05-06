@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:FileProposalsWriterTest.kt:FileProposalsWriterTest$("drum-loop")</ID>
+    <ID>ArgumentListWrapping:FileProposalsWriterTest.kt:FileProposalsWriterTest$("tags", kotlinx.serialization.json.buildJsonArray { add(kotlinx.serialization.json.JsonPrimitive("drum-loop")) })</ID>
+    <ID>ArgumentListWrapping:FileProposalsWriterTest.kt:FileProposalsWriterTest$(kotlinx.serialization.json.JsonPrimitive("drum-loop"))</ID>
+    <ID>FunctionLiteral:FileProposalsWriterTest.kt:FileProposalsWriterTest$&lt;anonymous&gt;</ID>
+  </CurrentIssues>
+</SmellBaseline>

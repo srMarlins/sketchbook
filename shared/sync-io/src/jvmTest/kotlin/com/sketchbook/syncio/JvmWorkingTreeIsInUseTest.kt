@@ -13,7 +13,9 @@ class JvmWorkingTreeIsInUseTest {
 
     private val tmp = createTempDirectory("isinuse-")
 
-    @AfterTest fun cleanup() { tmp.toFile().deleteRecursively() }
+    @AfterTest fun cleanup() {
+        tmp.toFile().deleteRecursively()
+    }
 
     @Test
     fun returnsFalseWhenFileMissing() {

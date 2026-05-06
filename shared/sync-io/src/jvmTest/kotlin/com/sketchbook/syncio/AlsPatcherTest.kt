@@ -57,8 +57,7 @@ class AlsPatcherTest {
         return out.toByteArray()
     }
 
-    private fun ungzipToString(gzipped: ByteArray): String =
-        GZIPInputStream(ByteArrayInputStream(gzipped)).use { it.readBytes().toString(Charsets.UTF_8) }
+    private fun ungzipToString(gzipped: ByteArray): String = GZIPInputStream(ByteArrayInputStream(gzipped)).use { it.readBytes().toString(Charsets.UTF_8) }
 
     @Test
     fun `patcher writes new als atomically and leaves no temp files on success`() {
@@ -169,11 +168,11 @@ class AlsPatcherTest {
         Files.write(als, originalBytes)
         val patcher = AlsPatcher(
             busyDetector = { false },
-            rewriter = { _, _ -> byteArrayOf(0x1F.toByte(), 0x8B.toByte(), 0xFF.toByte()) },  // truncated gzip
+            rewriter = { _, _ -> byteArrayOf(0x1F.toByte(), 0x8B.toByte(), 0xFF.toByte()) }, // truncated gzip
         )
         val outcome = patcher.patch(als, mapOf("x" to "y"))
         assertTrue(outcome is AlsPatcher.Outcome.Failed)
-        assertContentEquals(originalBytes, Files.readAllBytes(als))         // file unchanged
+        assertContentEquals(originalBytes, Files.readAllBytes(als)) // file unchanged
     }
 
     @Test
@@ -182,7 +181,7 @@ class AlsPatcherTest {
         val als = tmpDir.resolve("a.als")
         Files.write(als, gzipBytesOf("rewriter/oneSampleRef.als.xml"))
         val staleTmp = tmpDir.resolve("a.als.patcher-tmp")
-        Files.write(staleTmp, byteArrayOf(0x00))            // crash leftover
+        Files.write(staleTmp, byteArrayOf(0x00)) // crash leftover
         val patcher = AlsPatcher(busyDetector = { false })
         val outcome = patcher.patch(als, mapping = mapOf("nope" to "nope2"))
         // No-op mapping → NoChange — but the stale tmp must be gone after the call.

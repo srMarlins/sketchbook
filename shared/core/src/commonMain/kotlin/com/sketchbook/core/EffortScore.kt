@@ -79,8 +79,7 @@ object EffortScore {
     }
 
     /** Convenience: score only, or null. */
-    fun scoreOf(meta: ProjectMetadata?, fileSizeBytes: Long): Int? =
-        compute(meta, fileSizeBytes)?.score
+    fun scoreOf(meta: ProjectMetadata?, fileSizeBytes: Long): Int? = compute(meta, fileSizeBytes)?.score
 
     private fun excess(value: Double, baseline: Double): Double = max(0.0, value - baseline)
 
@@ -88,11 +87,10 @@ object EffortScore {
      * Heuristic: any plugin whose track_name is empty/null or matches "Master"
      * (case-insensitive) indicates the master chain. Matches scoring.py exactly.
      */
-    private fun hasMasterChain(plugins: List<PluginRef>): Boolean =
-        plugins.any { p ->
-            val tn = p.trackName?.trim().orEmpty()
-            tn.isEmpty() || tn.equals("Master", ignoreCase = true)
-        }
+    private fun hasMasterChain(plugins: List<PluginRef>): Boolean = plugins.any { p ->
+        val tn = p.trackName?.trim().orEmpty()
+        tn.isEmpty() || tn.equals("Master", ignoreCase = true)
+    }
 
     private fun roundTo4(v: Double): Double {
         val scaled = (v * 10_000.0)

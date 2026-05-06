@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>NoUnusedImports:McpServerTest.kt:com.sketchbook.mcp.McpServerTest.kt</ID>
+  </CurrentIssues>
+</SmellBaseline>

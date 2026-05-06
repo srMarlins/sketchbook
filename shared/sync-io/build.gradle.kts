@@ -8,7 +8,6 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":shared:core"))
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.io.core)
             implementation(libs.metro.runtime)
         }
@@ -23,7 +22,6 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
-            implementation(libs.sqldelight.jvm.driver)
         }
         commonTest.dependencies {
             implementation(libs.turbine)

@@ -19,29 +19,26 @@ import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsBytes
-import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.bodyAsChannel
-import io.ktor.utils.io.jvm.javaio.toInputStream
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.http.content.OutgoingContent
+import io.ktor.http.contentType
 import io.ktor.http.encodeURLPath
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ktor.utils.io.writeFully
 import kotlinx.io.Buffer
 import kotlinx.io.RawSource
 import kotlinx.io.Source
 import kotlinx.io.buffered
-import kotlinx.io.readByteArray
 import kotlinx.io.readAtMostTo
+import kotlinx.io.readByteArray
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.StandardOpenOption
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -50,6 +47,9 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 
 /**
  * Google Cloud Storage backend over the JSON API. Conditional writes use
@@ -105,7 +105,10 @@ class DirectGcsBackend(
         }
         when (response.status) {
             HttpStatusCode.OK -> Unit
-            HttpStatusCode.PreconditionFailed -> Unit // already present
+
+            HttpStatusCode.PreconditionFailed -> Unit
+
+            // already present
             else -> throw remoteFailure(response, "PUT $path")
         }
     }
@@ -165,7 +168,10 @@ class DirectGcsBackend(
         return when (response.status) {
             HttpStatusCode.OK -> response.headers[HttpHeaders.Location]
                 ?: throw SketchbookError.IntegrityError("missing Location header on resumable session init for $path")
-            HttpStatusCode.PreconditionFailed -> null // already present, content-addressed → noop
+
+            HttpStatusCode.PreconditionFailed -> null
+
+            // already present, content-addressed → noop
             else -> throw remoteFailure(response, "POST resumable-init $path")
         }
     }
@@ -192,8 +198,12 @@ class DirectGcsBackend(
         }
         return when (response.status.value) {
             200, 201 -> true
+
             308 -> false
-            412 -> true // already exists — content-addressed
+
+            412 -> true
+
+            // already exists — content-addressed
             else -> throw remoteFailure(response, "PUT chunk $start-$endInclusive of $total")
         }
     }
@@ -312,8 +322,10 @@ class DirectGcsBackend(
                     ?: return Result.failure(SketchbookError.IntegrityError("missing x-goog-generation on HEAD write"))
                 Result.success(Generation(gen))
             }
+
             HttpStatusCode.PreconditionFailed ->
                 Result.failure(SketchbookError.Conflict("HEAD generation mismatch on uuid=$uuid"))
+
             else -> Result.failure(remoteFailure(resp, "PUT $headPath"))
         }
     }
@@ -335,6 +347,7 @@ class DirectGcsBackend(
                     ?: throw SketchbookError.IntegrityError("missing x-goog-generation on lock write")
                 LeaseAcquireResult.Acquired(Generation(gen))
             }
+
             HttpStatusCode.PreconditionFailed -> {
                 val existing = http.get(objectUrl(path)) {
                     authHeader()
@@ -345,6 +358,7 @@ class DirectGcsBackend(
                     ?: throw SketchbookError.IntegrityError("missing x-goog-generation on held lock read")
                 LeaseAcquireResult.Held(existingLock, Generation(gen))
             }
+
             else -> throw remoteFailure(resp, "PUT $path")
         }
     }
@@ -370,7 +384,9 @@ class DirectGcsBackend(
                     ?: throw SketchbookError.IntegrityError("missing x-goog-generation on lock refresh")
                 LeaseRefreshResult.Refreshed(Generation(gen))
             }
+
             HttpStatusCode.PreconditionFailed -> LeaseRefreshResult.Stale
+
             else -> throw remoteFailure(resp, "REFRESH $path")
         }
     }
@@ -392,14 +408,11 @@ class DirectGcsBackend(
         bearerAuth(auth.token())
     }
 
-    private fun objectUrl(path: String): String =
-        "https://storage.googleapis.com/storage/v1/b/$bucket/o/${path.encodeURLPath()}"
+    private fun objectUrl(path: String): String = "https://storage.googleapis.com/storage/v1/b/$bucket/o/${path.encodeURLPath()}"
 
-    private fun uploadUrl(): String =
-        "https://storage.googleapis.com/upload/storage/v1/b/$bucket/o"
+    private fun uploadUrl(): String = "https://storage.googleapis.com/upload/storage/v1/b/$bucket/o"
 
-    private fun listUrl(): String =
-        "https://storage.googleapis.com/storage/v1/b/$bucket/o"
+    private fun listUrl(): String = "https://storage.googleapis.com/storage/v1/b/$bucket/o"
 
     private fun blobPath(hash: BlobHash, scope: BlobScope): String {
         val shard = hash.hex.substring(0, 2)
@@ -409,14 +422,11 @@ class DirectGcsBackend(
         }
     }
 
-    private fun manifestPath(uuid: ProjectUuid, rev: Long, timestamp: String, host: String): String =
-        "${userId.value}/manifests/${uuid.value}/${rev.toString().padStart(8, '0')}-${timestamp.replace(':', '-')}-$host.json"
+    private fun manifestPath(uuid: ProjectUuid, rev: Long, timestamp: String, host: String): String = "${userId.value}/manifests/${uuid.value}/${rev.toString().padStart(8, '0')}-${timestamp.replace(':', '-')}-$host.json"
 
-    private fun headPath(uuid: ProjectUuid): String =
-        "${userId.value}/manifests/${uuid.value}/HEAD"
+    private fun headPath(uuid: ProjectUuid): String = "${userId.value}/manifests/${uuid.value}/HEAD"
 
-    private fun lockPath(uuid: ProjectUuid): String =
-        "${userId.value}/locks/${uuid.value}.lock"
+    private fun lockPath(uuid: ProjectUuid): String = "${userId.value}/locks/${uuid.value}.lock"
 
     private fun JsonElement.toManifestRef(prefix: String): ManifestRef? {
         val obj = this.jsonObject

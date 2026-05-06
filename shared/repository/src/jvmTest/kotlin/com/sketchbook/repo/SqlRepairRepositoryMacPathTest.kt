@@ -1,14 +1,16 @@
 package com.sketchbook.repo
 
 import app.cash.turbine.test
-import com.sketchbook.catalog.CatalogDb
-import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.als.AlsParser
 import com.sketchbook.als.AlsRewriter
+import com.sketchbook.catalog.CatalogDb
+import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.SampleRefEdit
 import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
@@ -22,8 +24,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.runTest
 
 /**
  * Integration test for PR-W Task W5 — `SqlRepairRepository.applyMacPathRepair` reuses the same
@@ -103,8 +103,7 @@ class SqlRepairRepositoryMacPathTest {
         return out.toByteArray()
     }
 
-    private fun ungzipToString(gzipped: ByteArray): String =
-        GZIPInputStream(ByteArrayInputStream(gzipped)).use { it.readBytes().toString(Charsets.UTF_8) }
+    private fun ungzipToString(gzipped: ByteArray): String = GZIPInputStream(ByteArrayInputStream(gzipped)).use { it.readBytes().toString(Charsets.UTF_8) }
 
     /**
      * Default-mode fake mirrors the W3 test's behavior — does the rewrite via substring replace on

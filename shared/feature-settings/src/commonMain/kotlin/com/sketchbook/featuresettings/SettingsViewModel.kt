@@ -3,11 +3,11 @@ package com.sketchbook.featuresettings
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.SettingsRepository
-import com.sketchbook.core.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
@@ -57,21 +57,27 @@ class SettingsViewModel(
             is Intent.AddRoot -> launchWithEffect(intent.root.path) {
                 repository.upsertRoot(intent.root)
             }
+
             is Intent.RemoveRoot -> launchWithEffect(intent.root.path) {
                 repository.removeRoot(intent.root)
             }
+
             is Intent.SetCloudCredential -> launchWithEffect("cloud") {
                 repository.setCloudCredential(intent.serviceAccountJson)
             }
+
             is Intent.SetCloudBucket -> launchWithEffect("cloud-bucket") {
                 repository.setCloudBucket(intent.bucket)
             }
+
             is Intent.ToggleSelfContained -> launchWithEffect(intent.uuid.value) {
                 repository.setSelfContained(intent.uuid, intent.value)
             }
+
             is Intent.SetCacheSize -> launchWithEffect("cache-size") {
                 repository.setCacheSettings(intent.settings)
             }
+
             is Intent.SetCacheLru -> launchWithEffect("cache-lru") {
                 val current = state.value.cacheSettings
                 repository.setCacheSettings(current.copy(lruEnabled = intent.enabled))
@@ -82,8 +88,11 @@ class SettingsViewModel(
     private inline fun launchWithEffect(key: String, crossinline block: suspend () -> Result<*>) {
         viewModelScope.launch {
             val r = block()
-            if (r.isSuccess) _effects.tryEmit(Effect.Saved(key))
-            else _effects.tryEmit(Effect.Failed(key, r.exceptionOrNull()?.message ?: "save failed"))
+            if (r.isSuccess) {
+                _effects.tryEmit(Effect.Saved(key))
+            } else {
+                _effects.tryEmit(Effect.Failed(key, r.exceptionOrNull()?.message ?: "save failed"))
+            }
         }
     }
 

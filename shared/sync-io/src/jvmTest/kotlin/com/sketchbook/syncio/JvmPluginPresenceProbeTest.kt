@@ -160,8 +160,7 @@ class JvmPluginPresenceProbeTest {
     /** Reflective hook into the probe's name normalizer so we can pin behavior without exposing
      *  it on the public surface. The companion's `normalizeForTest` JVM method is private to the
      *  module but visible to test source set via package-internal `internal`.  */
-    private fun normalizePluginNameForTest(name: String): String =
-        JvmPluginPresenceProbe.normalizeForTest(name)
+    private fun normalizePluginNameForTest(name: String): String = JvmPluginPresenceProbe.normalizeForTest(name)
 
     private fun setupCatalogWithPlugin(
         pluginName: String,

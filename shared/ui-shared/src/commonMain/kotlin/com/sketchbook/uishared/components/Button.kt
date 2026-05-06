@@ -69,6 +69,7 @@ fun Button(
             Color(0x33FFFFFF),
             3.dp,
         )
+
         ButtonVariant.Secondary -> Quintet(
             colors.surfaceCard,
             colors.inkPrimary,
@@ -76,6 +77,7 @@ fun Button(
             if (colors.isDark) Color(0x14F5ECD8) else Color(0x55FFFAEE),
             1.dp,
         )
+
         ButtonVariant.Ghost -> Quintet(
             Color.Transparent,
             colors.inkPrimary,
@@ -100,22 +102,26 @@ fun Button(
         else -> baseElevation
     }
 
-    val drawEdges: Modifier = if (variant == ButtonVariant.Ghost) Modifier else Modifier.drawBehind {
-        val r = cornerDp.toPx()
-        drawRoundRect(
-            color = edgeDark,
-            topLeft = Offset(0f, 0f),
-            size = Size(size.width, size.height),
-            cornerRadius = CornerRadius(r, r),
-            style = Stroke(width = 1f),
-        )
-        drawRoundRect(
-            color = edgeLight,
-            topLeft = Offset(0.5f, 0.5f),
-            size = Size(size.width - 1f, size.height - 1f),
-            cornerRadius = CornerRadius(r - 0.5f, r - 0.5f),
-            style = Stroke(width = 0.6f),
-        )
+    val drawEdges: Modifier = if (variant == ButtonVariant.Ghost) {
+        Modifier
+    } else {
+        Modifier.drawBehind {
+            val r = cornerDp.toPx()
+            drawRoundRect(
+                color = edgeDark,
+                topLeft = Offset(0f, 0f),
+                size = Size(size.width, size.height),
+                cornerRadius = CornerRadius(r, r),
+                style = Stroke(width = 1f),
+            )
+            drawRoundRect(
+                color = edgeLight,
+                topLeft = Offset(0.5f, 0.5f),
+                size = Size(size.width - 1f, size.height - 1f),
+                cornerRadius = CornerRadius(r - 0.5f, r - 0.5f),
+                style = Stroke(width = 0.6f),
+            )
+        }
     }
 
     val finalMod = modifier

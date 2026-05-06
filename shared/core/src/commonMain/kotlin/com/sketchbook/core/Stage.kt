@@ -29,7 +29,8 @@ enum class Stage(val label: String, val displayName: String) {
     Done(label = "done", displayName = "Done"),
 
     /** Many tracks, untouched for >90d, no bounce — abandoned or stalled. */
-    Stuck(label = "stuck", displayName = "Stuck");
+    Stuck(label = "stuck", displayName = "Stuck"),
+    ;
 
     companion object {
         /**

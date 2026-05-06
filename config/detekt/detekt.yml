@@ -1,0 +1,137 @@
+config:
+  validation: true
+  warningsAsErrors: false
+
+processors:
+  active: true
+
+console-reports:
+  active: true
+
+complexity:
+  active: true
+  CyclomaticComplexMethod:
+    active: true
+    allowedComplexity: 20
+  LongMethod:
+    active: true
+    allowedLines: 80
+  LongParameterList:
+    active: true
+    allowedFunctionParameters: 8
+    allowedConstructorParameters: 10
+    ignoreDefaultParameters: true
+    ignoreDataClasses: true
+    ignoreAnnotatedParameter:
+      - "Composable"
+  ComplexCondition:
+    active: true
+    allowedConditions: 5
+  TooManyFunctions:
+    active: true
+    allowedFunctionsPerFile: 30
+    allowedFunctionsPerClass: 20
+    allowedFunctionsPerInterface: 20
+    allowedFunctionsPerObject: 20
+    allowedFunctionsPerEnum: 20
+    ignoreOverridden: true
+    ignoreAnnotatedFunctions:
+      - "Composable"
+
+style:
+  active: true
+  MaxLineLength:
+    active: true
+    maxLineLength: 140
+    excludePackageStatements: true
+    excludeImportStatements: true
+  MagicNumber:
+    active: true
+    ignoreNumbers: ['-1', '0', '1', '2', '100', '1000']
+    ignoreEnums: true
+    ignoreAnnotated:
+      - "Composable"
+      - "Preview"
+  ReturnCount:
+    active: true
+    max: 4
+  # detekt 2.x: `UnusedPrivateMember` was split into 3 finer-grained rules.
+  UnusedPrivateClass:
+    active: true
+  UnusedPrivateFunction:
+    active: true
+    ignoreAnnotated:
+      - "Composable"
+      - "Preview"
+  UnusedPrivateProperty:
+    active: true
+
+empty-blocks:
+  active: true
+
+exceptions:
+  active: true
+  TooGenericExceptionCaught:
+    active: false  # too noisy in coroutine code
+
+# detekt 2.x: the formatting ruleset is now `ktlint:` (was `formatting:` in 1.x)
+# and is supplied by the `dev.detekt:detekt-rules-ktlint-wrapper` artifact
+# (renamed from 1.x `detekt-formatting`).
+ktlint:
+  active: true
+  android: false
+  autoCorrect: false
+  # Disable rules already handled by Spotless/ktlint to avoid double-reporting.
+  Indentation:
+    active: false
+  MaximumLineLength:
+    active: false
+  ImportOrdering:
+    active: false
+  NoWildcardImports:
+    active: false
+
+# Compose Lints (compose-rules 0.5.x — ships matching detekt 2.0.0-alpha.3 bindings).
+# Rule list aligned with https://mrmans0n.github.io/compose-rules/detekt/ for 0.5.x.
+# Notable from 0.4.x: `ModifierComposable` is gone (replaced by `ModifierComposed`);
+# `ModifierClickableOrder`, `ContentSlotReused`, `LambdaParameterEventTrailing`,
+# `LambdaParameterInRestartableEffect`, `MutableStateAutoboxing`,
+# `RememberContentMissing`, `DefaultsVisibility`, `ParameterNaming`,
+# `ContentTrailingLambda`, `CompositionLocalAllowlist`, `CompositionLocalNaming`,
+# `ComposableAnnotationNaming`, `MutableStateParam` are 0.5.x defaults left at
+# their built-in defaults rather than enumerated here.
+Compose:
+  ComposableNaming:
+    active: true
+  ComposableParamOrder:
+    active: true
+  ContentEmitterReturningValues:
+    active: true
+  ModifierClickableOrder:
+    active: true
+  ModifierComposed:
+    active: true
+  ModifierMissing:
+    active: true
+  ModifierNaming:
+    active: true
+  ModifierNotUsedAtRoot:
+    active: true
+  ModifierReused:
+    active: true
+  ModifierWithoutDefault:
+    active: true
+  MultipleEmitters:
+    active: true
+  MutableParams:
+    active: true
+  PreviewPublic:
+    active: true
+  RememberMissing:
+    active: true
+  ViewModelForwarding:
+    active: true
+  # `ViewModelInjection` flags Hilt's `viewModel()` accessor — we use Metro's
+  # `metroViewModel()` at the NavEntry boundary instead, so leave it off.
+  ViewModelInjection:
+    active: false

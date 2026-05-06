@@ -1,0 +1,12 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>FunctionNaming:ProposalsScreen.kt:@Composable fun ProposalsScreen</ID>
+    <ID>FunctionNaming:ProposalsScreen.kt:@Composable private fun ActionsList</ID>
+    <ID>FunctionNaming:ProposalsScreen.kt:@Composable private fun PendingCard</ID>
+    <ID>FunctionNaming:ProposalsScreen.kt:@Composable private fun ResolvedCard</ID>
+    <ID>FunctionSignature:ProposalsScreen.kt:@Composable fun ProposalsScreen</ID>
+    <ID>FunctionSignature:ProposalsScreen.kt:@Composable private fun PendingCard</ID>
+  </CurrentIssues>
+</SmellBaseline>

@@ -61,7 +61,9 @@ class LeasedLockRepositoryTest {
         )
         val projectId = catalog.catalogQueries.selectProjectIdByPath("/tmp/p.als").executeAsOne()
         catalog.catalogQueries.insertProjectIdentityIfAbsent(
-            project_id = projectId, uuid = uuid.value, created_at = "2026-05-06T00:00:00Z",
+            project_id = projectId,
+            uuid = uuid.value,
+            created_at = "2026-05-06T00:00:00Z",
         )
         val store = SyncStateStore(catalog)
         val journal = InMemoryJournalRepository()
@@ -106,8 +108,7 @@ private class FakeLockCloud : CloudBackend {
     override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource = error("not used")
     override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest = error("not used")
     override suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?) = emptyList<ManifestRef>()
-    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest) =
-        Result.failure<Generation>(error("not used"))
+    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest) = Result.failure<Generation>(error("not used"))
     override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock): LeaseAcquireResult {
         val current = this.lock
         return if (current == null) {

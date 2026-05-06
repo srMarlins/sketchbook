@@ -14,11 +14,12 @@ kotlin {
 }
 
 powerAssert {
-    functions = listOf(
-        "kotlin.assert",
-        "kotlin.test.assertTrue",
-        "kotlin.test.assertEquals",
-        "kotlin.test.assertNull",
-        "kotlin.test.assertNotNull",
-    )
+    functions =
+        listOf(
+            "kotlin.assert",
+            "kotlin.test.assertTrue",
+            "kotlin.test.assertEquals",
+            "kotlin.test.assertNull",
+            "kotlin.test.assertNotNull",
+        )
 }

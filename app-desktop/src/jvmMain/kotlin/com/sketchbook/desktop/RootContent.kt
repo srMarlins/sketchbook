@@ -7,31 +7,17 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.navigation3.runtime.NavBackStack
-import androidx.navigation3.runtime.NavEntry
-import androidx.navigation3.runtime.NavKey
-import androidx.navigation3.ui.NavDisplay
-import dev.zacsweers.metrox.viewmodel.metroViewModel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -42,8 +28,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -57,16 +50,16 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.ui.NavDisplay
+import com.sketchbook.core.ProjectId
 import com.sketchbook.featuredetail.ProjectDetailScreen
 import com.sketchbook.featuredetail.ProjectDetailViewModel
 import com.sketchbook.featurejournal.JournalScreen
 import com.sketchbook.featurejournal.JournalViewModel
-import com.sketchbook.uishared.components.Button
-import com.sketchbook.uishared.components.ButtonVariant
-import com.sketchbook.uishared.components.ProvideContentColor
-import com.sketchbook.uishared.components.Text
-import java.io.File
-import javax.swing.JFileChooser
 import com.sketchbook.featureneedsattention.NeedsAttentionScreen
 import com.sketchbook.featureneedsattention.NeedsAttentionViewModel
 import com.sketchbook.featureprojects.ProjectListScreen
@@ -81,13 +74,19 @@ import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.ProjectSyncState
 import com.sketchbook.uishared.components.ActivityBar
 import com.sketchbook.uishared.components.ActivityState
+import com.sketchbook.uishared.components.Button
+import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.InkLoading
-import com.sketchbook.core.ProjectId
 import com.sketchbook.uishared.components.NotebookSidebar
 import com.sketchbook.uishared.components.PaperPage
+import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.SidebarItem
 import com.sketchbook.uishared.components.Surface
+import com.sketchbook.uishared.components.Text
+import dev.zacsweers.metrox.viewmodel.metroViewModel
 import kotlinx.coroutines.launch
+import java.io.File
+import javax.swing.JFileChooser
 
 /**
  * Root composable: notebook-style sidebar of top-level destinations + a `NavDisplay` body.
@@ -163,7 +162,9 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
         // only when something is actively uploading; a non-empty pending queue with no upload in
         // flight reads as "stuck loading" — the sidebar caption already exposes the queue depth.
         scanProgress is ScanUiState.Scanning -> ActivityState.Scanning
+
         syncState.uploading > 0 -> ActivityState.Syncing
+
         else -> ActivityState.Idle
     }
 
@@ -238,145 +239,155 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                 androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxHeight().fillMaxWidth()) {
                     ActivityBar(state = activityState, modifier = Modifier.fillMaxWidth())
                     Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                NavDisplay(
-                    backStack = backStack,
-                    onBack = { backStack.removeLastOrNull() },
-                    transitionSpec = {
-                        // Material fade-through + tiny scale-in. No positional slide because
-                        // sidebar siblings aren't on a left/right axis.
-                        val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
-                        val fadeOutSpec = tween<Float>(durationMillis = 90, easing = ease)
-                        val fadeInSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
-                        val scaleSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
-                        (fadeIn(fadeInSpec) + scaleIn(scaleSpec, initialScale = 0.985f)) togetherWith
-                            (fadeOut(fadeOutSpec) + scaleOut(scaleSpec, targetScale = 1.005f))
-                    },
-                    popTransitionSpec = {
-                        val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
-                        val fadeOutSpec = tween<Float>(durationMillis = 90, easing = ease)
-                        val fadeInSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
-                        val scaleSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
-                        (fadeIn(fadeInSpec) + scaleIn(scaleSpec, initialScale = 1.015f)) togetherWith
-                            (fadeOut(fadeOutSpec) + scaleOut(scaleSpec, targetScale = 0.99f))
-                    },
-                    entryProvider = { key ->
-                        NavEntry(key) { current ->
-                            when (current) {
-                                Screen.Projects -> {
-                                    val vm: ProjectListViewModel = metroViewModel()
-                                    // Sidebar→Projects is the user's "go home" gesture. Today the
-                                    // VM is window-scoped so its query persists across nav; reset
-                                    // it on each (re)entry so the dashboard reappears. When per-
-                                    // NavEntry ViewModelStore decorators land, this becomes a
-                                    // fresh-VM-per-entry behavior automatically.
-                                    LaunchedEffect(Unit) {
-                                        vm.dispatch(ProjectListViewModel.Intent.Search(""))
-                                    }
-                                    // PR-CC: the sidebar Health-chip filter rides through the
-                                    // AppScope-lifetime `ProjectFilterCoordinator` directly into
-                                    // this VM's `combine`. No `LaunchedEffect { collect { dispatch } }`
-                                    // orchestration here — the chip click in the sidebar already
-                                    // updated the coordinator, so this VM observes it on first
-                                    // collection.
-                                    ProjectListScreen(
-                                        vm = vm,
-                                        scanLabel = scanIndicatorLabel,
-                                        scanActive = scanIndicatorActive,
-                                        syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
-                                        detailPanel = { id, dismiss ->
-                                            // Track which project the side-panel is showing so the
-                                            // root quick-capture handler can resolve it without
-                                            // reaching into the NavEntry-scoped VM.
-                                            DisposableEffect(id) {
-                                                panelProjectId = id
-                                                onDispose { panelProjectId = null }
+                        NavDisplay(
+                            backStack = backStack,
+                            onBack = { backStack.removeLastOrNull() },
+                            transitionSpec = {
+                                // Material fade-through + tiny scale-in. No positional slide because
+                                // sidebar siblings aren't on a left/right axis.
+                                val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+                                val fadeOutSpec = tween<Float>(durationMillis = 90, easing = ease)
+                                val fadeInSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
+                                val scaleSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
+                                (fadeIn(fadeInSpec) + scaleIn(scaleSpec, initialScale = 0.985f)) togetherWith
+                                    (fadeOut(fadeOutSpec) + scaleOut(scaleSpec, targetScale = 1.005f))
+                            },
+                            popTransitionSpec = {
+                                val ease = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
+                                val fadeOutSpec = tween<Float>(durationMillis = 90, easing = ease)
+                                val fadeInSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
+                                val scaleSpec = tween<Float>(durationMillis = 220, delayMillis = 60, easing = ease)
+                                (fadeIn(fadeInSpec) + scaleIn(scaleSpec, initialScale = 1.015f)) togetherWith
+                                    (fadeOut(fadeOutSpec) + scaleOut(scaleSpec, targetScale = 0.99f))
+                            },
+                            entryProvider = { key ->
+                                NavEntry(key) { current ->
+                                    when (current) {
+                                        Screen.Projects -> {
+                                            val vm: ProjectListViewModel = metroViewModel()
+                                            // Sidebar→Projects is the user's "go home" gesture. Today the
+                                            // VM is window-scoped so its query persists across nav; reset
+                                            // it on each (re)entry so the dashboard reappears. When per-
+                                            // NavEntry ViewModelStore decorators land, this becomes a
+                                            // fresh-VM-per-entry behavior automatically.
+                                            LaunchedEffect(Unit) {
+                                                vm.dispatch(ProjectListViewModel.Intent.Search(""))
                                             }
-                                            val detailVm: com.sketchbook.featuredetail.ProjectDetailViewModel =
+                                            // PR-CC: the sidebar Health-chip filter rides through the
+                                            // AppScope-lifetime `ProjectFilterCoordinator` directly into
+                                            // this VM's `combine`. No `LaunchedEffect { collect { dispatch } }`
+                                            // orchestration here — the chip click in the sidebar already
+                                            // updated the coordinator, so this VM observes it on first
+                                            // collection.
+                                            ProjectListScreen(
+                                                vm = vm,
+                                                scanLabel = scanIndicatorLabel,
+                                                scanActive = scanIndicatorActive,
+                                                syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
+                                                detailPanel = { id, dismiss ->
+                                                    // Track which project the side-panel is showing so the
+                                                    // root quick-capture handler can resolve it without
+                                                    // reaching into the NavEntry-scoped VM.
+                                                    DisposableEffect(id) {
+                                                        panelProjectId = id
+                                                        onDispose { panelProjectId = null }
+                                                    }
+                                                    val detailVm: com.sketchbook.featuredetail.ProjectDetailViewModel =
+                                                        metroViewModel()
+                                                    LaunchedEffect(id) { detailVm.load(id) }
+                                                    LaunchedEffect(detailVm) {
+                                                        detailVm.effects.collect { e ->
+                                                            when (e) {
+                                                                is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LaunchLive ->
+                                                                    Os.openInLive(e.projectPath)
+
+                                                                com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTaken,
+                                                                is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTakeFailed,
+                                                                -> Unit
+                                                            }
+                                                        }
+                                                    }
+                                                    DetailPanelRoutePane(
+                                                        vm = detailVm,
+                                                        onDismiss = dismiss,
+                                                        syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
+                                                        onPushNow = if (chrome.syncWired) {
+                                                            { pid -> coroutineScope.launch { chrome.pushNow(pid) } }
+                                                        } else {
+                                                            null
+                                                        },
+                                                        conflictMessageFor = if (chrome.syncWired) chrome::conflictMessage else null,
+                                                        onOpenTimeline = { pid ->
+                                                            backStack.add(Screen.Timeline(chrome.timelineUuidFor(pid)))
+                                                        },
+                                                        // PR-AA: hand the Plugins tab the inverse query + a hook to swap
+                                                        // the panel's project on click. Reusing the same `detailVm.load`
+                                                        // path keeps the side-panel-vs-back-stack semantics consistent —
+                                                        // the user stays in the side-panel context, just on a different
+                                                        // project.
+                                                        pluginUsageFlow = chrome::observeProjectsUsing,
+                                                        onSelectProject = { pid ->
+                                                            vm.dispatch(ProjectListViewModel.Intent.OpenDetail(pid))
+                                                        },
+                                                    )
+                                                },
+                                            )
+                                        }
+
+                                        is Screen.ProjectDetail -> {
+                                            val vm: com.sketchbook.featuredetail.ProjectDetailViewModel =
                                                 metroViewModel()
-                                            LaunchedEffect(id) { detailVm.load(id) }
-                                            LaunchedEffect(detailVm) {
-                                                detailVm.effects.collect { e ->
+                                            LaunchedEffect(current.id) { vm.load(current.id) }
+                                            ProjectDetailScreen(vm)
+                                        }
+
+                                        is Screen.Timeline -> {
+                                            val vm: TimelineViewModel = metroViewModel()
+                                            LaunchedEffect(current.uuid) { vm.load(current.uuid) }
+                                            TimelineScreen(vm)
+                                        }
+
+                                        Screen.Proposals -> ProposalsScreen(vm = metroViewModel())
+
+                                        Screen.NeedsAttention -> NeedsAttentionScreen(vm = metroViewModel())
+
+                                        Screen.Journal -> {
+                                            val vm: JournalViewModel = metroViewModel()
+                                            LaunchedEffect(vm) {
+                                                vm.effects.collect { e ->
                                                     when (e) {
-                                                        is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LaunchLive ->
-                                                            Os.openInLive(e.projectPath)
-                                                        com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTaken,
-                                                        is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTakeFailed,
-                                                        -> Unit
+                                                        is JournalViewModel.Effect.NavigateToProject ->
+                                                            backStack.add(Screen.ProjectDetail(e.projectId))
                                                     }
                                                 }
                                             }
-                                            DetailPanelContent(
-                                                vm = detailVm,
-                                                onDismiss = dismiss,
-                                                syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
-                                                onPushNow = if (chrome.syncWired) {
-                                                    { pid -> coroutineScope.launch { chrome.pushNow(pid) } }
-                                                } else null,
-                                                conflictMessageFor = if (chrome.syncWired) chrome::conflictMessage else null,
-                                                onOpenTimeline = { pid ->
-                                                    backStack.add(Screen.Timeline(chrome.timelineUuidFor(pid)))
+                                            JournalScreen(vm)
+                                        }
+
+                                        Screen.Settings -> {
+                                            val vm: SettingsViewModel = metroViewModel()
+                                            SettingsScreen(
+                                                vm = vm,
+                                                syncState = syncState,
+                                                onAddRootClicked = {
+                                                    Os.pickDirectory(title = "Add library root")?.let { path ->
+                                                        vm.dispatch(SettingsViewModel.Intent.AddRoot(LibraryRoot.Projects(path)))
+                                                    }
                                                 },
-                                                // PR-AA: hand the Plugins tab the inverse query + a hook to swap
-                                                // the panel's project on click. Reusing the same `detailVm.load`
-                                                // path keeps the side-panel-vs-back-stack semantics consistent —
-                                                // the user stays in the side-panel context, just on a different
-                                                // project.
-                                                pluginUsageFlow = chrome::observeProjectsUsing,
-                                                onSelectProject = { pid ->
-                                                    vm.dispatch(ProjectListViewModel.Intent.OpenDetail(pid))
+                                                onUploadCredentialClicked = {
+                                                    Os.pickFile(title = "Service account JSON")?.let { path ->
+                                                        val json = runCatching { java.io.File(path).readText() }.getOrNull()
+                                                        vm.dispatch(SettingsViewModel.Intent.SetCloudCredential(json))
+                                                    }
                                                 },
                                             )
-                                        },
-                                    )
-                                }
-                                is Screen.ProjectDetail -> {
-                                    val vm: com.sketchbook.featuredetail.ProjectDetailViewModel =
-                                        metroViewModel()
-                                    LaunchedEffect(current.id) { vm.load(current.id) }
-                                    ProjectDetailScreen(vm)
-                                }
-                                is Screen.Timeline -> {
-                                    val vm: TimelineViewModel = metroViewModel()
-                                    LaunchedEffect(current.uuid) { vm.load(current.uuid) }
-                                    TimelineScreen(vm)
-                                }
-                                Screen.Proposals -> ProposalsScreen(vm = metroViewModel())
-                                Screen.NeedsAttention -> NeedsAttentionScreen(vm = metroViewModel())
-                                Screen.Journal -> {
-                                    val vm: JournalViewModel = metroViewModel()
-                                    LaunchedEffect(vm) {
-                                        vm.effects.collect { e ->
-                                            when (e) {
-                                                is JournalViewModel.Effect.NavigateToProject ->
-                                                    backStack.add(Screen.ProjectDetail(e.projectId))
-                                            }
                                         }
+
+                                        else -> Unit
                                     }
-                                    JournalScreen(vm)
                                 }
-                                Screen.Settings -> {
-                                    val vm: SettingsViewModel = metroViewModel()
-                                    SettingsScreen(
-                                        vm = vm,
-                                        syncState = syncState,
-                                        onAddRootClicked = {
-                                            Os.pickDirectory(title = "Add library root")?.let { path ->
-                                                vm.dispatch(SettingsViewModel.Intent.AddRoot(LibraryRoot.Projects(path)))
-                                            }
-                                        },
-                                        onUploadCredentialClicked = {
-                                            Os.pickFile(title = "Service account JSON")?.let { path ->
-                                                val json = runCatching { java.io.File(path).readText() }.getOrNull()
-                                                vm.dispatch(SettingsViewModel.Intent.SetCloudCredential(json))
-                                            }
-                                        },
-                                    )
-                                }
-                                else -> Unit
-                            }
-                        }
-                    },
-                )
+                            },
+                        )
                     }
                 }
             }
@@ -481,10 +492,12 @@ private fun QuickCaptureDialog(
                                             if (draft.trim().isNotEmpty()) onSave(draft)
                                             true
                                         }
+
                                         Key.Escape -> {
                                             onDismiss()
                                             true
                                         }
+
                                         else -> false
                                     }
                                 },
@@ -578,7 +591,7 @@ private fun screenForId(id: String): Screen = when (id) {
  *    through MCP.
  */
 @Composable
-private fun DetailPanelContent(
+private fun DetailPanelRoutePane(
     vm: ProjectDetailViewModel,
     onDismiss: () -> Unit,
     syncStateFor: ((com.sketchbook.core.ProjectId) -> ProjectSyncState)? = null,
@@ -738,8 +751,11 @@ private fun DetailPanelContent(
                 ) {
                     ProvideContentColor(theme.colors.inkMuted) {
                         Text(
-                            text = if (state.loading) "Loading project metadata…"
-                                else "We couldn't find this project. It may have been removed since the last scan.",
+                            text = if (state.loading) {
+                                "Loading project metadata…"
+                            } else {
+                                "We couldn't find this project. It may have been removed since the last scan."
+                            },
                             style = theme.typography.body,
                         )
                     }
@@ -765,14 +781,18 @@ private fun DetailPanelContent(
                             )
                             DetailQuickVersions(row, state, theme)
                         }
+
                         DetailTab.Versions -> DetailVersionsTab(
                             row = row,
                             state = state,
                             theme = theme,
                             onOpenTimeline = onOpenTimeline?.let { open -> { open(row.id) } },
                         )
+
                         DetailTab.Tracks -> DetailTracksTab(row, theme)
+
                         DetailTab.Samples -> DetailSamplesTab(state.samples, theme)
+
                         DetailTab.Plugins -> DetailPluginsTab(
                             plugins = state.plugins,
                             theme = theme,
@@ -780,6 +800,7 @@ private fun DetailPanelContent(
                             pluginUsageFlow = pluginUsageFlow,
                             onSelectProject = onSelectProject,
                         )
+
                         DetailTab.History -> DetailHistoryTab(state, theme)
                     }
                 }
@@ -820,7 +841,6 @@ private fun DetailTabButton(
         }
     }
 }
-
 
 @Composable
 private fun DetailMetaSection(
@@ -866,9 +886,13 @@ private fun StageOverrideRow(
     var open by remember { mutableStateOf(false) }
     val effective = override_ ?: inferred
     val label = effective?.label ?: "unset"
-    val suffix = if (override_ != null) "  (override)"
-        else if (inferred != null) "  (auto)"
-        else ""
+    val suffix = if (override_ != null) {
+        "  (override)"
+    } else if (inferred != null) {
+        "  (auto)"
+    } else {
+        ""
+    }
 
     androidx.compose.foundation.layout.Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1051,9 +1075,9 @@ private fun DetailHistoryTab(
             for (snap in state.history) {
                 ProvideContentColor(theme.colors.inkSecondary) {
                     Text(
-                        text = (snap.label ?: "rev ${snap.rev.value}")
-                            + " · ${snap.kind.name.lowercase()}"
-                            + " · ${snap.fileCount} files",
+                        text = (snap.label ?: "rev ${snap.rev.value}") +
+                            " · ${snap.kind.name.lowercase()}" +
+                            " · ${snap.fileCount} files",
                         style = theme.typography.body,
                     )
                 }
@@ -1176,8 +1200,7 @@ private fun unifyVersions(
     return out.sortedByDescending { it.timestampMs }
 }
 
-private fun relativeFromInstant(instant: kotlin.time.Instant): String =
-    relativeFromMs(instant.toEpochMilliseconds())
+private fun relativeFromInstant(instant: kotlin.time.Instant): String = relativeFromMs(instant.toEpochMilliseconds())
 
 private fun relativeFromMs(ms: Long): String {
     val deltaMs = System.currentTimeMillis() - ms
@@ -1287,9 +1310,13 @@ private fun DetailRow(
         ProvideContentColor(theme.colors.inkPrimary) {
             Text(
                 value,
-                style = if (mono) theme.typography.mono.copy(
-                    fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
-                ) else theme.typography.body,
+                style = if (mono) {
+                    theme.typography.mono.copy(
+                        fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    )
+                } else {
+                    theme.typography.body
+                },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1329,11 +1356,13 @@ private fun EditableTitle(
                             editing = false
                             true
                         }
+
                         Key.Escape -> {
                             draft = name
                             editing = false
                             true
                         }
+
                         else -> false
                     }
                 },
@@ -1347,7 +1376,10 @@ private fun EditableTitle(
                 modifier = Modifier.clickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                     indication = null,
-                    onClick = { draft = name; editing = true },
+                    onClick = {
+                        draft = name
+                        editing = true
+                    },
                 ),
             )
         }
@@ -1426,11 +1458,13 @@ private fun TagsEditorRow(
                                         addingTag = false
                                         true
                                     }
+
                                     Key.Escape -> {
                                         draft = ""
                                         addingTag = false
                                         true
                                     }
+
                                     else -> false
                                 }
                             },

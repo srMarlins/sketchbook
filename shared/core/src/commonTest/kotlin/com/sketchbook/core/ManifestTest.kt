@@ -1,9 +1,9 @@
 package com.sketchbook.core
 
-import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Instant
 
 class ManifestTest {
 

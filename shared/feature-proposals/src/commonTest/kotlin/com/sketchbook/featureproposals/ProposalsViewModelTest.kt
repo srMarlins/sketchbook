@@ -26,8 +26,13 @@ class ProposalsViewModelTest {
 
     private val mainDispatcher = StandardTestDispatcher()
 
-    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
-    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
+    @BeforeTest fun setUpMain() {
+        Dispatchers.setMain(mainDispatcher)
+    }
+
+    @AfterTest fun tearDownMain() {
+        Dispatchers.resetMain()
+    }
 
     private val now = Instant.parse("2026-05-05T12:00:00Z")
     private fun proposal(id: String, status: ProposalStatus = ProposalStatus.Pending) = Proposal(
@@ -50,7 +55,10 @@ class ProposalsViewModelTest {
         var failNext: Boolean = false
         override fun observe(): Flow<List<Proposal>> = flow
         override suspend fun approve(proposalId: String): Result<Proposal> {
-            if (failNext) { failNext = false; return Result.failure<Proposal>(IllegalStateException("approve boom")) }
+            if (failNext) {
+                failNext = false
+                return Result.failure<Proposal>(IllegalStateException("approve boom"))
+            }
             approved = proposalId
             val updated = flow.value.map { if (it.proposalId == proposalId) it.copy(status = ProposalStatus.Approved) else it }
             flow.value = updated
@@ -66,11 +74,13 @@ class ProposalsViewModelTest {
 
     @Test
     fun statePartitionsPendingFromResolved() = runTest(mainDispatcher) {
-        val flow = MutableStateFlow(listOf(
-            proposal("p1"),
-            proposal("p2", ProposalStatus.Approved),
-            proposal("p3", ProposalStatus.Rejected),
-        ))
+        val flow = MutableStateFlow(
+            listOf(
+                proposal("p1"),
+                proposal("p2", ProposalStatus.Approved),
+                proposal("p3", ProposalStatus.Rejected),
+            ),
+        )
         val vm = ProposalsViewModel(FakeRepo(flow))
         vm.state.test {
             var s = awaitItem()

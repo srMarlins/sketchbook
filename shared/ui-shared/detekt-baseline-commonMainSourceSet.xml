@@ -1,0 +1,84 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:HighlightsStrip.kt:(0.8f, androidx.compose.ui.unit.TextUnitType.Sp)</ID>
+    <ID>ArgumentListWrapping:NotebookSidebar.kt:(-0.1f, androidx.compose.ui.unit.TextUnitType.Sp)</ID>
+    <ID>ArgumentListWrapping:NotebookSidebar.kt:(10.5f, androidx.compose.ui.unit.TextUnitType.Sp)</ID>
+    <ID>ArgumentListWrapping:SongStrip.kt:(this.toFloat(), androidx.compose.ui.unit.TextUnitType.Sp)</ID>
+    <ID>ArgumentListWrapping:Typography.kt:AppTypography.Companion$(fontFamily = FontFamily.SansSerif, fontSize = 14.sp, fontWeight = FontWeight.Medium)</ID>
+    <ID>ClassSignature:HighlightsStrip.kt:HighlightChip</ID>
+    <ID>ClassSignature:NotebookSidebar.kt:SidebarItem</ID>
+    <ID>ClassSignature:SongStrip.kt:SongStageChip</ID>
+    <ID>CompositionLocalAllowlist:Colors.kt:val LocalAppColors = staticCompositionLocalOf&lt;AppColors&gt; { AppColors.Light }</ID>
+    <ID>CompositionLocalAllowlist:ContentColor.kt:/** * Cascading content color. Components downstream resolve text/icon tint from `LocalContentColor` * so a primary button's white-on-red text doesn't require every callsite to pass a color * explicitly. */ val LocalContentColor = compositionLocalOf&lt;Color&gt; { Color.Black }</ID>
+    <ID>CompositionLocalAllowlist:Spacing.kt:val LocalAppSpacing = staticCompositionLocalOf&lt;AppSpacing&gt; { AppSpacing.Default }</ID>
+    <ID>CompositionLocalAllowlist:Typography.kt:val LocalAppTypography = staticCompositionLocalOf&lt;AppTypography&gt; { AppTypography.Default }</ID>
+    <ID>CyclomaticComplexMethod:Button.kt:@Composable fun Button</ID>
+    <ID>CyclomaticComplexMethod:SongStrip.kt:@Composable fun SongStrip</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:Button.kt:val (baseBg, fg, edgeDark, edgeLight, baseElevation) = when (variant) { ButtonVariant.Primary -&gt; Quintet( colors.accentAction, colors.inkOnFill, Color(0x33000000), Color(0x33FFFFFF), 3.dp, ) ButtonVariant.Secondary -&gt; Quintet( colors.surfaceCard, colors.inkPrimary, colors.ruleLineStrong, if (colors.isDark) Color(0x14F5ECD8) else Color(0x55FFFAEE), 1.dp, ) ButtonVariant.Ghost -&gt; Quintet( Color.Transparent, colors.inkPrimary, Color.Transparent, Color.Transparent, 0.dp, ) }</ID>
+    <ID>FunctionNaming:ActivityBar.kt:@Composable fun ActivityBar</ID>
+    <ID>FunctionNaming:Badge.kt:@Composable fun Badge</ID>
+    <ID>FunctionNaming:Button.kt:@Composable fun Button</ID>
+    <ID>FunctionNaming:ContentColor.kt:@Composable fun ProvideContentColor</ID>
+    <ID>FunctionNaming:EmptyState.kt:@Composable fun EmptyState</ID>
+    <ID>FunctionNaming:HighlightsStrip.kt:@OptIn(ExperimentalLayoutApi::class) @Composable fun HighlightsStrip</ID>
+    <ID>FunctionNaming:InkLoading.kt:@Composable fun InkLoading</ID>
+    <ID>FunctionNaming:LockBadge.kt:@Composable fun LockBadge</ID>
+    <ID>FunctionNaming:NotebookSidebar.kt:@Composable fun NotebookSidebar</ID>
+    <ID>FunctionNaming:NotebookSidebar.kt:@Composable private fun BindingHoles</ID>
+    <ID>FunctionNaming:NotebookSidebar.kt:@Composable private fun SidebarRow</ID>
+    <ID>FunctionNaming:PageHeader.kt:@Composable fun PageHeader</ID>
+    <ID>FunctionNaming:PaperPage.kt:@Composable fun PaperPage</ID>
+    <ID>FunctionNaming:Pill.kt:@Composable fun Pill</ID>
+    <ID>FunctionNaming:RowItem.kt:@Composable fun RowItem</ID>
+    <ID>FunctionNaming:ScanIndicator.kt:@Composable fun ScanIndicator</ID>
+    <ID>FunctionNaming:Shelf.kt:@Composable fun ShelfHeader</ID>
+    <ID>FunctionNaming:Shelf.kt:@Composable private fun ShelfHeaderAction</ID>
+    <ID>FunctionNaming:SongStrip.kt:@Composable fun SongStrip</ID>
+    <ID>FunctionNaming:SongStrip.kt:@Composable private fun LaunchIcon</ID>
+    <ID>FunctionNaming:SongStrip.kt:@Composable private fun StageChip</ID>
+    <ID>FunctionNaming:SongStrip.kt:@Composable private fun Stat</ID>
+    <ID>FunctionNaming:SongStrip.kt:@Composable private fun SyncPip</ID>
+    <ID>FunctionNaming:SongStrip.kt:@Composable private fun TagChip</ID>
+    <ID>FunctionNaming:SongStrip.kt:@Composable private fun VersionPill</ID>
+    <ID>FunctionNaming:Surface.kt:@Composable fun Surface</ID>
+    <ID>FunctionNaming:Tag.kt:@Composable fun Tag</ID>
+    <ID>FunctionNaming:Text.kt:@Composable fun Text</ID>
+    <ID>FunctionNaming:TextField.kt:@Composable fun TextField</ID>
+    <ID>FunctionNaming:Theme.kt:@Composable fun AppTheme</ID>
+    <ID>FunctionSignature:ActivityBar.kt:@Composable fun ActivityBar</ID>
+    <ID>FunctionSignature:EmptyState.kt:@Composable fun EmptyState</ID>
+    <ID>FunctionSignature:HighlightsStrip.kt:@OptIn(ExperimentalLayoutApi::class) @Composable fun HighlightsStrip</ID>
+    <ID>FunctionSignature:InkLoading.kt:@Composable fun InkLoading</ID>
+    <ID>FunctionSignature:PaperPage.kt:@Composable fun PaperPage</ID>
+    <ID>FunctionSignature:Pill.kt:@Composable fun Pill</ID>
+    <ID>FunctionSignature:ScanIndicator.kt:@Composable fun ScanIndicator</ID>
+    <ID>FunctionSignature:SongStrip.kt:@Composable fun SongStrip</ID>
+    <ID>FunctionSignature:SongStrip.kt:private fun Double.sp: androidx.compose.ui.unit.TextUnit</ID>
+    <ID>FunctionSignature:SongStrip.kt:private fun Int.sp: androidx.compose.ui.unit.TextUnit</ID>
+    <ID>LongMethod:Button.kt:@Composable fun Button</ID>
+    <ID>LongMethod:NotebookSidebar.kt:@Composable fun NotebookSidebar</ID>
+    <ID>LongMethod:ScanIndicator.kt:@Composable fun ScanIndicator</ID>
+    <ID>LongMethod:SongStrip.kt:@Composable fun SongStrip</ID>
+    <ID>LongMethod:TextField.kt:@Composable fun TextField</ID>
+    <ID>MagicNumber:ActivityBar.kt:0.18f</ID>
+    <ID>MagicNumber:ActivityBar.kt:0.55f</ID>
+    <ID>MagicNumber:ActivityBar.kt:0.85f</ID>
+    <ID>MatchingDeclarationName:ActivityBar.kt:ActivityState</ID>
+    <ID>MatchingDeclarationName:Button.kt:ButtonVariant</ID>
+    <ID>MatchingDeclarationName:HighlightsStrip.kt:HighlightChip</ID>
+    <ID>MatchingDeclarationName:Spacing.kt:AppSpacing</ID>
+    <ID>MatchingDeclarationName:Typography.kt:AppTypography</ID>
+    <ID>MaxLineLength:SongStrip.kt:fontWeight = if (accent) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal</ID>
+    <ID>MaxLineLength:SongStrip.kt:private fun Double.sp: androidx.compose.ui.unit.TextUnit</ID>
+    <ID>MaxLineLength:SongStrip.kt:private fun Int.sp: androidx.compose.ui.unit.TextUnit</ID>
+    <ID>ModifierComposed:RuledPaper.kt:fun Modifier.ruledPaper: Modifier</ID>
+    <ID>NoUnusedImports:HighlightsStrip.kt:com.sketchbook.uishared.components.HighlightsStrip.kt</ID>
+    <ID>NoUnusedImports:InkLoading.kt:com.sketchbook.uishared.components.InkLoading.kt</ID>
+    <ID>NoUnusedImports:PageHeader.kt:com.sketchbook.uishared.components.PageHeader.kt</ID>
+    <ID>NoUnusedImports:PaperPage.kt:com.sketchbook.uishared.components.PaperPage.kt</ID>
+    <ID>NoUnusedImports:RuledPaper.kt:com.sketchbook.uishared.components.RuledPaper.kt</ID>
+    <ID>NoUnusedImports:Shelf.kt:com.sketchbook.uishared.components.Shelf.kt</ID>
+  </CurrentIssues>
+</SmellBaseline>

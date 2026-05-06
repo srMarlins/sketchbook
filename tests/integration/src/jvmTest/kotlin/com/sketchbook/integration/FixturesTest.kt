@@ -12,7 +12,9 @@ import kotlin.test.assertTrue
 class FixturesTest {
     private val tmp: Path = createTempDirectory("fixtures-test-")
 
-    @AfterTest fun cleanup() { tmp.toFile().deleteRecursively() }
+    @AfterTest fun cleanup() {
+        tmp.toFile().deleteRecursively()
+    }
 
     @Test
     fun cleanFixtureParsesOk() {

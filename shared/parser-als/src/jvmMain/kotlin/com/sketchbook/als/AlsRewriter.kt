@@ -106,11 +106,14 @@ object AlsRewriter {
                                 for (i in 0 until reader.attributeCount) {
                                     if (reader.getAttributeLocalName(i) == "Value" &&
                                         reader.getAttributeValue(i) in oldPaths
-                                    ) return true
+                                    ) {
+                                        return true
+                                    }
                                 }
                             }
                             stack.addLast(name)
                         }
+
                         XMLStreamConstants.END_ELEMENT -> stack.removeLastOrNull()
                     }
                 }
@@ -144,35 +147,77 @@ object AlsRewriter {
         var depthInsideSampleRef = 0
         val buffer = ArrayList<BufferedEvent>(64)
 
-        fun captureCurrent(): BufferedEvent =
-            when (reader.eventType) {
-                XMLStreamConstants.START_ELEMENT -> BufferedEvent(
-                    type = XMLStreamConstants.START_ELEMENT,
-                    name = reader.localName,
-                    attrs = (0 until reader.attributeCount).map {
-                        reader.getAttributeLocalName(it) to reader.getAttributeValue(it)
-                    },
-                    text = null, piTarget = null, piData = null, docEncoding = null, docVersion = null,
-                )
-                XMLStreamConstants.END_ELEMENT -> BufferedEvent(
-                    XMLStreamConstants.END_ELEMENT, reader.localName, emptyList(),
-                    null, null, null, null, null,
-                )
-                XMLStreamConstants.CHARACTERS, XMLStreamConstants.SPACE -> BufferedEvent(
-                    reader.eventType, null, emptyList(), reader.text, null, null, null, null,
-                )
-                XMLStreamConstants.CDATA -> BufferedEvent(
-                    XMLStreamConstants.CDATA, null, emptyList(), reader.text, null, null, null, null,
-                )
-                XMLStreamConstants.COMMENT -> BufferedEvent(
-                    XMLStreamConstants.COMMENT, null, emptyList(), reader.text, null, null, null, null,
-                )
-                XMLStreamConstants.PROCESSING_INSTRUCTION -> BufferedEvent(
-                    XMLStreamConstants.PROCESSING_INSTRUCTION, null, emptyList(), null,
-                    reader.piTarget, reader.piData, null, null,
-                )
-                else -> BufferedEvent(reader.eventType, null, emptyList(), null, null, null, null, null)
-            }
+        fun captureCurrent(): BufferedEvent = when (reader.eventType) {
+            XMLStreamConstants.START_ELEMENT -> BufferedEvent(
+                type = XMLStreamConstants.START_ELEMENT,
+                name = reader.localName,
+                attrs = (0 until reader.attributeCount).map {
+                    reader.getAttributeLocalName(it) to reader.getAttributeValue(it)
+                },
+                text = null,
+                piTarget = null,
+                piData = null,
+                docEncoding = null,
+                docVersion = null,
+            )
+
+            XMLStreamConstants.END_ELEMENT -> BufferedEvent(
+                XMLStreamConstants.END_ELEMENT,
+                reader.localName,
+                emptyList(),
+                null,
+                null,
+                null,
+                null,
+                null,
+            )
+
+            XMLStreamConstants.CHARACTERS, XMLStreamConstants.SPACE -> BufferedEvent(
+                reader.eventType,
+                null,
+                emptyList(),
+                reader.text,
+                null,
+                null,
+                null,
+                null,
+            )
+
+            XMLStreamConstants.CDATA -> BufferedEvent(
+                XMLStreamConstants.CDATA,
+                null,
+                emptyList(),
+                reader.text,
+                null,
+                null,
+                null,
+                null,
+            )
+
+            XMLStreamConstants.COMMENT -> BufferedEvent(
+                XMLStreamConstants.COMMENT,
+                null,
+                emptyList(),
+                reader.text,
+                null,
+                null,
+                null,
+                null,
+            )
+
+            XMLStreamConstants.PROCESSING_INSTRUCTION -> BufferedEvent(
+                XMLStreamConstants.PROCESSING_INSTRUCTION,
+                null,
+                emptyList(),
+                null,
+                reader.piTarget,
+                reader.piData,
+                null,
+                null,
+            )
+
+            else -> BufferedEvent(reader.eventType, null, emptyList(), null, null, null, null, null)
+        }
 
         fun emit(e: BufferedEvent) {
             when (e.type) {
@@ -180,12 +225,18 @@ object AlsRewriter {
                     writer.writeStartElement(e.name)
                     for ((k, v) in e.attrs) writer.writeAttribute(k, v)
                 }
+
                 XMLStreamConstants.END_ELEMENT -> writer.writeEndElement()
+
                 XMLStreamConstants.CHARACTERS, XMLStreamConstants.SPACE -> writer.writeCharacters(e.text!!)
+
                 XMLStreamConstants.CDATA -> writer.writeCData(e.text!!)
+
                 XMLStreamConstants.COMMENT -> writer.writeComment(e.text!!)
+
                 XMLStreamConstants.PROCESSING_INSTRUCTION ->
                     writer.writeProcessingInstruction(e.piTarget!!, e.piData ?: "")
+
                 XMLStreamConstants.END_DOCUMENT -> writer.writeEndDocument()
             }
         }
@@ -214,7 +265,9 @@ object AlsRewriter {
                             ?: primaryRelative?.let { byOldPath[it] }
                         val patched = if (edit != null) {
                             applyEdit(buffer, edit, primaryPath, primaryRelative)
-                        } else buffer
+                        } else {
+                            buffer
+                        }
                         patched.forEach(::emit)
                         buffer.clear()
                     }
@@ -226,7 +279,8 @@ object AlsRewriter {
                 XMLStreamConstants.START_ELEMENT, XMLStreamConstants.END_ELEMENT,
                 XMLStreamConstants.CHARACTERS, XMLStreamConstants.CDATA,
                 XMLStreamConstants.COMMENT, XMLStreamConstants.PROCESSING_INSTRUCTION,
-                XMLStreamConstants.SPACE, XMLStreamConstants.END_DOCUMENT -> emit(captureCurrent())
+                XMLStreamConstants.SPACE, XMLStreamConstants.END_DOCUMENT,
+                -> emit(captureCurrent())
             }
         }
     }
@@ -253,6 +307,7 @@ object AlsRewriter {
                     }
                     stack.addLast(name)
                 }
+
                 XMLStreamConstants.END_ELEMENT -> stack.removeLastOrNull()
             }
         }
@@ -291,28 +346,35 @@ object AlsRewriter {
                     val newAttrs = when {
                         name == "Path" && parent == "FileRef" && matchedOnPath ->
                             e.attrs.map { if (it.first == "Value") "Value" to edit.newPath else it }
+
                         name == "RelativePath" && parent == "FileRef" && newRelativeToWrite != null ->
                             e.attrs.map { if (it.first == "Value") "Value" to newRelativeToWrite else it }
+
                         name == "RelativePathType" && parent == "FileRef" && edit.newRelativePathType != null ->
                             e.attrs.map { if (it.first == "Value") "Value" to edit.newRelativePathType.toString() else it }
+
                         name == "OriginalFileSize" && parent == "FileRef" && edit.newOriginalFileSize != null ->
                             e.attrs.map { if (it.first == "Value") "Value" to edit.newOriginalFileSize.toString() else it }
+
                         name == "OriginalCrc" && parent == "FileRef" && edit.newOriginalCrc != null ->
                             e.attrs.map { if (it.first == "Value") "Value" to edit.newOriginalCrc.toString() else it }
+
                         name == "LastModDate" && parent == "SampleRef" && edit.newLastModDate != null ->
                             e.attrs.map { if (it.first == "Value") "Value" to edit.newLastModDate.toString() else it }
+
                         else -> e.attrs
                     }
                     stack.addLast(name)
                     e.copy(attrs = newAttrs)
                 }
+
                 XMLStreamConstants.END_ELEMENT -> {
                     stack.removeLastOrNull()
                     e
                 }
+
                 else -> e
             }
         }
     }
-
 }

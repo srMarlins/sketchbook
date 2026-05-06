@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:GcsSyncQueueDrainTest.kt:GcsSyncQueueDrainTest$(env.cloud.lockAcquireCount &gt; attemptsAfterConflict, "drain should pick up the uuid after conflict cleared")</ID>
+    <ID>ArgumentListWrapping:GcsSyncQueueDrainTest.kt:GcsSyncQueueDrainTest$(rowid = pid, name = name, parentDir = dir.toString(), pluginNames = "", sampleFilenames = "", notes = "")</ID>
+    <ID>ArgumentListWrapping:LeasedLockRepositoryTest.kt:FakeLockCloud$("not used")</ID>
+    <ID>ArgumentListWrapping:LeasedLockRepositoryTest.kt:FakeLockCloud$(error("not used"))</ID>
+    <ID>EmptyFunctionBlock:LeasedLockRepositoryTest.kt:FakeLockCloud${}</ID>
+    <ID>FunctionSignature:LeasedLockRepositoryTest.kt:FakeLockCloud$override suspend fun appendManifestHead</ID>
+    <ID>MaxLineLength:LeasedLockRepositoryTest.kt:FakeLockCloud$override suspend fun appendManifestHead</ID>
+    <ID>NoUnusedImports:GcsSyncQueueDrainTest.kt:com.sketchbook.desktop.repo.GcsSyncQueueDrainTest.kt</ID>
+    <ID>ParameterListWrapping:LeasedLockRepositoryTest.kt:FakeLockCloud$(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest)</ID>
+  </CurrentIssues>
+</SmellBaseline>

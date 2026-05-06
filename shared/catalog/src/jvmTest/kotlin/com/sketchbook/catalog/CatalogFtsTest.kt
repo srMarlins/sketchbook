@@ -70,7 +70,11 @@ class CatalogFtsTest {
         val ids = fts.search("kick")
         // Lookup names for the returned rowids.
         val idToName = listOf(
-            "kick_drum_lab", "punchy_kick_test", "ambient_pad", "bass_track", "kicks_sample_pack",
+            "kick_drum_lab",
+            "punchy_kick_test",
+            "ambient_pad",
+            "bass_track",
+            "kicks_sample_pack",
         ).withIndex().associate { (i, n) -> (i + 1L) to n }
         val orderedNames = ids.map { idToName[it] ?: "?" }
         // The "kicks_sample_pack" entry has 3 kick* sample filenames + "kicks" in name → high density.

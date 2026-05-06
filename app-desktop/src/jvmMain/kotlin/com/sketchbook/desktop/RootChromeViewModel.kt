@@ -112,15 +112,13 @@ class RootChromeViewModel(
     val syncWired: Boolean get() = syncImpl != null
 
     /** Per-project sync pip. Falls back to [ProjectSyncState.Unknown] without a desktop façade. */
-    fun syncStateFor(id: ProjectId): ProjectSyncState =
-        syncImpl?.snapshotFor(id) ?: ProjectSyncState.Unknown
+    fun syncStateFor(id: ProjectId): ProjectSyncState = syncImpl?.snapshotFor(id) ?: ProjectSyncState.Unknown
 
     /** Optional friendly message for the per-project conflict surface. */
     fun conflictMessage(id: ProjectId): String? = syncImpl?.conflictMessage(id)
 
     /** Trigger an immediate push for one project. No-op without cloud. */
-    suspend fun pushNow(id: ProjectId): Result<Unit> =
-        syncImpl?.pushNowById(id) ?: Result.failure(IllegalStateException("Cloud not configured"))
+    suspend fun pushNow(id: ProjectId): Result<Unit> = syncImpl?.pushNowById(id) ?: Result.failure(IllegalStateException("Cloud not configured"))
 
     /** Translate the local id used everywhere in the UI to the cloud-stable [ProjectUuid]. */
     fun timelineUuidFor(id: ProjectId): ProjectUuid = syncStateStore.identityFor(id)
