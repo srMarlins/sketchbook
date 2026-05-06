@@ -9,6 +9,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -101,6 +103,7 @@ fun ProjectListScreen(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isWide = maxWidth.value >= WIDE_THRESHOLD_DP
+        val rootMaxHeight = maxHeight
 
         Column(
             modifier = Modifier
@@ -130,14 +133,14 @@ fun ProjectListScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown && event.key == Key.Escape && state.query.isNotEmpty()) {
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.Escape && state.query.isNotBlank()) {
                                 holder.dispatch(ProjectListStateHolder.Intent.Search(""))
                                 true
                             } else {
                                 false
                             }
                         },
-                    trailing = if (state.query.isNotEmpty()) {
+                    trailing = if (state.query.isNotBlank()) {
                         {
                             Box(
                                 modifier = Modifier
@@ -145,9 +148,7 @@ fun ProjectListScreen(
                                     .clickable { holder.dispatch(ProjectListStateHolder.Intent.Search("")) }
                                     .padding(horizontal = 4.dp, vertical = 2.dp),
                             ) {
-                                ProvideContentColor(AppTheme.colors.inkMuted) {
-                                    Text("×", style = AppTheme.typography.body)
-                                }
+                                Text("×", style = AppTheme.typography.body)
                             }
                         }
                     } else null,
@@ -159,27 +160,54 @@ fun ProjectListScreen(
                 )
             }
 
-            when {
-                state.query.isNotBlank() -> SearchResults(
-                    groups = groups.filter { matchesQuery(it, state.query) },
-                    onOpen = { openDetailId = it.representative.id },
-                    syncStateFor = syncStateFor,
-                )
-                zoomShelf != null -> ShelfFlat(
-                    groups = zoomShelf!!.bucket(buckets),
-                    onOpen = { openDetailId = it.representative.id },
-                    syncStateFor = syncStateFor,
-                )
-                else -> HomeDashboard(
-                    buckets = buckets,
-                    gemsView = gemsView,
-                    isWide = isWide,
-                    onOpen = { openDetailId = it.representative.id },
-                    onSeeAll = { zoomShelf = it },
-                    onChip = { zoomShelf = it },
-                    onShuffleGems = { gemsShuffleSeed = (gemsShuffleSeed + 1).coerceAtLeast(1) },
-                    syncStateFor = syncStateFor,
-                )
+            Box(modifier = Modifier.widthIn(max = 1240.dp).fillMaxWidth()) {
+                // Base layer — always rendered so it stays visible (dimmed) behind the overlay.
+                if (zoomShelf != null) {
+                    ShelfFlat(
+                        groups = zoomShelf!!.bucket(buckets),
+                        onOpen = { openDetailId = it.representative.id },
+                        syncStateFor = syncStateFor,
+                    )
+                } else {
+                    HomeDashboard(
+                        buckets = buckets,
+                        gemsView = gemsView,
+                        isWide = isWide,
+                        onOpen = { openDetailId = it.representative.id },
+                        onSeeAll = { zoomShelf = it },
+                        onChip = { zoomShelf = it },
+                        onShuffleGems = { gemsShuffleSeed = (gemsShuffleSeed + 1).coerceAtLeast(1) },
+                        syncStateFor = syncStateFor,
+                    )
+                }
+
+                // Search overlay — scrim + results panel anchored under the search field.
+                if (state.query.isNotBlank()) {
+                    // Scrim: paper-fog over the base layer; click anywhere to clear the query.
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(AppTheme.colors.surfaceCard.copy(alpha = 0.85f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { holder.dispatch(ProjectListStateHolder.Intent.Search("")) },
+                            ),
+                    )
+                    // Results panel: full panel width, capped height with internal scroll, top-anchored.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = (rootMaxHeight * 0.6f))
+                            .align(Alignment.TopCenter),
+                    ) {
+                        SearchResults(
+                            groups = groups.filter { matchesQuery(it, state.query) },
+                            onOpen = { openDetailId = it.representative.id },
+                            syncStateFor = syncStateFor,
+                        )
+                    }
+                }
             }
         }
 
