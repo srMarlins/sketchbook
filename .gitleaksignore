@@ -1,0 +1,16 @@
+# gitleaks false positives, with rationale.
+#
+# Format: <commit-sha>:<path>:<rule-id>:<line>
+# Adding a fingerprint here suppresses that exact match. If gitleaks ever
+# flags the SAME line again under a NEW commit SHA (e.g. after a rebase),
+# you'll need to re-add the new SHA — keep the rationale comment so the
+# next reviewer can confirm the new flag is the same false positive, not
+# a real secret that drifted into the file.
+
+# `KEY_CLOUD_CREDENTIAL = "cloud_credential_json"` is a java.util.prefs
+# storage-key constant (used in Preferences.put/get/remove on lines 73/74/116
+# of the same file at the time of the flag). The actual credential is the
+# runtime-supplied serviceAccountJson string passed in by the user via the
+# Settings UI; it never appears in source. The string `cloud_credential_json`
+# has no entropy and no relationship to any real secret material.
+bbe3b1cbadd08dee340b6bb6a5a74716fa00d679:app-desktop/src/jvmMain/kotlin/com/sketchbook/desktop/repo/PreferencesSettingsRepository.kt:generic-api-key:209
