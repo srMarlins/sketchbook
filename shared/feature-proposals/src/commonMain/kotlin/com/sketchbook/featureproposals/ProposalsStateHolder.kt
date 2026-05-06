@@ -1,5 +1,6 @@
 package com.sketchbook.featureproposals
 
+import com.sketchbook.actions.ProposalActionExecutor
 import com.sketchbook.repo.Proposal
 import com.sketchbook.repo.ProposalStatus
 import com.sketchbook.repo.ProposalsRepository
@@ -22,6 +23,12 @@ import kotlinx.coroutines.launch
 class ProposalsStateHolder(
     private val repository: ProposalsRepository,
     private val scope: CoroutineScope,
+    /**
+     * Optional — when present, approving a proposal first applies its actions through the
+     * executor (which mutates the catalog), and only on success does the repository record the
+     * Approved status. Tests that don't care about side-effects can leave it `null`.
+     */
+    private val executor: ProposalActionExecutor? = null,
 ) {
 
     private val _effects = MutableSharedFlow<Effect>(
@@ -44,6 +51,22 @@ class ProposalsStateHolder(
     fun dispatch(intent: Intent) {
         when (intent) {
             is Intent.Approve -> scope.launch {
+                val proposal = state.value.pending.firstOrNull { it.proposalId == intent.proposalId }
+                    ?: state.value.resolved.firstOrNull { it.proposalId == intent.proposalId }
+                if (proposal == null) {
+                    _effects.tryEmit(Effect.Failed(intent.proposalId, "proposal not found"))
+                    return@launch
+                }
+                val applied = executor?.apply(proposal.actions) ?: Result.success(Unit)
+                if (applied.isFailure) {
+                    _effects.tryEmit(
+                        Effect.Failed(
+                            intent.proposalId,
+                            applied.exceptionOrNull()?.message ?: "apply failed",
+                        ),
+                    )
+                    return@launch
+                }
                 val r = repository.approve(intent.proposalId)
                 if (r.isSuccess) _effects.tryEmit(Effect.Approved(intent.proposalId))
                 else _effects.tryEmit(Effect.Failed(intent.proposalId, r.exceptionOrNull()?.message ?: "approve failed"))

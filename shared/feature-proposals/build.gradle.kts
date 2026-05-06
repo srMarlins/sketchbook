@@ -9,6 +9,7 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":shared:core"))
             implementation(project(":shared:repository"))
+            implementation(project(":shared:actions"))
             implementation(project(":shared:ui-shared"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)

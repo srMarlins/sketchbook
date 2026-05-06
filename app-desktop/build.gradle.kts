@@ -22,6 +22,7 @@ kotlin {
     sourceSets {
         jvmMain.dependencies {
             implementation(project(":shared:core"))
+            implementation(project(":shared:actions"))
             implementation(project(":shared:catalog"))
             implementation(project(":shared:cloud"))
             implementation(project(":shared:parser-als"))
@@ -48,6 +49,10 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.ui)
             implementation(compose.desktop.currentOs)
+        }
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
