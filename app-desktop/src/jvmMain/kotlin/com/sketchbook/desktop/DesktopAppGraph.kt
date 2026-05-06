@@ -7,7 +7,7 @@ import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.desktop.repo.InMemoryLockRepository
-import com.sketchbook.desktop.repo.InMemorySettingsRepository
+import com.sketchbook.desktop.repo.PreferencesSettingsRepository
 import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
@@ -32,6 +32,7 @@ import kotlinx.coroutines.SupervisorJob
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.prefs.Preferences
 
 /**
  * Composition root for the Compose Desktop shell. Metro generates the synthetic graph impl at
@@ -120,7 +121,10 @@ interface DesktopAppGraph {
         SqlRepairRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
 
     @Provides @SingleIn(AppScope::class)
-    fun provideSettingsRepository(): SettingsRepository = InMemorySettingsRepository()
+    fun provideSettingsRepository(): SettingsRepository = PreferencesSettingsRepository(
+        node = Preferences.userNodeForPackage(SettingsRepository::class.java),
+        ioDispatcher = Dispatchers.IO,
+    )
 
     @Provides @SingleIn(AppScope::class)
     fun provideLockRepository(): LockRepository = InMemoryLockRepository()
