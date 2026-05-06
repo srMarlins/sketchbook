@@ -19,6 +19,10 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation(libs.sqldelight.jvm.driver)
+            // Used by SqlRepairRepositoryAlsRewriteTest to exercise the real StAX rewrite path
+            // when asserting that both the primary FileRef and the OriginalFileRef sibling get
+            // patched atomically — the substring-replace recording fake can't prove that.
+            implementation(project(":shared:parser-als"))
         }
     }
 }
