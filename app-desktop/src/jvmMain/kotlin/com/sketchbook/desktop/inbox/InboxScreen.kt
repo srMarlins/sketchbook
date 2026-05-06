@@ -73,15 +73,6 @@ fun InboxScreen(
     val attentionState by needsAttentionVm.state.collectAsStateWithLifecycle()
     val journalState by journalVm.state.collectAsStateWithLifecycle()
 
-    // All three default expanded so the user sees all queues at once. `initialTab` is honored
-    // by forcing that section open even if it would have defaulted closed in the future.
-    val sectionExpanded = remember {
-        mutableStateMapOf(
-            InboxTab.Proposals to true,
-            InboxTab.NeedsAttention to true,
-            InboxTab.Journal to true,
-        ).also { it[initialTab] = true }
-    }
     val proposalGroupExpanded = remember {
         mutableStateMapOf<ProposalsViewModel.ProposalCategory, Boolean>()
     }
@@ -167,73 +158,84 @@ fun InboxScreen(
             verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
         ) {
             PageHeader(title = "Inbox")
-            Section(
-                tab = InboxTab.Proposals,
-                title = "Proposals",
-                count = pendingProposals,
-                sectionExpanded = sectionExpanded,
-                filterBar = {
+            Row(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxHeight().weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+                ) {
+                    ColumnHeader(title = "Proposals", count = pendingProposals)
                     ProposalsFilterBar(
                         state = proposalsState,
                         onSourceFilter = onSourceFilter,
                         onSearch = onProposalsSearch,
                     )
-                },
-            ) {
-                proposalsItems(
-                    state = proposalsState,
-                    groupExpanded = proposalGroupExpanded,
-                    resolvedExpanded = resolvedExpanded,
-                    onResolvedToggle = onResolvedToggle,
-                    vm = proposalsVm,
-                    onOpen = onOpenProposal,
-                    onApprove = onApprove,
-                    onReject = onReject,
-                )
-            }
-            Section(
-                tab = InboxTab.NeedsAttention,
-                title = "Needs Attention",
-                count = pendingAttention,
-                sectionExpanded = sectionExpanded,
-                filterBar = {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+                    ) {
+                        proposalsItems(
+                            state = proposalsState,
+                            groupExpanded = proposalGroupExpanded,
+                            resolvedExpanded = resolvedExpanded,
+                            onResolvedToggle = onResolvedToggle,
+                            vm = proposalsVm,
+                            onOpen = onOpenProposal,
+                            onApprove = onApprove,
+                            onReject = onReject,
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.fillMaxHeight().weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+                ) {
+                    ColumnHeader(title = "Needs Attention", count = pendingAttention)
                     NeedsAttentionFilterBar(
                         state = attentionState,
                         onSearch = onAttentionSearch,
                     )
-                },
-            ) {
-                needsAttentionItems(
-                    state = attentionState,
-                    cardExpanded = attentionCardExpanded,
-                    onOpen = onOpenAttention,
-                    onRepair = onRepair,
-                    onBulkRepair = onBulkRepair,
-                    onBulkApply = onBulkApply,
-                    onBulkDismiss = onBulkDismiss,
-                )
-            }
-            Section(
-                tab = InboxTab.Journal,
-                title = "Journal",
-                count = journalCount,
-                sectionExpanded = sectionExpanded,
-                filterBar = {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+                    ) {
+                        needsAttentionItems(
+                            state = attentionState,
+                            cardExpanded = attentionCardExpanded,
+                            onOpen = onOpenAttention,
+                            onRepair = onRepair,
+                            onBulkRepair = onBulkRepair,
+                            onBulkApply = onBulkApply,
+                            onBulkDismiss = onBulkDismiss,
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.fillMaxHeight().weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+                ) {
+                    ColumnHeader(title = "Journal", count = journalCount)
                     JournalFilterBar(
                         state = journalState,
                         onSearch = onJournalSearch,
                         onActionFilter = onActionFilter,
                         onDateRange = onDateRange,
                     )
-                },
-            ) {
-                journalItems(
-                    state = journalState,
-                    dayExpanded = journalDayExpanded,
-                    onOpen = onOpenJournal,
-                    onUndo = onUndoOne,
-                    onBulkUndo = onBulkUndo,
-                )
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+                    ) {
+                        journalItems(
+                            state = journalState,
+                            dayExpanded = journalDayExpanded,
+                            onOpen = onOpenJournal,
+                            onUndo = onUndoOne,
+                            onBulkUndo = onBulkUndo,
+                        )
+                    }
+                }
             }
         }
         when (val d = detail) {
@@ -259,67 +261,15 @@ fun InboxScreen(
 }
 
 /**
- * One queue section. Header is always visible with title + count + collapse toggle. When
- * expanded, the section claims `weight(1f)` of the parent Column so all expanded sections share
- * the available vertical space evenly; the body has its own internal LazyColumn for scrolling.
- * When collapsed, the section is just the header bar — no weight, no body — and other expanded
- * sections grow to fill the freed space.
+ * Per-column header — sits above each queue with the queue title and a count badge. No
+ * collapse toggle in this layout: with three side-by-side columns, "collapse" doesn't free
+ * useful real estate (the column would just go to 0 width). User scrolls within each column
+ * to see all rows.
  */
 @Composable
-private fun ColumnScope.Section(
-    tab: InboxTab,
-    title: String,
-    count: Int,
-    sectionExpanded: SnapshotStateMap<InboxTab, Boolean>,
-    filterBar: @Composable () -> Unit,
-    content: LazyListScope.() -> Unit,
-) {
-    val expanded = sectionExpanded[tab] ?: true
-    val onToggle: () -> Unit = { sectionExpanded[tab] = !expanded }
-    if (expanded) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-        ) {
-            SectionHeader(
-                title = title,
-                count = count,
-                expanded = true,
-                onToggle = onToggle,
-            )
-            filterBar()
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
-            ) {
-                content()
-            }
-        }
-    } else {
-        SectionHeader(
-            title = title,
-            count = count,
-            expanded = false,
-            onToggle = onToggle,
-        )
-    }
-}
-
-@Composable
-private fun SectionHeader(
-    title: String,
-    count: Int,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-) {
+private fun ColumnHeader(title: String, count: Int) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(AppTheme.colors.tintCream)
-            .clickable(onClick = onToggle)
-            .padding(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
@@ -329,14 +279,11 @@ private fun SectionHeader(
                 .background(AppTheme.colors.ruleMargin)
                 .padding(horizontal = 1.dp),
         )
-        ProvideContentColor(AppTheme.colors.inkSecondary) {
-            Text(if (expanded) "▾" else "▸", style = AppTheme.typography.mono)
-        }
         ProvideContentColor(AppTheme.colors.inkPrimary) {
-            Text(title, style = AppTheme.typography.bodyEmphasis)
+            Text(title, style = AppTheme.typography.title)
         }
         if (count > 0) {
-            Badge(color = AppTheme.colors.surfaceCard) {
+            Badge(color = AppTheme.colors.tintCream) {
                 ProvideContentColor(AppTheme.colors.inkSecondary) {
                     Text(count.toString(), style = AppTheme.typography.caption)
                 }
