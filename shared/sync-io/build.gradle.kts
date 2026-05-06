@@ -15,6 +15,7 @@ kotlin {
             implementation(project(":shared:cloud"))
             implementation(project(":shared:catalog"))
             implementation(project(":shared:repository"))
+            implementation(project(":shared:parser-als"))
             implementation(libs.directory.watcher)
             implementation(libs.blake3)
         }
