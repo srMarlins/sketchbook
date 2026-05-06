@@ -24,6 +24,19 @@ class InMemoryProjectRepository(
 
     private val rows = MutableStateFlow(seed)
 
+    /**
+     * Replace all rows. Used by the desktop scanner when a library root is added/refreshed —
+     * the scanner reads the filesystem, builds a list of [ProjectRow]s, and hands them here.
+     */
+    fun replaceAll(newRows: List<ProjectRow>) {
+        rows.value = newRows
+    }
+
+    /** Append rows discovered by an incremental scan; deduped by id. */
+    fun addRows(newRows: List<ProjectRow>) {
+        rows.value = (rows.value + newRows).distinctBy { it.id.value }
+    }
+
     override fun observeProjects(query: String): Flow<List<ProjectRow>> = rows.map { all ->
         if (query.isBlank()) all else all.filter { query.lowercase() in it.name.lowercase() }
     }

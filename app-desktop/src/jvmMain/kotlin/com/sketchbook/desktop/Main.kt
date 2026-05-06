@@ -8,7 +8,10 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.navigation3.runtime.rememberNavBackStack
+import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.uishared.theme.AppTheme
+import com.sketchbook.uishared.theme.AppTypography
+import kotlinx.coroutines.launch
 
 /**
  * Compose Desktop entry. Builds the composition root once, the Compose Navigation 3 back stack
@@ -17,8 +20,20 @@ import com.sketchbook.uishared.theme.AppTheme
  */
 fun main() = application {
     val graph = remember { buildDesktopAppGraph() }
+    // Dev convenience: if SKETCHBOOK_DEFAULT_ROOT is set and Settings has no roots, seed it
+    // once at launch so the iteration loop (build → run → screenshot) doesn't require clicking
+    // through the folder picker every time. No-op for normal users (env unset).
+    remember(graph) {
+        val envRoot = System.getenv("SKETCHBOOK_DEFAULT_ROOT")
+        if (!envRoot.isNullOrBlank()) {
+            graph.appScope.launch {
+                graph.settingsRepository.upsertRoot(LibraryRoot.Projects(envRoot))
+            }
+        }
+    }
     val backStack = rememberNavBackStack(NavSavedStateConfig, Screen.Projects)
-    val windowState = rememberWindowState(size = DpSize(1280.dp, 820.dp))
+    val windowState = rememberWindowState(size = DpSize(1360.dp, 900.dp))
+    val typography: AppTypography = remember { Fonts.load() }
 
     Window(
         onCloseRequest = ::exitApplication,
@@ -45,7 +60,7 @@ fun main() = application {
                 })
             }
         }
-        AppTheme {
+        AppTheme(typography = typography) {
             RootContent(graph = graph, backStack = backStack)
         }
     }

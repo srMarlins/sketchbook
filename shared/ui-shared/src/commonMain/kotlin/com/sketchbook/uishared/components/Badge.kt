@@ -19,6 +19,7 @@ import com.sketchbook.uishared.theme.AppTheme
 fun Badge(
     color: Color,
     modifier: Modifier = Modifier,
+    padding: PaddingValues = PaddingValues(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
     content: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(AppTheme.spacing.cornerSmall)
@@ -26,7 +27,7 @@ fun Badge(
         modifier = modifier
             .clip(shape)
             .background(color)
-            .padding(PaddingValues(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs)),
+            .padding(padding),
     ) {
         ProvideContentColor(AppTheme.colors.inkOnStripDark) {
             content()

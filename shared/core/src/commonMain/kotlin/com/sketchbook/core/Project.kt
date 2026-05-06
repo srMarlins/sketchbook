@@ -16,7 +16,19 @@ data class ProjectRow(
     val updatedAt: Instant,
     val tags: List<String>,
     val colorTag: Int?,
+    /** 0..100 effort score per [com.sketchbook.featureprojects.EffortScore]. Null until the
+     *  streaming `.als` parser fills [ProjectMetadata]. */
+    val effortScore: Int? = null,
+    /** Parser outcome. `Pending` = scanner saw the file but parser hasn't run yet. */
+    val parseStatus: ParseStatus = ParseStatus.Pending,
+    /** Number of `SampleRef`s the parser couldn't resolve to a real file on disk. */
+    val missingSampleCount: Int = 0,
+    /** `.als` file size in bytes. Filled by the scanner via `Files.size`; useful as a proxy
+     *  signal for the effort score until the streaming parser lands. */
+    val fileSizeBytes: Long = 0L,
 )
+
+enum class ParseStatus { Pending, Ok, Failed }
 
 /**
  * Full project view. Adds metadata that a detail screen wants but a list doesn't.
