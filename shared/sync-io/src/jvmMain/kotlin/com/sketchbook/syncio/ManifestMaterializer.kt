@@ -42,6 +42,22 @@ class ManifestMaterializer(
         val root = projectRoot(uuid)
         Files.createDirectories(root)
 
+        // Pre-flight: bail before any blob fetch when a destination file is already open in
+        // another process (Live with the project loaded on Windows). Doing this BEFORE the
+        // staging loop avoids wasted bandwidth + leaves zero on-disk side effects in the busy
+        // case — caller (PullPoller wiring or Rewind UI) decides whether to retry or surface.
+        // `resolveSafely` throws on traversal-escapes (`..`); surface that as Result.failure
+        // rather than letting it escape this function.
+        val busy = runCatching {
+            manifest.files.keys.mapNotNull { rel ->
+                val finalPath = resolveSafely(root, rel)
+                if (Files.exists(finalPath) && isInUse(finalPath)) rel else null
+            }
+        }.getOrElse { return Result.failure(it) }
+        if (busy.isNotEmpty()) {
+            return Result.failure(WorkingTreeBusyException(busy))
+        }
+
         // Pair (temp, final) — temps written first; renames happen only after every file is
         // staged so a mid-fetch failure leaves the working tree intact.
         val staged = mutableListOf<Pair<Path, Path>>()
