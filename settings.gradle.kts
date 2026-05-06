@@ -48,6 +48,7 @@ include(
     ":shared:feature-journal",
     ":app-desktop",
     ":app-mcp",
+    ":tests:architecture",
     ":tests:integration",
 )
 
