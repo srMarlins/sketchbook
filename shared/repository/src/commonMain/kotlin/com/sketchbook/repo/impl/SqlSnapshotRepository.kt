@@ -56,7 +56,7 @@ class SqlSnapshotRepository(
                     manifest_hash = manifestHash,
                     file_count = snapshot.fileCount.toLong(),
                     total_bytes = snapshot.totalBytes,
-                    new_bytes = 0L,
+                    new_bytes = snapshot.newBytes,
                 )
             }
         }
@@ -117,4 +117,5 @@ private fun com.sketchbook.catalog.db.Snapshots.toDomain(): Snapshot = Snapshot(
     selfContained = false, // tracked on sync_state, not the snapshot row.
     fileCount = file_count.toInt(),
     totalBytes = total_bytes,
+    newBytes = new_bytes,
 )
