@@ -269,12 +269,18 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                     // fresh-VM-per-entry behavior automatically.
                                     LaunchedEffect(Unit) {
                                         vm.dispatch(ProjectListViewModel.Intent.Search(""))
-                                        // PR-CC: pick up any pending Health-chip filter the user
-                                        // staged before navigating. Consume it so a re-entry
-                                        // without another chip click doesn't re-apply the filter.
-                                        chrome.pendingHealthFilter.value?.let { pending ->
-                                            vm.dispatch(ProjectListViewModel.Intent.SetHealthFilter(pending))
-                                            chrome.consumePendingHealthFilter()
+                                    }
+                                    // PR-CC: pick up any pending Health-chip filter the user staged.
+                                    // Collected as a flow (not a one-shot read) so a click while the
+                                    // Projects screen is already on top still applies the filter; we
+                                    // consume each non-null emission so a screen re-entry without
+                                    // another chip click doesn't re-apply the previous filter.
+                                    LaunchedEffect(vm) {
+                                        chrome.pendingHealthFilter.collect { pending ->
+                                            if (pending != null) {
+                                                vm.dispatch(ProjectListViewModel.Intent.SetHealthFilter(pending))
+                                                chrome.consumePendingHealthFilter()
+                                            }
                                         }
                                     }
                                     ProjectListScreen(
