@@ -1,0 +1,45 @@
+name: pages
+
+# Deploys site/ to GitHub Pages. Trigger on:
+#   - any change to site/ on main (so iteration is instant)
+#   - manual dispatch (so we can re-deploy without a content change)
+#   - successful release runs (so the version tag in the page can update from
+#     the new bucket metadata.properties on next visit — Pages is static, so
+#     this is just a rebuild trigger; index.html fetches the live version)
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["release"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deploy at a time. Skip mid-flight superseded deploys.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - name: Upload site/ as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sketchbook — versioning &amp; sync for your Ableton library</title>
+  <meta name="description" content="A versioning and sync layer for your Ableton Live library. Cross-device sync, every-save snapshots, repair tools — built as a tactile sketchbook, not a spreadsheet." />
+  <meta property="og:title" content="Sketchbook" />
+  <meta property="og:description" content="A versioning and sync layer for your Ableton Live library." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://srmarlins.github.io/sketchbook/" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Gloria+Hallelujah&family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600&display=swap" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['"Permanent Marker"', 'cursive'],
+            hand: ['"Gloria Hallelujah"', 'cursive'],
+            mono: ['"Space Mono"', 'ui-monospace', 'monospace'],
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
+
+  <style>
+    :root {
+      /* Primitive tokens — match docs/design-language.md */
+      --paper-cream-50:  #FBF7EC;
+      --paper-cream-100: #F5EFDF;
+      --paper-cream-200: #ECE2C7;
+      --paper-cream-400: #C8B687;
+      --wood-walnut-300: #8C6A48;
+      --wood-walnut-500: #6B4A2B;
+      --wood-walnut-700: #4A301B;
+      --ink-graphite-700: #2F2A26;
+      --ink-graphite-500: #5A534D;
+      --ink-graphite-300: #9A938B;
+      --kraft-300: #C8A678;
+
+      /* Ableton-14 palette (truthful project colors, never theme-swapped) */
+      --als-1:  #FF94A4; --als-2:  #FFA948; --als-3:  #CC9A2E; --als-4:  #F4F576;
+      --als-5:  #BFFB00; --als-6:  #1AFF2F; --als-7:  #25FFA8; --als-8:  #5CFFCA;
+      --als-9:  #8DC5FF; --als-10: #5480E4; --als-11: #92A7FF; --als-12: #D86CE4;
+      --als-13: #E553A0; --als-14: #FFFFFF;
+
+      --rule-line: rgba(105, 90, 75, 0.18);
+      --shadow-page: 0 4px 14px rgba(74, 48, 27, 0.18), 0 18px 60px rgba(74, 48, 27, 0.22);
+      --shadow-lift: 0 6px 16px rgba(0, 0, 0, 0.18);
+      --shadow-pin:  0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Wood-grain desk: walnut base + SVG turbulence noise overlay (real organic
+       grain, not a striped gradient) + a warm key light + a deep corner shadow.
+       The svg data URLs use feTurbulence which gives every page load the same
+       seed (deterministic). */
+    body {
+      background-color: var(--wood-walnut-500);
+      background-image:
+        /* warm key light, top-left */
+        radial-gradient(ellipse 60% 50% at 18% 8%, rgba(255, 210, 160, 0.18), transparent 70%),
+        /* deep shadow, bottom-right */
+        radial-gradient(ellipse 70% 60% at 95% 110%, rgba(20, 10, 4, 0.45), transparent 65%),
+        /* coarse grain — long horizontal streaks */
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='600'><filter id='w'><feTurbulence type='fractalNoise' baseFrequency='0.012 0.32' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.10  0 0 0 0 0.04  0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>"),
+        /* fine grain — texture */
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='w2'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.02  0 0 0 0 0  0 0 0 0.18 0'/></filter><rect width='100%25' height='100%25' filter='url(%23w2)'/></svg>");
+      background-blend-mode: normal, normal, multiply, multiply;
+      color: var(--ink-graphite-700);
+      font-family: 'Inter', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* Notebook page: cream base + SVG paper-fiber turbulence + handwritten-style
+       blue rule lines (slight wobble in the path keeps them from looking ruled
+       by a machine) + faint margin red rule + worn corners. */
+    .notebook-page {
+      position: relative;
+      background-color: var(--paper-cream-100);
+      background-image:
+        /* paper fiber */
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='480'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='1.6' numOctaves='2' seed='11'/><feColorMatrix values='0 0 0 0 0.20  0 0 0 0 0.16  0 0 0 0 0.10  0 0 0 0.06 0'/></filter><rect width='100%25' height='100%25' filter='url(%23p)'/></svg>"),
+        /* horizontal blue rule lines, slightly imperfect via SVG path */
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='32' preserveAspectRatio='none'><path d='M0 28 Q 200 27.4 400 28 T 800 28' stroke='%23628fb8' stroke-width='1' fill='none' opacity='0.34'/></svg>"),
+        /* faint paper warmth toward edges */
+        radial-gradient(ellipse 110% 80% at 50% 50%, transparent 60%, rgba(120, 80, 40, 0.06) 100%);
+      background-size: 480px 480px, 100% 32px, auto;
+      background-repeat: repeat, repeat-y, no-repeat;
+      background-blend-mode: multiply, normal, normal;
+      box-shadow:
+        inset 0 0 60px rgba(140, 90, 50, 0.08),
+        var(--shadow-page);
+      transform: rotate(-0.15deg);
+    }
+    /* Red margin rule — the vertical line common in lined notebooks */
+    .notebook-page::before {
+      content: '';
+      position: absolute;
+      left: 56px; top: 0; bottom: 0;
+      width: 1px;
+      background: linear-gradient(to bottom, transparent 0, rgba(200, 70, 70, 0.32) 6%, rgba(200, 70, 70, 0.32) 94%, transparent 100%);
+      pointer-events: none;
+    }
+    /* Worn upper-right corner — slight darkening, fades inward */
+    .notebook-page::after {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 120px; height: 120px;
+      background: radial-gradient(circle at 100% 0%, rgba(110, 70, 30, 0.18), transparent 70%);
+      pointer-events: none;
+    }
+
+    /* Spiral binding: SVG with proper rings (highlight + shadow on each loop)
+       instead of flat black radial gradients. The ring positions repeat every
+       64px down the page; the binding stretches the full page height. */
+    .spiral-binding {
+      background-image:
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='64' viewBox='0 0 28 64'><defs><linearGradient id='m' x1='0' x2='1'><stop offset='0' stop-color='%23807060'/><stop offset='0.45' stop-color='%23d8c9b0'/><stop offset='0.55' stop-color='%23b8a48a'/><stop offset='1' stop-color='%23665545'/></linearGradient></defs><rect x='0' y='0' width='28' height='64' fill='%23000' fill-opacity='0.06'/><ellipse cx='14' cy='22' rx='8' ry='5' fill='none' stroke='url(%23m)' stroke-width='3'/><ellipse cx='14' cy='22' rx='4.5' ry='2' fill='%23241a10' fill-opacity='0.85'/></svg>");
+      background-repeat: repeat-y;
+      background-size: 28px 64px;
+      background-position: 0 12px;
+    }
+
+    /* Brand wordmark — colored construction-paper letters, pinned at angles. */
+    .wordmark { display: inline-flex; gap: 2px; line-height: 1; user-select: none; }
+    .wordmark span {
+      font-family: 'Permanent Marker', cursive;
+      font-size: 56px;
+      padding: 4px 10px;
+      color: white;
+      text-shadow: 0 2px 0 rgba(0,0,0,0.18);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.22);
+      clip-path: polygon(2% 8%, 98% 4%, 96% 98%, 4% 95%);
+      transform-origin: center;
+    }
+    .wordmark span:nth-child(1) { background: #E94B4B; transform: rotate(-3deg); }
+    .wordmark span:nth-child(2) { background: #4F8FE5; transform: rotate(2deg); }
+    .wordmark span:nth-child(3) { background: #F2C73D; color: #5A4A1F; text-shadow: 0 2px 0 rgba(255,255,255,0.4); transform: rotate(-1deg); }
+    .wordmark span:nth-child(4) { background: #4FB373; transform: rotate(3deg); }
+    .wordmark span:nth-child(5) { background: #9C5BD0; transform: rotate(-2deg); }
+    .wordmark span:nth-child(6) { background: #E94B4B; transform: rotate(1deg); }
+    .wordmark span:nth-child(7) { background: #ED8B3A; transform: rotate(-2deg); }
+    .wordmark span:nth-child(8) { background: #4F8FE5; transform: rotate(2deg); }
+    .wordmark span:nth-child(9) { background: #F2C73D; color: #5A4A1F; text-shadow: 0 2px 0 rgba(255,255,255,0.4); transform: rotate(-3deg); }
+    .wordmark span:nth-child(10) { background: #4FB373; transform: rotate(2deg); }
+
+    /* Song-strip mockup — colored construction paper with washi tape across the top.
+       Torn edges via a denser polygon (more vertices, smaller deltas) so the
+       silhouette reads as fibrous tear, not pinking-shears. */
+    .song-strip {
+      position: relative;
+      padding: 18px 22px 18px 22px;
+      box-shadow: var(--shadow-lift);
+      clip-path: polygon(
+        0% 7%, 3% 4%, 6% 6%, 10% 3%, 14% 5%, 19% 2%, 24% 5%, 29% 3%, 34% 6%, 40% 3%,
+        46% 5%, 52% 2%, 58% 5%, 64% 3%, 70% 6%, 76% 3%, 82% 5%, 88% 2%, 93% 5%, 97% 3%, 100% 6%,
+        100% 94%, 97% 97%, 93% 95%, 88% 98%, 82% 95%, 76% 97%, 70% 94%, 64% 97%, 58% 95%, 52% 98%,
+        46% 95%, 40% 97%, 34% 94%, 29% 97%, 24% 95%, 19% 98%, 14% 95%, 10% 97%, 6% 94%, 3% 96%, 0% 93%
+      );
+    }
+    /* Subtle paper grain on the strip itself */
+    .song-strip > .strip-grain {
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='s'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' seed='5'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23s)'/></svg>");
+      mix-blend-mode: multiply;
+      pointer-events: none;
+    }
+    .washi-tape {
+      position: absolute;
+      top: -8px;
+      left: 12%;
+      width: 88px;
+      height: 22px;
+      background:
+        repeating-linear-gradient(45deg, transparent 0 6px, rgba(0,0,0,0.08) 6px 7px),
+        #FFD7CC;
+      opacity: 0.92;
+      transform: rotate(-3deg);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }
+    .washi-tape::before, .washi-tape::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 6px;
+      background: inherit;
+    }
+    .washi-tape::before { left: -3px; clip-path: polygon(0% 20%, 100% 0%, 100% 100%, 0% 80%); }
+    .washi-tape::after  { right: -3px; clip-path: polygon(0% 0%, 100% 20%, 100% 80%, 0% 100%); }
+
+    /* Rough-cut button — primary CTA, "red construction paper" per design doc. */
+    .btn-rough {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 24px;
+      font-family: 'Permanent Marker', cursive;
+      font-size: 22px;
+      letter-spacing: 0.5px;
+      color: white;
+      background: #E94B4B;
+      box-shadow: 0 4px 0 #B83838, 0 8px 16px rgba(0,0,0,0.18);
+      clip-path: polygon(1% 6%, 4% 0%, 24% 4%, 50% 0%, 76% 4%, 96% 0%, 99% 6%, 100% 90%, 96% 100%, 76% 96%, 50% 100%, 24% 96%, 4% 100%, 1% 90%);
+      cursor: pointer;
+      transition: transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .btn-rough:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #B83838, 0 12px 24px rgba(0,0,0,0.22); }
+    .btn-rough:active { transform: translateY(2px); box-shadow: 0 1px 0 #B83838, 0 4px 8px rgba(0,0,0,0.18); }
+
+    .btn-ghost {
+      font-family: 'Gloria Hallelujah', cursive;
+      font-size: 17px;
+      color: var(--ink-graphite-500);
+      text-decoration: underline wavy var(--ink-graphite-300) 1.5px;
+      text-underline-offset: 6px;
+      cursor: pointer;
+    }
+    .btn-ghost:hover { color: var(--ink-graphite-700); }
+
+    .handwritten { font-family: 'Gloria Hallelujah', cursive; }
+    .marker { font-family: 'Permanent Marker', cursive; letter-spacing: 0.3px; }
+    .data { font-family: 'Space Mono', monospace; }
+
+    /* Margin doodles — small handwritten marks in the left margin and corners.
+       Absolute-positioned, pointer-events:none, opacity tuned to read as faint
+       pencil/pen ink rather than UI. Hidden on small screens to avoid clutter. */
+    .doodle { position: absolute; pointer-events: none; opacity: 0.55; }
+    @media (max-width: 640px) { .doodle { display: none; } }
+    .doodle-star  { top: 80px; left: 12px; transform: rotate(-12deg); color: #c2802a; }
+    .doodle-arrow { top: 260px; left: 8px;  transform: rotate(8deg);   color: #4a6b8c; }
+    .doodle-check { top: 470px; left: 14px; transform: rotate(-4deg);  color: #6a8a4e; }
+    .doodle-dots  { bottom: 90px; left: 14px; opacity: 0.4;             color: #5a534d; }
+
+    /* Coffee ring — faint brown stain, off to the side. The double ring (outer
+       darker than inner) is the classic capillary deposit pattern. */
+    .coffee-ring {
+      position: absolute;
+      right: 60px; top: 220px;
+      width: 110px; height: 110px;
+      pointer-events: none;
+      opacity: 0.32;
+      background:
+        radial-gradient(circle at 50% 50%,
+          transparent 0,
+          transparent 38%,
+          rgba(120, 70, 30, 0.55) 41%,
+          rgba(140, 85, 40, 0.35) 44%,
+          transparent 48%,
+          transparent 52%,
+          rgba(120, 70, 30, 0.25) 54%,
+          transparent 58%);
+      transform: rotate(8deg);
+      filter: blur(0.4px);
+      mix-blend-mode: multiply;
+    }
+    .coffee-ring::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='110' height='110'><filter id='c'><feTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 0.45  0 0 0 0 0.25  0 0 0 0 0.10  0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23c)'/></svg>");
+      mix-blend-mode: multiply;
+      mask: radial-gradient(circle at 50% 50%, transparent 38%, black 41%, black 58%, transparent 60%);
+      -webkit-mask: radial-gradient(circle at 50% 50%, transparent 38%, black 41%, black 58%, transparent 60%);
+    }
+
+    /* Pencil scribble — a thin, slightly transparent stroke that looks like
+       someone tested a pencil tip in the corner. */
+    .pencil-mark {
+      position: absolute;
+      pointer-events: none;
+      opacity: 0.5;
+      mix-blend-mode: multiply;
+    }
+
+    /* Reduced-motion contract from design doc §6 */
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+      .notebook-page, .wordmark span { transform: none !important; }
+      .btn-rough:hover, .btn-rough:active { transform: none !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Wooden desk full-bleed; notebook page floats on top -->
+  <main class="min-h-screen flex items-start justify-center px-4 sm:px-8 py-10">
+    <div class="w-full max-w-4xl">
+      <!-- Brand row -->
+      <div class="flex items-end justify-between mb-6 px-4">
+        <div class="wordmark" role="img" aria-label="Sketchbook">
+          <span>S</span><span>k</span><span>e</span><span>t</span><span>c</span><span>h</span><span>b</span><span>o</span><span>o</span><span>k</span>
+        </div>
+        <a href="https://github.com/srMarlins/sketchbook" class="handwritten text-cream-100 hidden sm:inline-block" style="color: var(--paper-cream-100); font-size: 18px; text-decoration: underline wavy var(--paper-cream-400); text-underline-offset: 4px;">
+          on github →
+        </a>
+      </div>
+
+      <!-- The notebook page -->
+      <article class="notebook-page relative rounded-sm pl-16 pr-10 py-12 sm:pr-16">
+        <!-- Spiral binding -->
+        <div class="spiral-binding absolute left-0 top-0 bottom-0 w-7" aria-hidden="true"></div>
+
+        <!-- Margin doodles (decorative; aria-hidden) -->
+        <svg class="doodle doodle-star" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3 L13.6 9.4 L20 10 L15 14.2 L16.5 20.4 L12 17 L7.5 20.4 L9 14.2 L4 10 L10.4 9.4 Z" />
+        </svg>
+        <svg class="doodle doodle-arrow" width="36" height="20" viewBox="0 0 36 20" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 11 Q 12 4 24 12 L 30 8 M 24 12 L 28 17" />
+        </svg>
+        <svg class="doodle doodle-check" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 13 Q 7 14 9 16 Q 13 9 21 5" />
+        </svg>
+        <svg class="doodle doodle-dots" width="14" height="40" viewBox="0 0 14 40" aria-hidden="true" fill="currentColor" aria-label="">
+          <circle cx="7" cy="6"  r="1.4"/>
+          <circle cx="7" cy="14" r="1.2"/>
+          <circle cx="7" cy="22" r="1.4"/>
+          <circle cx="7" cy="30" r="1.1"/>
+          <circle cx="7" cy="37" r="1.3"/>
+        </svg>
+
+        <!-- Faint coffee ring stain -->
+        <div class="coffee-ring" aria-hidden="true"></div>
+
+        <!-- Pencil test scribble in lower-right corner -->
+        <svg class="pencil-mark" style="right: 28px; bottom: 24px;" width="64" height="20" viewBox="0 0 64 20" aria-hidden="true" stroke="#3a342e" fill="none" stroke-width="0.8" stroke-linecap="round">
+          <path d="M2 14 Q 8 6 14 12 T 26 10 T 38 12 T 50 9 T 62 11" />
+          <path d="M3 17 Q 10 13 18 16 T 34 14 T 50 16" opacity="0.6"/>
+        </svg>
+
+        <!-- Hero copy -->
+        <header class="mb-10">
+          <h1 class="marker text-4xl sm:text-5xl leading-tight" style="color: var(--ink-graphite-700);">
+            A versioning &amp; sync layer<br />for your Ableton library.
+          </h1>
+          <p class="handwritten mt-5 text-lg sm:text-xl" style="color: var(--ink-graphite-500); max-width: 60ch;">
+            Snapshots every save. Syncs across machines. Surfaces broken paths, missing samples, and duplicates — fix them in batches.
+          </p>
+        </header>
+
+        <!-- Sample song-strip — show what your library will look like in-app -->
+        <div class="mb-10 ml-2">
+          <div class="song-strip data" style="background: var(--als-9);">
+            <div class="strip-grain" aria-hidden="true"></div>
+            <div class="washi-tape" aria-hidden="true"></div>
+            <div class="flex items-baseline justify-between gap-6">
+              <span class="text-lg" style="color: rgba(0,0,0,0.78);">2026-04-Kyoto-trap-sketch.als</span>
+              <span class="text-sm" style="color: rgba(0,0,0,0.55);">v 47 · auto</span>
+            </div>
+            <div class="flex items-baseline gap-5 mt-2 text-sm" style="color: rgba(0,0,0,0.7);">
+              <span>140 bpm</span>
+              <span>F# minor</span>
+              <span>23 tracks</span>
+              <span>3:42</span>
+              <span style="color: rgba(0,0,0,0.55);">last save 6 min ago</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Download row -->
+        <section class="mb-10">
+          <div class="flex flex-wrap items-center gap-x-8 gap-y-4">
+            <a id="primary-download" class="btn-rough" href="#" data-platform-fallback="https://storage.googleapis.com/sketchbook-releases/download.html">
+              <span aria-hidden="true">↓</span>
+              <span id="primary-download-label">Download for your Mac</span>
+            </a>
+            <div class="handwritten text-base flex flex-wrap items-center gap-x-5 gap-y-1" style="color: var(--ink-graphite-500);">
+              <span>or pick:</span>
+              <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook-mac-aarch64.zip">Apple Silicon</a>
+              <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook-mac-amd64.zip">Intel Mac</a>
+              <a class="btn-ghost" href="https://storage.googleapis.com/sketchbook-releases/sketchbook.exe">Windows</a>
+            </div>
+          </div>
+          <p class="handwritten mt-4 text-sm" style="color: var(--ink-graphite-300);">
+            Already installed? Updates apply on next launch. Old versions: <a href="https://github.com/srMarlins/sketchbook/releases" class="underline">github.com/srMarlins/sketchbook/releases</a>.
+          </p>
+        </section>
+
+        <!-- Three feature beats with hand-drawn doodle icons (inline SVG) -->
+        <section class="grid sm:grid-cols-3 gap-7 mb-10">
+          <div>
+            <svg viewBox="0 0 64 64" width="48" height="48" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-graphite-700);">
+              <path d="M10 50 V14 L32 6 L54 14 V50" />
+              <path d="M10 50 L32 58 L54 50" />
+              <path d="M32 6 V58" />
+              <circle cx="32" cy="32" r="4" fill="currentColor" />
+            </svg>
+            <h3 class="marker mt-3 text-xl" style="color: var(--ink-graphite-700);">Snapshots</h3>
+            <p class="handwritten mt-1 text-base" style="color: var(--ink-graphite-500);">
+              Every save becomes a content-addressed snapshot. Rewind any project to any moment.
+            </p>
+          </div>
+          <div>
+            <svg viewBox="0 0 64 64" width="48" height="48" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-graphite-700);">
+              <rect x="6" y="14" width="22" height="36" rx="2" />
+              <rect x="36" y="14" width="22" height="36" rx="2" />
+              <path d="M28 20 L36 26" />
+              <path d="M28 30 L36 36" />
+              <path d="M28 40 L36 46" />
+            </svg>
+            <h3 class="marker mt-3 text-xl" style="color: var(--ink-graphite-700);">Sync</h3>
+            <p class="handwritten mt-1 text-base" style="color: var(--ink-graphite-500);">
+              One catalog across machines. Open your laptop, then your studio, without guessing which copy is current.
+            </p>
+          </div>
+          <div>
+            <svg viewBox="0 0 64 64" width="48" height="48" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-graphite-700);">
+              <circle cx="26" cy="26" r="14" />
+              <path d="M36 36 L54 54" />
+              <path d="M19 26 H33" />
+              <path d="M26 19 V33" />
+            </svg>
+            <h3 class="marker mt-3 text-xl" style="color: var(--ink-graphite-700);">Repair</h3>
+            <p class="handwritten mt-1 text-base" style="color: var(--ink-graphite-500);">
+              Mac paths after a Windows session. Samples that moved. Duplicates from version-saving. Surface and approve.
+            </p>
+          </div>
+        </section>
+
+        <!-- Who is this for -->
+        <section class="mb-10">
+          <p class="handwritten text-lg" style="color: var(--ink-graphite-500); max-width: 60ch;">
+            For producers with too many sketches across too many drives. Personal use. Private libraries. Not a DAW; not a chat tool.
+          </p>
+        </section>
+
+        <!-- Footer / OSS attribution -->
+        <footer class="mt-12 pt-6 border-t border-dashed flex flex-wrap items-center justify-between gap-3 text-sm" style="border-color: var(--rule-line); color: var(--ink-graphite-300);">
+          <div class="data flex items-center gap-3 flex-wrap">
+            <span>Apache-2.0</span>
+            <span>·</span>
+            <a href="https://github.com/srMarlins/sketchbook" class="underline hover:text-current" style="color: var(--ink-graphite-500);">srMarlins/sketchbook</a>
+            <span>·</span>
+            <span id="version-tag">v0.0.x</span>
+          </div>
+          <a href="https://hydraulic.dev" class="data inline-flex items-center gap-2 px-3 py-1 rounded" style="background: var(--paper-cream-200); color: var(--ink-graphite-500);" aria-label="Packaged with Conveyor">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="currentColor"><path d="M3 7h18v2H3zm2 4h14v2H5zm-2 4h18v2H3z"/></svg>
+            Packaged with Conveyor
+          </a>
+        </footer>
+      </article>
+
+      <!-- Pinned-down kraft sticky note off the page edge — the design's signature
+           "AI presence is a side note, not a chat" feel. -->
+      <aside class="hidden md:block relative">
+        <div style="position: absolute; right: 12px; top: -90px; width: 220px; padding: 16px 18px; background: #FFEEAA; transform: rotate(4deg); box-shadow: 0 8px 16px rgba(0,0,0,0.18);" class="handwritten text-base" aria-label="Note">
+          <span style="color: var(--ink-graphite-700);">v0.0 is rough on purpose. Shape first, polish later.</span>
+          <span aria-hidden="true" style="position: absolute; left: 50%; top: -12px; transform: translateX(-50%) rotate(8deg); width: 60px; height: 18px; background: rgba(255,255,255,0.7); box-shadow: 0 1px 2px rgba(0,0,0,0.15);"></span>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    // OS detection — only used to label the primary CTA. Three platforms; fall
+    // back to the Conveyor download.html which auto-detects on the server side.
+    (function() {
+      var ua = navigator.userAgent;
+      var btn = document.getElementById('primary-download');
+      var lbl = document.getElementById('primary-download-label');
+      if (!btn || !lbl) return;
+      var isWin = /Windows NT/i.test(ua);
+      var isMac = /Mac OS X|Macintosh/i.test(ua);
+      var isAppleSilicon = isMac && /Mac OS X 10_15|Mac OS X 11|Mac OS X 12|Mac OS X 13|Mac OS X 14|Mac OS X 15/i.test(ua) && (window.navigator.platform === 'MacIntel' && (navigator.maxTouchPoints > 1 || /arm/i.test(ua)));
+      // Apple silicon detection is unreliable from UA alone (Apple lies); offer both Mac links and let the user pick.
+      if (isWin) {
+        btn.href = 'https://storage.googleapis.com/sketchbook-releases/sketchbook.exe';
+        lbl.textContent = 'Download for Windows';
+      } else if (isMac) {
+        // Default to download.html which lets Conveyor route to the right Mac variant.
+        btn.href = 'https://storage.googleapis.com/sketchbook-releases/download.html';
+        lbl.textContent = 'Download for Mac';
+      } else {
+        btn.href = btn.dataset.platformFallback || 'https://storage.googleapis.com/sketchbook-releases/download.html';
+        lbl.textContent = 'See downloads';
+      }
+    })();
+
+    // Live version tag — fetches the bucket's metadata.properties to display the
+    // current shipped version. Best-effort; failures stay silent.
+    (function() {
+      fetch('https://storage.googleapis.com/sketchbook-releases/metadata.properties', { cache: 'no-cache' })
+        .then(function(r) { return r.ok ? r.text() : null; })
+        .then(function(t) {
+          if (!t) return;
+          var m = t.match(/^app\.version\s*=\s*([^\s]+)/m);
+          var el = document.getElementById('version-tag');
+          if (m && el) el.textContent = 'v' + m[1];
+        })
+        .catch(function() { /* silent */ });
+    })();
+  </script>
+</body>
+</html>

@@ -62,6 +62,13 @@ Step 4 "Set short cache header default for the auto-update manifest"
 # (No bucket-level default cache header on GCS — handled at upload time.)
 Write-Host "Cache headers handled per-object at upload time in release.yml."
 
+# Note: we deliberately don't set --web-main-page-suffix on this bucket.
+# GCS only honors that when the bucket is fronted by a custom domain (CNAME
+# to c.storage.googleapis.com). For the raw storage.googleapis.com/<bucket>/
+# URL, GCS always returns an XML listing. The landing page lives on GitHub
+# Pages (.github/workflows/pages.yml) — the bucket only serves binaries +
+# Conveyor update metadata.
+
 Step 5 "Create release-uploader service account '$ServiceAccount'"
 $saEmail = "$ServiceAccount@$Project.iam.gserviceaccount.com"
 $saExists = $null -ne (gcloud iam service-accounts describe $saEmail --format="value(email)" 2>$null)

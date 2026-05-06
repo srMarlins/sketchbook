@@ -1,37 +1,22 @@
+<div align="center">
+
 # Sketchbook
 
-Cross-device catalog, versioning, and AI-assisted curation for your Ableton Live projects.
+*A versioning and sync layer for an Ableton library.*
 
-**Status (2026-05-05):** Kotlin / Compose Multiplatform rewrite landed. Python `packages/` retained as the parity reference until validation completes (see `docs/parity.md`). The Tauri/web shell that previously lived in `web/` and `src-tauri/` is retired — Compose Desktop is the v1 surface.
+[![latest](https://img.shields.io/github/v/release/srMarlins/sketchbook?label=latest&style=flat-square&color=4F8FE5)](https://github.com/srMarlins/sketchbook/releases/latest)
+[![release](https://img.shields.io/github/actions/workflow/status/srMarlins/sketchbook/release.yml?label=release&style=flat-square)](https://github.com/srMarlins/sketchbook/actions/workflows/release.yml)
+[![platforms](https://img.shields.io/badge/platforms-mac%20·%20windows-9C5BD0?style=flat-square)](https://srmarlins.github.io/sketchbook/)
 
-## Run the desktop app
+[**Download**](https://srmarlins.github.io/sketchbook/)  ·  Apache-2.0  ·  Packaged with [Conveyor](https://hydraulic.dev)
+
+</div>
+
+---
+
+> Pre-1.0. The shape is right; the polish is incoming.
 
 ```pwsh
-./gradlew :app-desktop:run
+./gradlew :app-desktop:run    # desktop app
+./gradlew :app-mcp:run        # mcp server, for Claude Desktop
 ```
-
-Builds installers (`.dmg` for Mac, `.msi` for Windows) via Conveyor — see `docs/runbooks/release.md`.
-
-## Run the MCP server (for Claude Desktop)
-
-```pwsh
-./gradlew :app-mcp:run
-```
-
-See `docs/mcp-setup.md` for the Claude Desktop config snippet.
-
-## Repo layout
-
-- `app-desktop/` — Compose Desktop entry; Compose Navigation 3 for routing.
-- `app-mcp/` — JVM MCP server (JSON-RPC 2.0 over stdio).
-- `shared/`
-  - `core/`, `parser-als/`, `catalog/`, `cloud/`, `sync-io/`, `actions/`, `sync/`, `repository/`, `mcp-server/`
-  - `ui-shared/`, `feature-projects/`, `feature-project-detail/`, `feature-timeline/`, `feature-proposals/`, `feature-needs-attention/`, `feature-settings/`
-- `docs/` — design docs, plans, runbooks, parity log.
-- `tools/parity/` — Python ↔ Kotlin diff harness for cutover validation.
-- `packages/` — original Python implementation (parity reference; will be deleted in a follow-up after parity passes).
-
-## Plans + design
-
-- `docs/plans/2026-05-05-sync-versioning-design.md` — authoritative architecture.
-- `docs/plans/2026-05-05-kotlin-rewrite-impl-plan.md` — PR-by-PR roadmap.

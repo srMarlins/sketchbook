@@ -58,3 +58,33 @@ compose.desktop {
         }
     }
 }
+
+// Conveyor packages all OS targets from a single (Linux) runner, so we
+// can't rely on `compose.desktop.currentOs` for cross-platform skiko
+// natives — that resolves at build time to the runner's OS only, and
+// the bundled installers crash on every other OS with
+// ExceptionInInitializerError in WindowSkiaLayerComponent.
+//
+// The Conveyor Gradle plugin pre-registers per-target configurations
+// (linuxAmd64/macAmd64/macAarch64/windowsAmd64). Adding the matching
+// compose.desktop.<os>_<arch> artifact to each ensures every installer
+// ships its own skiko binaries.
+dependencies {
+    "linuxAmd64"(compose.desktop.linux_x64)
+    "macAmd64"(compose.desktop.macos_x64)
+    "macAarch64"(compose.desktop.macos_arm64)
+    "windowsAmd64"(compose.desktop.windows_x64)
+}
+
+// Workaround for a long-standing Compose Multiplatform issue where
+// configuration resolution sometimes picks an HTML/Web variant for
+// JVM-only consumers. Forcing the "awt" UI variant fixes it.
+// See: https://github.com/JetBrains/compose-jb/issues/1404
+//
+// Gradle 9 forbids mutating attributes on bucket (dependency-only)
+// configurations, so apply only to resolvable/consumable ones.
+configurations.matching { it.isCanBeResolved || it.isCanBeConsumed }.configureEach {
+    attributes {
+        attribute(Attribute.of("ui", String::class.java), "awt")
+    }
+}

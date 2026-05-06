@@ -69,10 +69,15 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Upload site to gs://sketchbook-releases
+      - name: Upload Conveyor output to gs://sketchbook-releases
         run: |
           gsutil -m -h "Cache-Control:public, max-age=300" \
             cp -r output/* gs://sketchbook-releases/
+
+      # The custom landing page lives on GitHub Pages (.github/workflows/pages.yml)
+      # rather than the bucket. GCS only honors MainPageSuffix on buckets fronted
+      # by a custom domain — for raw `storage.googleapis.com/<bucket>/` URLs it
+      # always returns the XML listing. Pages serves a clean URL for free.
 
       # Generate human changelog from commits since the previous tag.
       # First-tag case (no PREV) only takes commits *since the project's
@@ -95,14 +100,15 @@ jobs:
             echo ""
             echo "Already running Sketchbook? Auto-update will pick this up on next launch — no action needed."
             echo ""
-            echo "Fresh installs: <https://storage.googleapis.com/sketchbook-releases/download.html>"
+            echo "Fresh installs: <https://srmarlins.github.io/sketchbook/>"
             echo ""
-            echo "(The download page auto-detects your OS and serves the right installer:"
-            echo "Apple Silicon / Intel Mac \`.zip\`, Windows \`.exe\` launcher + signed MSIX.)"
+            echo "Old versions: assets attached below. Auto-update is forward-only — installing an older version won't downgrade an existing install."
           } >> NOTES.md
 
-      # Create the GitHub Release with notes only (no binaries — those live on
-      # the bucket so the auto-updater can fetch anonymously).
+      # Create the GitHub Release. Notes from the changelog above; installable
+      # binaries attached as assets so users can grab a specific old version
+      # from /releases. Auto-update still uses the bucket — these are an
+      # archive, not the live update channel.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -111,3 +117,9 @@ jobs:
           body_path: NOTES.md
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            output/sketchbook-*-mac-aarch64.zip
+            output/sketchbook-*-mac-amd64.zip
+            output/sketchbook-*-windows-amd64.zip
+            output/sketchbook-*.x64.msix
+            output/sketchbook.exe
