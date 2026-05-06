@@ -319,6 +319,10 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
                                                 }
                                             } },
                                             conflictMessageFor = syncImpl?.let { impl -> { pid -> impl.conflictMessage(pid) } },
+                                            onOpenTimeline = { pid ->
+                                                val uuid = graph.syncStateStore.identityFor(pid)
+                                                backStack.add(Screen.Timeline(uuid))
+                                            },
                                         )
                                     },
                                 )
@@ -434,6 +438,7 @@ private fun DetailPanelContent(
     syncStateFor: ((com.sketchbook.core.ProjectId) -> ProjectSyncState)? = null,
     onPushNow: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
     conflictMessageFor: ((com.sketchbook.core.ProjectId) -> String?)? = null,
+    onOpenTimeline: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
 ) {
     val state by holder.state.collectAsState()
     val theme = com.sketchbook.uishared.theme.AppTheme
@@ -603,7 +608,12 @@ private fun DetailPanelContent(
                             )
                             DetailQuickVersions(row, state, theme)
                         }
-                        DetailTab.Versions -> DetailVersionsTab(row, state, theme)
+                        DetailTab.Versions -> DetailVersionsTab(
+                            row = row,
+                            state = state,
+                            theme = theme,
+                            onOpenTimeline = onOpenTimeline?.let { open -> { open(row.id) } },
+                        )
                         DetailTab.Tracks -> DetailTracksTab(row, theme)
                         DetailTab.Samples -> DetailSamplesTab(state.samples, theme)
                         DetailTab.Plugins -> DetailPluginsTab(state.plugins, theme)
@@ -700,6 +710,7 @@ private fun DetailVersionsTab(
     row: com.sketchbook.core.ProjectRow,
     state: ProjectDetailStateHolder.State,
     theme: com.sketchbook.uishared.theme.AppTheme,
+    onOpenTimeline: (() -> Unit)? = null,
 ) {
     val unified = remember(row.path.value, state.history) { unifyVersions(row, state.history) }
     Section("Local + remote", theme) {
@@ -723,6 +734,14 @@ private fun DetailVersionsTab(
                     VersionRow(entry, isCurrent = entry.absPath == row.path.value, theme = theme)
                 }
             }
+        }
+    }
+    if (onOpenTimeline != null) {
+        com.sketchbook.uishared.components.Button(
+            onClick = onOpenTimeline,
+            variant = com.sketchbook.uishared.components.ButtonVariant.Ghost,
+        ) {
+            Text("View full timeline →", style = theme.typography.bodyEmphasis)
         }
     }
 }
