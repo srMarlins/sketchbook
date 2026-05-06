@@ -24,17 +24,20 @@ class ProjectListStateHolderTest {
         name: String,
         tags: List<String> = emptyList(),
         archived: Boolean = false,
+        tempo: Double? = 124.0,
+        key: String? = null,
     ) = ProjectRow(
         id = ProjectId(id),
         name = name,
         path = ProjectPath("Projects/2026/$name/Project.als"),
-        tempo = 124.0,
+        tempo = tempo,
         trackCount = 8,
         lastSavedLiveVersion = "11.3.20",
         updatedAt = now,
         tags = tags,
         colorTag = null,
         archived = archived,
+        key = key,
     )
 
     private class FakeRepo(
@@ -108,6 +111,62 @@ class ProjectListStateHolderTest {
             assertEquals(listOf("kick"), s.rows.map { it.name })
             assertEquals(listOf("old-snare"), s.archivedRows.map { it.name })
             assertTrue(s.rows.none { it.archived })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun tempoAndKeyFiltersNarrowTheRowSet() = runTest {
+        val all = MutableStateFlow(
+            listOf(
+                row(1, "a", tempo = 140.0, key = "F# Minor"),
+                row(2, "b", tempo = 128.0, key = "F# Minor"),
+                row(3, "c", tempo = 140.0, key = "C Major"),
+            ),
+        )
+        val repo = FakeRepo(mapOf("" to all))
+        val holder = ProjectListStateHolder(repo, backgroundScope)
+
+        holder.state.test {
+            // Drain until rows populate.
+            var s = awaitItem()
+            while (s.rows.size < 3) s = awaitItem()
+
+            holder.dispatch(ProjectListStateHolder.Intent.SetTempoRange(135.0..145.0))
+            holder.dispatch(ProjectListStateHolder.Intent.SetKeyFilter("F# Minor"))
+
+            s = awaitItem()
+            while (s.tempoRange == null || s.keyFilter != "F# Minor" || s.rows.size != 1) {
+                s = awaitItem()
+            }
+            assertEquals(listOf("a"), s.rows.map { it.name })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun clearFiltersRestoresFullRowSet() = runTest {
+        val all = MutableStateFlow(
+            listOf(
+                row(1, "a", tempo = 140.0, key = "F# Minor"),
+                row(2, "b", tempo = 128.0, key = "F# Minor"),
+                row(3, "c", tempo = 140.0, key = "C Major"),
+            ),
+        )
+        val repo = FakeRepo(mapOf("" to all))
+        val holder = ProjectListStateHolder(repo, backgroundScope)
+
+        holder.state.test {
+            var s = awaitItem()
+            while (s.rows.size < 3) s = awaitItem()
+
+            holder.dispatch(ProjectListStateHolder.Intent.SetKeyFilter("F# Minor"))
+            while (s.keyFilter != "F# Minor" || s.rows.size != 2) s = awaitItem()
+            assertEquals(setOf("a", "b"), s.rows.map { it.name }.toSet())
+
+            holder.dispatch(ProjectListStateHolder.Intent.ClearFilters)
+            while (s.keyFilter != null || s.rows.size != 3) s = awaitItem()
+            assertEquals(setOf("a", "b", "c"), s.rows.map { it.name }.toSet())
             cancelAndIgnoreRemainingEvents()
         }
     }

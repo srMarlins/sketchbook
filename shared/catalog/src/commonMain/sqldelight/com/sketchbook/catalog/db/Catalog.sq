@@ -209,6 +209,12 @@ SELECT * FROM projects WHERE id = :id;
 selectProjectByPath:
 SELECT * FROM projects WHERE path = :path;
 
+-- Distinct, non-null key values across the catalog (uses idx_projects_key from migration 3).
+-- Powers the Browse toolbar's Key filter chip — only shows keys that actually exist in the
+-- user's library so a producer who never made anything in B Locrian doesn't see it as an option.
+selectDistinctKeys:
+SELECT DISTINCT key FROM projects WHERE key IS NOT NULL ORDER BY key;
+
 insertOrReplaceProject:
 INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, key, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes)
 VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :key, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :parse_error, :mac_paths_count, :effort_score, :effort_breakdown, :file_size_bytes);

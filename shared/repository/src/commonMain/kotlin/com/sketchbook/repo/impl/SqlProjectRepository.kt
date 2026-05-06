@@ -88,6 +88,12 @@ class SqlProjectRepository(
             rows.map { it.toDomain(tags = tagsByProject[it.id].orEmpty()) }
         }
 
+    override fun observeDistinctKeys(): Flow<List<String>> =
+        catalog.catalogQueries.selectDistinctKeys()
+            .asFlow()
+            .mapToList(ioDispatcher)
+            .map { rows -> rows.mapNotNull { it } }
+
     override fun observeProject(id: ProjectId): Flow<ProjectRow?> =
         combine(
             catalog.catalogQueries.selectProjectByIdWithMissing(id.value)

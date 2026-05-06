@@ -28,12 +28,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -154,6 +160,17 @@ fun ProjectListScreen(
                                 }
                             }
                         } else null,
+                    )
+                    FilterChipsRow(
+                        tempoRange = state.tempoRange,
+                        keyFilter = state.keyFilter,
+                        distinctKeys = state.distinctKeys,
+                        onTempoChange = { range ->
+                            dispatch(ProjectListStateHolder.Intent.SetTempoRange(range))
+                        },
+                        onKeyChange = { key ->
+                            dispatch(ProjectListStateHolder.Intent.SetKeyFilter(key))
+                        },
                     )
                     ScanIndicator(
                         active = scanActive,
@@ -524,6 +541,270 @@ private fun BoxScope.DetailPanel(
             if (id != null && content != null) {
                 content(id, onDismiss)
             }
+        }
+    }
+}
+
+/**
+ * Toolbar filter chips: Tempo range + Key. Two pill-shaped chips matching the home
+ * `HighlightsStrip` styling (same shape, border, padding, mono caption type) per
+ * `feedback_color_restraint` — no new colors per state. Each opens a small Popup with the
+ * actual editor; clicking the chip toggles the popup, and clicking outside dismisses it.
+ */
+@Composable
+private fun FilterChipsRow(
+    tempoRange: ClosedFloatingPointRange<Double>?,
+    keyFilter: String?,
+    distinctKeys: List<String>,
+    onTempoChange: (ClosedFloatingPointRange<Double>?) -> Unit,
+    onKeyChange: (String?) -> Unit,
+) {
+    var tempoOpen by remember { mutableStateOf(false) }
+    var keyOpen by remember { mutableStateOf(false) }
+
+    val tempoLabel = tempoRange?.let { range ->
+        "Tempo: ${formatBpm(range.start)}–${formatBpm(range.endInclusive)}"
+    } ?: "Tempo: any"
+    val keyLabel = "Key: ${keyFilter ?: "any"}"
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box {
+            FilterChip(
+                label = tempoLabel,
+                active = tempoRange != null,
+                onClick = { tempoOpen = !tempoOpen },
+            )
+            if (tempoOpen) {
+                Popup(
+                    onDismissRequest = { tempoOpen = false },
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    TempoFilterPopup(
+                        current = tempoRange,
+                        onApply = { range ->
+                            onTempoChange(range)
+                            tempoOpen = false
+                        },
+                        onClear = {
+                            onTempoChange(null)
+                            tempoOpen = false
+                        },
+                    )
+                }
+            }
+        }
+        Box {
+            FilterChip(
+                label = keyLabel,
+                active = keyFilter != null,
+                onClick = { keyOpen = !keyOpen },
+            )
+            if (keyOpen) {
+                Popup(
+                    onDismissRequest = { keyOpen = false },
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    KeyFilterPopup(
+                        keys = distinctKeys,
+                        current = keyFilter,
+                        onPick = { picked ->
+                            onKeyChange(picked)
+                            keyOpen = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Single pill chip — same geometry/typography as HighlightsStrip chips for visual cohesion. */
+@Composable
+private fun FilterChip(label: String, active: Boolean, onClick: () -> Unit) {
+    val colors = AppTheme.colors
+    val borderColor = if (active) colors.accentSecondary else colors.ruleLineStrong
+    val tint = if (active) colors.tintCream else colors.surfaceCard
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(tint)
+            .border(1.dp, borderColor, RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ProvideContentColor(if (active) colors.inkPrimary else colors.inkSecondary) {
+            Text(
+                label.uppercase(),
+                style = AppTheme.typography.mono.copy(
+                    fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                ),
+            )
+        }
+    }
+}
+
+/**
+ * Tempo popup: two BPM input fields (min, max). Empty field = open-ended on that side.
+ * "Apply" parses + clamps to [40, 240] and emits the range; "Clear" emits null.
+ */
+@Composable
+private fun TempoFilterPopup(
+    current: ClosedFloatingPointRange<Double>?,
+    onApply: (ClosedFloatingPointRange<Double>?) -> Unit,
+    onClear: () -> Unit,
+) {
+    val colors = AppTheme.colors
+    var minText by remember { mutableStateOf(current?.start?.let { formatBpm(it) } ?: "") }
+    var maxText by remember { mutableStateOf(current?.endInclusive?.let { formatBpm(it) } ?: "") }
+
+    Column(
+        modifier = Modifier
+            .widthIn(min = 240.dp, max = 280.dp)
+            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+            .background(colors.surfaceCard)
+            .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard))
+            .padding(AppTheme.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+    ) {
+        ProvideContentColor(colors.inkSecondary) {
+            Text("Tempo (BPM)", style = AppTheme.typography.body)
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                TextField(
+                    value = minText,
+                    onChange = { minText = it },
+                    placeholder = "min",
+                )
+            }
+            ProvideContentColor(colors.inkMuted) { Text("–", style = AppTheme.typography.body) }
+            Box(modifier = Modifier.weight(1f)) {
+                TextField(
+                    value = maxText,
+                    onChange = { maxText = it },
+                    placeholder = "max",
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(50))
+                    .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(50))
+                    .clickable(onClick = onClear)
+                    .padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                ProvideContentColor(colors.inkSecondary) {
+                    Text("Clear", style = AppTheme.typography.body)
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(50))
+                    .background(colors.tintCream)
+                    .border(1.dp, colors.accentSecondary, RoundedCornerShape(50))
+                    .clickable {
+                        val range = parseTempoRange(minText, maxText)
+                        onApply(range)
+                    }
+                    .padding(vertical = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                ProvideContentColor(colors.inkPrimary) {
+                    Text("Apply", style = AppTheme.typography.body)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Parse min/max strings into a clamped range. Empty fields become open-ended (40 / 240).
+ * Both empty → null (no filter). Invalid input falls through to null on its side.
+ */
+internal fun parseTempoRange(minText: String, maxText: String): ClosedFloatingPointRange<Double>? {
+    val rawMin = minText.trim().toDoubleOrNull()
+    val rawMax = maxText.trim().toDoubleOrNull()
+    if (rawMin == null && rawMax == null) return null
+    val lo = (rawMin ?: 40.0).coerceIn(40.0, 240.0)
+    val hi = (rawMax ?: 240.0).coerceIn(40.0, 240.0)
+    return if (lo <= hi) lo..hi else hi..lo
+}
+
+private fun formatBpm(value: Double): String {
+    val rounded = (value * 10).toLong() / 10.0
+    return if (rounded == rounded.toLong().toDouble()) {
+        rounded.toLong().toString()
+    } else {
+        rounded.toString()
+    }
+}
+
+/**
+ * Key popup: scrolling list of distinct keys + an "Any" entry that clears the filter.
+ * Keys come from the catalog's `selectDistinctKeys` query so the producer only sees keys their
+ * library actually contains.
+ */
+@Composable
+private fun KeyFilterPopup(
+    keys: List<String>,
+    current: String?,
+    onPick: (String?) -> Unit,
+) {
+    val colors = AppTheme.colors
+    Column(
+        modifier = Modifier
+            .widthIn(min = 200.dp, max = 260.dp)
+            .heightIn(max = 320.dp)
+            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+            .background(colors.surfaceCard)
+            .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard)),
+    ) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            KeyRow(label = "Any", selected = current == null) { onPick(null) }
+            for (k in keys) {
+                KeyRow(label = k, selected = k == current) { onPick(k) }
+            }
+            if (keys.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(AppTheme.spacing.md),
+                ) {
+                    ProvideContentColor(colors.inkMuted) {
+                        Text("No keys parsed yet.", style = AppTheme.typography.body)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeyRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = AppTheme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (selected) colors.tintCream else colors.surfaceCard)
+            .clickable(onClick = onClick)
+            .padding(horizontal = AppTheme.spacing.md, vertical = 8.dp),
+    ) {
+        ProvideContentColor(if (selected) colors.inkPrimary else colors.inkSecondary) {
+            Text(label, style = AppTheme.typography.body)
         }
     }
 }

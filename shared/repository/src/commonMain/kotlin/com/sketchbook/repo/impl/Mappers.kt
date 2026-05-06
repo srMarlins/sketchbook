@@ -36,6 +36,7 @@ internal fun Projects.toDomain(
     tags = tags,
     missingSampleCount = missingSampleCount,
     archived = is_archived != 0L,
+    key = key,
 )
 
 internal fun SelectAllProjectsWithMissing.toDomain(
@@ -55,6 +56,7 @@ internal fun SelectAllProjectsWithMissing.toDomain(
     tags = tags,
     missingSampleCount = missing_sample_count.toInt(),
     archived = is_archived != 0L,
+    key = key,
 )
 
 internal fun SelectArchivedProjectsWithMissing.toDomain(
@@ -74,6 +76,7 @@ internal fun SelectArchivedProjectsWithMissing.toDomain(
     tags = tags,
     missingSampleCount = missing_sample_count.toInt(),
     archived = is_archived != 0L,
+    key = key,
 )
 
 internal fun SelectProjectByIdWithMissing.toDomain(
@@ -93,6 +96,7 @@ internal fun SelectProjectByIdWithMissing.toDomain(
     tags = tags,
     missingSampleCount = missing_sample_count.toInt(),
     archived = is_archived != 0L,
+    key = key,
 )
 
 @Suppress("LongParameterList")
@@ -111,6 +115,7 @@ private fun build(
     tags: List<String>,
     missingSampleCount: Int,
     archived: Boolean,
+    key: String?,
 ): ProjectRow = ProjectRow(
     id = ProjectId(id),
     name = name,
@@ -126,6 +131,7 @@ private fun build(
     missingSampleCount = missingSampleCount,
     fileSizeBytes = fileSizeBytes ?: 0L,
     archived = archived,
+    key = key,
 )
 
 private fun parseStatusFor(raw: String?): ParseStatus = when (raw) {
