@@ -314,6 +314,9 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                             when (e) {
                                                 is JournalViewModel.Effect.NavigateToProject ->
                                                     backStack.add(Screen.ProjectDetail(e.projectId))
+                                                is JournalViewModel.Effect.Undone,
+                                                is JournalViewModel.Effect.UndoFailed,
+                                                is JournalViewModel.Effect.BulkUndone -> Unit
                                             }
                                         }
                                     }

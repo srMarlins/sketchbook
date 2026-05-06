@@ -41,9 +41,9 @@ class JournalViewModelTest {
 
         vm.state.test {
             var s = awaitItem()
-            while (s.entries.isEmpty()) s = awaitItem()
-            assertEquals(1, s.entries.size)
-            assertEquals(ProjectId(7), s.entries[0].projectId)
+            while (s.rows.isEmpty()) s = awaitItem()
+            assertEquals(1, s.rows.size)
+            assertEquals(ProjectId(7), s.rows[0].entry.projectId)
             cancelAndIgnoreRemainingEvents()
         }
     }
