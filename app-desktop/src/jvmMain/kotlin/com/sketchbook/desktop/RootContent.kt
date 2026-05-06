@@ -448,6 +448,21 @@ private fun DetailPanelContent(
                     }
                 }
             }
+            state.row?.let { row ->
+                androidx.compose.foundation.layout.Row(
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                ) {
+                    com.sketchbook.uishared.components.Button(
+                        onClick = { holder.dispatch(com.sketchbook.featuredetail.ProjectDetailStateHolder.Intent.OpenInLive) },
+                        variant = com.sketchbook.uishared.components.ButtonVariant.Primary,
+                    ) { Text("Open in Live") }
+                    com.sketchbook.uishared.components.Button(
+                        onClick = { Os.openInLive(parentDirOf(row.path.value)) },
+                        variant = com.sketchbook.uishared.components.ButtonVariant.Secondary,
+                    ) { Text("Reveal folder") }
+                }
+            }
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier
                     .clickable(onClick = onDismiss)
@@ -508,7 +523,6 @@ private fun DetailPanelContent(
                     when (tab) {
                         DetailTab.Overview -> {
                             DetailMetaSection(row, theme)
-                            DetailActionsSection(row, holder, theme)
                             DetailQuickVersions(row, state, theme)
                         }
                         DetailTab.Versions -> DetailVersionsTab(row, state, theme)
@@ -591,28 +605,6 @@ private fun DetailQuickVersions(
                     style = theme.typography.caption,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun DetailActionsSection(
-    row: com.sketchbook.core.ProjectRow,
-    holder: com.sketchbook.featuredetail.ProjectDetailStateHolder,
-    theme: com.sketchbook.uishared.theme.AppTheme,
-) {
-    Section("Actions", theme) {
-        androidx.compose.foundation.layout.Row(
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-        ) {
-            com.sketchbook.uishared.components.Button(
-                onClick = { holder.dispatch(com.sketchbook.featuredetail.ProjectDetailStateHolder.Intent.OpenInLive) },
-                variant = com.sketchbook.uishared.components.ButtonVariant.Primary,
-            ) { Text("Open in Live") }
-            com.sketchbook.uishared.components.Button(
-                onClick = { Os.openInLive(parentDirOf(row.path.value)) },
-                variant = com.sketchbook.uishared.components.ButtonVariant.Secondary,
-            ) { Text("Reveal folder") }
         }
     }
 }
