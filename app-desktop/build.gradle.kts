@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.metro)
     alias(libs.plugins.conveyor)
+    alias(libs.plugins.dependency.analysis)
 }
 
 // Conveyor (and Compose Desktop's nativeDistributions) require a real
@@ -25,7 +26,6 @@ kotlin {
             implementation(project(":shared:actions"))
             implementation(project(":shared:catalog"))
             implementation(project(":shared:cloud"))
-            implementation(project(":shared:parser-als"))
             implementation(project(":shared:repository"))
             implementation(project(":shared:sync"))
             implementation(project(":shared:sync-io"))
@@ -38,7 +38,6 @@ kotlin {
             implementation(project(":shared:feature-settings"))
             implementation(project(":shared:feature-journal"))
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.cio)
@@ -49,7 +48,9 @@ kotlin {
             implementation(libs.metro.viewmodel.compose)
             implementation(libs.lifecycle.viewmodel.navigation3)
             implementation(libs.lifecycle.runtime.compose)
-            implementation(libs.kotlinx.coroutines.swing)
+            // Required by `Dispatchers.Main` on Compose Desktop (Swing event-loop binding).
+            // Pure runtime; no compile-time references.
+            runtimeOnly(libs.kotlinx.coroutines.swing)
             // nav3-ui transitively pulls navigation3-runtime; explicit runtime dep is omitted
             // because the JetBrains fork only publishes navigation3-runtime via the ui artifact.
             implementation(libs.nav3.ui)

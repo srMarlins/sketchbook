@@ -1,6 +1,7 @@
 plugins {
     application
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.dependency.analysis)
 }
 
 application {
@@ -12,7 +13,6 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":shared:core"))
     implementation(project(":shared:catalog"))
     implementation(project(":shared:mcp-server"))
     implementation(project(":shared:repository"))

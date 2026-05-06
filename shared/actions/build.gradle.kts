@@ -12,7 +12,6 @@ kotlin {
             // need the type on their compile classpath; api() makes that transitive.
             api(project(":shared:repository"))
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.metro.runtime)
         }

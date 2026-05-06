@@ -10,7 +10,6 @@ kotlin {
             implementation(project(":shared:cloud"))
             implementation(project(":shared:catalog"))
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.io.core)
         }
         jvmMain.dependencies {
@@ -24,7 +23,6 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)
-            implementation(libs.sqldelight.jvm.driver)
         }
     }
 }

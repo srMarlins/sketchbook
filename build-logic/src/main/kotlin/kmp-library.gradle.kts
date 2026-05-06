@@ -3,6 +3,9 @@ import dev.detekt.gradle.Detekt
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("dev.detekt")
+    // Dependency-analysis is applied per-project so the root `buildHealth` task can
+    // aggregate per-project health reports across all KMP modules.
+    id("com.autonomousapps.dependency-analysis")
 }
 
 kotlin {

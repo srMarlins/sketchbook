@@ -27,7 +27,6 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":shared:core"))
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.datetime)
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines.extensions)
             implementation(libs.metro.runtime)

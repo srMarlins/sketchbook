@@ -15,4 +15,7 @@ dependencies {
     // jar is served from the Gradle Plugin Portal (not Maven Central) for the
     // 2.0.0-alpha line.
     implementation("dev.detekt:detekt-gradle-plugin:${version("detekt")}")
+    // Dependency-analysis must be on the build-logic classpath so convention
+    // plugins (kmp-library) can apply it via `id("com.autonomousapps.dependency-analysis")`.
+    implementation("com.autonomousapps:dependency-analysis-gradle-plugin:${version("dependency-analysis")}")
 }
