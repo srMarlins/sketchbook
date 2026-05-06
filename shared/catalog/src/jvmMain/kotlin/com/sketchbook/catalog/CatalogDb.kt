@@ -3,12 +3,8 @@ package com.sketchbook.catalog
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlCursor
 import app.cash.sqldelight.db.SqlDriver
-import app.cash.sqldelight.driver.jdbc.asJdbcDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.sketchbook.catalog.db.Catalog
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
-import org.sqlite.SQLiteDataSource
 import java.nio.file.Path
 import java.util.Properties
 
@@ -39,10 +35,7 @@ data class CatalogHandle(val catalog: Catalog, val driver: SqlDriver)
  */
 object CatalogDb {
 
-    /** Pool size for the disk driver. 1 writer + a few readers; SQLite WAL handles the rest. */
-    private const val MAX_POOL_SIZE: Int = 4
-
-    /** Per-connection PRAGMAs. Run on every new connection HikariCP opens. */
+    /** PRAGMAs applied to the live JDBC connection on bring-up. */
     private val PER_CONNECTION_PRAGMAS: List<String> = listOf(
         "PRAGMA foreign_keys = ON",
         // synchronous=NORMAL is the recommended pairing with WAL: durable across process
@@ -62,32 +55,23 @@ object CatalogDb {
     )
 
     fun openOnDisk(path: Path): CatalogHandle {
-        val sqliteDs = SQLiteDataSource().apply {
-            url = "jdbc:sqlite:${path.toAbsolutePath()}"
+        // Single-connection JdbcSqliteDriver. The earlier HikariCP-pooled setup looked nice on
+        // paper (parallel reads under WAL) but broke SQLDelight's `Query.asFlow()` invalidation:
+        // listener notifications fired during a transaction did not propagate to flow subscribers
+        // when the driver wrapped a connection pool. The user-visible symptom was the project
+        // list never updating during a scan — see PooledDriverInvalidationTest. WAL with one
+        // connection still queues reads behind the in-flight writer transaction, but on a
+        // 1,628-row catalog the contention is invisible compared to a flatlined UI.
+        val driver = JdbcSqliteDriver(
+            "jdbc:sqlite:${path.toAbsolutePath()}",
+            Properties(),
+        )
+        // Apply both the sticky DB-level pragma (journal_mode=WAL) and the per-connection set on
+        // the single live connection.
+        driver.execute(identifier = null, sql = "PRAGMA journal_mode = WAL", parameters = 0)
+        for (pragma in PER_CONNECTION_PRAGMAS) {
+            driver.execute(identifier = null, sql = pragma, parameters = 0)
         }
-        // Open one bootstrap connection through the raw DataSource to set sticky DB-level
-        // PRAGMAs (journal_mode=WAL) before any pooled connection sees the file. Doing this
-        // through HikariCP's connectionInitSql races with concurrent reads on cold pool warm-up.
-        sqliteDs.connection.use { conn ->
-            conn.createStatement().use { st ->
-                st.execute("PRAGMA journal_mode = WAL")
-                for (pragma in PER_CONNECTION_PRAGMAS) st.execute(pragma)
-            }
-        }
-        val hikariConfig = HikariConfig().apply {
-            dataSource = sqliteDs
-            maximumPoolSize = MAX_POOL_SIZE
-            minimumIdle = 1
-            poolName = "sketchbook-catalog"
-            // HikariCP runs this once per new connection; xerial's driver allows one statement
-            // per execute() call, so we configure pragmas via a Connection callback instead and
-            // leave connectionInitSql empty.
-        }
-        val hikari = HikariDataSource(hikariConfig)
-        // HikariCP doesn't expose a "after-acquire" hook directly; subclass the DataSource to
-        // run pragmas on every fresh connection. We do this by registering a wrapper.
-        val pooled = PerConnectionPragmaDataSource(hikari, PER_CONNECTION_PRAGMAS)
-        val driver = pooled.asJdbcDriver()
         ensureSchema(driver)
         return CatalogHandle(Catalog(driver), driver)
     }
