@@ -13,6 +13,7 @@ import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
+import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.sync.JvmBlobCache
 import com.sketchbook.sync.SnapshotPipeline
@@ -73,6 +74,15 @@ class SwappableSyncQueue(
     var currentMaterializer: ManifestMaterializer? = null
         private set
 
+    /**
+     * The active cloud backend, or null when cloud isn't configured. Exposed so the desktop
+     * graph can spawn a [PullPoller] subscription per project — keeps PullPoller wiring out of
+     * SwappableSyncQueue's direct DI graph (the poller depends on [SnapshotRepository], which
+     * depends on this queue, which would otherwise be a cycle).
+     */
+    private val _currentCloud = MutableStateFlow<CloudBackend?>(null)
+    val currentCloud: kotlinx.coroutines.flow.StateFlow<CloudBackend?> = _currentCloud
+
     init {
         scope.launch {
             settings.observe()
@@ -85,6 +95,7 @@ class SwappableSyncQueue(
                     } else {
                         delegate.value = fallback
                         currentMaterializer = null
+                        _currentCloud.value = null
                     }
                 }
         }
@@ -118,6 +129,7 @@ class SwappableSyncQueue(
                 cloud = backend,
                 cacheSettings = cacheSettings,
             )
+            _currentCloud.value = backend
             currentMaterializer = ManifestMaterializer(
                 cloud = backend,
                 blobCache = blobCache,
@@ -143,6 +155,7 @@ class SwappableSyncQueue(
             // Bad creds JSON or unsupported scheme — fall back to in-memory so the UI keeps
             // rendering. The error surfaces via Settings → Test connection.
             currentMaterializer = null
+            _currentCloud.value = null
             fallback
         }
     }
