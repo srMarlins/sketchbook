@@ -52,36 +52,64 @@
       --als-13: #E553A0; --als-14: #FFFFFF;
 
       --rule-line: rgba(105, 90, 75, 0.18);
-      --shadow-page: 0 4px 14px rgba(74, 48, 27, 0.18), 0 18px 60px rgba(74, 48, 27, 0.22);
+      --shadow-page:
+        0 1px 0 rgba(0,0,0,0.04),
+        0 2px 4px rgba(50, 30, 14, 0.18),
+        0 8px 22px rgba(50, 30, 14, 0.32),
+        0 28px 80px rgba(40, 20, 8, 0.42);
       --shadow-lift: 0 6px 16px rgba(0, 0, 0, 0.18);
       --shadow-pin:  0 1px 3px rgba(0, 0, 0, 0.4);
     }
 
-    /* Wood-grain desk: walnut base + SVG turbulence noise overlay (real organic
-       grain, not a striped gradient) + a warm key light + a deep corner shadow.
-       The svg data URLs use feTurbulence which gives every page load the same
-       seed (deterministic). */
+    /* Wood-grain desk: walnut base + SVG turbulence noise overlay + 2 wood
+       knots (drawn as concentric SVG ellipses so they read as actual knots,
+       not just darker spots) + warm directional key light + corner falloff. */
     body {
       background-color: var(--wood-walnut-500);
       background-image:
         /* warm key light, top-left */
-        radial-gradient(ellipse 60% 50% at 18% 8%, rgba(255, 210, 160, 0.18), transparent 70%),
+        radial-gradient(ellipse 70% 60% at 12% 6%, rgba(255, 210, 160, 0.22), transparent 60%),
         /* deep shadow, bottom-right */
-        radial-gradient(ellipse 70% 60% at 95% 110%, rgba(20, 10, 4, 0.45), transparent 65%),
+        radial-gradient(ellipse 80% 70% at 92% 108%, rgba(15, 8, 3, 0.55), transparent 60%),
+        /* wood knots — 2 placed asymmetrically */
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='2000'><g transform='translate(110, 1240) rotate(-8)'><ellipse cx='0' cy='0' rx='42' ry='24' fill='%231f1208' opacity='0.55'/><ellipse cx='0' cy='0' rx='34' ry='18' fill='%23311c0c' opacity='0.55'/><ellipse cx='0' cy='0' rx='26' ry='13' fill='%23472a14' opacity='0.6'/><ellipse cx='0' cy='0' rx='18' ry='9' fill='%235a371a' opacity='0.6'/><ellipse cx='0' cy='0' rx='10' ry='5' fill='%23311c0c' opacity='0.7'/></g><g transform='translate(1180, 380) rotate(14)'><ellipse cx='0' cy='0' rx='30' ry='17' fill='%231f1208' opacity='0.45'/><ellipse cx='0' cy='0' rx='22' ry='12' fill='%23311c0c' opacity='0.5'/><ellipse cx='0' cy='0' rx='14' ry='7' fill='%23472a14' opacity='0.55'/><ellipse cx='0' cy='0' rx='6' ry='3' fill='%23241509' opacity='0.7'/></g></svg>"),
         /* coarse grain — long horizontal streaks */
-        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='600'><filter id='w'><feTurbulence type='fractalNoise' baseFrequency='0.012 0.32' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.10  0 0 0 0 0.04  0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>"),
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='800' height='800'><filter id='w'><feTurbulence type='fractalNoise' baseFrequency='0.008 0.34' numOctaves='3' seed='7'/><feColorMatrix values='0 0 0 0 0.16  0 0 0 0 0.09  0 0 0 0 0.04  0 0 0 0.62 0'/></filter><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>"),
+        /* secondary streaks at slightly different frequency for variation */
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='700' height='700'><filter id='w3'><feTurbulence type='fractalNoise' baseFrequency='0.02 0.55' numOctaves='2' seed='13'/><feColorMatrix values='0 0 0 0 0.08  0 0 0 0 0.04  0 0 0 0 0.01  0 0 0 0.32 0'/></filter><rect width='100%25' height='100%25' filter='url(%23w3)'/></svg>"),
         /* fine grain — texture */
-        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='w2'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.02  0 0 0 0 0  0 0 0 0.18 0'/></filter><rect width='100%25' height='100%25' filter='url(%23w2)'/></svg>");
-      background-blend-mode: normal, normal, multiply, multiply;
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='w2'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.02  0 0 0 0 0  0 0 0 0.20 0'/></filter><rect width='100%25' height='100%25' filter='url(%23w2)'/></svg>");
+      background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat, repeat;
+      background-size: auto, auto, auto, 800px 800px, 700px 700px, 320px 320px;
+      background-blend-mode: normal, normal, multiply, multiply, multiply, multiply;
       color: var(--ink-graphite-700);
       font-family: 'Inter', system-ui, sans-serif;
       min-height: 100vh;
+    }
+
+    /* Second sheet of paper peeking out from underneath the main page — gives
+       the page real weight (it's a stack, not a sticker). */
+    .page-stack { position: relative; }
+    .page-stack::before {
+      content: '';
+      position: absolute;
+      inset: 6px -10px -14px 14px;
+      background-color: #f1e8d2;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='480'><filter id='p2'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' seed='17'/><feColorMatrix values='0 0 0 0 0.20  0 0 0 0 0.16  0 0 0 0 0.10  0 0 0 0.05 0'/></filter><rect width='100%25' height='100%25' filter='url(%23p2)'/></svg>");
+      transform: rotate(-1.2deg);
+      box-shadow:
+        0 1px 0 rgba(0,0,0,0.04),
+        0 6px 14px rgba(40, 20, 8, 0.28),
+        0 18px 50px rgba(40, 20, 8, 0.34);
+      z-index: 0;
+      pointer-events: none;
     }
 
     /* Notebook page: cream base + SVG paper-fiber turbulence + handwritten-style
        blue rule lines (slight wobble in the path keeps them from looking ruled
        by a machine) + faint margin red rule + worn corners. */
     .notebook-page {
+      z-index: 1;
       position: relative;
       background-color: var(--paper-cream-100);
       background-image:
@@ -230,91 +258,39 @@
     .marker { font-family: 'Permanent Marker', cursive; letter-spacing: 0.3px; }
     .data { font-family: 'Space Mono', monospace; }
 
-    /* Margin doodles — handwritten ink marks placed alongside content. Bigger and
-       more visible than small margin glyphs; meant to read as someone's notes
-       in the margin, not invisible decoration. */
-    .doodle { position: absolute; pointer-events: none; mix-blend-mode: multiply; }
-    @media (max-width: 640px) { .doodle { display: none; } }
+    /* Margin doodles — handwritten ink marks placed alongside content. Quiet
+       graphite tone; opacity tuned to read as faint pencil rather than UI ink. */
+    .doodle { position: absolute; pointer-events: none; mix-blend-mode: multiply; opacity: 0.55; }
+    @media (max-width: 640px) { .doodle, .pencil-note { display: none; } }
 
-    /* Annotations next to actual content (arrows, circles, "yes" notes). */
-    .annot {
+    /* Pencil margin notes — Gloria Hallelujah graphite-gray, slightly imperfect
+       rotation. The kind of note a producer would actually scribble: a BPM
+       guess, a "yes/no", an arrow. */
+    .pencil-note {
       position: absolute;
-      pointer-events: none;
       font-family: 'Gloria Hallelujah', cursive;
-      color: #b34a3a;
+      font-size: 14px;
+      color: #4a3f33;
+      opacity: 0.55;
       mix-blend-mode: multiply;
+      pointer-events: none;
+      letter-spacing: 0.2px;
     }
 
-    /* Coffee ring — translucent amber wash with a defined-but-soft outer rim.
-       Two rings (drip + main) and a faint inner pool. Should read as "stain
-       on paper", not "donut sticker". */
-    .coffee-ring {
+    /* Coffee stain — photographic-quality. A real coffee ring has:
+       - Darker rim from capillary deposit (dries last, concentrates pigment)
+       - Lighter, splotchy interior with brown/sepia variation
+       - Asymmetric blob shape (not a perfect circle — cup wasn't level)
+       - A small drip or two beside the main stain
+       - Slight stain BLEED into paper around the edge
+       Constructed as a single SVG with proper amber tones and randomness. */
+    .coffee-stain {
       position: absolute;
       pointer-events: none;
-      width: 140px; height: 140px;
       mix-blend-mode: multiply;
-      filter: blur(0.6px);
-      transform: rotate(14deg);
-    }
-    .coffee-ring::before, .coffee-ring::after { content: ''; position: absolute; }
-    /* outer rim — capillary deposit (darkest at the edge of where coffee dried) */
-    .coffee-ring::before {
-      inset: 0;
-      background: radial-gradient(circle at 50% 50%,
-        transparent 35%,
-        rgba(150, 95, 40, 0.0) 38%,
-        rgba(150, 95, 40, 0.42) 41%,
-        rgba(180, 120, 60, 0.28) 44%,
-        rgba(190, 130, 70, 0.10) 47%,
-        transparent 50%);
-    }
-    /* faint inner wash + subtle second drip ring just outside */
-    .coffee-ring::after {
-      inset: 0;
-      background:
-        radial-gradient(circle at 50% 50%,
-          rgba(190, 130, 70, 0.10) 0%,
-          rgba(190, 130, 70, 0.10) 33%,
-          transparent 36%),
-        radial-gradient(circle at 50% 50%,
-          transparent 51%,
-          rgba(160, 100, 50, 0.16) 53%,
-          transparent 56%);
-    }
-    /* texture pass — turbulence inside the rim mask, gives the stain unevenness */
-    .coffee-ring-texture {
-      position: absolute; inset: 0;
-      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='c'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 0.55  0 0 0 0 0.32  0 0 0 0 0.15  0 0 0 0.45 0'/></filter><rect width='100%25' height='100%25' filter='url(%23c)'/></svg>");
-      mix-blend-mode: multiply;
-      mask: radial-gradient(circle at 50% 50%, transparent 35%, black 40%, black 49%, transparent 51%);
-      -webkit-mask: radial-gradient(circle at 50% 50%, transparent 35%, black 40%, black 49%, transparent 51%);
-      pointer-events: none;
+      filter: drop-shadow(0 0 0.5px rgba(80, 50, 25, 0.12));
     }
 
-    /* Hand-drawn underline beneath a phrase. Two slightly offset wobbly strokes
-       so the eye reads it as someone underlining twice for emphasis. */
-    .hand-underline {
-      position: relative;
-      display: inline;
-      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 14' preserveAspectRatio='none'><path d='M2 6 Q 30 2 60 6 T 120 7 T 198 5' stroke='%23c93535' stroke-width='2.4' fill='none' stroke-linecap='round' opacity='0.78'/><path d='M3 11 Q 28 9 58 12 T 122 11 T 197 10' stroke='%23c93535' stroke-width='1.6' fill='none' stroke-linecap='round' opacity='0.55'/></svg>");
-      background-repeat: no-repeat;
-      background-position: 0 100%;
-      background-size: 100% 12px;
-      padding-bottom: 10px;
-    }
-
-    /* Hand-drawn circle wrapped around a word — uses an SVG ellipse with stroke. */
-    .hand-circle {
-      position: relative;
-      display: inline-block;
-      padding: 2px 10px;
-    }
-    .hand-circle::before {
-      content: '';
-      position: absolute; inset: -4px -2px -2px -2px;
-      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' preserveAspectRatio='none'><path d='M100 4 Q 180 6 192 30 Q 188 54 100 56 Q 14 56 8 30 Q 12 6 100 4' stroke='%23c93535' stroke-width='2' fill='none' opacity='0.72' stroke-linecap='round'/></svg>") no-repeat center / 100% 100%;
-      pointer-events: none;
-    }
 
     /* Smudge — graphite/ink thumb mark, with feTurbulence ridges for fingerprint
        hint instead of a featureless blob. */
@@ -449,16 +425,56 @@
         </a>
       </div>
 
+      <!-- Page stack — second sheet peeks out underneath, gives weight -->
+      <div class="page-stack">
       <!-- The notebook page -->
       <article class="notebook-page relative rounded-sm pl-16 pr-10 py-12 sm:pr-16">
         <!-- Spiral binding -->
         <div class="spiral-binding absolute left-0 top-0 bottom-0 w-7" aria-hidden="true"></div>
 
-        <!-- Coffee ring (upper-right of page, sits over the corner so it reads
-             as a real spill that overlapped the page edge) -->
-        <div class="coffee-ring" style="top: 24px; right: 28px;" aria-hidden="true">
-          <div class="coffee-ring-texture"></div>
-        </div>
+        <!-- Coffee stain — sits over the upper-right corner, partially off the
+             page edge. Asymmetric, amber, with a small satellite drip. -->
+        <svg class="coffee-stain" style="top: -18px; right: -20px;" width="190" height="170" viewBox="0 0 190 170" aria-hidden="true">
+          <defs>
+            <radialGradient id="coffeeFill" cx="50%" cy="50%" r="50%">
+              <stop offset="0%"  stop-color="#9a6230" stop-opacity="0.20"/>
+              <stop offset="55%" stop-color="#8a5026" stop-opacity="0.28"/>
+              <stop offset="80%" stop-color="#6e3c1a" stop-opacity="0.45"/>
+              <stop offset="92%" stop-color="#532b12" stop-opacity="0.62"/>
+              <stop offset="100%" stop-color="#3b1e0a" stop-opacity="0.0"/>
+            </radialGradient>
+            <radialGradient id="coffeeRim" cx="50%" cy="50%" r="50%">
+              <stop offset="0%"  stop-color="#3b1e0a" stop-opacity="0"/>
+              <stop offset="78%" stop-color="#3b1e0a" stop-opacity="0"/>
+              <stop offset="86%" stop-color="#3b1e0a" stop-opacity="0.55"/>
+              <stop offset="93%" stop-color="#5a2e14" stop-opacity="0.42"/>
+              <stop offset="100%" stop-color="#5a2e14" stop-opacity="0.0"/>
+            </radialGradient>
+            <filter id="coffeeRough" x="-20%" y="-20%" width="140%" height="140%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="8"/>
+              <feDisplacementMap in="SourceGraphic" scale="14"/>
+            </filter>
+            <filter id="coffeeGrain">
+              <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="2" seed="2"/>
+              <feColorMatrix values="0 0 0 0 0.30  0 0 0 0 0.16  0 0 0 0 0.07  0 0 0 0.55 0"/>
+              <feComposite in2="SourceGraphic" operator="in"/>
+            </filter>
+          </defs>
+          <!-- main stain blob — irregular ring -->
+          <g filter="url(#coffeeRough)">
+            <ellipse cx="95" cy="85" rx="78" ry="64" fill="url(#coffeeFill)"/>
+            <ellipse cx="95" cy="85" rx="78" ry="64" fill="url(#coffeeRim)"/>
+            <!-- inner unevenness — light pool inside -->
+            <ellipse cx="84" cy="78" rx="42" ry="34" fill="#caa472" opacity="0.10"/>
+          </g>
+          <!-- grain pass on top of the stain region -->
+          <ellipse cx="95" cy="85" rx="78" ry="64" filter="url(#coffeeGrain)" opacity="0.6"/>
+          <!-- small satellite drip below -->
+          <g filter="url(#coffeeRough)" opacity="0.6">
+            <ellipse cx="48" cy="146" rx="14" ry="9" fill="#6e3c1a" opacity="0.55"/>
+            <ellipse cx="48" cy="146" rx="10" ry="6" fill="#caa472" opacity="0.18"/>
+          </g>
+        </svg>
 
         <!-- Tiny ink blot on the page near the second paragraph — the kind that
              happens when a pen tip sits too long. -->
@@ -500,12 +516,11 @@
           <path d="M4 22 Q 12 18 22 21 T 42 19 T 62 21 T 80 19" opacity="0.7"/>
         </svg>
 
-        <!-- Thumbprint smudge along the right edge mid-page (where you'd grip
-             when writing), with subtle fingerprint ridges -->
-        <div class="smudge" style="top: 380px; right: 18px;" aria-hidden="true"></div>
-
-        <!-- Torn lower-right corner of the page — small triangle revealing wood -->
-        <div class="torn-corner" aria-hidden="true"></div>
+        <!-- Pencil margin notes — graphite gray, low opacity, like real producer
+             jottings: BPMs, key reminders, todos. Quiet detail, not signage. -->
+        <div class="pencil-note" style="top: 246px; left: 78px; transform: rotate(-3deg);" aria-hidden="true">try @ 132?</div>
+        <div class="pencil-note" style="top: 540px; left: 80px; transform: rotate(-2deg);" aria-hidden="true">→ all macs</div>
+        <div class="pencil-note" style="top: 760px; right: 70px; transform: rotate(2deg); font-size: 12px;" aria-hidden="true">ok</div>
 
         <!-- Hero copy -->
         <header class="mb-10">
@@ -524,7 +539,7 @@
             <div class="washi-tape" aria-hidden="true"></div>
             <div class="flex items-baseline justify-between gap-6">
               <span class="text-lg" style="color: rgba(0,0,0,0.78);">2026-04-Kyoto-trap-sketch.als</span>
-              <span class="text-sm hand-circle" style="color: rgba(0,0,0,0.78);">v 47 · auto</span>
+              <span class="text-sm" style="color: rgba(0,0,0,0.78);">v 47 · auto</span>
             </div>
             <div class="flex items-baseline gap-5 mt-2 text-sm" style="color: rgba(0,0,0,0.7);">
               <span>140 bpm</span>
@@ -538,10 +553,6 @@
 
         <!-- Download row -->
         <section class="mb-10 relative">
-          <!-- Hand-drawn arrow + "this one" pointing at the CTA -->
-          <div class="annot hidden sm:flex" style="top: -28px; left: 14px; align-items: center; gap: 6px; transform: rotate(-6deg); font-size: 22px; color: #c93535;" aria-hidden="true">
-            <span style="font-family:'Permanent Marker', cursive;">this one ↓</span>
-          </div>
           <div class="flex flex-wrap items-center gap-x-8 gap-y-4">
             <a id="primary-download" class="btn-rough" href="#" data-platform-fallback="https://storage.googleapis.com/sketchbook-releases/download.html">
               <span aria-hidden="true">↓</span>
@@ -561,8 +572,7 @@
 
         <!-- Three feature beats with hand-drawn doodle icons (inline SVG) -->
         <section class="grid sm:grid-cols-3 gap-7 mb-10">
-          <div class="relative">
-            <span class="annot" style="top: -26px; left: 8px; transform: rotate(-6deg); font-size: 20px; font-weight: 600;" aria-hidden="true">↓ yes!</span>
+          <div>
             <svg viewBox="0 0 64 64" width="48" height="48" aria-hidden="true" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-graphite-700);">
               <path d="M10 50 V14 L32 6 L54 14 V50" />
               <path d="M10 50 L32 58 L54 50" />
@@ -571,7 +581,7 @@
             </svg>
             <h3 class="marker mt-3 text-xl" style="color: var(--ink-graphite-700);">Snapshots</h3>
             <p class="handwritten mt-1 text-base" style="color: var(--ink-graphite-500);">
-              Every save becomes a <span class="hand-underline">content-addressed</span> snapshot. Rewind any project to any moment.
+              Every save becomes a content-addressed snapshot. Rewind any project to any moment.
             </p>
           </div>
           <div>
@@ -623,6 +633,7 @@
           </a>
         </footer>
       </article>
+      </div><!-- /.page-stack -->
 
       <!-- Pinned-down kraft sticky note off the page edge — the design's signature
            "AI presence is a side note, not a chat" feel. -->
