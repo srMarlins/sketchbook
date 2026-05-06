@@ -6,13 +6,16 @@ import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.SnapshotRepository
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class TimelineStateHolderTest {
@@ -36,8 +39,28 @@ class TimelineStateHolderTest {
     private class Repo(val flow: MutableStateFlow<List<Snapshot>>) : SnapshotRepository {
         var rewoundTo: SnapshotRev? = null
         var failNext: Boolean = false
+        var lastRelabel: Triple<ProjectUuid, SnapshotRev, String?>? = null
         override fun observeHistory(uuid: ProjectUuid): Flow<List<Snapshot>> = flow
         override suspend fun recordSnapshot(snapshot: Snapshot, manifestPath: String, manifestHash: String): Result<Unit> = Result.success(Unit)
+        override suspend fun setSnapshotLabel(
+            uuid: ProjectUuid,
+            rev: SnapshotRev,
+            label: String?,
+        ): Result<com.sketchbook.repo.JournalEntry> {
+            lastRelabel = Triple(uuid, rev, label)
+            return Result.success(
+                com.sketchbook.repo.JournalEntry(
+                    timestamp = kotlin.time.Instant.fromEpochMilliseconds(0L),
+                    projectId = com.sketchbook.core.ProjectId(1L),
+                    action = com.sketchbook.repo.ActionRecord.SnapshotRelabeled(
+                        rev = rev.value,
+                        labelBefore = null,
+                        labelAfter = label,
+                        kindBefore = "auto",
+                    ),
+                ),
+            )
+        }
         override suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> {
             return if (failNext) {
                 failNext = false
@@ -109,6 +132,36 @@ class TimelineStateHolderTest {
             assertTrue(done is TimelineStateHolder.Effect.RewindCompleted)
             assertEquals(SnapshotRev(5), repo.rewoundTo)
         }
+    }
+
+    @Test
+    fun relabelSnapshotForwardsToRepositoryWithCleanedLabel() = runTest {
+        val repo = Repo(MutableStateFlow(emptyList()))
+        // UnconfinedTestDispatcher so the coroutine launched inside dispatch() runs eagerly to
+        // its first suspension point — the recording stub Repo.setSnapshotLabel doesn't actually
+        // suspend, so the Triple lands before assertNotNull(...) reads it. backgroundScope uses
+        // StandardTestDispatcher (queue-based) which is the wrong shape for this assertion.
+        val unconfined = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val holder = TimelineStateHolder(repo, unconfined)
+        holder.load(uuid)
+
+        holder.dispatch(TimelineStateHolder.Intent.RelabelSnapshot(SnapshotRev(7), "  demo  "))
+        val (recordedUuid, recordedRev, recordedLabel) = assertNotNull(repo.lastRelabel)
+        assertEquals(uuid, recordedUuid)
+        assertEquals(SnapshotRev(7), recordedRev)
+        assertEquals("demo", recordedLabel) // trimmed
+    }
+
+    @Test
+    fun relabelSnapshotWithBlankPassesNullToClear() = runTest {
+        val repo = Repo(MutableStateFlow(emptyList()))
+        val unconfined = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val holder = TimelineStateHolder(repo, unconfined)
+        holder.load(uuid)
+
+        holder.dispatch(TimelineStateHolder.Intent.RelabelSnapshot(SnapshotRev(2), "   "))
+        val (_, _, recordedLabel) = assertNotNull(repo.lastRelabel)
+        kotlin.test.assertNull(recordedLabel)
     }
 
     @Test

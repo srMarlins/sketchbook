@@ -14,8 +14,10 @@ import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
 import com.sketchbook.cloud.CloudBackend
+import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.JournalRepository
+import com.sketchbook.sync.ForceSnapshotPipeline
 import com.sketchbook.sync.JvmBlobCache
 import com.sketchbook.sync.SnapshotPipeline
 import com.sketchbook.syncio.ManifestMaterializer
@@ -62,7 +64,7 @@ class SwappableSyncQueue(
     private val journal: JournalRepository? = null,
     private val httpClient: HttpClient = HttpClient(CIO),
     private val json: Json = Json { ignoreUnknownKeys = false },
-) : SyncQueue {
+) : SyncQueue, ForceSnapshotPipeline {
 
     private val fallback = InMemorySyncQueue(projects = projects, scope = scope)
     private val delegate = MutableStateFlow<SyncQueue>(fallback)
@@ -180,6 +182,21 @@ class SwappableSyncQueue(
 
     override suspend fun pushNow(uuid: ProjectUuid): Result<Unit> =
         delegate.value.pushNow(uuid)
+
+    /**
+     * Z3 quick-capture: route through the live cloud queue so the forced Named snapshot picks up
+     * the same blob upload + journal wiring as auto-save. When cloud isn't ready we fall back to
+     * a clear failure rather than silently dropping the snapshot — the desktop dialog can show
+     * the user a "configure cloud first" message.
+     */
+    override suspend fun recordForcedNamed(uuid: ProjectUuid, label: String): Result<SnapshotRev> {
+        return when (val current = delegate.value) {
+            is GcsSyncQueue -> current.recordForcedNamed(uuid, label)
+            else -> Result.failure(
+                IllegalStateException("Cloud sync isn't configured — set credentials in Settings first."),
+            )
+        }
+    }
 
     /** Per-row Sync-now invocation from the desktop detail panel. */
     suspend fun pushNowById(id: ProjectId): Result<Unit> = when (val current = delegate.value) {

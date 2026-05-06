@@ -118,6 +118,10 @@ class SnapshotPipeline(
             files.putAll(toUpload)
             val totalBytes = files.values.sumOf { it.size }
             val newBytes = actuallyUploadedBytes
+            // Caller can promote this snapshot to a Named entry by setting [PipelineInput.kind]
+            // (with optional [PipelineInput.label]). The Z3 quick-capture hotkey uses that to
+            // force a labeled timeline row regardless of dirty flag. Default stays Auto so the
+            // existing watcher-driven path is unchanged.
             val auto = Manifest(
                 ownerUserId = ownerUserId,
                 projectUuid = uuid,
@@ -126,7 +130,8 @@ class SnapshotPipeline(
                 timestamp = clock.now(),
                 hostId = hostId,
                 hostName = hostName,
-                kind = SnapshotKind.Auto,
+                kind = input.kind,
+                label = input.label,
                 files = files,
                 stats = ManifestStats(
                     fileCount = files.size,
@@ -140,7 +145,7 @@ class SnapshotPipeline(
             val casResult = cloud.appendManifestHead(uuid, parentExpectedHead, auto)
             val saved = casResult.fold(
                 onSuccess = {
-                    SnapshotProgress.Saved(uuid, newRev, SnapshotKind.Auto)
+                    SnapshotProgress.Saved(uuid, newRev, input.kind, input.label)
                 },
                 onFailure = { err ->
                     if (err is SketchbookError.Conflict) {
@@ -203,4 +208,14 @@ data class PipelineInput(
      * `SettingsRepository.setSelfContained`).
      */
     val selfContained: Boolean = false,
+    /**
+     * Snapshot kind to record. Defaults to [SnapshotKind.Auto] so the existing watcher-driven
+     * save path is unchanged. The Z3 quick-capture hotkey passes [SnapshotKind.Named] with a
+     * user-supplied [label] to force a labeled timeline row. CAS-conflict still re-classifies
+     * the resulting manifest as [SnapshotKind.Branch] regardless of this hint — divergence
+     * always wins over Named.
+     */
+    val kind: SnapshotKind = SnapshotKind.Auto,
+    /** Human-readable label attached to the manifest. Pairs with [kind] = Named. */
+    val label: String? = null,
 )

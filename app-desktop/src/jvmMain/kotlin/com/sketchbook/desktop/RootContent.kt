@@ -40,12 +40,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -77,9 +81,13 @@ import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.uishared.components.ActivityBar
 import com.sketchbook.uishared.components.ActivityState
 import com.sketchbook.uishared.components.InkLoading
+import com.sketchbook.core.ProjectId
+import com.sketchbook.sync.ForceSnapshotPipeline
+import com.sketchbook.sync.ForceSnapshotUseCase
 import com.sketchbook.uishared.components.NotebookSidebar
 import com.sketchbook.uishared.components.PaperPage
 import com.sketchbook.uishared.components.SidebarItem
+import com.sketchbook.uishared.components.Surface
 import kotlinx.coroutines.launch
 
 /**
@@ -140,6 +148,33 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     // `SyncQueue` interface stays narrow; the swappable façade exposes per-row wiring.
     val syncImpl = syncQueue as? SwappableSyncQueue
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    // Z3 quick-capture: Ctrl/Cmd+Shift+S forces a Named snapshot of the current project. Only
+    // armed when a project is in focus (Detail screen or Projects-detail-panel open). The use
+    // case routes through the live SwappableSyncQueue, which delegates to the GcsSyncQueue when
+    // cloud is configured and surfaces a clear failure otherwise.
+    val forceSnapshotUseCase = remember(syncImpl) {
+        val pipeline: ForceSnapshotPipeline = syncImpl
+            ?: object : ForceSnapshotPipeline {
+                override suspend fun recordForcedNamed(
+                    uuid: com.sketchbook.core.ProjectUuid,
+                    label: String,
+                ): Result<com.sketchbook.core.SnapshotRev> = Result.failure(
+                    IllegalStateException("Cloud sync isn't configured — set credentials in Settings first."),
+                )
+            }
+        ForceSnapshotUseCase(pipeline)
+    }
+    var quickCaptureProjectId by remember { mutableStateOf<ProjectId?>(null) }
+    var quickCaptureError by remember { mutableStateOf<String?>(null) }
+    val rootFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        // Reach for focus once at startup so the preview-key handler actually receives keystrokes
+        // when no field is focused. Per-row text fields steal focus normally; on blur the root
+        // re-claims it via the focusable() chain below.
+        runCatching { rootFocusRequester.requestFocus() }
+    }
+    val projectListState by projectListHolder.state.collectAsState()
+    val projectDetailState by projectDetailHolder.state.collectAsState()
 
     // Journal row taps navigate to project detail. Push onto the stack so the back gesture
     // returns to the journal list.
@@ -255,8 +290,36 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
         else -> ActivityState.Idle
     }
 
+    val currentProjectId: () -> ProjectId? = {
+        // Resolve "what project is the user looking at" in the same priority order as the visible
+        // panels: explicit Detail screen on the back stack first, then the side-panel on Projects.
+        when (val cur = backStack.lastOrNull()) {
+            is Screen.ProjectDetail -> cur.id
+            else -> projectListState.openDetailId
+                ?: projectDetailState.row?.id
+        }
+    }
     PaperPage {
-        Row(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(rootFocusRequester)
+                .focusable()
+                .onPreviewKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    // Cover both platforms cheaply: Ctrl on Win/Linux, Cmd (Meta) on Mac. Compose
+                    // Multiplatform Desktop reports them on separate flags, so checking both keeps
+                    // the binding portable without a hostOs branch.
+                    val modifierActive = e.isCtrlPressed || e.isMetaPressed
+                    if (!modifierActive || !e.isShiftPressed || e.key != Key.S) {
+                        return@onPreviewKeyEvent false
+                    }
+                    val pid = currentProjectId() ?: return@onPreviewKeyEvent false
+                    quickCaptureError = null
+                    quickCaptureProjectId = pid
+                    true
+                },
+        ) {
             NotebookSidebar(
                 title = "Sketchbook",
                 items = items,
@@ -361,6 +424,136 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
                         }
                     },
                 )
+                    }
+                }
+            }
+        }
+        quickCaptureProjectId?.let { pid ->
+            QuickCaptureDialog(
+                error = quickCaptureError,
+                onDismiss = {
+                    quickCaptureProjectId = null
+                    quickCaptureError = null
+                    runCatching { rootFocusRequester.requestFocus() }
+                },
+                onSave = { typed ->
+                    coroutineScope.launch {
+                        val uuid = graph.syncStateStore.identityFor(pid)
+                        val result = forceSnapshotUseCase.invoke(uuid, typed)
+                        if (result.isSuccess) {
+                            quickCaptureProjectId = null
+                            quickCaptureError = null
+                            runCatching { rootFocusRequester.requestFocus() }
+                        } else {
+                            quickCaptureError = result.exceptionOrNull()?.message
+                                ?: "Snapshot failed."
+                        }
+                    }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickCaptureDialog(
+    error: String?,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    val theme = com.sketchbook.uishared.theme.AppTheme
+    var draft by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
+    // Click-scrim covers the page so a click outside the panel cancels — same affordance the
+    // ConfirmRewindDialog uses (no separate Material Dialog wrapper). The inner Surface
+    // swallows clicks so the scrim only fires on the gutter.
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.32f))
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss,
+            ),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .widthIn(min = 360.dp, max = 520.dp)
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = null,
+                    onClick = {},
+                ),
+        ) {
+            Surface(
+                color = theme.colors.surfacePanel,
+                padding = PaddingValues(theme.spacing.lg),
+            ) {
+                androidx.compose.foundation.layout.Column(
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(theme.spacing.md),
+                ) {
+                    ProvideContentColor(theme.colors.inkPrimary) {
+                        Text("Name this take", style = theme.typography.title)
+                    }
+                    ProvideContentColor(theme.colors.inkMuted) {
+                        Text(
+                            "Saves a labeled snapshot of the current project so you can find it on the timeline.",
+                            style = theme.typography.body,
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(theme.colors.tintCream)
+                            .border(1.dp, theme.colors.ruleLineStrong, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                    ) {
+                        BasicTextField(
+                            value = draft,
+                            onValueChange = { draft = it },
+                            singleLine = true,
+                            textStyle = theme.typography.body.copy(color = theme.colors.inkPrimary),
+                            cursorBrush = SolidColor(theme.colors.inkPrimary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester)
+                                .onPreviewKeyEvent { event ->
+                                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                    when (event.key) {
+                                        Key.Enter, Key.NumPadEnter -> {
+                                            if (draft.trim().isNotEmpty()) onSave(draft)
+                                            true
+                                        }
+                                        Key.Escape -> {
+                                            onDismiss()
+                                            true
+                                        }
+                                        else -> false
+                                    }
+                                },
+                        )
+                    }
+                    if (error != null) {
+                        ProvideContentColor(theme.colors.accentDanger) {
+                            Text(error, style = theme.typography.caption)
+                        }
+                    }
+                    androidx.compose.foundation.layout.Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(
+                            theme.spacing.sm,
+                            alignment = androidx.compose.ui.Alignment.End,
+                        ),
+                    ) {
+                        Button(onClick = onDismiss, variant = ButtonVariant.Ghost) { Text("Cancel") }
+                        Button(
+                            onClick = { if (draft.trim().isNotEmpty()) onSave(draft) },
+                            variant = ButtonVariant.Primary,
+                        ) { Text("Save") }
                     }
                 }
             }

@@ -31,6 +31,14 @@ class PullPollerTest {
             recorded += snapshot
             return Result.success(Unit)
         }
+        override suspend fun setSnapshotLabel(uuid: ProjectUuid, rev: SnapshotRev, label: String?): Result<com.sketchbook.repo.JournalEntry> =
+            Result.success(
+                com.sketchbook.repo.JournalEntry(
+                    timestamp = Instant.fromEpochMilliseconds(0L),
+                    projectId = com.sketchbook.core.ProjectId(1L),
+                    action = com.sketchbook.repo.ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto"),
+                ),
+            )
         override suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> = Result.success(Unit)
     }
 

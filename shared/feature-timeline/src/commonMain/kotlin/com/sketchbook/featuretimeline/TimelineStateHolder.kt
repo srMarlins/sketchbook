@@ -88,6 +88,27 @@ class TimelineStateHolder(
             is Intent.RequestRewind -> pendingRewind.update { intent.rev }
             Intent.CancelRewind -> pendingRewind.update { null }
             is Intent.ConfirmRewind -> rewind(intent.rev)
+            is Intent.RelabelSnapshot -> relabel(intent.rev, intent.newLabel)
+        }
+    }
+
+    private fun relabel(rev: SnapshotRev, newLabel: String?) {
+        val uuid = selectedUuid.value ?: return
+        scope.launch {
+            // Trim before passing through; treat blank-after-trim as a clear gesture so
+            // accidental whitespace doesn't masquerade as a label. We intentionally do NOT
+            // round-trip the result back into local state — the SQL update flows through
+            // observeHistory so the row re-renders with the new label automatically.
+            val cleaned = newLabel?.trim().takeUnless { it.isNullOrEmpty() }
+            val r = snapshots.setSnapshotLabel(uuid, rev, cleaned)
+            if (r.isFailure) {
+                _effects.tryEmit(
+                    Effect.RelabelFailed(
+                        rev = rev,
+                        reason = r.exceptionOrNull()?.message ?: "label update failed",
+                    ),
+                )
+            }
         }
     }
 
@@ -140,11 +161,14 @@ class TimelineStateHolder(
         data class RequestRewind(val rev: SnapshotRev) : Intent
         data object CancelRewind : Intent
         data class ConfirmRewind(val rev: SnapshotRev) : Intent
+        /** PR-Z Z2: edit a snapshot's label inline. `null` (or blank-after-trim) clears it. */
+        data class RelabelSnapshot(val rev: SnapshotRev, val newLabel: String?) : Intent
     }
 
     sealed interface Effect {
         data class RewindStarted(val rev: SnapshotRev) : Effect
         data class RewindCompleted(val rev: SnapshotRev) : Effect
         data class RewindFailed(val rev: SnapshotRev, val reason: String) : Effect
+        data class RelabelFailed(val rev: SnapshotRev, val reason: String) : Effect
     }
 }

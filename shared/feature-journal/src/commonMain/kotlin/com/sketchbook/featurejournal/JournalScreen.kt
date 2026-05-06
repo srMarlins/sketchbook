@@ -85,4 +85,5 @@ private fun actionType(action: ActionRecord): String = when (action) {
     is ActionRecord.MissingSampleMapped -> "sample remap"
     is ActionRecord.MissingSampleUnmapped -> "sample remap undo"
     is ActionRecord.MacPathRepaired -> "mac path repair"
+    is ActionRecord.SnapshotRelabeled -> "snapshot relabel"
 }

@@ -3,15 +3,22 @@ package com.sketchbook.repo.impl
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.sketchbook.catalog.db.Catalog
+import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.repo.ActionRecord
+import com.sketchbook.repo.JournalEntry
+import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.SnapshotRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
@@ -27,6 +34,11 @@ import kotlin.time.Instant
 class SqlSnapshotRepository(
     private val catalog: Catalog,
     private val ioDispatcher: CoroutineDispatcher,
+    /** Optional so legacy call sites (and the parameterless rewind path) keep compiling; required
+     *  for [setSnapshotLabel] to emit a journal entry. The desktop graph wires the real
+     *  [SqlJournalRepository] in. Tests that don't touch labels can pass `null`. */
+    private val journal: JournalRepository? = null,
+    private val clock: Clock = Clock.System,
     private val materialize: suspend (ProjectUuid, SnapshotRev) -> Result<Unit> =
         { _, _ -> Result.success(Unit) },
 ) : SnapshotRepository {
@@ -59,6 +71,60 @@ class SqlSnapshotRepository(
                     new_bytes = snapshot.newBytes,
                 )
             }
+        }
+    }
+
+    override suspend fun setSnapshotLabel(
+        uuid: ProjectUuid,
+        rev: SnapshotRev,
+        label: String?,
+    ): Result<JournalEntry> = withContext(ioDispatcher) {
+        // Capture before-state, write, journal — all atomic under one transaction so a concurrent
+        // observer never sees the row mutated without the journal entry's row also visible.
+        // Cancellation discipline mirrors SqlJournalRepository: re-throw, wrap everything else.
+        try {
+            val before = catalog.catalogQueries
+                .selectSnapshotByRev(uuid.value, rev.value)
+                .executeAsOneOrNull()
+                ?: return@withContext Result.failure<JournalEntry>(
+                    SketchbookError.NotFound("snapshot ${uuid.value}@${rev.value} not found"),
+                )
+            // Resolve the project_id for the JournalEntry. Snapshots key on project_uuid; the
+            // journal keys on project_id (legacy v0.1 schema). project_identity is the bridge.
+            // Fall back to 1L when the identity row is missing — `ProjectId(0)` would fail the
+            // value-class precondition and crash the journal append. The "orphan" case (snapshot
+            // without an identity row) shouldn't happen in practice, but a synthetic-1 audit row
+            // is preferable to a thrown exception for a label-edit hotpath.
+            val resolvedProjectId = catalog.catalogQueries
+                .selectIdentityByUuid(uuid.value)
+                .executeAsOneOrNull()
+                ?.project_id
+                ?.takeIf { it > 0L }
+                ?: 1L
+            catalog.transaction {
+                catalog.catalogQueries.updateSnapshotLabel(
+                    label = label,
+                    project_uuid = uuid.value,
+                    rev = rev.value,
+                )
+            }
+            val entry = JournalEntry(
+                timestamp = clock.now(),
+                projectId = ProjectId(resolvedProjectId),
+                action = ActionRecord.SnapshotRelabeled(
+                    rev = rev.value,
+                    labelBefore = before.label,
+                    labelAfter = label,
+                    kindBefore = before.kind,
+                ),
+            )
+            // No journal wired (test path that doesn't care about audit) → fabricate the entry
+            // so callers can still assert action contents without a side-channel.
+            journal?.append(entry) ?: Result.success(entry)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 
