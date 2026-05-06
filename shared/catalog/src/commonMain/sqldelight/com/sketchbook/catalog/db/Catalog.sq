@@ -225,6 +225,12 @@ SELECT COUNT(*) FROM project_samples WHERE project_id = :project_id AND is_missi
 selectProjectIdByPath:
 SELECT id FROM projects WHERE path = :path;
 
+-- Look up project ids by their parent directory. Used by the Watcher → markDirty wiring:
+-- a save event for ".../<Project> Project/Backup/foo.als" matches by directory, not by file
+-- path (the backup files have timestamped names that don't equal projects.path).
+selectProjectIdsByParentDir:
+SELECT id FROM projects WHERE parent_dir = :parent_dir;
+
 deleteAllProjects:
 DELETE FROM projects;
 
@@ -463,3 +469,44 @@ revertMissingSampleMatch:
 UPDATE project_samples
 SET sample_path = :old_path, is_missing = 1
 WHERE project_id = :project_id AND sample_path = :new_path;
+
+-- journal_entries — persistent audit log of every catalog write. Replaces the in-memory
+-- JournalRepository so the desktop journal viewer survives restart and shares entries with
+-- the MCP subprocess (both processes write into the same on-disk catalog).
+CREATE TABLE journal_entries (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  occurred_at  INTEGER NOT NULL,
+  actor        TEXT    NOT NULL,
+  action_type  TEXT    NOT NULL,
+  -- NOT NULL but intentionally no FK: audit entries outlive their project; projects.id is
+  -- AUTOINCREMENT so the int never gets reused, so a stale project_id stays meaningful.
+  project_id   INTEGER NOT NULL,
+  payload_json TEXT    NOT NULL DEFAULT '{}'
+);
+CREATE INDEX journal_entries_project_idx ON journal_entries(project_id, occurred_at DESC);
+CREATE INDEX journal_entries_recency_idx ON journal_entries(occurred_at DESC);
+
+insertJournalEntry:
+INSERT INTO journal_entries(occurred_at, actor, action_type, project_id, payload_json)
+VALUES (:occurred_at, :actor, :action_type, :project_id, :payload_json);
+
+-- ORDER BY (occurred_at, id) DESC — id is the secondary key so events that land in the same
+-- millisecond still come back in insertion order. undoLast() relies on this for determinism.
+selectJournalRecent:
+SELECT * FROM journal_entries ORDER BY occurred_at DESC, id DESC LIMIT :limit_;
+
+selectJournalForProject:
+SELECT * FROM journal_entries WHERE project_id = :project_id
+ORDER BY occurred_at DESC, id DESC LIMIT :limit_;
+
+countJournalEntries:
+SELECT COUNT(*) FROM journal_entries;
+
+-- Last AUTOINCREMENT id from the most recent insert on this connection. Called inside the
+-- same transaction as insertJournalEntry so SqlJournalRepository.append can echo the assigned
+-- sequence back on the returned JournalEntry.
+lastJournalEntryId:
+SELECT last_insert_rowid();
+
+deleteJournalEntryById:
+DELETE FROM journal_entries WHERE id = :id;

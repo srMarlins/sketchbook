@@ -20,7 +20,7 @@ import com.sketchbook.repo.RepairRepository
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.SyncQueue
-import com.sketchbook.repo.impl.InMemoryJournalRepository
+import com.sketchbook.repo.impl.SqlJournalRepository
 import com.sketchbook.repo.impl.SqlProjectRepository
 import com.sketchbook.repo.impl.SqlProposalsRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
@@ -28,7 +28,10 @@ import com.sketchbook.syncio.AlsPatcher
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.impl.SqlSnapshotRepository
+import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.sync.PullPoller
+import com.sketchbook.syncio.Watcher
+import com.sketchbook.syncio.WatcherToSyncState
 import dev.zacsweers.metro.DependencyGraph
 import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
@@ -63,11 +66,9 @@ import java.util.prefs.Preferences
  * If a future binding is genuinely stateless (a pure mapper, a per-call factory) it should be
  * left unscoped so callers don't pin live references unnecessarily.
  *
- * **Catalog (SQLite).** Project / Snapshot / Proposals / Repair are SQLDelight-backed; the
- * DB lives at `~/.local/share/sketchbook/catalog.db` (Linux/Mac) or
- * `%APPDATA%\Sketchbook\catalog.db` (Windows). One handle per app instance. Lock + Settings
- * remain in-memory: locks belong to the sync engine (PR-22) and settings still ride on
- * `java.util.prefs.Preferences` until the keychain rotation in v1.1.
+ * **Catalog (SQLite).** Project / Snapshot / Proposals / Repair / Journal are SQLDelight-backed;
+ * the DB lives at `~/.local/share/sketchbook/catalog.db` (Linux/Mac) or
+ * `%APPDATA%\Sketchbook\catalog.db` (Windows). One handle per app instance.
  */
 @DependencyGraph(scope = AppScope::class)
 interface DesktopAppGraph {
@@ -116,7 +117,8 @@ interface DesktopAppGraph {
     fun provideSyncStateStore(catalog: Catalog): SyncStateStore = SyncStateStore(catalog)
 
     @Provides @SingleIn(AppScope::class)
-    fun provideJournalRepository(): JournalRepository = InMemoryJournalRepository()
+    fun provideJournalRepository(catalog: Catalog): JournalRepository =
+        SqlJournalRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
 
     @Provides @SingleIn(AppScope::class)
     fun provideProjectRepository(
@@ -312,6 +314,36 @@ internal suspend fun autoMaterializeAfterPull(
         // infinite-loop (and cloud_head_rev > local_rev keeps the UI in RemoteAhead state).
         if (r.exceptionOrNull() !is com.sketchbook.syncio.WorkingTreeBusyException) break
         delay(30_000)
+    }
+}
+
+/**
+ * Spawn the file-watcher → dirty-bit pump. Watches every configured `LibraryRoot.Projects` and
+ * flips `sync_state.dirty = 1` whenever Live writes a `.als` under one of them. The background
+ * drain (PR-H) consumes those flips on its own cadence — this function closes the auto-trigger
+ * half of the save→push loop.
+ *
+ * Outer `collectLatest` over [SettingsRepository.observe] re-launches the watcher whenever the
+ * set of project roots changes, so adding a root in Settings takes effect without a restart.
+ * No-op while no projects roots are configured.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+fun startWatcher(graph: DesktopAppGraph) {
+    val store = graph.syncStateStore
+    val catalog = graph.catalog
+    graph.appScope.launch {
+        graph.settingsRepository.observe().collectLatest { settings ->
+            val projectsRoots = settings.libraryRoots
+                .filterIsInstance<LibraryRoot.Projects>()
+                .map { Paths.get(it.path) }
+                .filter { Files.isDirectory(it) }
+            if (projectsRoots.isEmpty()) return@collectLatest
+            val watcher = Watcher()
+            val bridge = WatcherToSyncState(watcher, catalog, store)
+            // collect() suspends until cancellation (collectLatest tearing us down on the next
+            // settings emission), which doubles as the lifetime of the underlying DirectoryWatcher.
+            bridge.watchAll(projectsRoots).collect { /* side-effect already fired in onEach */ }
+        }
     }
 }
 

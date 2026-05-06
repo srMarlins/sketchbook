@@ -33,16 +33,6 @@ kotlin {
         jvmMain.dependencies {
             implementation(project(":shared:parser-als"))
             implementation(libs.sqldelight.jvm.driver)
-            // Compile-time access to JdbcDrivers.fromDataSource(...) and SQLiteDataSource.
-            // Both are pulled at runtime via sqldelight-jvm-driver, but Gradle's strict mode
-            // hides their transitive classes from the consumer's compile classpath; declare
-            // explicitly so we can construct the pool in CatalogDb.openOnDisk.
-            implementation(libs.sqldelight.jdbc.driver)
-            implementation(libs.xerial.sqlite.jdbc)
-            // HikariCP wraps the xerial SQLiteDataSource so we can hand SQLDelight a pool.
-            // Without a pool, every read serializes through the single JDBC connection that
-            // the SQLDelight driver opens.
-            implementation(libs.hikaricp)
         }
         commonTest.dependencies {
             implementation(libs.turbine)

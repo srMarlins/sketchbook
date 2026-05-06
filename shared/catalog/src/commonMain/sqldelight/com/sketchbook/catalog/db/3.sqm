@@ -1,0 +1,15 @@
+-- v3 → v4: add journal_entries table. Replaces InMemoryJournalRepository in production so
+-- the journal viewer survives restart and the MCP subprocess can share entries with the
+-- desktop app (both write the same on-disk catalog).
+CREATE TABLE journal_entries (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  occurred_at  INTEGER NOT NULL,
+  actor        TEXT    NOT NULL,
+  action_type  TEXT    NOT NULL,
+  -- NOT NULL but intentionally no FK: audit entries outlive their project; projects.id is
+  -- AUTOINCREMENT so the int never gets reused, so a stale project_id stays meaningful.
+  project_id   INTEGER NOT NULL,
+  payload_json TEXT    NOT NULL DEFAULT '{}'
+);
+CREATE INDEX journal_entries_project_idx ON journal_entries(project_id, occurred_at DESC);
+CREATE INDEX journal_entries_recency_idx ON journal_entries(occurred_at DESC);

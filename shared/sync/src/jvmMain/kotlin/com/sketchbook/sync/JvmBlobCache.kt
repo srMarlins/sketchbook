@@ -7,7 +7,7 @@ import com.sketchbook.core.BlobHash
 import com.sketchbook.repo.BlobCacheSettings
 import kotlinx.io.RawSource
 import kotlinx.io.buffered
-import kotlinx.io.readByteArray
+import kotlinx.io.readAtMostTo
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -56,15 +56,31 @@ class JvmBlobCache(
         Files.createDirectories(target.parent)
         val tempPath = target.resolveSibling("${target.fileName}.fetch-${System.nanoTime()}")
         val source: RawSource = cloud.getBlob(hash, scope)
-        val bytes = source.buffered().readByteArray()
-        Files.write(tempPath, bytes)
+        val totalBytes: Long = try {
+            java.io.BufferedOutputStream(Files.newOutputStream(tempPath)).use { out ->
+                source.buffered().use { src ->
+                    val buf = ByteArray(64 * 1024)
+                    var written = 0L
+                    while (true) {
+                        val n = src.readAtMostTo(buf, 0, buf.size)
+                        if (n <= 0) break
+                        out.write(buf, 0, n)
+                        written += n
+                    }
+                    written
+                }
+            }
+        } catch (e: Throwable) {
+            Files.deleteIfExists(tempPath)
+            throw e
+        }
         try {
             Files.move(tempPath, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } catch (e: Throwable) {
             Files.deleteIfExists(tempPath)
             throw e
         }
-        recordInsert(hash, bytes.size.toLong())
+        recordInsert(hash, totalBytes)
         runCatching { evictIfOverBudget() }
         return target
     }

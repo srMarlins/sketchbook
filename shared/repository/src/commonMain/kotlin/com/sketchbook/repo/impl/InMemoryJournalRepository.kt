@@ -12,8 +12,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * In-memory journal. Used in tests today and as the default until PR-8 (`actions`) lands a
- * disk writer that round-trips with the v0.1 Python format.
+ * In-memory journal — used by tests that don't want a SQLDelight driver. Production graphs
+ * use `SqlJournalRepository`.
  */
 class InMemoryJournalRepository : JournalRepository {
 

@@ -13,6 +13,7 @@ data/catalog.db-*
 data/cache/
 data/journal/
 data/proposals/
+.test-data/
 
 # editors / os
 .vscode/

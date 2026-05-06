@@ -6,7 +6,7 @@ import com.sketchbook.mcp.FileProposalsWriter
 import com.sketchbook.mcp.McpServer
 import com.sketchbook.mcp.Tools
 import com.sketchbook.mcp.runStdio
-import com.sketchbook.repo.impl.InMemoryJournalRepository
+import com.sketchbook.repo.impl.SqlJournalRepository
 import com.sketchbook.repo.impl.SqlProjectRepository
 import kotlinx.coroutines.Dispatchers
 import java.nio.file.Files
@@ -34,7 +34,7 @@ fun main() {
 
     val handle = CatalogDb.openOnDisk(dbPath)
     val fts = CatalogFts(handle.driver)
-    val journal = InMemoryJournalRepository()
+    val journal = SqlJournalRepository(catalog = handle.catalog, ioDispatcher = Dispatchers.IO)
     val repository = SqlProjectRepository(
         catalog = handle.catalog,
         ioDispatcher = Dispatchers.IO,

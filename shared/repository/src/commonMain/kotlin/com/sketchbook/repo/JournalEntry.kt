@@ -18,42 +18,73 @@ data class JournalEntry(
     val action: ActionRecord,
     /** Optional: machine-local sequence id, if persisted. `null` for in-memory entries. */
     val sequence: Long? = null,
+    /**
+     * Who triggered this entry. Persisted into `journal_entries.actor` so the desktop UI and
+     * audit log can distinguish user-driven edits from MCP/agent-driven ones. Defaults to
+     * `"user"` so existing call sites in `SqlProjectRepository` keep compiling; the MCP
+     * subprocess passes `"sketchbook"` (matching `Proposal.actor`).
+     */
+    val actor: String = "user",
 )
 
-/** Action variant + before/after state. New variants land as features add (PR-8). */
+/**
+ * Action variant + before/after state. New variants land as features add (PR-8).
+ *
+ * **`typeKey` contract.** Each variant carries a stable string identifier persisted into
+ * `journal_entries.action_type`. Do NOT derive these from `::class.simpleName` — under R8 / future
+ * obfuscation those become `a`/`b`/`c` and break SQL filters and human-readable audit logs. The
+ * abstract property forces every new variant to declare its own key.
+ */
 @Serializable
 sealed interface ActionRecord {
+
+    val typeKey: String
 
     @Serializable
     data class Move(
         val pathBefore: String,
         val pathAfter: String,
-    ) : ActionRecord
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "Move" }
+    }
 
     @Serializable
     data class Rename(
         val nameBefore: String,
         val nameAfter: String,
-    ) : ActionRecord
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "Rename" }
+    }
 
     @Serializable
     data class Archive(
         val wasArchived: Boolean,
         val isArchived: Boolean,
-    ) : ActionRecord
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "Archive" }
+    }
 
     @Serializable
     data class SetTags(
         val before: List<String>,
         val after: List<String>,
-    ) : ActionRecord
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "SetTags" }
+    }
 
     /** Force-take of a lease lock from another host. Carries the prior owner for audit. */
     @Serializable
     data class ForceTakeLock(
         val priorOwnerHostName: String?,
         val priorExpiresAtMs: Long?,
-    ) : ActionRecord
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "ForceTakeLock" }
+    }
 
     /**
      * Push attempt CAS-failed because the cloud HEAD diverged. Surfaces in the journal so the
@@ -63,7 +94,10 @@ sealed interface ActionRecord {
     data class PushConflict(
         val ourRev: Long,
         val theirRev: Long,
-    ) : ActionRecord
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "PushConflict" }
+    }
 
     /**
      * User mapped a missing sample reference to a concrete file on disk. The catalog is updated
@@ -77,7 +111,10 @@ sealed interface ActionRecord {
         val candidatePath: String,
         /** One of `AlsPatchService.Outcome` names: `Patched` | `NoChange` | `SkippedBusy` | `Failed`. */
         val alsOutcome: String,
-    ) : ActionRecord
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "MissingSampleMapped" }
+    }
 
     /**
      * User undid a previous `MissingSampleMapped` action. Symmetric counterpart: catalog row is
@@ -92,7 +129,10 @@ sealed interface ActionRecord {
         val candidatePath: String,
         /** One of `AlsPatchService.Outcome` names plus `NoUndoBytes` for the sidecar-missing case. */
         val alsOutcome: String,
-    ) : ActionRecord
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "MissingSampleUnmapped" }
+    }
 
     /**
      * User repaired Mac-style absolute paths (e.g. `Macintosh HD:/Users/jay/...`) inside a
@@ -113,5 +153,8 @@ sealed interface ActionRecord {
         val mappingCount: Int,
         /** One of `AlsPatchService.Outcome` names. */
         val alsOutcome: String,
-    ) : ActionRecord
+    ) : ActionRecord {
+        override val typeKey: String get() = TYPE_KEY
+        companion object { const val TYPE_KEY: String = "MacPathRepaired" }
+    }
 }

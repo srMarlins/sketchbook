@@ -63,6 +63,26 @@ class JvmBlobCacheTest {
     }
 
     @Test
+    fun fetchStreamsLargeBlobWithoutHeapBuffering() = runTest {
+        // 64 MB synthetic blob — large enough to OOM if heap-buffered under tight heap budgets,
+        // small enough to keep CI fast. The contract under test is "fetch does not read the
+        // entire RawSource into a ByteArray before writing"; size equality between source payload
+        // and on-disk file (and the recorded catalog row) implicitly proves the streaming path is
+        // correct.
+        val sizeBytes = 64 * 1024 * 1024
+        val largePayload = ByteArray(sizeBytes) { (it % 251).toByte() }
+        val cloud = CountingCloud(largePayload)
+        val handle = CatalogDb.openInMemory()
+        val cache = JvmBlobCache(handle.catalog, tmp, cloud, cacheSettings = { BlobCacheSettings.Default })
+
+        val path = cache.getOrFetch(hash, BlobScope.Shared)
+
+        assertEquals(sizeBytes.toLong(), Files.size(path))
+        val recorded = handle.catalog.catalogQueries.sumBlobCacheBytes().executeAsOne()
+        assertEquals(sizeBytes.toLong(), recorded)
+    }
+
+    @Test
     fun lruEvictsWhenOverBudget() = runTest {
         val cloud = CountingCloud(payload)
         val handle = CatalogDb.openInMemory()

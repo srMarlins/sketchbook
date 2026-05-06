@@ -18,6 +18,7 @@ class CatalogDbTest {
             "tags", "project_tags",
             "project_identity", "snapshots", "blob_cache", "sync_state", "pending_uploads",
             "repair_acks", "proposal_acks",
+            "journal_entries",
         )) {
             assertTrue(t in tables, "missing table $t — got $tables")
         }
