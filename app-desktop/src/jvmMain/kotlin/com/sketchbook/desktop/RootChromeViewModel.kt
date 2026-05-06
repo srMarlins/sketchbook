@@ -10,6 +10,8 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.repo.LibraryHealth
+import com.sketchbook.repo.MissingPluginRow
+import com.sketchbook.repo.MissingPluginSummary
 import com.sketchbook.repo.PluginUsage
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProjectSyncState
@@ -74,6 +76,20 @@ class RootChromeViewModel(
 
     val libraryHealth: StateFlow<LibraryHealth> = projectRepository.observeLibraryHealth()
         .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryHealth.EMPTY)
+
+    /**
+     * PR-T: scalar count for the Home coverage chip. `null` while the SQL is still warming up so
+     * the chip has a way to render nothing rather than a flashing "0 missing" placeholder.
+     */
+    val missingPluginSummary: StateFlow<MissingPluginSummary?> = projectRepository.observeMissingPluginSummary()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * PR-T: list of missing (name, format) pairs that the chip's popup renders. Empty list while
+     * loading; filled once the probe has run + the SQL has propagated.
+     */
+    val missingPluginCoverage: StateFlow<List<MissingPluginRow>> = projectRepository.observeMissingPluginCoverage()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
      * `null` when cloud isn't configured — the cluster of nullable callbacks (`syncStateFor`,

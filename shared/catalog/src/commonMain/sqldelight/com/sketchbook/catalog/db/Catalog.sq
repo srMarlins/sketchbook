@@ -359,6 +359,34 @@ UPDATE project_plugins
 SET is_installed = :is_installed
 WHERE plugin_name = :plugin_name AND plugin_type = :plugin_type;
 
+-- PR-T: aggregate "missing plugins by (name, type)" view that powers the Home coverage chip's
+-- popup list. Grouped on (name, type) so a plugin loaded as both VST2 and VST3 surfaces twice if
+-- *both* formats are missing — that mirrors how the user sees them in Live's plugin browser, and
+-- a user with VST3 installed but not VST2 of the same name should only see the VST2 row as
+-- missing. Archived projects are excluded so a project the user already shelved doesn't keep
+-- inflating the affected-projects column.
+selectMissingPluginCoverage:
+SELECT pp.plugin_name AS name,
+       pp.plugin_type AS type,
+       COUNT(DISTINCT pp.project_id) AS affected_projects
+FROM project_plugins pp
+JOIN projects p ON p.id = pp.project_id
+WHERE pp.is_installed = 0 AND p.is_archived = 0
+GROUP BY pp.plugin_name, pp.plugin_type
+ORDER BY affected_projects DESC, pp.plugin_name ASC;
+
+-- PR-T: scalar summary for the Home chip itself ("N plugins missing affecting M projects"). One
+-- row, two counts. The compound key in `missing_count` (`name || '|' || type`) treats VST2/VST3
+-- as separate entries to match the coverage list above. `COUNT(DISTINCT … || '|' || …)` is the
+-- portable trick — SQLite has no `COUNT(DISTINCT name, type)` syntax. Archived projects are
+-- excluded for the same reason as the coverage query.
+selectMissingPluginSummary:
+SELECT COUNT(DISTINCT pp.plugin_name || '|' || pp.plugin_type) AS missing_count,
+       COUNT(DISTINCT pp.project_id) AS affected_projects
+FROM project_plugins pp
+JOIN projects p ON p.id = pp.project_id
+WHERE pp.is_installed = 0 AND p.is_archived = 0;
+
 
 selectSampleEntriesForProject:
 SELECT sample_path, is_missing, size_bytes FROM project_samples WHERE project_id = :project_id;

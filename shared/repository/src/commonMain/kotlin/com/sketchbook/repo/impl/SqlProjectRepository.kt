@@ -149,6 +149,33 @@ class SqlProjectRepository(
             } ?: com.sketchbook.repo.LibraryHealth.EMPTY
         }
 
+    override fun observeMissingPluginCoverage(): Flow<List<com.sketchbook.repo.MissingPluginRow>> =
+        catalog.catalogQueries.selectMissingPluginCoverage()
+            .asFlow()
+            .mapToList(ioDispatcher)
+            .map { rows ->
+                rows.map { r ->
+                    com.sketchbook.repo.MissingPluginRow(
+                        name = r.name,
+                        format = pluginFormatFor(r.type),
+                        affectedProjects = r.affected_projects.toInt(),
+                    )
+                }
+            }
+
+    override fun observeMissingPluginSummary(): Flow<com.sketchbook.repo.MissingPluginSummary?> =
+        catalog.catalogQueries.selectMissingPluginSummary()
+            .asFlow()
+            .mapToOneOrNull(ioDispatcher)
+            .map { row ->
+                row?.let {
+                    com.sketchbook.repo.MissingPluginSummary(
+                        missingPluginCount = it.missing_count.toInt(),
+                        affectedProjects = it.affected_projects.toInt(),
+                    )
+                }
+            }
+
     override fun observeSamples(id: ProjectId): Flow<List<com.sketchbook.repo.SampleEntry>> =
         catalog.catalogQueries.selectSampleEntriesForProject(id.value)
             .asFlow()

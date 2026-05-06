@@ -3,6 +3,7 @@ package com.sketchbook.repo
 import app.cash.turbine.test
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.CatalogFts
+import com.sketchbook.core.PluginFormat
 import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlProjectRepository
@@ -331,6 +332,114 @@ class SqlProjectRepositoryTest {
         ).test {
             val rows = awaitItem()
             assertTrue(rows.isEmpty())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // PR-T: missing-plugin coverage
+    // ------------------------------------------------------------------------
+
+    private fun markPluginInstalled(
+        catalog: com.sketchbook.catalog.db.Catalog,
+        name: String,
+        type: String,
+        installed: Boolean,
+    ) {
+        catalog.catalogQueries.markPluginsInstalledByNameAndType(
+            is_installed = if (installed) 1L else 0L,
+            plugin_name = name,
+            plugin_type = type,
+        )
+    }
+
+    @Test
+    fun observeMissingPluginCoverageGroupsByNameAndType() = runTest {
+        val (catalog, fts, repo) = setup()
+        // Three projects: P1+P2 use Serum VST3; P3 uses Serum VST2; all marked missing. P4 uses
+        // Vital VST3 but it's installed.
+        val p1 = seed(catalog, fts, "p1", "/lib", lastModified = 4.0)
+        val p2 = seed(catalog, fts, "p2", "/lib", lastModified = 3.0)
+        val p3 = seed(catalog, fts, "p3", "/lib", lastModified = 2.0)
+        val p4 = seed(catalog, fts, "p4", "/lib", lastModified = 1.0)
+        seedPlugin(catalog, p1, "Serum", "vst3")
+        seedPlugin(catalog, p2, "Serum", "vst3")
+        seedPlugin(catalog, p3, "Serum", "vst2")
+        seedPlugin(catalog, p4, "Vital", "vst3")
+        markPluginInstalled(catalog, "Serum", "vst3", installed = false)
+        markPluginInstalled(catalog, "Serum", "vst2", installed = false)
+        markPluginInstalled(catalog, "Vital", "vst3", installed = true)
+
+        repo.observeMissingPluginCoverage().test {
+            val rows = awaitItem()
+            // Two missing groups; Serum VST3 first (2 affected projects), then Serum VST2 (1).
+            assertEquals(2, rows.size)
+            assertEquals("Serum", rows[0].name)
+            assertEquals(PluginFormat.Vst3, rows[0].format)
+            assertEquals(2, rows[0].affectedProjects)
+            assertEquals("Serum", rows[1].name)
+            assertEquals(PluginFormat.Vst2, rows[1].format)
+            assertEquals(1, rows[1].affectedProjects)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun observeMissingPluginCoverageExcludesArchivedProjects() = runTest {
+        val (catalog, fts, repo) = setup()
+        val live = seed(catalog, fts, "live", "/lib", lastModified = 2.0)
+        val archived = seed(catalog, fts, "archived", "/lib", lastModified = 1.0)
+        seedPlugin(catalog, live, "Serum", "vst3")
+        seedPlugin(catalog, archived, "Serum", "vst3")
+        markPluginInstalled(catalog, "Serum", "vst3", installed = false)
+        catalog.catalogQueries.setArchived(archived = 1, id = archived)
+
+        repo.observeMissingPluginCoverage().test {
+            val rows = awaitItem()
+            // Archived project doesn't count toward `affected_projects` — user has shelved it,
+            // they don't need it to be screaming red on the home chip.
+            assertEquals(1, rows.size)
+            assertEquals(1, rows[0].affectedProjects)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun observeMissingPluginSummaryCountsCompoundDistinct() = runTest {
+        val (catalog, fts, repo) = setup()
+        val p1 = seed(catalog, fts, "p1", "/lib", lastModified = 3.0)
+        val p2 = seed(catalog, fts, "p2", "/lib", lastModified = 2.0)
+        val p3 = seed(catalog, fts, "p3", "/lib", lastModified = 1.0)
+        seedPlugin(catalog, p1, "Serum", "vst3")
+        seedPlugin(catalog, p2, "Serum", "vst2")
+        seedPlugin(catalog, p3, "Vital", "vst3")
+        markPluginInstalled(catalog, "Serum", "vst3", installed = false)
+        markPluginInstalled(catalog, "Serum", "vst2", installed = false)
+        markPluginInstalled(catalog, "Vital", "vst3", installed = false)
+
+        repo.observeMissingPluginSummary().test {
+            val s = awaitItem()
+            assertNotNull(s)
+            // Three (name, type) pairs missing; three distinct projects affected.
+            assertEquals(3, s.missingPluginCount)
+            assertEquals(3, s.affectedProjects)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun observeMissingPluginSummaryReportsZerosWhenAllInstalled() = runTest {
+        val (catalog, fts, repo) = setup()
+        val p1 = seed(catalog, fts, "p1", "/lib")
+        seedPlugin(catalog, p1, "Serum", "vst3")
+        // is_installed defaults to 1 from the schema; nothing missing.
+
+        repo.observeMissingPluginSummary().test {
+            val s = awaitItem()
+            assertNotNull(s)
+            assertEquals(0, s.missingPluginCount)
+            assertEquals(0, s.affectedProjects)
+            assertTrue(s.isEmpty)
             cancelAndIgnoreRemainingEvents()
         }
     }

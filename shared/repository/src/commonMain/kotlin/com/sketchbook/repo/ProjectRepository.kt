@@ -72,6 +72,22 @@ interface ProjectRepository {
      */
     fun observeLibraryHealth(): Flow<LibraryHealth> = kotlinx.coroutines.flow.flowOf(LibraryHealth.EMPTY)
 
+    /**
+     * PR-T: per-(name, type) breakdown of plugins the user's filesystem is missing. Used by the
+     * Home coverage chip popup. Empty list when nothing is missing — caller hides the chip in
+     * that case.
+     */
+    fun observeMissingPluginCoverage(): Flow<List<MissingPluginRow>> =
+        kotlinx.coroutines.flow.flowOf(emptyList())
+
+    /**
+     * PR-T: scalar summary that drives the chip's label ("N plugins missing affecting M projects").
+     * `null` while loading — caller renders nothing for that initial frame so a flash of "0
+     * missing" doesn't appear before the SQL lands.
+     */
+    fun observeMissingPluginSummary(): Flow<MissingPluginSummary?> =
+        kotlinx.coroutines.flow.flowOf(null)
+
     /** Move the project's working tree to a new parent directory. Path-rename only; no FS I/O. */
     suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry>
 
@@ -164,6 +180,30 @@ data class LibraryHealth(
     companion object {
         val EMPTY = LibraryHealth(total = 0, synced = 0, sampleClean = 0)
     }
+}
+
+/**
+ * PR-T: one row in the missing-plugin coverage list. The chip's popup renders one [MissingPluginRow]
+ * per row. `name` + `format` together identify the plugin slot; the user thinks of "Serum (VST3)"
+ * differently from "Serum (VST2)" because Live preserves the format pin and won't auto-substitute.
+ * `affectedProjects` is the count of distinct non-archived projects that load this plugin.
+ */
+data class MissingPluginRow(
+    val name: String,
+    val format: com.sketchbook.core.PluginFormat,
+    val affectedProjects: Int,
+)
+
+/**
+ * PR-T: scalar summary for the Home chip. The chip hides when both counts are zero (no missing
+ * plugins, no need to nag the user). Counted as compound (name|type) so the same plugin missing
+ * in two formats counts as two — mirrors the popup list.
+ */
+data class MissingPluginSummary(
+    val missingPluginCount: Int,
+    val affectedProjects: Int,
+) {
+    val isEmpty: Boolean get() = missingPluginCount == 0 && affectedProjects == 0
 }
 
 /** Convenience: report a [SketchbookError] as a `Result.failure`. */
