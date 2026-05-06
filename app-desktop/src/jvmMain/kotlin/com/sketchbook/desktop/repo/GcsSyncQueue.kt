@@ -150,7 +150,12 @@ class GcsSyncQueue(
     private suspend fun runPipeline(pid: ProjectId, uuid: ProjectUuid): Result<Unit> {
         val row: ProjectRow = projects.observeProject(pid).first()
             ?: return Result.failure(IllegalStateException("project row $pid not found"))
-        val alsPath = row.path.value
+        // ProjectPath.fromPlatform strips leading slashes for portable storage. Restore the
+        // absolute form before handing off to NIO: a Windows drive-letter path ("Z:/...") needs
+        // no fix-up, but a Unix path arrives as "tmp/foo/x.als" and must be reified as
+        // "/tmp/foo/x.als" so Paths.get() resolves it absolutely.
+        val rawPath = row.path.value
+        val alsPath = if (rawPath.length >= 2 && rawPath[1] == ':') rawPath else "/$rawPath"
         val rootDir = Paths.get(alsPath).parent
             ?: return Result.failure(IllegalStateException("project path has no parent: $alsPath"))
 
@@ -312,7 +317,8 @@ class GcsSyncQueue(
     private suspend fun isInQuietPeriod(uuid: ProjectUuid, now: Instant): Boolean {
         val pid = withContext(ioDispatcher) { syncState.projectIdFor(uuid) } ?: return false
         val row = projects.observeProject(pid).first() ?: return false
-        val alsPath = row.path.value
+        val rawPath = row.path.value
+        val alsPath = if (rawPath.length >= 2 && rawPath[1] == ':') rawPath else "/$rawPath"
         return runCatching {
             val mtime = withContext(ioDispatcher) {
                 Instant.fromEpochMilliseconds(

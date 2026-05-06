@@ -134,7 +134,7 @@ class GcsSyncQueueDrainTest {
         tempDirs.add(dir)
         val alsPath = dir.resolve("$name.als")
         alsPath.writeBytes("AbletonProject".encodeToByteArray())
-        Files.setLastModifiedTime(alsPath, FileTime.fromMillis(fileMtimeMs))
+        Files.setLastModifiedTime(alsPath, FileTime.fromMillis(BASE_EPOCH_MS + fileMtimeMs))
 
         env.catalog.catalogQueries.insertOrReplaceProject(
             path = alsPath.toString(),
@@ -333,7 +333,7 @@ class GcsSyncQueueDrainTest {
         // content change, `headBlob` would short-circuit and `failuresRemaining` would never
         // fire, since putBlob is the only failure injection point.
         alsPath.writeBytes("AbletonProject-v2".encodeToByteArray())
-        Files.setLastModifiedTime(alsPath, FileTime.fromMillis(testScheduler.currentTime - 60_000))
+        Files.setLastModifiedTime(alsPath, FileTime.fromMillis(BASE_EPOCH_MS + testScheduler.currentTime - 60_000))
 
         env.cloud.failuresRemaining = 1
         env.syncState.markDirty(uuid)
@@ -366,7 +366,7 @@ class GcsSyncQueueDrainTest {
         // Age the file's mtime past the quiet period (now is at virtual t=current; set mtime
         // well into the past relative to the virtual clock).
         val virtualNowMs = testScheduler.currentTime
-        Files.setLastModifiedTime(alsPath, FileTime.fromMillis(virtualNowMs - 60_000))
+        Files.setLastModifiedTime(alsPath, FileTime.fromMillis(BASE_EPOCH_MS + virtualNowMs - 60_000))
 
         // Bump version so the loop wakes (markDirty re-stamps updated_at, but we want a wake
         // signal independent of the mtime change).
@@ -403,11 +403,17 @@ class GcsSyncQueueDrainTest {
 /**
  * Reads `currentTime` from the test scheduler so the queue's `clock.now()` advances in lockstep
  * with `advanceTimeBy()`.
+ *
+ * Anchored at [BASE_EPOCH_MS] (2026-05-06 UTC) so all derived file mtimes stay positive: ext4
+ * on Linux clamps `Files.setLastModifiedTime` with negative values, which would silently break
+ * the mtime quiet-period filter.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 private class VirtualClock(private val scheduler: TestCoroutineScheduler) : Clock {
-    override fun now(): Instant = Instant.fromEpochMilliseconds(scheduler.currentTime)
+    override fun now(): Instant = Instant.fromEpochMilliseconds(BASE_EPOCH_MS + scheduler.currentTime)
 }
+
+private const val BASE_EPOCH_MS = 1_777_900_800_000L // 2026-05-06 UTC, comfortably positive
 
 /**
  * In-memory CloudBackend with two test knobs:
