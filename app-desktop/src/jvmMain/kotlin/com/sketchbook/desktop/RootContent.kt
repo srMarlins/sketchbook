@@ -305,8 +305,32 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                     LaunchedEffect(current.uuid) { vm.load(current.uuid) }
                                     TimelineScreen(vm)
                                 }
-                                Screen.Proposals -> ProposalsScreen(vm = metroViewModel())
-                                Screen.NeedsAttention -> NeedsAttentionScreen(vm = metroViewModel())
+                                Screen.Proposals -> {
+                                    val vm: com.sketchbook.featureproposals.ProposalsViewModel = metroViewModel()
+                                    ProposalsScreen(
+                                        vm = vm,
+                                        detailPane = { proposalId, dismiss ->
+                                            com.sketchbook.featureproposals.ProposalDetailPane(
+                                                proposalId = proposalId,
+                                                vm = vm,
+                                                onDismiss = dismiss,
+                                            )
+                                        },
+                                    )
+                                }
+                                Screen.NeedsAttention -> {
+                                    val vm: com.sketchbook.featureneedsattention.NeedsAttentionViewModel = metroViewModel()
+                                    NeedsAttentionScreen(
+                                        vm = vm,
+                                        detailPane = { target, dismiss ->
+                                            com.sketchbook.featureneedsattention.NeedsAttentionDetailPane(
+                                                target = target,
+                                                vm = vm,
+                                                onDismiss = dismiss,
+                                            )
+                                        },
+                                    )
+                                }
                                 Screen.Journal -> {
                                     val vm: JournalViewModel = metroViewModel()
                                     LaunchedEffect(vm) {
@@ -320,7 +344,17 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                             }
                                         }
                                     }
-                                    JournalScreen(vm)
+                                    JournalScreen(
+                                        vm = vm,
+                                        detailPane = { entry, projectName, dismiss ->
+                                            com.sketchbook.featurejournal.JournalDetailPane(
+                                                entry = entry,
+                                                projectName = projectName,
+                                                vm = vm,
+                                                onDismiss = dismiss,
+                                            )
+                                        },
+                                    )
                                 }
                                 Screen.Settings -> {
                                     val vm: SettingsViewModel = metroViewModel()
