@@ -48,6 +48,7 @@ include(
     ":shared:feature-journal",
     ":app-desktop",
     ":app-mcp",
+    ":tests:integration",
 )
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
