@@ -1,5 +1,7 @@
 # Web Stationery Redesign + Real Backend Wiring
 
+**Status:** SUPERSEDED 2026-05-05. The web/React frontend was retired in the Kotlin/Compose Multiplatform cutover (`2026-05-05-kotlin-rewrite-impl-plan.md`). The stationery aesthetic was carried into the Compose UI; the FastAPI backend wiring is irrelevant (Kotlin shared modules talk to SQLite + GCS directly). Preserved for design-language context only — do not implement against it.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Why this plan exists:** the sketchbook v1 redesign attempted on `feat/sketchbook-ui` did not land — too much asset dependency, busy chrome, weak dark mode, density problems. We're keeping the components, hooks, routing, tests, and overall architecture, but **replacing the visual layer** with a calmer "warm stationery with character" theme that is achievable using only CSS + the icon doodles we already have. We're also **wiring the UI to the real FastAPI backend** instead of mock JSON.

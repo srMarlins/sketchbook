@@ -65,11 +65,15 @@ local.properties
 # Kotlin compiler caches (in-process compiler writes here)
 .kotlin/
 
-# Retired frontends — leftover build/cache dirs from the pre-cutover Tauri/web tree.
-# The source was deleted in PR-24; these are untracked artifacts that the local
-# user can blow away at their leisure.
+# Retired frontends and Python tree — leftover build/cache dirs from before the
+# Kotlin/Compose Multiplatform cutover (PR-24, PR-49, PR-50). The source was
+# deleted; these are local untracked artifacts that the user can blow away at
+# leisure. Listed here so a stray `git add -A` doesn't accidentally re-import
+# them as embedded directories.
 src-tauri/
 web/
+packages/
+dist/
 
 .tmp_screens/
 live-page*.png

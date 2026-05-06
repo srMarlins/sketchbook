@@ -1,5 +1,7 @@
 # Tauri sidecar bundling — design
 
+**Status:** SUPERSEDED 2026-05-05. Tauri + Python sidecar is no longer the desktop shell; the Kotlin/Compose Multiplatform rewrite (`2026-05-05-sync-versioning-design.md`, `2026-05-05-kotlin-rewrite-impl-plan.md`) replaces it entirely. This file is preserved for historical context — do not implement against it.
+
 **Date:** 2026-05-04.
 **Scope:** how to ship the FastAPI backend as a Tauri sidecar binary that runs
 on a user's machine without requiring a system Python install. Windows-first;

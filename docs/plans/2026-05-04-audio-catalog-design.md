@@ -1,8 +1,10 @@
 # Audio: Ableton catalog & organizer — design
 
+**Status:** SUPERSEDED 2026-05-05. The Python+FastAPI reference impl this design described was retired in PRs #49/#50; the catalog now lives in the Kotlin/Compose Multiplatform rewrite (`2026-05-05-sync-versioning-design.md`). The data model (content-addressed blobs, FTS5 over project metadata, snapshot history) carried over substantially intact. Preserved for data-model rationale only — do not implement against it.
+
 **Date:** 2026-05-04
 **Owner:** srmarlins@gmail.com
-**Status:** Approved, ready for implementation plan
+**Status (original):** Approved, ready for implementation plan
 
 ## 1. Scope & non-goals
 

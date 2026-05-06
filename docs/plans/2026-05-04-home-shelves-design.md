@@ -1,7 +1,9 @@
 # Home Shelves Design
 
+**Status:** REJECTED 2026-05-04. The Netflix-style horizontal shelves and oversized CTAs were rejected in favor of layering small chips/details onto the existing stationery web/. The "needs attention" feature lives on as a Compose feature module (`shared/feature-needs-attention/`) but the shelf-grid presentation here is not the implementation — see `2026-05-06-feature-complete-design.md`. Preserved for ranking-heuristic context only.
+
 **Date:** 2026-05-04
-**Status:** Approved
+**Status (original):** Approved
 **Related:** `docs/plans/2026-05-04-effort-score-design.md` (depends on), `docs/plans/2026-05-04-library-organization-design.md`
 
 ## Goal
