@@ -53,13 +53,21 @@ class NeedsAttentionViewModel(
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
     private val pending = MutableStateFlow(Pending())
+    private val search = MutableStateFlow("")
 
     val state: StateFlow<State> = combine(
         repository.observeFindings(),
         pending,
-    ) { findings, p ->
-        val macEntries = macEntries(findings.macImports)
-        val missingByConfidence = bucketize(findings.missingSamples)
+        search,
+    ) { findings, p, q ->
+        // Filter the upstream lists by the search query before bucketizing/sorting so the
+        // project-boundary flags reflect only the visible rows. Empty query short-circuits.
+        val visibleMac = if (q.isBlank()) findings.macImports
+            else findings.macImports.filter { it.matchesSearch(q) }
+        val visibleMissing = if (q.isBlank()) findings.missingSamples
+            else findings.missingSamples.filter { it.matchesSearch(q) }
+        val macEntries = macEntries(visibleMac)
+        val missingByConfidence = bucketize(visibleMissing)
         // Auto-clean: if a pending row has already left the findings list, drop the pending
         // flag. Avoids the row visually flashing back to idle during the SQL ack/re-emit gap.
         val macIds = findings.macImports.mapTo(HashSet(findings.macImports.size)) { it.projectId }
@@ -67,20 +75,37 @@ class NeedsAttentionViewModel(
             HashSet(findings.missingSamples.size),
         ) { it.projectId to it.missingPath }
         State(
-            macImports = findings.macImports,
+            macImports = visibleMac,
             macEntries = macEntries,
-            missingSamples = findings.missingSamples,
+            missingSamples = visibleMissing,
             missingByConfidence = missingByConfidence,
             missingSamplesTotal = findings.missingSamplesTotal,
             missingSamplesTruncated = findings.missingSamplesTruncated,
             pendingMacRepairs = p.macRepairs.intersect(macIds),
             pendingMissingApplies = p.missingApplies.intersect(missingKeys),
+            search = q,
             loading = false,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
+    private fun MacImportFinding.matchesSearch(q: String): Boolean {
+        val needle = q.lowercase()
+        return name.lowercase().contains(needle) ||
+            path.lowercase().contains(needle) ||
+            parentDir.lowercase().contains(needle)
+    }
+
+    private fun MissingSampleFinding.matchesSearch(q: String): Boolean {
+        val needle = q.lowercase()
+        return projectName.lowercase().contains(needle) ||
+            missingPath.lowercase().contains(needle) ||
+            autoMatch?.path?.lowercase()?.contains(needle) == true ||
+            candidates.any { it.path.lowercase().contains(needle) }
+    }
+
     fun dispatch(intent: Intent) {
         when (intent) {
+            is Intent.SetSearch -> search.value = intent.query
             is Intent.AckMacImport -> viewModelScope.launch {
                 val r = repository.acknowledgeMacImport(intent.projectId)
                 emitAck(r.isSuccess, intent.projectId.value.toString(), "ack")
@@ -280,6 +305,7 @@ class NeedsAttentionViewModel(
         val missingSamplesTruncated: Boolean = false,
         val pendingMacRepairs: Set<ProjectId> = emptySet(),
         val pendingMissingApplies: Set<Pair<ProjectId, String>> = emptySet(),
+        val search: String = "",
         val loading: Boolean = false,
     )
 
@@ -289,6 +315,7 @@ class NeedsAttentionViewModel(
     )
 
     sealed interface Intent {
+        data class SetSearch(val query: String) : Intent
         data class AckMacImport(val projectId: ProjectId) : Intent
         data class RepairMacPaths(val projectId: ProjectId) : Intent
         data class DismissMissingSample(val projectId: ProjectId, val missingPath: String) : Intent

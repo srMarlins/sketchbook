@@ -8,21 +8,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
@@ -52,78 +47,77 @@ import com.sketchbook.uishared.theme.AppTheme
  *
  * `detailPane` is an optional slot the host wires (RootContent owns navigation).
  */
+/** Search field for the needs-attention queue. Filters macImports + missingSamples by name/path. */
 @Composable
-fun NeedsAttentionBody(
-    vm: NeedsAttentionViewModel,
-    onOpen: (target: NeedsAttentionDetailTarget) -> Unit,
+fun NeedsAttentionFilterBar(
+    state: NeedsAttentionViewModel.State,
+    onSearch: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val state by vm.state.collectAsStateWithLifecycle()
-    val expanded = remember { mutableStateMapOf<String, Boolean>() }
+    com.sketchbook.uishared.components.TextField(
+        value = state.search,
+        onChange = onSearch,
+        placeholder = "Search project, path, or filename…",
+        modifier = modifier.fillMaxWidth(),
+    )
+}
 
-    val onRepair: (ProjectId) -> Unit = remember(vm) {
-        { id -> vm.dispatch(NeedsAttentionViewModel.Intent.RepairMacPaths(id)) }
-    }
-    val onOpenMac: (MacImportFinding) -> Unit = remember(onOpen) {
-        { f -> onOpen(NeedsAttentionDetailTarget.Mac(f)) }
-    }
-    val onOpenMissing: (MissingSampleFinding) -> Unit = remember(onOpen) {
-        { f -> onOpen(NeedsAttentionDetailTarget.Missing(f)) }
-    }
-    val macIds by remember {
-        derivedStateOf { state.macEntries.map { it.finding.projectId } }
-    }
-    val onBulkRepair: () -> Unit = remember(vm, macIds) {
-        { vm.dispatch(NeedsAttentionViewModel.Intent.BulkRepairMacPaths(macIds)) }
-    }
-
+/**
+ * Emits the needs-attention queue's content (mac-imported card + missing-samples card) into a
+ * parent LazyColumn. See [proposalsItems] for the rationale.
+ */
+fun LazyListScope.needsAttentionItems(
+    state: NeedsAttentionViewModel.State,
+    cardExpanded: SnapshotStateMap<String, Boolean>,
+    onOpen: (target: NeedsAttentionDetailTarget) -> Unit,
+    onRepair: (ProjectId) -> Unit,
+    onBulkRepair: () -> Unit,
+    onBulkApply: (List<MissingSampleFinding>) -> Unit,
+    onBulkDismiss: (List<MissingSampleFinding>) -> Unit,
+) {
     val hasMissing = state.missingByConfidence.autoMatch.isNotEmpty() ||
         state.missingByConfidence.multiCandidate.isNotEmpty() ||
         state.missingByConfidence.noCandidate.isNotEmpty()
     if (state.macEntries.isEmpty() && !hasMissing) {
-        EmptyState(
-            title = if (state.loading) "Scanning…" else "All clear",
-            hint = "No Mac-imported projects or missing samples found.",
-            modifier = modifier,
-        )
+        item(key = "na-empty") {
+            EmptyState(
+                title = if (state.loading) "Scanning…"
+                    else if (state.search.isNotBlank()) "No matches"
+                    else "All clear",
+                hint = if (state.search.isNotBlank())
+                    "Nothing matches \"${state.search}\". Clear the search to see everything."
+                else "No Mac-imported projects or missing samples found.",
+            )
+        }
         return
     }
-    LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg),
-    ) {
-        if (state.macEntries.isNotEmpty()) {
-            item(key = "mac-card") {
-                MacImportCard(
-                    entries = state.macEntries,
-                    pending = state.pendingMacRepairs,
-                    expanded = expanded["mac"] ?: true,
-                    onToggle = { expanded["mac"] = !(expanded["mac"] ?: true) },
-                    onBulkRepair = onBulkRepair,
-                    onRepair = onRepair,
-                    onOpen = onOpenMac,
-                )
-            }
+    if (state.macEntries.isNotEmpty()) {
+        item(key = "na-mac-card") {
+            MacImportCard(
+                entries = state.macEntries,
+                pending = state.pendingMacRepairs,
+                expanded = cardExpanded["mac"] ?: true,
+                onToggle = { cardExpanded["mac"] = !(cardExpanded["mac"] ?: true) },
+                onBulkRepair = onBulkRepair,
+                onRepair = onRepair,
+                onOpen = { f -> onOpen(NeedsAttentionDetailTarget.Mac(f)) },
+            )
         }
-        if (hasMissing) {
-            item(key = "missing-card") {
-                MissingSamplesCard(
-                    buckets = state.missingByConfidence,
-                    shown = state.missingSamples.size,
-                    total = state.missingSamplesTotal,
-                    truncated = state.missingSamplesTruncated,
-                    pending = state.pendingMissingApplies,
-                    expanded = expanded["missing"] ?: true,
-                    onToggle = { expanded["missing"] = !(expanded["missing"] ?: true) },
-                    onOpen = onOpenMissing,
-                    onBulkApply = { findings ->
-                        vm.dispatch(NeedsAttentionViewModel.Intent.BulkApplyAutoMatch(findings))
-                    },
-                    onBulkDismiss = { findings ->
-                        vm.dispatch(NeedsAttentionViewModel.Intent.BulkDismiss(findings))
-                    },
-                )
-            }
+    }
+    if (hasMissing) {
+        item(key = "na-missing-card") {
+            MissingSamplesCard(
+                buckets = state.missingByConfidence,
+                shown = state.missingSamples.size,
+                total = state.missingSamplesTotal,
+                truncated = state.missingSamplesTruncated,
+                pending = state.pendingMissingApplies,
+                expanded = cardExpanded["missing"] ?: true,
+                onToggle = { cardExpanded["missing"] = !(cardExpanded["missing"] ?: true) },
+                onOpen = { f -> onOpen(NeedsAttentionDetailTarget.Missing(f)) },
+                onBulkApply = onBulkApply,
+                onBulkDismiss = onBulkDismiss,
+            )
         }
     }
 }

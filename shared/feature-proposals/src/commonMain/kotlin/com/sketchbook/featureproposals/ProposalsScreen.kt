@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -14,15 +14,12 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.featureproposals.format.proposalLabel
 import com.sketchbook.repo.Proposal
 import com.sketchbook.repo.ProposalStatus
@@ -55,32 +52,20 @@ import kotlin.time.Instant
  * unchanged rows when the parent state changes. Per-row click lambdas capture stable values from
  * the dispatch surface and the proposal id only.
  */
+/**
+ * Filter chip row + search field for the proposals queue. Lives outside the LazyColumn so it
+ * doesn't get key()'d as part of the lazy list — chip selection isn't recomposition-sensitive.
+ */
 @Composable
-fun ProposalsBody(
-    vm: ProposalsViewModel,
-    onOpen: (proposalId: String) -> Unit,
+fun ProposalsFilterBar(
+    state: ProposalsViewModel.State,
+    onSourceFilter: (ProposalsViewModel.SourceFilter) -> Unit,
+    onSearch: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val state by vm.state.collectAsStateWithLifecycle()
-    var resolvedExpanded by remember { mutableStateOf(false) }
-    val expanded = remember { mutableStateMapOf<ProposalsViewModel.ProposalCategory, Boolean>() }
-
-    val approve: (String) -> Unit = remember(vm) {
-        { id -> vm.dispatch(ProposalsViewModel.Intent.Approve(id)) }
-    }
-    val reject: (String) -> Unit = remember(vm) {
-        { id -> vm.dispatch(ProposalsViewModel.Intent.Reject(id)) }
-    }
-    val onSearch: (String) -> Unit = remember(vm) {
-        { q -> vm.dispatch(ProposalsViewModel.Intent.SetSearch(q)) }
-    }
-    val onSourceFilter: (ProposalsViewModel.SourceFilter) -> Unit = remember(vm) {
-        { f -> vm.dispatch(ProposalsViewModel.Intent.SetSourceFilter(f)) }
-    }
-
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
         FilterChipRow(
             options = SOURCE_FILTER_OPTIONS,
@@ -93,39 +78,59 @@ fun ProposalsBody(
             placeholder = "Search rationale or paths…",
             modifier = Modifier.fillMaxWidth(),
         )
-        if (state.groups.isEmpty() && state.resolved.isEmpty()) {
+    }
+}
+
+/**
+ * Emits the proposals queue's content (group cards + resolved card) into a parent LazyColumn.
+ * Designed for the unified Inbox layout where all three queues share one scroll surface — the
+ * outer LazyColumn handles virtualization, this extension just contributes its items.
+ *
+ * Group/resolved expansion state is hoisted to the parent so it survives section toggles
+ * without remembering a fresh map per body composition.
+ */
+fun LazyListScope.proposalsItems(
+    state: ProposalsViewModel.State,
+    groupExpanded: SnapshotStateMap<ProposalsViewModel.ProposalCategory, Boolean>,
+    resolvedExpanded: Boolean,
+    onResolvedToggle: () -> Unit,
+    vm: ProposalsViewModel,
+    onOpen: (String) -> Unit,
+    onApprove: (String) -> Unit,
+    onReject: (String) -> Unit,
+) {
+    if (state.groups.isEmpty() && state.resolved.isEmpty()) {
+        item(key = "p-empty") {
             EmptyState(
                 title = if (state.loading) "Loading…" else "No proposals",
                 hint = "Claude submits a proposal via the MCP server when it wants to make a write.",
             )
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)) {
-                items(state.groups, key = { "g-${it.category}" }) { group ->
-                    ProposalGroupCard(
-                        group = group,
-                        projectNamesById = state.projectNamesById,
-                        expanded = expanded[group.category] ?: true,
-                        onToggle = {
-                            expanded[group.category] = !(expanded[group.category] ?: true)
-                        },
-                        vm = vm,
-                        onOpen = onOpen,
-                        onApprove = approve,
-                        onReject = reject,
-                    )
-                }
-                if (state.resolved.isNotEmpty()) {
-                    item(key = "resolved-card") {
-                        ResolvedCard(
-                            resolved = state.resolved,
-                            projectNamesById = state.projectNamesById,
-                            expanded = resolvedExpanded,
-                            onToggle = { resolvedExpanded = !resolvedExpanded },
-                            onOpen = onOpen,
-                        )
-                    }
-                }
-            }
+        }
+        return
+    }
+    items(state.groups, key = { "p-g-${it.category}" }) { group ->
+        ProposalGroupCard(
+            group = group,
+            projectNamesById = state.projectNamesById,
+            expanded = groupExpanded[group.category] ?: true,
+            onToggle = {
+                groupExpanded[group.category] = !(groupExpanded[group.category] ?: true)
+            },
+            vm = vm,
+            onOpen = onOpen,
+            onApprove = onApprove,
+            onReject = onReject,
+        )
+    }
+    if (state.resolved.isNotEmpty()) {
+        item(key = "p-resolved") {
+            ResolvedCard(
+                resolved = state.resolved,
+                projectNamesById = state.projectNamesById,
+                expanded = resolvedExpanded,
+                onToggle = onResolvedToggle,
+                onOpen = onOpen,
+            )
         }
     }
 }

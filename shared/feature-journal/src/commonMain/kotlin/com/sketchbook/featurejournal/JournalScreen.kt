@@ -6,21 +6,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.featurejournal.format.JournalLabel
 import com.sketchbook.featurejournal.format.journalLabel
 import com.sketchbook.repo.JournalEntry
@@ -51,38 +47,18 @@ import kotlin.time.Instant
  * journal-volume (capped at 200 rows) stays cheap. Per-row composables take a remembered
  * @Immutable view so Compose skips unchanged rows on parent recomposition.
  */
+/** Filter chips + search field for the journal queue. */
 @Composable
-fun JournalBody(
-    vm: JournalViewModel,
-    onOpen: (entry: JournalEntry, projectName: String) -> Unit,
+fun JournalFilterBar(
+    state: JournalViewModel.State,
+    onSearch: (String) -> Unit,
+    onActionFilter: (JournalViewModel.ActionTypeFilter) -> Unit,
+    onDateRange: (JournalViewModel.DateRange) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val state by vm.state.collectAsStateWithLifecycle()
-    val expanded = remember { mutableStateMapOf<String, Boolean>() }
-
-    val onSearch: (String) -> Unit = remember(vm) {
-        { q -> vm.dispatch(JournalViewModel.Intent.SetSearch(q)) }
-    }
-    val onAction: (JournalViewModel.ActionTypeFilter) -> Unit = remember(vm) {
-        { f -> vm.dispatch(JournalViewModel.Intent.SetActionTypeFilter(f)) }
-    }
-    val onDateRange: (JournalViewModel.DateRange) -> Unit = remember(vm) {
-        { r -> vm.dispatch(JournalViewModel.Intent.SetDateRange(r)) }
-    }
-    val onUndo: (JournalEntry) -> Unit = remember(vm) {
-        { e -> vm.dispatch(JournalViewModel.Intent.UndoOne(e)) }
-    }
-    val onOpenWithName: (JournalEntry) -> Unit = remember(onOpen, state.rows) {
-        { e ->
-            val name = state.rows.firstOrNull { it.entry == e }?.projectName
-                ?: "project #${e.projectId.value}"
-            onOpen(e, name)
-        }
-    }
-
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
         FilterChipRow(
             options = DATE_RANGE_OPTIONS,
@@ -92,7 +68,7 @@ fun JournalBody(
         FilterChipRow(
             options = ACTION_TYPE_OPTIONS,
             selected = state.actionTypeFilter,
-            onSelected = onAction,
+            onSelected = onActionFilter,
         )
         TextField(
             value = state.search,
@@ -100,34 +76,54 @@ fun JournalBody(
             placeholder = "Search project name, paths, tags…",
             modifier = Modifier.fillMaxWidth(),
         )
-        if (state.rows.isEmpty()) {
+    }
+}
+
+/**
+ * Emits the journal queue's content (day-bucket cards) into a parent LazyColumn. See
+ * [com.sketchbook.featureproposals.proposalsItems] for the rationale.
+ */
+fun LazyListScope.journalItems(
+    state: JournalViewModel.State,
+    dayExpanded: SnapshotStateMap<String, Boolean>,
+    onOpen: (entry: JournalEntry, projectName: String) -> Unit,
+    onUndo: (JournalEntry) -> Unit,
+    onBulkUndo: () -> Unit,
+) {
+    if (state.rows.isEmpty()) {
+        item(key = "j-empty") {
             EmptyState(
-                title = if (state.loading) "Loading…" else "No entries",
-                hint = "Move/rename/archive/tag actions land here.",
+                title = if (state.loading) "Loading…"
+                    else if (state.isNarrowed) "No matches"
+                    else "No entries",
+                hint = if (state.isNarrowed)
+                    "Nothing matches the current filters. Clear them to see everything."
+                else "Move/rename/archive/tag actions land here.",
             )
-            return@Column
         }
-        val showBulkUndoOnFirstDay = state.isNarrowed && state.invertibleEntries.isNotEmpty()
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg)) {
-            itemsIndexed(
-                items = state.days,
-                key = { _, day -> "g-${day.label}" },
-            ) { idx, day ->
-                DayGroupCard(
-                    label = day.label,
-                    rows = day.rows,
-                    expanded = expanded[day.label] ?: true,
-                    onToggle = { expanded[day.label] = !(expanded[day.label] ?: true) },
-                    onOpen = onOpenWithName,
-                    onUndo = onUndo,
-                    showBulkUndo = showBulkUndoOnFirstDay && idx == 0,
-                    bulkUndoCount = state.invertibleEntries.size,
-                    onBulkUndo = {
-                        vm.dispatch(JournalViewModel.Intent.BulkUndo(state.invertibleEntries))
-                    },
-                )
-            }
-        }
+        return
+    }
+    val showBulkUndoOnFirstDay = state.isNarrowed && state.invertibleEntries.isNotEmpty()
+    val firstDayLabel = state.days.firstOrNull()?.label
+    itemsIndexed(
+        items = state.days,
+        key = { _, day -> "j-g-${day.label}" },
+    ) { _, day ->
+        DayGroupCard(
+            label = day.label,
+            rows = day.rows,
+            expanded = dayExpanded[day.label] ?: true,
+            onToggle = { dayExpanded[day.label] = !(dayExpanded[day.label] ?: true) },
+            onOpen = { entry ->
+                val name = state.rows.firstOrNull { it.entry == entry }?.projectName
+                    ?: "project #${entry.projectId.value}"
+                onOpen(entry, name)
+            },
+            onUndo = onUndo,
+            showBulkUndo = showBulkUndoOnFirstDay && day.label == firstDayLabel,
+            bulkUndoCount = state.invertibleEntries.size,
+            onBulkUndo = onBulkUndo,
+        )
     }
 }
 
