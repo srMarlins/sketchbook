@@ -8,7 +8,9 @@ import com.sketchbook.catalog.JvmScanner
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
+import com.sketchbook.syncio.AlsPatcher
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
@@ -39,6 +41,8 @@ class RepairWorkflowTest {
         val repair = SqlRepairRepository(
             catalog = handle.catalog,
             ioDispatcher = UnconfinedTestDispatcher(),
+            journal = InMemoryJournalRepository(),
+            patcher = AlsPatcher(),
         )
 
         // Initial emission: 1 mac-import finding (mac_paths project), and 2 missing-sample

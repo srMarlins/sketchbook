@@ -19,6 +19,18 @@ interface RepairRepository {
     /** Mark a Mac-import finding as repaired (drops it from subsequent flow emissions). */
     suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit>
 
+    /**
+     * Repair Mac-style absolute paths (e.g. `Macintosh HD:/Users/jay/...`) inside the project's
+     * `.als` by reusing the same patcher pipe as [applyMissingSampleMatch]: each Mac-style path
+     * found inside a `<SampleRef>` is mapped to its POSIX equivalent (everything after the first
+     * `:`). The mac-import finding is acknowledged so it drops out of Needs Attention.
+     *
+     * If the .als has no actual Mac-style paths to rewrite (the catalog flag fires on POSIX-only
+     * `/Users/` prefixes too, so this isn't unusual), the patcher is skipped and the journal
+     * records `mappingCount = 0` / `alsOutcome = "NoChange"`. The finding still acks.
+     */
+    suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit>
+
     /** Drop a missing-sample finding from the queue without changing on-disk state. */
     suspend fun dismissMissingSample(projectId: ProjectId, missingPath: String): Result<Unit>
 
@@ -30,6 +42,22 @@ interface RepairRepository {
      * disk.
      */
     suspend fun applyMissingSampleMatch(
+        projectId: ProjectId,
+        missingPath: String,
+        candidatePath: String,
+    ): Result<Unit>
+
+    /**
+     * Reverse a previous [applyMissingSampleMatch]. PR-L L7's Undo pill calls this to undo a
+     * just-applied match: the on-disk `.als` is restored from the pre-patch sidecar (best-effort
+     * — `NoUndoBytes` is journaled if the sidecar is gone), and the catalog row reverts to
+     * `is_missing=1` so the finding re-surfaces in Needs Attention.
+     *
+     * Implementations must be idempotent: calling restore twice or restoring a row that was
+     * never applied is a no-op on the catalog (the WHERE clause won't match) and only the
+     * journal entry advances.
+     */
+    suspend fun restoreMissingSampleMatch(
         projectId: ProjectId,
         missingPath: String,
         candidatePath: String,

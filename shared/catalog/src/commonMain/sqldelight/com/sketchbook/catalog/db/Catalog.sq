@@ -461,6 +461,15 @@ UPDATE project_samples
 SET sample_path = :new_path, is_missing = 0
 WHERE project_id = :project_id AND sample_path = :old_path;
 
+-- Symmetric reverse of applyMissingSampleMatch — used by PR-W W4's Undo path. Restores the row
+-- to its pre-apply state (sample_path back to the missing path, is_missing=1) so the finding
+-- re-surfaces in Needs Attention. Matches on the *candidate* (post-apply) path because that's
+-- the row's current sample_path; old_path becomes the new (restored) value.
+revertMissingSampleMatch:
+UPDATE project_samples
+SET sample_path = :old_path, is_missing = 1
+WHERE project_id = :project_id AND sample_path = :new_path;
+
 -- journal_entries — persistent audit log of every catalog write. Replaces the in-memory
 -- JournalRepository so the desktop journal viewer survives restart and shares entries with
 -- the MCP subprocess (both processes write into the same on-disk catalog).

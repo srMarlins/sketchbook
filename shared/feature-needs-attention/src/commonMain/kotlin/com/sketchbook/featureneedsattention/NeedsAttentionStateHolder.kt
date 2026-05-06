@@ -50,6 +50,18 @@ class NeedsAttentionStateHolder(
                 val r = repository.acknowledgeMacImport(intent.projectId)
                 emitEffect(r.isSuccess, intent.projectId.value.toString(), "ack")
             }
+            is Intent.RepairMacPaths -> scope.launch {
+                // PR-W W5 — same patcher pipe as ApplyMatch. The repository scans the .als,
+                // builds a mac-path → POSIX mapping, calls the patcher, and acks the finding so
+                // it drops out of Needs Attention regardless of the patch outcome (busy/Failed
+                // is recorded in the journal for a future retry pass).
+                val r = repository.applyMacPathRepair(intent.projectId)
+                if (r.isSuccess) {
+                    _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
+                } else {
+                    _effects.tryEmit(Effect.Failed(intent.projectId.value.toString(), "repair failed"))
+                }
+            }
             is Intent.DismissMissingSample -> scope.launch {
                 val r = repository.dismissMissingSample(intent.projectId, intent.missingPath)
                 emitEffect(r.isSuccess, intent.projectId.value.toString(), "dismiss")
@@ -84,6 +96,7 @@ class NeedsAttentionStateHolder(
 
     sealed interface Intent {
         data class AckMacImport(val projectId: ProjectId) : Intent
+        data class RepairMacPaths(val projectId: ProjectId) : Intent
         data class DismissMissingSample(val projectId: ProjectId, val missingPath: String) : Intent
         data class ApplyMatch(
             val projectId: ProjectId,

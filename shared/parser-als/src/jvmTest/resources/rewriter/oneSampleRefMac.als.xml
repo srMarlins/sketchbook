@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="11" MinorVersion="11.3" Creator="Ableton Live 11.3.21">
+  <LiveSet>
+    <Tracks>
+      <AudioTrack>
+        <DeviceChain>
+          <MainSequencer>
+            <ClipSlotList>
+              <AudioClip>
+                <SampleRef>
+                  <FileRef>
+                    <Name Value="kick.wav"/>
+                    <Path Value="Macintosh HD:/Users/jay/Samples/kick.wav"/>
+                    <RelativePath Value="Samples/kick.wav"/>
+                  </FileRef>
+                </SampleRef>
+              </AudioClip>
+            </ClipSlotList>
+          </MainSequencer>
+        </DeviceChain>
+      </AudioTrack>
+    </Tracks>
+  </LiveSet>
+</Ableton>
