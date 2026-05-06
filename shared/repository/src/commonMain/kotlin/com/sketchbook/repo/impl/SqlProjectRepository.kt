@@ -145,6 +145,11 @@ class SqlProjectRepository(
                     // SUM over zero rows is NULL; coalesce to 0 so the UI sees a clean numeric.
                     synced = (it.synced ?: 0L).toInt(),
                     sampleClean = (it.sample_clean ?: 0L).toInt(),
+                    // PR-CC: plugin presence + stage classification now flow through the same
+                    // aggregate. The fields are nullable on the data class for forward-compat
+                    // with older PRs, but the SQL always emits a count now so we always populate.
+                    pluginInstalled = (it.plugin_installed ?: 0L).toInt(),
+                    stageNotStuck = (it.stage_not_stuck ?: 0L).toInt(),
                 )
             } ?: com.sketchbook.repo.LibraryHealth.EMPTY
         }
