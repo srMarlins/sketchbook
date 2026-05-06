@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.metro)
     alias(libs.plugins.conveyor)
     alias(libs.plugins.dependency.analysis)
+    id("detekt-config")
 }
 
 // Conveyor (and Compose Desktop's nativeDistributions) require a real

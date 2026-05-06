@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.dependency.analysis)
+    id("detekt-config")
 }
 
 kotlin {
@@ -7,10 +9,12 @@ kotlin {
 }
 
 dependencies {
-    testImplementation(kotlin("test"))
+    // Konsist 0.17.3 docs use JUnit 4 directly, but our tests use the
+    // `kotlin.test.Test` / `kotlin.test.Ignore` annotations (which delegate to
+    // JUnit 4 on JVM). Depend on `kotlin-test-junit` directly so
+    // dependency-analysis sees the resolved capability — declaring
+    // `kotlin("test")` (the umbrella alias) is flagged as unused because DA
+    // resolves it to a different artifact than the one source references.
+    testImplementation(kotlin("test-junit"))
     testImplementation(libs.konsist)
 }
-
-// Konsist 0.17.3 examples in the upstream docs use JUnit 4 (`org.junit.Test`).
-// `kotlin("test")` resolves to kotlin-test-junit by default on JVM, which is
-// JUnit 4 — so no `useJUnitPlatform()` here.
