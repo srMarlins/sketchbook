@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:ProposalsViewModelTest.kt:ProposalsViewModelTest.FakeRepo$(status = ProposalStatus.Approved)</ID>
+    <ID>ArgumentListWrapping:ProposalsViewModelTest.kt:ProposalsViewModelTest.FakeRepo$(status = ProposalStatus.Rejected)</ID>
+    <ID>BinaryExpressionWrapping:ProposalsViewModelTest.kt:ProposalsViewModelTest.FakeRepo$it.proposalId == proposalId</ID>
+    <ID>FunctionLiteral:ProposalsViewModelTest.kt:ProposalsViewModelTest.FakeRepo$&lt;anonymous&gt;</ID>
+  </CurrentIssues>
+</SmellBaseline>

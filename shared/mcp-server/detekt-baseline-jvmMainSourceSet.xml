@@ -1,0 +1,12 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>FunctionSignature:StdioLoop.kt:fun runStdio: Unit</ID>
+    <ID>LoopWithTooManyJumpStatements:StdioLoop.kt:while</ID>
+    <ID>MagicNumber:FileProposalsWriter.kt:FileProposalsWriter$16</ID>
+    <ID>MagicNumber:FileProposalsWriter.kt:FileProposalsWriter$8</ID>
+    <ID>NoUnusedImports:FileProposalsWriter.kt:com.sketchbook.mcp.FileProposalsWriter.kt</ID>
+    <ID>ParameterListWrapping:StdioLoop.kt:(server: McpServer, input: java.io.InputStream = System.`in`, output: PrintStream = System.out)</ID>
+  </CurrentIssues>
+</SmellBaseline>

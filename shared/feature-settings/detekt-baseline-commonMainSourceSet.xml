@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:SettingsScreen.kt:(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, +1)))</ID>
+    <ID>ArgumentListWrapping:SettingsScreen.kt:(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, -1)))</ID>
+    <ID>ArgumentListWrapping:SettingsScreen.kt:(SettingsViewModel.Intent.SetCloudBucket(it.takeIf { v -&gt; v.isNotBlank() }))</ID>
+    <ID>ArgumentListWrapping:SettingsScreen.kt:(cache.maxSizeBytes)</ID>
+    <ID>ArgumentListWrapping:SettingsScreen.kt:(cache.maxSizeBytes, +1)</ID>
+    <ID>ArgumentListWrapping:SettingsScreen.kt:(cache.maxSizeBytes, -1)</ID>
+    <ID>ArgumentListWrapping:SettingsScreen.kt:(it.takeIf { v -&gt; v.isNotBlank() })</ID>
+    <ID>ArgumentListWrapping:SettingsScreen.kt:(scaleSize(cache.maxSizeBytes, +1))</ID>
+    <ID>ArgumentListWrapping:SettingsScreen.kt:(scaleSize(cache.maxSizeBytes, -1))</ID>
+    <ID>ClassSignature:SettingsViewModel.kt:SettingsViewModel : ViewModel</ID>
+    <ID>FunctionLiteral:SettingsScreen.kt:&lt;anonymous&gt;</ID>
+    <ID>FunctionNaming:SettingsScreen.kt:@Composable private fun LibraryRootCard</ID>
+    <ID>FunctionNaming:SettingsScreen.kt:@Composable private fun Section</ID>
+    <ID>FunctionNaming:SettingsScreen.kt:@OptIn(ExperimentalLayoutApi::class) @Composable fun SettingsScreen</ID>
+    <ID>LongMethod:SettingsScreen.kt:@OptIn(ExperimentalLayoutApi::class) @Composable fun SettingsScreen</ID>
+    <ID>MagicNumber:SettingsScreen.kt:1024</ID>
+    <ID>MagicNumber:SettingsScreen.kt:3600</ID>
+    <ID>MagicNumber:SettingsScreen.kt:60</ID>
+    <ID>MagicNumber:SettingsScreen.kt:86_400</ID>
+    <ID>MaxLineLength:SettingsScreen.kt:"Pending ${syncState.pending} · Uploading ${syncState.uploading} · Downloading ${syncState.downloading}"</ID>
+    <ID>MaxLineLength:SettingsScreen.kt:"Sketchbook backs snapshots up to a Google Cloud Storage bucket so projects round-trip across machines. Drop in a service-account JSON with read/write on the bucket, then enter the bucket name below."</ID>
+    <ID>ParameterNaming:SettingsScreen.kt:onAddRootClicked: () -&gt; Unit</ID>
+    <ID>ParameterNaming:SettingsScreen.kt:onUploadCredentialClicked: () -&gt; Unit</ID>
+  </CurrentIssues>
+</SmellBaseline>

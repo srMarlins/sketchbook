@@ -1,0 +1,46 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(ProjectListViewModel.Intent.OpenDetail(id))</ID>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(ProjectListViewModel.Intent.ZoomShelf(shelf))</ID>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(ShelfId.AlmostDone.id, "Almost done", buckets.almostDone.size, colors.pinOrange, colors.tintSage)</ID>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(ShelfId.Archived.id, "Archived", buckets.archived.size, colors.inkMuted, colors.surfaceCard)</ID>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(ShelfId.CurrentlyWorking.id, "Currently working on", buckets.currentlyWorking.size, colors.pinBlue, colors.tintBlue)</ID>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(ShelfId.ForgottenGems.id, "Forgotten gems", buckets.forgottenGems.size, colors.accentWarning, colors.tintCream)</ID>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(ShelfId.HasPotential.id, "Has potential", buckets.hasPotential.size, colors.pinPurple, colors.tintRose)</ID>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(ShelfId.Untriaged.id, "Untriaged", buckets.untriaged.size, colors.inkMuted, colors.surfaceCard)</ID>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(id)</ID>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(shelf)</ID>
+    <ID>ArgumentListWrapping:ProjectListScreen.kt:(vm)</ID>
+    <ID>BinaryExpressionWrapping:ProjectListScreen.kt:missingSampleCount &gt; 0</ID>
+    <ID>ClassSignature:ProjectListViewModel.kt:ProjectListViewModel : ViewModel</ID>
+    <ID>FunctionLiteral:ProjectListScreen.kt:&lt;anonymous&gt;</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable fun ProjectListScreen</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun BackToOverview</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun BoxScope.DetailPanel</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun FilterChip</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun FilterChipsRow</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun HomeDashboard</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun KeyFilterPopup</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun KeyRow</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun SearchOverlayPanel</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun Shelf</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun SongStripRow</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun TempoFilterPopup</ID>
+    <ID>FunctionSignature:ProjectListScreen.kt:@Composable private fun KeyFilterPopup</ID>
+    <ID>LongMethod:ProjectListScreen.kt:@Composable fun ProjectListScreen</ID>
+    <ID>MagicNumber:ProjectListScreen.kt:30</ID>
+    <ID>MagicNumber:ProjectListScreen.kt:365</ID>
+    <ID>MatchingDeclarationName:ProjectGroups.kt:ProjectGroup</ID>
+    <ID>MaxLineLength:ProjectListScreen.kt:HighlightChip(ShelfId.CurrentlyWorking.id, "Currently working on", buckets.currentlyWorking.size, colors.pinBlue, colors.tintBlue)</ID>
+    <ID>MaxLineLength:ProjectListScreen.kt:HighlightChip(ShelfId.ForgottenGems.id, "Forgotten gems", buckets.forgottenGems.size, colors.accentWarning, colors.tintCream)</ID>
+    <ID>MaxLineLength:ProjectListScreen.kt:hint = "Open Settings → Library roots and add the folder where you keep your Ableton projects. Sketchbook scans on launch and updates the catalog as files change."</ID>
+    <ID>MaxLineLength:ProjectListScreen.kt:subtitle = "Active sketches — blue color tag or touched in the last 6 months. ${buckets.currentlyWorking.size} total."</ID>
+    <ID>ParameterListWrapping:ProjectListScreen.kt:(ProjectId)</ID>
+    <ID>ParameterListWrapping:ProjectListScreen.kt:(ShelfId?)</ID>
+    <ID>PropertyWrapping:ProjectListScreen.kt:val onOpenDetail: (ProjectId) -&gt; Unit = remember(vm) { { id -&gt; dispatch(ProjectListViewModel.Intent.OpenDetail(id)) } }</ID>
+    <ID>PropertyWrapping:ProjectListScreen.kt:val onZoomShelf: (ShelfId?) -&gt; Unit = remember(vm) { { shelf -&gt; dispatch(ProjectListViewModel.Intent.ZoomShelf(shelf)) } }</ID>
+    <ID>Wrapping:ProjectListScreen.kt:{ shelf -&gt; dispatch(ProjectListViewModel.Intent.ZoomShelf(shelf)) }</ID>
+  </CurrentIssues>
+</SmellBaseline>

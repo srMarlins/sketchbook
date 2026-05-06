@@ -1,0 +1,39 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:SqlJournalRepository.kt:SqlJournalRepository$(limit.toLong())</ID>
+    <ID>ArgumentListWrapping:SqlProjectRepository.kt:SqlProjectRepository$(id.value)</ID>
+    <ID>ArgumentListWrapping:SqlProposalsRepository.kt:SqlProposalsRepository$(ioDispatcher)</ID>
+    <ID>ArgumentListWrapping:SqlSnapshotRepository.kt:SqlSnapshotRepository$(uuid.value)</ID>
+    <ID>ClassSignature:JournalEntry.kt:ActionRecord$Archive : ActionRecord</ID>
+    <ID>ClassSignature:JournalEntry.kt:ActionRecord$ForceTakeLock : ActionRecord</ID>
+    <ID>ClassSignature:JournalEntry.kt:ActionRecord$Move : ActionRecord</ID>
+    <ID>ClassSignature:JournalEntry.kt:ActionRecord$PushConflict : ActionRecord</ID>
+    <ID>ClassSignature:JournalEntry.kt:ActionRecord$Rename : ActionRecord</ID>
+    <ID>ClassSignature:JournalEntry.kt:ActionRecord$SetTags : ActionRecord</ID>
+    <ID>ClassSignature:ProjectRepository.kt:SampleEntry</ID>
+    <ID>ClassSignature:ProposalsRepository.kt:ProposalAction</ID>
+    <ID>ClassSignature:RepairRepository.kt:SampleCandidate</ID>
+    <ID>ClassSignature:SettingsRepository.kt:LibraryRoot$External : LibraryRoot</ID>
+    <ID>ClassSignature:SnapshotRepository.kt:MaterializationProgress$Failed : MaterializationProgress</ID>
+    <ID>FunctionSignature:Mappers.kt:internal fun Projects.toDomain: ProjectRow</ID>
+    <ID>FunctionSignature:Mappers.kt:internal fun SelectAllProjectsWithMissing.toDomain: ProjectRow</ID>
+    <ID>FunctionSignature:Mappers.kt:internal fun SelectArchivedProjectsWithMissing.toDomain: ProjectRow</ID>
+    <ID>FunctionSignature:Mappers.kt:internal fun SelectProjectByIdWithMissing.toDomain: ProjectRow</ID>
+    <ID>FunctionSignature:RepairRepository.kt:RepairRepository$suspend fun applyMissingSampleMatch: Result&lt;Unit&gt;</ID>
+    <ID>FunctionSignature:SnapshotRepository.kt:SnapshotRepository$fun materializeAtWithProgress: Flow&lt;MaterializationProgress&gt;</ID>
+    <ID>FunctionSignature:SqlJournalRepository.kt:SqlJournalRepository$override fun observeRecent: Flow&lt;List&lt;JournalEntry&gt;&gt;</ID>
+    <ID>FunctionSignature:SqlProjectRepository.kt:SqlProjectRepository$override fun observePlugins: Flow&lt;List&lt;com.sketchbook.core.PluginRef&gt;&gt;</ID>
+    <ID>FunctionSignature:SqlProjectRepository.kt:SqlProjectRepository$override fun observeSamples: Flow&lt;List&lt;com.sketchbook.repo.SampleEntry&gt;&gt;</ID>
+    <ID>FunctionSignature:SqlProposalsRepository.kt:SqlProposalsRepository$private suspend fun recordDecision: Result&lt;Proposal&gt;</ID>
+    <ID>FunctionSignature:SqlRepairRepository.kt:SqlRepairRepository$override suspend fun dismissMissingSample: Result&lt;Unit&gt;</ID>
+    <ID>FunctionSignature:SqlSnapshotRepository.kt:SqlSnapshotRepository$override fun observeHistory: Flow&lt;List&lt;Snapshot&gt;&gt;</ID>
+    <ID>FunctionSignature:SqlSnapshotRepository.kt:SqlSnapshotRepository$override suspend fun recordSnapshot: Result&lt;Unit&gt;</ID>
+    <ID>FunctionSignature:SqlSnapshotRepository.kt:SqlSnapshotRepository$override suspend fun setSnapshotLabel: Result&lt;JournalEntry&gt;</ID>
+    <ID>MaxLineLength:SqlProjectRepository.kt:SqlProjectRepository$override</ID>
+    <ID>NestedBlockDepth:SqlRepairRepository.kt:private fun extractMacStyleSamplePaths: List&lt;String&gt;</ID>
+    <ID>ParameterListWrapping:SnapshotRepository.kt:MaterializationProgress.Failed$(override val uuid: ProjectUuid, override val rev: SnapshotRev, val reason: String)</ID>
+    <ID>ParameterListWrapping:SnapshotRepository.kt:SnapshotRepository$(uuid: ProjectUuid, rev: SnapshotRev)</ID>
+  </CurrentIssues>
+</SmellBaseline>

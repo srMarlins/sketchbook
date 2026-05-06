@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ClassSignature:FirstRunMigration.kt:ProjectMigrationOutcome$SidecarConflictResolved : ProjectMigrationOutcome</ID>
+    <ID>ClassSignature:ForceSnapshotUseCase.kt:ForceSnapshotUseCase</ID>
+    <ID>ClassSignature:SnapshotProgress.kt:SnapshotProgress$Hashing : SnapshotProgress</ID>
+    <ID>ClassSignature:SnapshotProgress.kt:SnapshotProgress$LeaseHeld : SnapshotProgress</ID>
+    <ID>LongMethod:SnapshotPipeline.kt:SnapshotPipeline$fun run: Flow&lt;SnapshotProgress&gt;</ID>
+    <ID>LoopWithTooManyJumpStatements:PullPoller.kt:PullPoller$for</ID>
+    <ID>NoUnusedImports:SnapshotPipeline.kt:com.sketchbook.sync.SnapshotPipeline.kt</ID>
+    <ID>ReturnCount:CoalesceJob.kt:CoalesceJob$fun evaluate: Promotion?</ID>
+  </CurrentIssues>
+</SmellBaseline>

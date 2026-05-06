@@ -11,4 +11,8 @@ fun version(name: String): String = libs.findVersion(name).orElseThrow { Illegal
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:${version("kotlin")}")
     implementation("org.jetbrains.kotlin:kotlin-power-assert:${version("kotlin")}")
+    // detekt 2.x publishes its Gradle plugin under the `dev.detekt` group; the
+    // jar is served from the Gradle Plugin Portal (not Maven Central) for the
+    // 2.0.0-alpha line.
+    implementation("dev.detekt:detekt-gradle-plugin:${version("detekt")}")
 }

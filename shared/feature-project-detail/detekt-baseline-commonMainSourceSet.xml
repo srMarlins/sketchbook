@@ -1,0 +1,21 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ClassSignature:ProjectDetailViewModel.kt:ProjectDetailViewModel : ViewModel</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable fun ProjectDetailScreen</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun Header</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun HistoryTab</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun LockSlot</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun OverviewTab</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun PluginsTab</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun SamplesTab</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun Tabs</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun TracksTab</ID>
+    <ID>FunctionSignature:ProjectDetailScreen.kt:@Composable fun ProjectDetailScreen</ID>
+    <ID>NoUnusedImports:ProjectDetailViewModel.kt:com.sketchbook.featuredetail.ProjectDetailViewModel.kt</ID>
+    <ID>ReturnCount:ProjectDetailViewModel.kt:ProjectDetailViewModel$fun dispatch</ID>
+    <ID>ViewModelForwarding:ProjectDetailScreen.kt:Header(state, vm)</ID>
+    <ID>ViewModelForwarding:ProjectDetailScreen.kt:LockSlot(state.lockStatus, vm)</ID>
+  </CurrentIssues>
+</SmellBaseline>

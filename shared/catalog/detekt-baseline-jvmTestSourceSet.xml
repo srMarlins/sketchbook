@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:JvmScannerTest.kt:JvmScannerTest$(catalog, CatalogFts(handle.driver), ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)</ID>
+    <ID>ArgumentListWrapping:JvmScannerTest.kt:JvmScannerTest$(handle.driver)</ID>
+    <ID>FunctionSignature:LibraryHealthQueryTest.kt:LibraryHealthQueryTest$private fun seedProject: Long</ID>
+    <ID>NoUnusedImports:JvmScannerTest.kt:com.sketchbook.catalog.JvmScannerTest.kt</ID>
+    <ID>PropertyWrapping:JvmScannerTest.kt:JvmScannerTest$val scanner = JvmScanner(catalog, CatalogFts(handle.driver), ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)</ID>
+  </CurrentIssues>
+</SmellBaseline>

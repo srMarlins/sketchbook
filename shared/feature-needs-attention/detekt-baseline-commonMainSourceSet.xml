@@ -1,0 +1,20 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:NeedsAttentionScreen.kt:(AppTheme.spacing.sm)</ID>
+    <ID>ArgumentListWrapping:NeedsAttentionScreen.kt:(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm))</ID>
+    <ID>ClassSignature:NeedsAttentionViewModel.kt:NeedsAttentionViewModel : ViewModel</ID>
+    <ID>ClassSignature:NeedsAttentionViewModel.kt:NeedsAttentionViewModel.Intent$ApplyMatch : Intent</ID>
+    <ID>FunctionNaming:NeedsAttentionScreen.kt:@Composable fun NeedsAttentionScreen</ID>
+    <ID>FunctionNaming:NeedsAttentionScreen.kt:@Composable private fun CandidatePickRow</ID>
+    <ID>FunctionNaming:NeedsAttentionScreen.kt:@Composable private fun MacImportCard</ID>
+    <ID>FunctionNaming:NeedsAttentionScreen.kt:@Composable private fun MissingSampleCard</ID>
+    <ID>FunctionSignature:NeedsAttentionScreen.kt:@Composable fun NeedsAttentionScreen</ID>
+    <ID>FunctionSignature:NeedsAttentionScreen.kt:@Composable private fun CandidatePickRow</ID>
+    <ID>MaxLineLength:NeedsAttentionScreen.kt:val suffix = if (state.missingSamplesTruncated) " (${state.missingSamples.size} of ${state.missingSamplesTotal})" else " (${state.missingSamplesTotal})"</ID>
+    <ID>ViewModelForwarding:NeedsAttentionScreen.kt:CandidatePickRow(f, c, vm)</ID>
+    <ID>ViewModelForwarding:NeedsAttentionScreen.kt:MacImportCard(f, vm)</ID>
+    <ID>ViewModelForwarding:NeedsAttentionScreen.kt:MissingSampleCard(f, vm)</ID>
+  </CurrentIssues>
+</SmellBaseline>

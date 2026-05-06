@@ -1,0 +1,18 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:AlsParserTest.kt:AlsParserTest$("""&lt;AudioTrack&gt;&lt;Name&gt;&lt;EffectiveName Value="t$i"/&gt;&lt;/Name&gt;&lt;DeviceChain&gt;&lt;Devices&gt;&lt;Eq8/&gt;&lt;/Devices&gt;&lt;/DeviceChain&gt;""")</ID>
+    <ID>ArgumentListWrapping:AlsParserTest.kt:AlsParserTest$("""&lt;MainTrack&gt;&lt;DeviceChain&gt;&lt;Mixer&gt;&lt;Tempo&gt;&lt;Manual Value="120"/&gt;&lt;/Tempo&gt;&lt;/Mixer&gt;&lt;/DeviceChain&gt;&lt;/MainTrack&gt;""")</ID>
+    <ID>ArgumentListWrapping:AlsRewriterTest.kt:AlsRewriterTest$(ByteArrayInputStream(gzipped))</ID>
+    <ID>ArgumentListWrapping:AlsRewriterTest.kt:AlsRewriterTest$(Charsets.UTF_8)</ID>
+    <ID>ArgumentListWrapping:AlsRewriterTest.kt:AlsRewriterTest$(gzipped)</ID>
+    <ID>ExplicitGarbageCollectionCall:AlsParserTest.kt:AlsParserTest$gc()</ID>
+    <ID>FunctionLiteral:AlsRewriterTest.kt:AlsRewriterTest$&lt;anonymous&gt;</ID>
+    <ID>FunctionSignature:AlsRewriterTest.kt:AlsRewriterTest$private fun ungzipToString: String</ID>
+    <ID>MaxLineLength:AlsParserTest.kt:AlsParserTest$ &lt;Ableton&gt;&lt;LiveSet&gt;&lt;MainTrack&gt;&lt;DeviceChain&gt;&lt;Mixer&gt;&lt;TimeSignature&gt;&lt;Manual Value=</ID>
+    <ID>MaxLineLength:AlsRewriterTest.kt:AlsRewriterTest$private fun ungzipToString: String</ID>
+    <ID>NoUnusedImports:AlsParserTest.kt:com.sketchbook.als.AlsParserTest.kt</ID>
+    <ID>Wrapping:AlsRewriterTest.kt:AlsRewriterTest$it.readBytes().toString(Charsets.UTF_8)</ID>
+  </CurrentIssues>
+</SmellBaseline>

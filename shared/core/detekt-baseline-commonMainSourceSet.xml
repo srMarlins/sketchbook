@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>BinaryExpressionWrapping:Ids.kt:this == '_'</ID>
+    <ID>BinaryExpressionWrapping:Ids.kt:this in '0'..'9' || this in 'a'..'z' || this in 'A'..'Z' || this == '-' || this == '_'</ID>
+    <ID>ClassSignature:Errors.kt:SketchbookError : Exception</ID>
+    <ID>ClassSignature:Errors.kt:SketchbookError$RemoteFailure : SketchbookError</ID>
+    <ID>ClassSignature:Project.kt:PluginRef</ID>
+    <ID>ClassSignature:Project.kt:Project</ID>
+    <ID>Filename:Errors.kt:com.sketchbook.core.Errors.kt</ID>
+    <ID>FunctionSignature:Ids.kt:private fun Char.isSafeIdChar: Boolean</ID>
+    <ID>MagicNumber:EffortScore.kt:EffortScore$10_000.0</ID>
+    <ID>MatchingDeclarationName:Errors.kt:SketchbookError : Exception</ID>
+  </CurrentIssues>
+</SmellBaseline>

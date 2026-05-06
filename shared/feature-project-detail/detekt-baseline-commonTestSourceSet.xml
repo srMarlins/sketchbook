@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeProjects$("2026-05-05T12:00:00Z")</ID>
+    <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeProjects$(1)</ID>
+    <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeProjects$(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.Archive(false, true))</ID>
+    <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeProjects$(false, true)</ID>
+    <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$("2026-05-05T12:00:00Z")</ID>
+    <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$(1)</ID>
+    <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto"))</ID>
+    <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$(JournalEntry(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto")))</ID>
+    <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$(Unit)</ID>
+    <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$(rev.value, null, label, "auto")</ID>
+    <ID>FunctionSignature:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeProjects$private fun stub</ID>
+    <ID>FunctionSignature:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$override suspend fun recordSnapshot: Result&lt;Unit&gt;</ID>
+    <ID>FunctionSignature:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$override suspend fun setSnapshotLabel: Result&lt;JournalEntry&gt;</ID>
+    <ID>MaxLineLength:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$override suspend fun recordSnapshot: Result&lt;Unit&gt;</ID>
+    <ID>MaxLineLength:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$override suspend fun setSnapshotLabel: Result&lt;JournalEntry&gt;</ID>
+    <ID>NoUnusedImports:ProjectDetailViewModelTest.kt:com.sketchbook.featuredetail.ProjectDetailViewModelTest.kt</ID>
+    <ID>ParameterListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$(snapshot: Snapshot, manifestPath: String, manifestHash: String)</ID>
+    <ID>ParameterListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$(uuid: ProjectUuid, rev: SnapshotRev, label: String?)</ID>
+  </CurrentIssues>
+</SmellBaseline>

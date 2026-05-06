@@ -1,0 +1,18 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>BinaryExpressionWrapping:AlsRewriter.kt:AlsRewriter$it.first == "Value"</ID>
+    <ID>ClassSignature:AlsParser.kt:AlsParser$PendingPlugin</ID>
+    <ID>CyclomaticComplexMethod:AlsParser.kt:AlsParser.Driver$private fun handleStart</ID>
+    <ID>CyclomaticComplexMethod:AlsRewriter.kt:AlsRewriter$private fun applyEdit: List&lt;BufferedEvent&gt;</ID>
+    <ID>CyclomaticComplexMethod:AlsRewriter.kt:AlsRewriter$private fun identityWithSampleRefEdits</ID>
+    <ID>FunctionLiteral:AlsRewriter.kt:AlsRewriter$&lt;anonymous&gt;</ID>
+    <ID>LongMethod:AlsParser.kt:AlsParser.Driver$private fun handleStart</ID>
+    <ID>LoopWithTooManyJumpStatements:AlsRewriter.kt:AlsRewriter$while</ID>
+    <ID>MagicNumber:AlsParser.kt:AlsParser.Driver$3</ID>
+    <ID>NestedBlockDepth:AlsParser.kt:AlsParser.Driver$private fun handleStart</ID>
+    <ID>NestedBlockDepth:AlsRewriter.kt:AlsRewriter$private fun hasMatchingSampleRef: Boolean</ID>
+    <ID>NestedBlockDepth:AlsRewriter.kt:AlsRewriter$private fun identityWithSampleRefEdits</ID>
+  </CurrentIssues>
+</SmellBaseline>

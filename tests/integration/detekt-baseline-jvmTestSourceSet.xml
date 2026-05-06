@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ArgumentListWrapping:FakeCloudBackend.kt:FakeCloudBackend$(8, '0')</ID>
+    <ID>BinaryExpressionWrapping:FakeCloudBackend.kt:FakeCloudBackend$manifests[uuid]?.lastOrNull()?.ref?.generation ?: Generation.ZERO</ID>
+    <ID>ClassSignature:FakeWorkingTree.kt:FakeWorkingTree : WorkingTree</ID>
+    <ID>FunctionSignature:FakeCloudBackend.kt:FakeCloudBackend$fun headGenerationFor: Generation</ID>
+  </CurrentIssues>
+</SmellBaseline>

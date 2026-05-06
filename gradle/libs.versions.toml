@@ -112,7 +112,10 @@ kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 
 # Dev tooling — detekt rule packs
-detekt-formatting = { module = "io.gitlab.arturbosch.detekt:detekt-formatting", version.ref = "detekt" }
+# detekt 2.x renamed the formatting ruleset and moved the group from
+# `io.gitlab.arturbosch.detekt` to `dev.detekt`; the ktlint-wrapper artifact
+# replaces the old `detekt-formatting`.
+detekt-formatting = { module = "dev.detekt:detekt-rules-ktlint-wrapper", version.ref = "detekt" }
 compose-lints-detekt = { module = "io.nlopez.compose.rules:detekt", version.ref = "compose-lints" }
 
 # Dev tooling — Konsist (test dependency, not a plugin)
@@ -131,5 +134,5 @@ conveyor = { id = "dev.hydraulic.conveyor", version.ref = "conveyor" }
 
 # Dev tooling
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
-detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+detekt = { id = "dev.detekt", version.ref = "detekt" }
 dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependency-analysis" }
