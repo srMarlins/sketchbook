@@ -19,7 +19,7 @@ import com.sketchbook.repo.RepairRepository
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.SyncQueue
-import com.sketchbook.repo.impl.InMemoryJournalRepository
+import com.sketchbook.repo.impl.SqlJournalRepository
 import com.sketchbook.repo.impl.SqlProjectRepository
 import com.sketchbook.repo.impl.SqlProposalsRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
@@ -61,11 +61,9 @@ import java.util.prefs.Preferences
  * If a future binding is genuinely stateless (a pure mapper, a per-call factory) it should be
  * left unscoped so callers don't pin live references unnecessarily.
  *
- * **Catalog (SQLite).** Project / Snapshot / Proposals / Repair are SQLDelight-backed; the
- * DB lives at `~/.local/share/sketchbook/catalog.db` (Linux/Mac) or
- * `%APPDATA%\Sketchbook\catalog.db` (Windows). One handle per app instance. Lock + Settings
- * remain in-memory: locks belong to the sync engine (PR-22) and settings still ride on
- * `java.util.prefs.Preferences` until the keychain rotation in v1.1.
+ * **Catalog (SQLite).** Project / Snapshot / Proposals / Repair / Journal are SQLDelight-backed;
+ * the DB lives at `~/.local/share/sketchbook/catalog.db` (Linux/Mac) or
+ * `%APPDATA%\Sketchbook\catalog.db` (Windows). One handle per app instance.
  */
 @DependencyGraph(scope = AppScope::class)
 interface DesktopAppGraph {
@@ -114,7 +112,8 @@ interface DesktopAppGraph {
     fun provideSyncStateStore(catalog: Catalog): SyncStateStore = SyncStateStore(catalog)
 
     @Provides @SingleIn(AppScope::class)
-    fun provideJournalRepository(): JournalRepository = InMemoryJournalRepository()
+    fun provideJournalRepository(catalog: Catalog): JournalRepository =
+        SqlJournalRepository(catalog = catalog, ioDispatcher = Dispatchers.IO)
 
     @Provides @SingleIn(AppScope::class)
     fun provideProjectRepository(
