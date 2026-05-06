@@ -1,0 +1,8 @@
+-- v4 → v5: index `projects(key)` to back the chip filter on Browse. The `key` column itself
+-- has been declared on the projects table since v0.1, but never populated until PR-X Task X2
+-- bound `:key` in `insertOrReplaceProject`. Indexing it now keeps the chip-filter SELECTs cheap
+-- as the catalog grows. The accompanying defensive UPDATE collapses any accidental empty-string
+-- writes (older code paths) into NULL so the chip filter doesn't spawn a phantom "" bucket.
+CREATE INDEX IF NOT EXISTS idx_projects_key ON projects(key);
+
+UPDATE projects SET key = NULL WHERE key = '';

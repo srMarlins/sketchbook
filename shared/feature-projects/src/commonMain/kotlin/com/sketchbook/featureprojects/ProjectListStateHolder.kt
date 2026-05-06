@@ -44,6 +44,8 @@ class ProjectListStateHolder(
     private val zoomShelf = MutableStateFlow<ShelfId?>(null)
     private val openDetailId = MutableStateFlow<ProjectId?>(null)
     private val searchSelectedIndex = MutableStateFlow(0)
+    private val tempoRange = MutableStateFlow<ClosedFloatingPointRange<Double>?>(null)
+    private val keyFilter = MutableStateFlow<String?>(null)
 
     private val _effects = MutableSharedFlow<Effect>(
         replay = 0,
@@ -55,27 +57,41 @@ class ProjectListStateHolder(
     // Rows track the query — repository's `observeProjects` does FTS5 narrowing for us.
     private val rowsFlow: Flow<List<ProjectRow>> = query.flatMapLatest { repository.observeProjects(it) }
     private val archivedRowsFlow: Flow<List<ProjectRow>> = repository.observeArchivedProjects()
+    private val distinctKeysFlow: Flow<List<String>> = repository.observeDistinctKeys()
 
     val state: StateFlow<State> = combine(
-        query,
-        rowsFlow,
-        archivedRowsFlow,
-        gemsShuffleSeed,
-        zoomShelf,
-        openDetailId,
-        searchSelectedIndex,
+        listOf(
+            query,
+            rowsFlow,
+            archivedRowsFlow,
+            gemsShuffleSeed,
+            zoomShelf,
+            openDetailId,
+            searchSelectedIndex,
+            tempoRange,
+            keyFilter,
+            distinctKeysFlow,
+        ),
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val q = values[0] as String
         @Suppress("UNCHECKED_CAST")
-        val rows = values[1] as List<ProjectRow>
+        val rawRows = values[1] as List<ProjectRow>
         @Suppress("UNCHECKED_CAST")
         val archivedRows = values[2] as List<ProjectRow>
         val seed = values[3] as Int
         val zoom = values[4] as ShelfId?
         val openId = values[5] as ProjectId?
         val selectedIdx = values[6] as Int
+        @Suppress("UNCHECKED_CAST")
+        val tempo = values[7] as ClosedFloatingPointRange<Double>?
+        val key = values[8] as String?
+        @Suppress("UNCHECKED_CAST")
+        val distinctKeys = values[9] as List<String>
 
+        // Filter happens here, before grouping/bucketing — so the chip selection narrows the
+        // visible row set on every shelf. The 1,628-row library does this in microseconds.
+        val rows = applyFilters(rawRows, tempo, key)
         val groups = deriveProjectGroups(rows)
         val archivedGroups = deriveProjectGroups(archivedRows)
         val buckets = bucketize(groups, archivedGroups)
@@ -99,9 +115,25 @@ class ProjectListStateHolder(
             searchSelectedIndex = clampedIdx,
             zoomShelf = zoom,
             openDetailId = openId,
+            tempoRange = tempo,
+            keyFilter = key,
+            distinctKeys = distinctKeys,
             loading = false,
         )
     }.stateIn(scope, SharingStarted.Eagerly, State(loading = true))
+
+    private fun applyFilters(
+        rows: List<ProjectRow>,
+        tempoRange: ClosedFloatingPointRange<Double>?,
+        keyFilter: String?,
+    ): List<ProjectRow> {
+        if (tempoRange == null && keyFilter == null) return rows
+        return rows.filter { row ->
+            val tempo = row.tempo
+            (tempoRange == null || (tempo != null && tempo in tempoRange)) &&
+                (keyFilter == null || row.key == keyFilter)
+        }
+    }
 
     fun dispatch(intent: Intent) {
         when (intent) {
@@ -132,6 +164,12 @@ class ProjectListStateHolder(
                     openDetailId.update { group.representative.id }
                 }
             }
+            is Intent.SetTempoRange -> tempoRange.update { intent.range }
+            is Intent.SetKeyFilter -> keyFilter.update { intent.key }
+            is Intent.ClearFilters -> {
+                tempoRange.update { null }
+                keyFilter.update { null }
+            }
         }
     }
 
@@ -147,6 +185,13 @@ class ProjectListStateHolder(
         val searchSelectedIndex: Int = 0,
         val zoomShelf: ShelfId? = null,
         val openDetailId: ProjectId? = null,
+        /** Active tempo (BPM) filter range; null = "Tempo: any". Filter is applied to `rows`
+         *  (and downstream groups/buckets) inside the combiner. */
+        val tempoRange: ClosedFloatingPointRange<Double>? = null,
+        /** Active key filter (e.g. "F# Minor"); null = "Key: any". */
+        val keyFilter: String? = null,
+        /** Sorted, distinct, non-null keys present in the catalog. Powers the Key chip's popup. */
+        val distinctKeys: List<String> = emptyList(),
         val loading: Boolean = true,
     )
 
@@ -170,6 +215,12 @@ class ProjectListStateHolder(
         data object NavigateSearchPrev : Intent
         /** Open the detail panel for the currently-highlighted search result. */
         data object OpenSelectedSearch : Intent
+        /** Set the tempo range filter (`null` clears it). Applies to the row set before bucketing. */
+        data class SetTempoRange(val range: ClosedFloatingPointRange<Double>?) : Intent
+        /** Set the key filter (e.g. "F# Minor"; `null` clears it). */
+        data class SetKeyFilter(val key: String?) : Intent
+        /** Clear both tempo and key filters in one shot. */
+        data object ClearFilters : Intent
     }
 
     sealed interface Effect {

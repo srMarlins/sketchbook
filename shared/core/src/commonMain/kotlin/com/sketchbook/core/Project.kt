@@ -27,6 +27,9 @@ data class ProjectRow(
      *  signal for the effort score until the streaming parser lands. */
     val fileSizeBytes: Long = 0L,
     val archived: Boolean = false,
+    /** Project root key + scale (e.g. "D Minor", "F# Major"); null when the .als has no
+     *  ScaleInformation block or the parser hasn't run. Source: [ProjectMetadata.keySignature]. */
+    val key: String? = null,
 )
 
 enum class ParseStatus { Pending, Ok, Failed }
@@ -55,6 +58,11 @@ data class ProjectMetadata(
     val lastSavedLiveVersion: String?,
     /** Count of `FileRef/Path` values starting with a Mac-only prefix (`/Volumes/`, `/Users/`, etc.). */
     val macPathsCount: Int,
+    /**
+     * Project root key + scale, derived from `<ScaleInformation>` (e.g. "D Minor", "F# Major").
+     * `null` when the project has no key set or only a partial `ScaleInformation` block.
+     */
+    val keySignature: String? = null,
 ) {
     val totalTrackCount: Int get() = audioTrackCount + midiTrackCount + returnTrackCount + groupTrackCount
 }

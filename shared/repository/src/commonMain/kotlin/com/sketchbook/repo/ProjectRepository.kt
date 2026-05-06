@@ -31,6 +31,13 @@ interface ProjectRepository {
     /** Live single-project view by local PK. Emits new state whenever the row mutates. */
     fun observeProject(id: ProjectId): Flow<ProjectRow?>
 
+    /**
+     * Distinct, non-null `key` values across the catalog, sorted alphabetically. Drives the
+     * Browse toolbar's Key filter chip popup — only surfaces keys actually present in the
+     * user's library. Empty list when no parsed projects yet have a key.
+     */
+    fun observeDistinctKeys(): Flow<List<String>> = kotlinx.coroutines.flow.flowOf(emptyList())
+
     /** Plugins extracted by the parser for [id]. Empty when the project hasn't parsed yet. */
     fun observePlugins(id: ProjectId): Flow<List<PluginRef>> = kotlinx.coroutines.flow.flowOf(emptyList())
 

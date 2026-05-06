@@ -113,6 +113,8 @@ object AlsParser {
         private var tempo: Double? = null
         private var tsValue: Int? = null
         private var liveVersion: String? = null
+        private var rootNote: Int? = null
+        private var scaleName: String? = null
         private var audio = 0
         private var midi = 0
         private var returnTracks = 0
@@ -145,6 +147,7 @@ object AlsParser {
                 sampleRefs = samples.toList(),
                 lastSavedLiveVersion = liveVersion,
                 macPathsCount = macPaths,
+                keySignature = deriveKeySignature(rootNote, scaleName),
             )
         }
 
@@ -177,6 +180,18 @@ object AlsParser {
                     when (parentTag()) {
                         "Tempo" -> if (tempo == null) tempo = v.toDoubleOrNull()
                         "TimeSignature" -> if (tsValue == null) tsValue = v.toIntOrNull()
+                    }
+                }
+            }
+
+            // Project root key: <ScaleInformation><RootNote Value="N"/><Name Value="Major|Minor|..."/></ScaleInformation>.
+            if (parentTag() == "ScaleInformation") {
+                when (tag) {
+                    "RootNote" -> if (rootNote == null) {
+                        rootNote = start.attr("Value")?.toIntOrNull()
+                    }
+                    "Name" -> if (scaleName == null) {
+                        scaleName = start.attr("Value")
                     }
                 }
             }
@@ -313,6 +328,16 @@ object AlsParser {
         PluginFormat.Au -> "Unknown AU"
         PluginFormat.AbletonNative -> "Unknown Native"
         PluginFormat.Unknown -> "Unknown"
+    }
+
+    /** Live root-note encoding: 0=C ascending chromatic to 11=B. Modulo canonicalises out-of-range values. */
+    private val pitchClasses = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+
+    private fun deriveKeySignature(rootNote: Int?, scaleName: String?): String? {
+        if (rootNote == null || scaleName.isNullOrBlank()) return null
+        val pitch = pitchClasses[((rootNote % 12) + 12) % 12]
+        val name = scaleName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        return "$pitch $name"
     }
 
     private fun decodeTimeSignature(encoded: Int?): Pair<Int, Int>? {
