@@ -83,4 +83,5 @@ private fun actionType(action: ActionRecord): String = when (action) {
     is ActionRecord.ForceTakeLock -> "force-take lock"
     is ActionRecord.PushConflict -> "push conflict"
     is ActionRecord.MissingSampleMapped -> "sample remap"
+    is ActionRecord.MissingSampleUnmapped -> "sample remap undo"
 }

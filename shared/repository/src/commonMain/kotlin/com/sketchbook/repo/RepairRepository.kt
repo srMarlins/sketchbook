@@ -34,6 +34,22 @@ interface RepairRepository {
         missingPath: String,
         candidatePath: String,
     ): Result<Unit>
+
+    /**
+     * Reverse a previous [applyMissingSampleMatch]. PR-L L7's Undo pill calls this to undo a
+     * just-applied match: the on-disk `.als` is restored from the pre-patch sidecar (best-effort
+     * — `NoUndoBytes` is journaled if the sidecar is gone), and the catalog row reverts to
+     * `is_missing=1` so the finding re-surfaces in Needs Attention.
+     *
+     * Implementations must be idempotent: calling restore twice or restoring a row that was
+     * never applied is a no-op on the catalog (the WHERE clause won't match) and only the
+     * journal entry advances.
+     */
+    suspend fun restoreMissingSampleMatch(
+        projectId: ProjectId,
+        missingPath: String,
+        candidatePath: String,
+    ): Result<Unit>
 }
 
 data class RepairFindings(

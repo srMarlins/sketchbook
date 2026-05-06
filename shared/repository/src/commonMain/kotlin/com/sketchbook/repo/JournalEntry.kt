@@ -78,4 +78,19 @@ sealed interface ActionRecord {
         /** One of `AlsPatchService.Outcome` names: `Patched` | `NoChange` | `SkippedBusy` | `Failed`. */
         val alsOutcome: String,
     ) : ActionRecord
+
+    /**
+     * User undid a previous `MissingSampleMapped` action. Symmetric counterpart: catalog row is
+     * reverted to is_missing=1 and [alsOutcome] records the on-disk restore outcome. The extra
+     * sentinel [alsOutcome] value `NoUndoBytes` flags the case where no pre-patch sidecar was
+     * found (e.g. the apply happened before W4 shipped, or the sidecar got cleaned up); the
+     * catalog still reverts so the finding re-surfaces in Needs Attention.
+     */
+    @Serializable
+    data class MissingSampleUnmapped(
+        val missingPath: String,
+        val candidatePath: String,
+        /** One of `AlsPatchService.Outcome` names plus `NoUndoBytes` for the sidecar-missing case. */
+        val alsOutcome: String,
+    ) : ActionRecord
 }

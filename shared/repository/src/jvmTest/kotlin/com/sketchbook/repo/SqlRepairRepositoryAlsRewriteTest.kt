@@ -15,6 +15,7 @@ import java.util.zip.GZIPOutputStream
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -81,12 +82,19 @@ class SqlRepairRepositoryAlsRewriteTest {
      */
     private class RecordingPatchService(
         private val forcedOutcome: AlsPatchService.Outcome? = null,
+        private val forcedRestoreOutcome: AlsPatchService.Outcome? = null,
     ) : AlsPatchService {
         var calls: Int = 0
             private set
         var lastPath: String? = null
             private set
         var lastMapping: Map<String, String>? = null
+            private set
+        var restoreCalls: Int = 0
+            private set
+        var lastRestorePath: String? = null
+            private set
+        var lastRestoreBytes: ByteArray? = null
             private set
 
         override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
@@ -110,6 +118,15 @@ class SqlRepairRepositoryAlsRewriteTest {
             val out = ByteArrayOutputStream(text.length + 64)
             GZIPOutputStream(out).use { it.write(text.toByteArray(Charsets.UTF_8)) }
             Files.write(path, out.toByteArray())
+            return AlsPatchService.Outcome.Patched
+        }
+
+        override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome {
+            restoreCalls++
+            lastRestorePath = alsPath
+            lastRestoreBytes = bytes
+            if (forcedRestoreOutcome != null) return forcedRestoreOutcome
+            Files.write(Path.of(alsPath), bytes)
             return AlsPatchService.Outcome.Patched
         }
     }
@@ -243,6 +260,149 @@ class SqlRepairRepositoryAlsRewriteTest {
             val action = entries.first().action
             assertTrue(action is ActionRecord.MissingSampleMapped)
             assertEquals("SkippedBusy", action.alsOutcome)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `apply then restore brings back exact pre-patch bytes and reverts catalog`() = runTest {
+        // PR-W W4 round-trip: applyMissingSampleMatch snapshots the .als bytes to a sidecar
+        // before delegating to the patcher; restoreMissingSampleMatch reads the sidecar and
+        // calls AlsPatchService.restore(), then reverts the catalog row so the finding
+        // re-surfaces in Needs Attention.
+        val tmp = createTempDirectory("repo-undo")
+        val als = tmp.resolve("Round.als")
+        val originalBytes = gzipBytes()
+        Files.write(als, originalBytes)
+        val patcher = RecordingPatchService()
+        val (catalog, journal, repo) = setup(patcher)
+        val projectId = seedProjectWithMissingSample(catalog, als, missingPath = "/old/missing.wav")
+
+        // Apply: patches the file, flips the catalog.
+        repo.applyMissingSampleMatch(
+            projectId = projectId,
+            missingPath = "/old/missing.wav",
+            candidatePath = "/new/found.wav",
+        ).getOrThrow()
+        // Sanity: post-patch bytes differ from originals.
+        assertTrue(!Files.readAllBytes(als).contentEquals(originalBytes), "patch should change the bytes")
+
+        // Restore.
+        repo.restoreMissingSampleMatch(
+            projectId = projectId,
+            missingPath = "/old/missing.wav",
+            candidatePath = "/new/found.wav",
+        ).getOrThrow()
+
+        // .als bytes are restored *exactly* to the pre-patch state.
+        assertContentEquals(originalBytes, Files.readAllBytes(als), "restore must return exact original bytes")
+        assertEquals(1, patcher.restoreCalls, "patcher.restore should be invoked once")
+        assertEquals(als.toString(), patcher.lastRestorePath)
+
+        // Sidecar cleaned up after a successful undo.
+        val sidecar = als.resolveSibling("${als.fileName}.patcher-undo")
+        assertTrue(Files.notExists(sidecar), "sidecar should be removed after successful restore")
+
+        // Catalog row reverted: missing_path is back, is_missing=1.
+        val sampleRows = catalog.catalogQueries
+            .selectSampleEntriesForProject(projectId.value)
+            .executeAsList()
+        assertEquals(1, sampleRows.size)
+        assertEquals("/old/missing.wav", sampleRows.first().sample_path)
+        assertEquals(1L, sampleRows.first().is_missing)
+
+        // Journal carries both the apply and the symmetric unmap entry.
+        journal.observeRecent(limit = 5).test {
+            val entries = awaitItem()
+            assertEquals(2, entries.size, "expected Mapped + Unmapped journal entries")
+            // observeRecent returns most-recent first.
+            val unmap = entries.first().action
+            assertTrue(unmap is ActionRecord.MissingSampleUnmapped, "expected MissingSampleUnmapped but was $unmap")
+            assertEquals("/old/missing.wav", unmap.missingPath)
+            assertEquals("/new/found.wav", unmap.candidatePath)
+            assertEquals("Patched", unmap.alsOutcome)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `restore with no sidecar still reverts catalog and journals NoUndoBytes`() = runTest {
+        // No prior apply ran (or sidecar was wiped) — restore should still revert the catalog
+        // so the finding re-surfaces, and the journal records that no on-disk undo happened.
+        val tmp = createTempDirectory("repo-undo-empty")
+        val als = tmp.resolve("Empty.als").also { Files.write(it, gzipBytes()) }
+        val patcher = RecordingPatchService()
+        val (catalog, journal, repo) = setup(patcher)
+        val projectId = seedProjectWithMissingSample(catalog, als, missingPath = "/old/missing.wav")
+
+        // Manually flip the row to simulate an apply whose sidecar got cleaned up.
+        catalog.catalogQueries.applyMissingSampleMatch(
+            new_path = "/new/found.wav",
+            project_id = projectId.value,
+            old_path = "/old/missing.wav",
+        )
+
+        repo.restoreMissingSampleMatch(
+            projectId = projectId,
+            missingPath = "/old/missing.wav",
+            candidatePath = "/new/found.wav",
+        ).getOrThrow()
+
+        assertEquals(0, patcher.restoreCalls, "no sidecar means restore should not be invoked")
+
+        val sampleRows = catalog.catalogQueries
+            .selectSampleEntriesForProject(projectId.value)
+            .executeAsList()
+        assertEquals("/old/missing.wav", sampleRows.first().sample_path)
+        assertEquals(1L, sampleRows.first().is_missing)
+
+        journal.observeRecent(limit = 5).test {
+            val entries = awaitItem()
+            val action = entries.first().action
+            assertTrue(action is ActionRecord.MissingSampleUnmapped)
+            assertEquals("NoUndoBytes", action.alsOutcome)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `restore honors busy outcome from patch service`() = runTest {
+        // Sidecar exists, but the patch service reports SkippedBusy. Catalog still reverts so
+        // the finding re-surfaces; journal records SkippedBusy so a retry pass can act on it.
+        val tmp = createTempDirectory("repo-undo-busy")
+        val als = tmp.resolve("Busy.als")
+        val originalBytes = gzipBytes()
+        Files.write(als, originalBytes)
+        val patcher = RecordingPatchService(forcedRestoreOutcome = AlsPatchService.Outcome.SkippedBusy)
+        val (catalog, journal, repo) = setup(patcher)
+        val projectId = seedProjectWithMissingSample(catalog, als, missingPath = "/old/missing.wav")
+
+        repo.applyMissingSampleMatch(
+            projectId = projectId,
+            missingPath = "/old/missing.wav",
+            candidatePath = "/new/found.wav",
+        ).getOrThrow()
+
+        repo.restoreMissingSampleMatch(
+            projectId = projectId,
+            missingPath = "/old/missing.wav",
+            candidatePath = "/new/found.wav",
+        ).getOrThrow()
+
+        assertEquals(1, patcher.restoreCalls)
+
+        // Catalog row reverted regardless of patch outcome.
+        val sampleRows = catalog.catalogQueries
+            .selectSampleEntriesForProject(projectId.value)
+            .executeAsList()
+        assertEquals("/old/missing.wav", sampleRows.first().sample_path)
+        assertEquals(1L, sampleRows.first().is_missing)
+
+        journal.observeRecent(limit = 5).test {
+            val entries = awaitItem()
+            val unmap = entries.first().action
+            assertTrue(unmap is ActionRecord.MissingSampleUnmapped)
+            assertEquals("SkippedBusy", unmap.alsOutcome)
             cancelAndIgnoreRemainingEvents()
         }
     }

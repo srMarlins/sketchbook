@@ -43,12 +43,35 @@ class AlsPatcher(
     }
 
     /**
+     * Restore [als] to the supplied [bytes]. PR-W W4 Undo path: the repository captured the
+     * pre-patch bytes; this puts them back. Same atomic temp+rename dance as [patch] so a
+     * concurrent reader never sees a half-written file.
+     */
+    fun restore(als: Path, bytes: ByteArray): Outcome {
+        if (busyDetector(als)) return Outcome.SkippedBusy
+        return runCatching {
+            val temp = als.resolveSibling("${als.fileName}.patcher-tmp")
+            Files.write(temp, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+            Files.move(temp, als, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            Outcome.Patched as Outcome
+        }.getOrElse { Outcome.Failed(it) }
+    }
+
+    /**
      * [AlsPatchService] adapter — bridges the stringly-typed repository surface to the typed
      * `Path`-based core. Repository code in `commonMain` can't reference `java.nio.file.Path`,
      * so the path round-trips through `String`.
      */
     override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome =
         when (val o = patch(Paths.get(alsPath), mapping)) {
+            Outcome.Patched -> AlsPatchService.Outcome.Patched
+            Outcome.NoChange -> AlsPatchService.Outcome.NoChange
+            Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
+            is Outcome.Failed -> AlsPatchService.Outcome.Failed
+        }
+
+    override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome =
+        when (val o = restore(Paths.get(alsPath), bytes)) {
             Outcome.Patched -> AlsPatchService.Outcome.Patched
             Outcome.NoChange -> AlsPatchService.Outcome.NoChange
             Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy

@@ -54,6 +54,11 @@ class NeedsAttentionStateHolderTest {
             appliedMatch = Triple(projectId, missingPath, candidatePath)
             return Result.success(Unit)
         }
+        override suspend fun restoreMissingSampleMatch(
+            projectId: ProjectId,
+            missingPath: String,
+            candidatePath: String,
+        ): Result<Unit> = Result.success(Unit)
     }
 
     @Test

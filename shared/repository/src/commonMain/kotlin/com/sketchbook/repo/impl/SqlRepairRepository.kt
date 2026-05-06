@@ -13,6 +13,10 @@ import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.RepairFindings
 import com.sketchbook.repo.RepairRepository
 import com.sketchbook.repo.SampleCandidate
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.StandardOpenOption
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -166,13 +170,36 @@ class SqlRepairRepository(
                 .executeAsOne()
                 .path
 
-            // Rewrite the .als first; the catalog flip is a tiny in-memory transaction and the
-            // patch is the slow + failure-prone step. If the patch raises, we honor the user's
-            // pick anyway (catalog still flips below) — the journal records the outcome so a
-            // later retry pass / Undo (PR-W W4) can act on un-rewritten files.
-            val outcome = runCatching {
-                patcher.patch(alsPath, mapOf(missingPath to candidatePath))
-            }.getOrElse { AlsPatchService.Outcome.Failed }
+            // PR-W W4 — snapshot the pre-patch bytes to a sidecar before delegating to the
+            // patcher. The sidecar (`<als>.patcher-undo`) lives next to the .als so it follows
+            // the project around on moves; PR-L L7's Undo pill reads it back via
+            // restoreMissingSampleMatch. Best-effort: if the snapshot itself fails (file gone,
+            // permissions), we journal an alsOutcome of Failed and skip the patch — losing the
+            // ability to undo silently is the worst possible outcome.
+            val snapshotResult = runCatching {
+                val path = Paths.get(alsPath)
+                val originalBytes = Files.readAllBytes(path)
+                val sidecar = path.resolveSibling("${path.fileName}.patcher-undo")
+                Files.write(
+                    sidecar,
+                    originalBytes,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE,
+                )
+            }
+
+            // Rewrite the .als; the catalog flip is a tiny in-memory transaction and the patch
+            // is the slow + failure-prone step. If the patch raises, we honor the user's pick
+            // anyway (catalog still flips below) — the journal records the outcome so a later
+            // retry pass / Undo can act on un-rewritten files.
+            val outcome = if (snapshotResult.isFailure) {
+                AlsPatchService.Outcome.Failed
+            } else {
+                runCatching {
+                    patcher.patch(alsPath, mapOf(missingPath to candidatePath))
+                }.getOrElse { AlsPatchService.Outcome.Failed }
+            }
 
             catalog.transaction {
                 catalog.catalogQueries.applyMissingSampleMatch(
@@ -202,8 +229,60 @@ class SqlRepairRepository(
         }
     }
 
+    override suspend fun restoreMissingSampleMatch(
+        projectId: ProjectId,
+        missingPath: String,
+        candidatePath: String,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val alsPath = catalog.catalogQueries
+                .selectProjectById(projectId.value)
+                .executeAsOne()
+                .path
+
+            // Look up the sidecar created by applyMissingSampleMatch. Sentinel `NoUndoBytes`
+            // covers the case where no sidecar exists (apply happened pre-W4, sidecar was
+            // cleaned up, etc.) — the catalog still reverts so the finding re-surfaces.
+            val path: Path = Paths.get(alsPath)
+            val sidecar = path.resolveSibling("${path.fileName}.patcher-undo")
+            val outcomeName = if (Files.notExists(sidecar)) {
+                NO_UNDO_BYTES
+            } else {
+                val bytes = Files.readAllBytes(sidecar)
+                val outcome = runCatching { patcher.restore(alsPath, bytes) }
+                    .getOrElse { AlsPatchService.Outcome.Failed }
+                // Best-effort cleanup; a leftover sidecar is benign (next apply overwrites it).
+                runCatching { Files.deleteIfExists(sidecar) }
+                outcome.name
+            }
+
+            catalog.transaction {
+                catalog.catalogQueries.revertMissingSampleMatch(
+                    old_path = missingPath,
+                    project_id = projectId.value,
+                    new_path = candidatePath,
+                )
+            }
+            ackTick.value = ackTick.value + 1
+
+            journal.append(
+                JournalEntry(
+                    timestamp = Clock.System.now(),
+                    projectId = projectId,
+                    action = ActionRecord.MissingSampleUnmapped(
+                        missingPath = missingPath,
+                        candidatePath = candidatePath,
+                        alsOutcome = outcomeName,
+                    ),
+                ),
+            )
+            Unit
+        }
+    }
+
     private companion object {
         const val SCOPE_MAC = "mac_import"
         const val SCOPE_MISS = "missing_sample"
+        const val NO_UNDO_BYTES = "NoUndoBytes"
     }
 }

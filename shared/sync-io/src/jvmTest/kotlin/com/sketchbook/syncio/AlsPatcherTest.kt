@@ -123,4 +123,48 @@ class AlsPatcherTest {
         val result = AlsPatcher().patch(als, mapOf("/a" to "/b"))
         assertTrue(result is AlsPatcher.Outcome.Failed, "expected Failed but got $result")
     }
+
+    @Test
+    fun `restore writes provided bytes back atomically and returns Patched`() {
+        // Round-trip: patch flips the .als content, restore brings back the *exact* original
+        // bytes (byte-for-byte, including the gzip representation captured pre-patch).
+        val tmpDir = createTempDirectory("patcher-restore")
+        val als = tmpDir.resolve("Round.als")
+        val originalBytes = gzipBytesOf("rewriter/oneSampleRef.als.xml")
+        Files.write(als, originalBytes)
+        val patcher = AlsPatcher()
+
+        // Patch: file content changes.
+        val patchOutcome = patcher.patch(als, mapOf("/old/missing.wav" to "/new/found.wav"))
+        assertEquals(AlsPatcher.Outcome.Patched, patchOutcome)
+        assertTrue(
+            !Files.readAllBytes(als).contentEquals(originalBytes),
+            "patch should have changed the bytes",
+        )
+
+        // Restore: bytes go back exactly.
+        val restoreOutcome = patcher.restore(als, originalBytes)
+        assertEquals(AlsPatcher.Outcome.Patched, restoreOutcome)
+        assertTrue(
+            originalBytes.contentEquals(Files.readAllBytes(als)),
+            "restore must put back the *exact* original bytes",
+        )
+
+        // No temp files left behind.
+        val tempCount = Files.list(tmpDir).use { stream ->
+            stream.filter { it.fileName.toString().contains(".patcher-tmp") }.count()
+        }
+        assertEquals(0, tempCount)
+    }
+
+    @Test
+    fun `restore skips when busy`() {
+        val tmpDir = createTempDirectory("patcher-restore-busy")
+        val als = tmpDir.resolve("Busy.als").also { Files.write(it, gzipBytesOf("rewriter/oneSampleRef.als.xml")) }
+        val before = Files.readAllBytes(als)
+        val patcher = AlsPatcher(busyDetector = { _ -> true })
+        val outcome = patcher.restore(als, byteArrayOf(0x42))
+        assertEquals(AlsPatcher.Outcome.SkippedBusy, outcome)
+        assertTrue(before.contentEquals(Files.readAllBytes(als)), "busy file untouched")
+    }
 }
