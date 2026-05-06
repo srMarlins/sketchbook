@@ -219,9 +219,11 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                         HealthChip(
                             health = libraryHealth,
                             onRowFilter = { filter ->
-                                // PR-CC: stash the filter on the chrome VM, then jump to Browse.
-                                // The Projects NavEntry's LaunchedEffect picks the pending filter
-                                // up and dispatches it onto the per-entry ProjectListViewModel.
+                                // PR-CC: publish the filter through the AppScope-lifetime
+                                // `ProjectFilterCoordinator` (via the chrome VM's pass-through),
+                                // then jump to Browse. The destination `ProjectListViewModel`
+                                // observes the coordinator in its `combine` pipeline — no
+                                // `LaunchedEffect` orchestration in this composable.
                                 chrome.publishHealthFilter(filter)
                                 if (current != Screen.Projects) {
                                     backStack.clear()
@@ -270,19 +272,12 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                     LaunchedEffect(Unit) {
                                         vm.dispatch(ProjectListViewModel.Intent.Search(""))
                                     }
-                                    // PR-CC: pick up any pending Health-chip filter the user staged.
-                                    // Collected as a flow (not a one-shot read) so a click while the
-                                    // Projects screen is already on top still applies the filter; we
-                                    // consume each non-null emission so a screen re-entry without
-                                    // another chip click doesn't re-apply the previous filter.
-                                    LaunchedEffect(vm) {
-                                        chrome.pendingHealthFilter.collect { pending ->
-                                            if (pending != null) {
-                                                vm.dispatch(ProjectListViewModel.Intent.SetHealthFilter(pending))
-                                                chrome.consumePendingHealthFilter()
-                                            }
-                                        }
-                                    }
+                                    // PR-CC: the sidebar Health-chip filter rides through the
+                                    // AppScope-lifetime `ProjectFilterCoordinator` directly into
+                                    // this VM's `combine`. No `LaunchedEffect { collect { dispatch } }`
+                                    // orchestration here — the chip click in the sidebar already
+                                    // updated the coordinator, so this VM observes it on first
+                                    // collection.
                                     ProjectListScreen(
                                         vm = vm,
                                         scanLabel = scanIndicatorLabel,

@@ -10,6 +10,7 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.featureprojects.HealthFilter
+import com.sketchbook.featureprojects.ProjectFilterCoordinator
 import com.sketchbook.repo.LibraryHealth
 import com.sketchbook.repo.MissingPluginRow
 import com.sketchbook.repo.MissingPluginSummary
@@ -27,10 +28,8 @@ import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
@@ -54,6 +53,7 @@ class RootChromeViewModel(
     proposalsRepository: ProposalsRepository,
     repairRepository: RepairRepository,
     private val projectRepository: ProjectRepository,
+    private val filterCoordinator: ProjectFilterCoordinator,
 ) : ViewModel() {
 
     /**
@@ -81,26 +81,13 @@ class RootChromeViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryHealth.EMPTY)
 
     /**
-     * PR-CC: pending Health-chip row-click filter. The sidebar chip (which lives in the chrome
-     * scope, not inside any `NavEntry`) publishes a filter here. The Projects `NavEntry` reads it
-     * once on entry, dispatches it onto the per-entry `ProjectListViewModel`, and clears the
-     * pending value via [consumePendingHealthFilter].
-     *
-     * Why a pending slot instead of a direct call: the chip-click happens *before* navigation, so
-     * the destination VM doesn't exist yet. Stashing the filter on the chrome VM (which outlives
-     * every entry) and consuming on entry decouples the chip from the navigation host.
+     * Sidebar Health-chip row-click handler. Publishes [filter] into the AppScope-lifetime
+     * [ProjectFilterCoordinator] so the per-NavEntry `ProjectListViewModel` (which may not even
+     * exist yet at the moment the chip is clicked) picks it up via constructor injection. No
+     * `LaunchedEffect` orchestration needed in `RootContent`.
      */
-    private val _pendingHealthFilter = MutableStateFlow<HealthFilter?>(null)
-    val pendingHealthFilter: StateFlow<HealthFilter?> = _pendingHealthFilter.asStateFlow()
-
-    /** Sidebar Health-chip row-click handler. Stashes [filter] for the next Projects entry. */
     fun publishHealthFilter(filter: HealthFilter) {
-        _pendingHealthFilter.value = filter
-    }
-
-    /** Called by the Projects `NavEntry` after dispatching the filter onto its VM. */
-    fun consumePendingHealthFilter() {
-        _pendingHealthFilter.value = null
+        filterCoordinator.setFilter(filter)
     }
 
     /**

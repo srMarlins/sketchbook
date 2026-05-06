@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -79,11 +81,26 @@ class ProjectListViewModelTest {
         ))
     }
 
+    /**
+     * In-memory fake of the AppScope coordinator that owns the Health-chip filter. Tests can
+     * either drive via [vm.dispatch(Intent.SetHealthFilter(..))] (which routes through the VM
+     * back into here) or push directly with [setFilter] to simulate a sidebar chip click that
+     * happened before the VM existed.
+     */
+    private class FakeProjectFilterCoordinator : ProjectFilterCoordinator {
+        private val _filter = MutableStateFlow<HealthFilter?>(null)
+        override val filter: StateFlow<HealthFilter?> = _filter.asStateFlow()
+        override fun setFilter(filter: HealthFilter?) { _filter.value = filter }
+    }
+
+    private fun newVm(repo: ProjectRepository) =
+        ProjectListViewModel(repo, FakeProjectFilterCoordinator())
+
     @Test
     fun stateUpdatesWhenRepositoryEmits() = runTest(mainDispatcher) {
         val all = MutableStateFlow(listOf(row(1, "kick"), row(2, "snare")))
         val repo = FakeRepo(mapOf("" to all))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -99,7 +116,7 @@ class ProjectListViewModelTest {
         val all = MutableStateFlow(listOf(row(1, "kick"), row(2, "snare")))
         val matches = MutableStateFlow(listOf(row(1, "kick")))
         val repo = FakeRepo(mapOf("" to all, "kick" to matches))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -120,7 +137,7 @@ class ProjectListViewModelTest {
         val active = MutableStateFlow(listOf(row(1, "kick")))
         val archived = MutableStateFlow(listOf(row(2, "old-snare", archived = true)))
         val repo = FakeRepo(mapOf("" to active), archived)
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -142,7 +159,7 @@ class ProjectListViewModelTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             // Drain until rows populate.
@@ -171,7 +188,7 @@ class ProjectListViewModelTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -203,7 +220,7 @@ class ProjectListViewModelTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -233,7 +250,7 @@ class ProjectListViewModelTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -262,7 +279,7 @@ class ProjectListViewModelTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -279,7 +296,7 @@ class ProjectListViewModelTest {
     @Test
     fun openIntentEmitsNavigateEffectExactlyOnce() = runTest(mainDispatcher) {
         val repo = FakeRepo()
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.effects.test {
             vm.dispatch(ProjectListViewModel.Intent.Open(ProjectId(7)))

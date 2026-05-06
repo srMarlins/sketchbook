@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.update
 @Inject
 class ProjectListViewModel(
     private val repository: ProjectRepository,
+    private val filterCoordinator: ProjectFilterCoordinator,
 ) : ViewModel() {
 
     private val query = MutableStateFlow("")
@@ -60,7 +61,12 @@ class ProjectListViewModel(
     // failing subset (e.g. only stuck projects, only projects with missing samples). `null` =
     // no health-chip narrowing. Lives alongside the existing tempo/key/stage filters and is
     // applied in the same `applyFilters` combiner pass so the dashboard shelves all narrow at once.
-    private val healthFilter = MutableStateFlow<HealthFilter?>(null)
+    //
+    // Owned by [ProjectFilterCoordinator] (`@SingleIn(AppScope)`) rather than this VM so the
+    // sidebar Health chip — which lives in chrome scope and clicks before this VM exists for
+    // a fresh `Browse` NavEntry — can publish into the same flow the VM consumes. No
+    // `LaunchedEffect` orchestration in `RootContent` needed.
+    private val healthFilter: StateFlow<HealthFilter?> get() = filterCoordinator.filter
 
     private val _effects = MutableSharedFlow<Effect>(
         replay = 0,
@@ -196,12 +202,12 @@ class ProjectListViewModel(
             is Intent.SetTempoRange -> tempoRange.update { intent.range }
             is Intent.SetKeyFilter -> keyFilter.update { intent.key }
             is Intent.SetStageFilter -> stageFilter.update { intent.stages }
-            is Intent.SetHealthFilter -> healthFilter.update { intent.filter }
+            is Intent.SetHealthFilter -> filterCoordinator.setFilter(intent.filter)
             is Intent.ClearFilters -> {
                 tempoRange.update { null }
                 keyFilter.update { null }
                 stageFilter.update { emptySet() }
-                healthFilter.update { null }
+                filterCoordinator.setFilter(null)
             }
         }
     }
