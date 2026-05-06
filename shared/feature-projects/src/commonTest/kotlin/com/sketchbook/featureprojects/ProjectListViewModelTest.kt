@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -42,6 +44,7 @@ class ProjectListViewModelTest {
         key: String? = null,
         stageInferred: Stage? = null,
         stageOverride: Stage? = null,
+        missingSampleCount: Int = 0,
     ) = ProjectRow(
         id = ProjectId(id),
         name = name,
@@ -56,6 +59,7 @@ class ProjectListViewModelTest {
         key = key,
         stageInferred = stageInferred,
         stageOverride = stageOverride,
+        missingSampleCount = missingSampleCount,
     )
 
     private class FakeRepo(
@@ -77,11 +81,26 @@ class ProjectListViewModelTest {
         ))
     }
 
+    /**
+     * In-memory fake of the AppScope coordinator that owns the Health-chip filter. Tests can
+     * either drive via [vm.dispatch(Intent.SetHealthFilter(..))] (which routes through the VM
+     * back into here) or push directly with [setFilter] to simulate a sidebar chip click that
+     * happened before the VM existed.
+     */
+    private class FakeProjectFilterCoordinator : ProjectFilterCoordinator {
+        private val _filter = MutableStateFlow<HealthFilter?>(null)
+        override val filter: StateFlow<HealthFilter?> = _filter.asStateFlow()
+        override fun setFilter(filter: HealthFilter?) { _filter.value = filter }
+    }
+
+    private fun newVm(repo: ProjectRepository) =
+        ProjectListViewModel(repo, FakeProjectFilterCoordinator())
+
     @Test
     fun stateUpdatesWhenRepositoryEmits() = runTest(mainDispatcher) {
         val all = MutableStateFlow(listOf(row(1, "kick"), row(2, "snare")))
         val repo = FakeRepo(mapOf("" to all))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -97,7 +116,7 @@ class ProjectListViewModelTest {
         val all = MutableStateFlow(listOf(row(1, "kick"), row(2, "snare")))
         val matches = MutableStateFlow(listOf(row(1, "kick")))
         val repo = FakeRepo(mapOf("" to all, "kick" to matches))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -118,7 +137,7 @@ class ProjectListViewModelTest {
         val active = MutableStateFlow(listOf(row(1, "kick")))
         val archived = MutableStateFlow(listOf(row(2, "old-snare", archived = true)))
         val repo = FakeRepo(mapOf("" to active), archived)
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -140,7 +159,7 @@ class ProjectListViewModelTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             // Drain until rows populate.
@@ -169,7 +188,7 @@ class ProjectListViewModelTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -201,7 +220,7 @@ class ProjectListViewModelTest {
             ),
         )
         val repo = FakeRepo(mapOf("" to all))
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.state.test {
             var s = awaitItem()
@@ -217,9 +236,67 @@ class ProjectListViewModelTest {
     }
 
     @Test
+    fun healthFilterOnlyStuckNarrowsToInferredStuckRows() = runTest(mainDispatcher) {
+        // PR-CC: a, b have stage_inferred=Stuck. c has Mixing override but inferred=Sketch
+        // (override wins for the per-row chip but does NOT count as Stuck for the health filter
+        // because the health filter reads stage_inferred to mirror the SQL aggregate). d's
+        // override is Stuck but inferred is null — also filtered out.
+        val all = MutableStateFlow(
+            listOf(
+                row(1, "a", stageInferred = Stage.Stuck),
+                row(2, "b", stageInferred = Stage.Stuck),
+                row(3, "c", stageInferred = Stage.Sketch, stageOverride = Stage.Mixing),
+                row(4, "d", stageOverride = Stage.Stuck),
+            ),
+        )
+        val repo = FakeRepo(mapOf("" to all))
+        val vm = newVm(repo)
+
+        vm.state.test {
+            var s = awaitItem()
+            while (s.rows.size < 4) s = awaitItem()
+
+            vm.dispatch(ProjectListViewModel.Intent.SetHealthFilter(HealthFilter.OnlyStuck))
+
+            s = awaitItem()
+            while (s.healthFilter !is HealthFilter.OnlyStuck || s.rows.size != 2) s = awaitItem()
+            assertEquals(setOf("a", "b"), s.rows.map { it.name }.toSet())
+
+            // Clearing via null restores the full set without touching tempo/key/stage filters.
+            vm.dispatch(ProjectListViewModel.Intent.SetHealthFilter(null))
+            while (s.healthFilter != null || s.rows.size != 4) s = awaitItem()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun healthFilterOnlyMissingSamplesNarrowsToProjectsWithMissingSampleCount() = runTest(mainDispatcher) {
+        val all = MutableStateFlow(
+            listOf(
+                row(1, "clean", missingSampleCount = 0),
+                row(2, "broken", missingSampleCount = 3),
+                row(3, "also-broken", missingSampleCount = 1),
+            ),
+        )
+        val repo = FakeRepo(mapOf("" to all))
+        val vm = newVm(repo)
+
+        vm.state.test {
+            var s = awaitItem()
+            while (s.rows.size < 3) s = awaitItem()
+
+            vm.dispatch(ProjectListViewModel.Intent.SetHealthFilter(HealthFilter.OnlyMissingSamples))
+            s = awaitItem()
+            while (s.healthFilter !is HealthFilter.OnlyMissingSamples || s.rows.size != 2) s = awaitItem()
+            assertEquals(setOf("broken", "also-broken"), s.rows.map { it.name }.toSet())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun openIntentEmitsNavigateEffectExactlyOnce() = runTest(mainDispatcher) {
         val repo = FakeRepo()
-        val vm = ProjectListViewModel(repo)
+        val vm = newVm(repo)
 
         vm.effects.test {
             vm.dispatch(ProjectListViewModel.Intent.Open(ProjectId(7)))

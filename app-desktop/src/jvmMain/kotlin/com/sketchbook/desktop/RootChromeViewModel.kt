@@ -9,6 +9,8 @@ import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.desktop.repo.SwappableSyncQueue
+import com.sketchbook.featureprojects.HealthFilter
+import com.sketchbook.featureprojects.ProjectFilterCoordinator
 import com.sketchbook.repo.LibraryHealth
 import com.sketchbook.repo.MissingPluginRow
 import com.sketchbook.repo.MissingPluginSummary
@@ -51,6 +53,7 @@ class RootChromeViewModel(
     proposalsRepository: ProposalsRepository,
     repairRepository: RepairRepository,
     private val projectRepository: ProjectRepository,
+    private val filterCoordinator: ProjectFilterCoordinator,
 ) : ViewModel() {
 
     /**
@@ -76,6 +79,16 @@ class RootChromeViewModel(
 
     val libraryHealth: StateFlow<LibraryHealth> = projectRepository.observeLibraryHealth()
         .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryHealth.EMPTY)
+
+    /**
+     * Sidebar Health-chip row-click handler. Publishes [filter] into the AppScope-lifetime
+     * [ProjectFilterCoordinator] so the per-NavEntry `ProjectListViewModel` (which may not even
+     * exist yet at the moment the chip is clicked) picks it up via constructor injection. No
+     * `LaunchedEffect` orchestration needed in `RootContent`.
+     */
+    fun publishHealthFilter(filter: HealthFilter) {
+        filterCoordinator.setFilter(filter)
+    }
 
     /**
      * PR-T: scalar count for the Home coverage chip. `null` while the SQL is still warming up so

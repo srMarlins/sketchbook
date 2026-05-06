@@ -216,7 +216,21 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                             summary = missingPluginSummary,
                             coverage = missingPluginCoverage,
                         )
-                        HealthChip(health = libraryHealth)
+                        HealthChip(
+                            health = libraryHealth,
+                            onRowFilter = { filter ->
+                                // PR-CC: publish the filter through the AppScope-lifetime
+                                // `ProjectFilterCoordinator` (via the chrome VM's pass-through),
+                                // then jump to Browse. The destination `ProjectListViewModel`
+                                // observes the coordinator in its `combine` pipeline — no
+                                // `LaunchedEffect` orchestration in this composable.
+                                chrome.publishHealthFilter(filter)
+                                if (current != Screen.Projects) {
+                                    backStack.clear()
+                                    backStack.add(Screen.Projects)
+                                }
+                            },
+                        )
                     }
                 },
             )
@@ -258,6 +272,12 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                     LaunchedEffect(Unit) {
                                         vm.dispatch(ProjectListViewModel.Intent.Search(""))
                                     }
+                                    // PR-CC: the sidebar Health-chip filter rides through the
+                                    // AppScope-lifetime `ProjectFilterCoordinator` directly into
+                                    // this VM's `combine`. No `LaunchedEffect { collect { dispatch } }`
+                                    // orchestration here — the chip click in the sidebar already
+                                    // updated the coordinator, so this VM observes it on first
+                                    // collection.
                                     ProjectListScreen(
                                         vm = vm,
                                         scanLabel = scanIndicatorLabel,
