@@ -83,9 +83,6 @@ fun SongStrip(
     val colors = AppTheme.colors
     val cornerDp = AppTheme.spacing.cornerCard
     val shape = RoundedCornerShape(cornerDp)
-    val interaction = remember { MutableInteractionSource() }
-    val isHovered by interaction.collectIsHoveredAsState()
-    val bg = if (isHovered) colors.surfaceSunken else colors.surfaceCard
     val colorVar = data.colorTag?.let { AbletonPalette[it] } ?: colors.ruleLineStrong
     val isGroup = data.variantCount > 1
     val borderColor = if (data.warning != null) colors.accentDanger.copy(alpha = 0.4f) else colors.ruleLine
@@ -105,10 +102,10 @@ fun SongStrip(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(shape)
-                .background(bg)
+                .background(colors.surfaceCard)
                 .border(1.dp, borderColor, shape)
                 .clickable(
-                    interactionSource = interaction,
+                    interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = onOpen,
                 )

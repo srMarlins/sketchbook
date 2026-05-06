@@ -440,7 +440,11 @@ private fun BoxScope.DetailPanel(
             modifier = Modifier
                 .fillMaxSize()
                 .background(AppTheme.colors.surfaceOverlay)
-                .clickable(onClick = onDismiss),
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
         )
     }
     AnimatedVisibility(
