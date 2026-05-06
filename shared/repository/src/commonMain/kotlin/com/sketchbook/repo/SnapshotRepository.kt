@@ -37,8 +37,19 @@ interface SnapshotRepository {
             emit(MaterializationProgress.Started(uuid, rev))
             val r = materializeAt(uuid, rev)
             if (r.isSuccess) emit(MaterializationProgress.Done(uuid, rev))
-            else emit(MaterializationProgress.Failed(uuid, rev, r.exceptionOrNull()?.message ?: "materialize failed"))
+            else emit(MaterializationProgress.Failed(uuid, rev, friendlyReason(r.exceptionOrNull())))
         }
+}
+
+/**
+ * Human-friendly failure reason for the rewind UI. The busy case is matched by simple class
+ * name so commonMain doesn't have to depend on the JVM-only `WorkingTreeBusyException` type.
+ */
+private fun friendlyReason(cause: Throwable?): String = when {
+    cause == null -> "materialize failed"
+    cause::class.simpleName == "WorkingTreeBusyException" ->
+        "Close the project in Ableton, then try again."
+    else -> cause.message ?: "materialize failed"
 }
 
 sealed interface MaterializationProgress {
