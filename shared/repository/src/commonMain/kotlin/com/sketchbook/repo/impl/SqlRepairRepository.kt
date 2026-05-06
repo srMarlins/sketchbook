@@ -190,7 +190,14 @@ class SqlRepairRepository(
                     if (snapshotResult.isFailure) {
                         AlsPatchService.Outcome.Failed
                     } else {
-                        runCatching { patcher.patch(alsPath, mapping) }
+                        // Project Mac → POSIX mapping into rich edits with `newOriginalCrc=0L`.
+                        // Path change invalidates the CRC (Live recomputes on next save). We don't
+                        // have a candidate file to stat in the Mac-path repair case, so size /
+                        // mtime / RelativePathType are left untouched.
+                        val edits = mapping.map { (mac, posix) ->
+                            SampleRefEdit(oldPath = mac, newPath = posix, newOriginalCrc = 0L)
+                        }
+                        runCatching { patcher.patch(alsPath, edits) }
                             .getOrElse { AlsPatchService.Outcome.Failed }
                     }
                 }

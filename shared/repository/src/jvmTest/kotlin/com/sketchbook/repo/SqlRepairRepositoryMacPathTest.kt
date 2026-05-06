@@ -3,6 +3,8 @@ package com.sketchbook.repo
 import app.cash.turbine.test
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.db.Catalog
+import com.sketchbook.als.AlsParser
+import com.sketchbook.als.AlsRewriter
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.SampleRefEdit
 import com.sketchbook.repo.impl.InMemoryJournalRepository
@@ -18,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -215,14 +218,14 @@ class SqlRepairRepositoryMacPathTest {
         assertTrue(result.isSuccess, "applyMacPathRepair should succeed; was $result")
         assertEquals(1, patcher.calls, "patcher should be invoked exactly once")
         assertEquals(als.toString(), patcher.lastPath)
-        // Mapping should drop the volume prefix on each Mac-style path.
-        assertEquals(
-            mapOf(
-                "Macintosh HD:/Users/jay/Samples/kick.wav" to "/Users/jay/Samples/kick.wav",
-                "OS X:/Volumes/External/Splice/snare.wav" to "/Volumes/External/Splice/snare.wav",
-            ),
-            patcher.lastMapping,
-        )
+        // Mac-path repair routes through the rich SampleRefEdit overload (PR follow-up to PR #102).
+        // Each edit drops the volume prefix and zeroes the CRC since the path is changing.
+        val edits = assertNotNull(patcher.lastEdits, "edits-based patch should have been called")
+        assertEquals(2, edits.size)
+        val byOld = edits.associateBy { it.oldPath }
+        assertEquals("/Users/jay/Samples/kick.wav", byOld["Macintosh HD:/Users/jay/Samples/kick.wav"]?.newPath)
+        assertEquals("/Volumes/External/Splice/snare.wav", byOld["OS X:/Volumes/External/Splice/snare.wav"]?.newPath)
+        assertTrue(edits.all { it.newOriginalCrc == 0L }, "every Mac-path edit must zero the CRC")
 
         // Disk: both Mac-style paths gone, both POSIX paths present.
         val text = ungzipToString(Files.readAllBytes(als))
@@ -322,5 +325,100 @@ class SqlRepairRepositoryMacPathTest {
             assertEquals("SkippedBusy", action.alsOutcome)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    /**
+     * Mac-path-bearing fixture that *also* carries `OriginalCrc` + `OriginalFileSize` in both the
+     * primary FileRef and the OriginalFileRef sibling. Required for the CRC-invalidation test —
+     * the rewriter only updates fields that physically exist in the document.
+     */
+    private val macPathWithMetaXml = """<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="11" MinorVersion="11.3" Creator="Ableton Live 11.3.21">
+  <LiveSet>
+    <Tracks>
+      <AudioTrack>
+        <DeviceChain>
+          <MainSequencer>
+            <ClipSlotList>
+              <AudioClip>
+                <SampleRef>
+                  <FileRef>
+                    <Name Value="kick.wav"/>
+                    <Path Value="Macintosh HD:/Users/jay/Samples/kick.wav"/>
+                    <RelativePath Value="Samples/kick.wav"/>
+                    <OriginalFileSize Value="58394528"/>
+                    <OriginalCrc Value="7866"/>
+                  </FileRef>
+                  <SourceContext>
+                    <SourceContext>
+                      <OriginalFileRef>
+                        <FileRef>
+                          <Name Value="kick.wav"/>
+                          <Path Value="Macintosh HD:/Users/jay/Samples/kick.wav"/>
+                          <RelativePath Value="Samples/kick.wav"/>
+                          <OriginalFileSize Value="58394528"/>
+                          <OriginalCrc Value="7866"/>
+                        </FileRef>
+                      </OriginalFileRef>
+                    </SourceContext>
+                  </SourceContext>
+                </SampleRef>
+              </AudioClip>
+            </ClipSlotList>
+          </MainSequencer>
+        </DeviceChain>
+      </AudioTrack>
+    </Tracks>
+  </LiveSet>
+</Ableton>
+""".toByteArray(Charsets.UTF_8)
+
+    /**
+     * Real-rewriter [AlsPatchService] for asserting the structured output of a Mac-path repair —
+     * the substring-replace recording fake can't observe attribute-level CRC/size changes.
+     */
+    private class RealRewriterPatchService : AlsPatchService {
+        override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
+            val path = Path.of(alsPath)
+            val original = Files.readAllBytes(path)
+            val rewritten = AlsRewriter.rewriteSamplePaths(original, mapping)
+            if (rewritten.contentEquals(original)) return AlsPatchService.Outcome.NoChange
+            Files.write(path, rewritten)
+            return AlsPatchService.Outcome.Patched
+        }
+
+        override suspend fun patch(alsPath: String, edits: List<SampleRefEdit>): AlsPatchService.Outcome {
+            val path = Path.of(alsPath)
+            val original = Files.readAllBytes(path)
+            val rewritten = AlsRewriter.rewriteSampleRefs(original, edits)
+            if (rewritten.contentEquals(original)) return AlsPatchService.Outcome.NoChange
+            Files.write(path, rewritten)
+            return AlsPatchService.Outcome.Patched
+        }
+
+        override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome {
+            Files.write(Path.of(alsPath), bytes)
+            return AlsPatchService.Outcome.Patched
+        }
+    }
+
+    @Test
+    fun `mac path repair zeros OriginalCrc since path change invalidates it`() = runTest {
+        val tmp = createTempDirectory("repo-mac-crc")
+        val als = tmp.resolve("MacCrc.als").also { Files.write(it, gzip(macPathWithMetaXml)) }
+        val patcher = RealRewriterPatchService()
+        val (catalog, _, repo) = setup(patcher)
+        val projectId = seedMacImportProject(catalog, als, macPathsCount = 1)
+
+        repo.applyMacPathRepair(projectId).getOrThrow()
+
+        // Re-parse the rewritten file: path is POSIX-ified and OriginalCrc was zeroed (was 7866).
+        val md = Files.newInputStream(als).use { AlsParser.parse(it) }
+        assertEquals(1, md.sampleRefs.size)
+        val s = md.sampleRefs.first()
+        assertEquals("/Users/jay/Samples/kick.wav", s.rawPath, "path POSIX-ified")
+        assertEquals(0L, s.originalCrc, "CRC must be zeroed when path changes")
+        // Size left untouched — we don't have a candidate file to stat in the Mac-path case.
+        assertEquals(58394528L, s.originalFileSize, "OriginalFileSize is preserved")
     }
 }
