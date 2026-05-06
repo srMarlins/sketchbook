@@ -35,7 +35,7 @@ class JvmScannerTest {
                   <Tracks><AudioTrack><Name><EffectiveName Value="Drums"/></Name>
                     <DeviceChain><Devices><Eq8/></Devices></DeviceChain>
                   </AudioTrack></Tracks>
-                </LiveSet></Ableton>"""
+                </LiveSet></Ableton>""",
             )
             writeAls(
                 root.resolve("Projects/Bar/Bar.als"),
@@ -45,17 +45,17 @@ class JvmScannerTest {
                   <Tracks>
                     <AudioTrack/><MidiTrack/>
                   </Tracks>
-                </LiveSet></Ableton>"""
+                </LiveSet></Ableton>""",
             )
             // Backup directory contents must be skipped.
             writeAls(
                 root.resolve("Projects/Bar/Backup/Bar [old].als"),
-                """<?xml version="1.0"?><Ableton><LiveSet/></Ableton>"""
+                """<?xml version="1.0"?><Ableton><LiveSet/></Ableton>""",
             )
             // Empty/broken project — should appear as ProjectFailed.
             writeAls(
                 root.resolve("Projects/Broken/Broken.als"),
-                "not actually xml"
+                "not actually xml",
             )
 
             val handle = CatalogDb.openInMemory()
@@ -111,7 +111,7 @@ class JvmScannerTest {
                     <RootNote Value="6"/>
                     <Name Value="Major"/>
                   </ScaleInformation>
-                </LiveSet></Ableton>"""
+                </LiveSet></Ableton>""",
             )
             // No ScaleInformation — key column should remain NULL.
             writeAls(
@@ -119,7 +119,7 @@ class JvmScannerTest {
                 """<?xml version="1.0"?>
                 <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
                   <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="120"/></Tempo></Mixer></DeviceChain></MainTrack>
-                </LiveSet></Ableton>"""
+                </LiveSet></Ableton>""",
             )
 
             val handle = CatalogDb.openInMemory()
@@ -263,7 +263,7 @@ class JvmScannerTest {
                       </FileRef>
                     </SampleRef>
                   </DeviceChain></AudioTrack></Tracks>
-                </LiveSet></Ableton>"""
+                </LiveSet></Ableton>""",
             )
             val handle = CatalogDb.openInMemory()
             val catalog = handle.catalog

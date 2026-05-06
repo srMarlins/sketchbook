@@ -143,6 +143,7 @@ class JvmScanner(
                                 effortScore = null,
                             )
                         }
+
                         is ParseOutcome.Ok -> {
                             persistOk(outcome, now)
                             val id = catalog.catalogQueries.selectProjectIdByPath(outcome.abs)
@@ -155,6 +156,7 @@ class JvmScanner(
                                 effortScore = outcome.effort?.score,
                             )
                         }
+
                         is ParseOutcome.Failed -> {
                             persistFailed(outcome, now)
                             val id = catalog.catalogQueries.selectProjectIdByPath(outcome.abs)
@@ -179,7 +181,7 @@ class JvmScanner(
                     name = report.outcome.name,
                     missingSampleCount = report.missingSampleCount,
                     effortScore = report.effortScore,
-                )
+                ),
             )
         }
         for (report in failedReports) {
@@ -190,11 +192,12 @@ class JvmScanner(
                     done = done,
                     path = report.outcome.abs,
                     reason = report.outcome.reason,
-                )
+                ),
             )
         }
         // Suppress unused warning on idsByPath; kept for future event payloads.
-        @Suppress("UNUSED_VARIABLE") val unused = idsByPath
+        @Suppress("UNUSED_VARIABLE")
+        val unused = idsByPath
         return done
     }
 

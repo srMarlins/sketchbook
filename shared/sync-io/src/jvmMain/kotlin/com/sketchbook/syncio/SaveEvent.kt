@@ -1,7 +1,7 @@
 package com.sketchbook.syncio
 
-import kotlin.time.Instant
 import java.nio.file.Path
+import kotlin.time.Instant
 
 /**
  * Filesystem save event surfaced by [Watcher]. One event per debounced write — Live's

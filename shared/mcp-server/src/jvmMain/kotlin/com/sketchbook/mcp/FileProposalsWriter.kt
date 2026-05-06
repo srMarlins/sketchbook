@@ -1,7 +1,5 @@
 package com.sketchbook.mcp
 
-import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -13,6 +11,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.writeText
 import kotlin.random.Random
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * Writes proposal JSON to `<root>/<proposalId>.json` with the v0.1 wire layout:
@@ -28,7 +28,11 @@ class FileProposalsWriter(
 ) : ProposalsWriter {
 
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    private val json = Json { prettyPrint = true; prettyPrintIndent = "  "; encodeDefaults = true }
+    private val json = Json {
+        prettyPrint = true
+        prettyPrintIndent = "  "
+        encodeDefaults = true
+    }
 
     override suspend fun write(actions: List<ProposedAction>, rationale: String?): String {
         Files.createDirectories(root)
@@ -36,14 +40,19 @@ class FileProposalsWriter(
         val payload = buildJsonObject {
             put("proposal_id", id)
             put("actor", "claude")
-            put("actions", buildJsonArray {
-                actions.forEach { a ->
-                    add(buildJsonObject {
-                        put("type", a.type)
-                        put("args", a.args)
-                    })
-                }
-            })
+            put(
+                "actions",
+                buildJsonArray {
+                    actions.forEach { a ->
+                        add(
+                            buildJsonObject {
+                                put("type", a.type)
+                                put("args", a.args)
+                            },
+                        )
+                    }
+                },
+            )
             put("rationale", rationale?.let(::JsonPrimitive) ?: JsonNull)
         }
         val file = root.resolve("$id.json")

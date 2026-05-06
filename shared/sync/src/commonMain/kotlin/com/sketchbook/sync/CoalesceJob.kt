@@ -5,9 +5,9 @@ import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 /**
  * Auto → Named promotion job. Per design §4.5: every 5 min, look at idle projects and promote

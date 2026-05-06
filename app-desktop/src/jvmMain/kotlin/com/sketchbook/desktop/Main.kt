@@ -62,20 +62,24 @@ private fun runApp() = application {
         MenuBar {
             Menu("File", mnemonic = 'F') {
                 Item("Library settings", onClick = {
-                    backStack.clear(); backStack.add(Screen.Settings)
+                    backStack.clear()
+                    backStack.add(Screen.Settings)
                 })
                 Item("Needs attention", onClick = {
-                    backStack.clear(); backStack.add(Screen.NeedsAttention)
+                    backStack.clear()
+                    backStack.add(Screen.NeedsAttention)
                 })
                 Separator()
                 Item("Quit", onClick = ::exitApplication)
             }
             Menu("Project", mnemonic = 'P') {
                 Item("Projects", onClick = {
-                    backStack.clear(); backStack.add(Screen.Projects)
+                    backStack.clear()
+                    backStack.add(Screen.Projects)
                 })
                 Item("Proposals", onClick = {
-                    backStack.clear(); backStack.add(Screen.Proposals)
+                    backStack.clear()
+                    backStack.add(Screen.Proposals)
                 })
             }
         }

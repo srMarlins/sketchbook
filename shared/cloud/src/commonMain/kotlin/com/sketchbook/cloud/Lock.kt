@@ -1,7 +1,7 @@
 package com.sketchbook.cloud
 
-import kotlin.time.Instant
 import kotlinx.serialization.Serializable
+import kotlin.time.Instant
 
 /**
  * Lease lock primitives. Stored in cloud as `locks/<project_uuid>.lock` JSON. CAS via the
@@ -19,12 +19,14 @@ data class LeaseLock(
 sealed interface LeaseAcquireResult {
     /** Lock acquired; [generation] is the object generation we just wrote. */
     data class Acquired(val generation: Generation) : LeaseAcquireResult
+
     /** Another host holds the lock; [held] describes who, [generation] is theirs. */
     data class Held(val held: LeaseLock, val generation: Generation) : LeaseAcquireResult
 }
 
 sealed interface LeaseRefreshResult {
     data class Refreshed(val generation: Generation) : LeaseRefreshResult
+
     /** Our generation no longer matches — someone else took the lock. */
     data object Stale : LeaseRefreshResult
 }

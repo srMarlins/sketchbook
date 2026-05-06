@@ -1,8 +1,8 @@
 package com.sketchbook.repo
 
+import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotRev
-import com.sketchbook.core.ProjectUuid
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -41,13 +41,15 @@ interface SnapshotRepository {
      * [materializeAt] with synthetic Start/Done events; real impls (sync engine in PR-9) emit
      * granular per-blob progress.
      */
-    fun materializeAtWithProgress(uuid: ProjectUuid, rev: SnapshotRev): Flow<MaterializationProgress> =
-        kotlinx.coroutines.flow.flow {
-            emit(MaterializationProgress.Started(uuid, rev))
-            val r = materializeAt(uuid, rev)
-            if (r.isSuccess) emit(MaterializationProgress.Done(uuid, rev))
-            else emit(MaterializationProgress.Failed(uuid, rev, friendlyReason(r.exceptionOrNull())))
+    fun materializeAtWithProgress(uuid: ProjectUuid, rev: SnapshotRev): Flow<MaterializationProgress> = kotlinx.coroutines.flow.flow {
+        emit(MaterializationProgress.Started(uuid, rev))
+        val r = materializeAt(uuid, rev)
+        if (r.isSuccess) {
+            emit(MaterializationProgress.Done(uuid, rev))
+        } else {
+            emit(MaterializationProgress.Failed(uuid, rev, friendlyReason(r.exceptionOrNull())))
         }
+    }
 }
 
 /**
@@ -56,8 +58,10 @@ interface SnapshotRepository {
  */
 private fun friendlyReason(cause: Throwable?): String = when {
     cause == null -> "materialize failed"
+
     cause::class.simpleName == "WorkingTreeBusyException" ->
         "Close the project in Ableton, then try again."
+
     else -> cause.message ?: "materialize failed"
 }
 

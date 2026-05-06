@@ -1,13 +1,15 @@
 package com.sketchbook.repo
 
 import app.cash.turbine.test
+import com.sketchbook.als.AlsRewriter
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.SampleRefEdit
-import com.sketchbook.als.AlsRewriter
 import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
@@ -21,8 +23,6 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import kotlinx.coroutines.test.runTest
 
 /**
  * Integration test for PR-W Task W3 — `SqlRepairRepository.applyMissingSampleMatch` rewrites the
@@ -178,8 +178,7 @@ class SqlRepairRepositoryAlsRewriteTest {
         return out.toByteArray()
     }
 
-    private fun ungzipToString(gzipped: ByteArray): String =
-        GZIPInputStream(ByteArrayInputStream(gzipped)).use { it.readBytes().toString(Charsets.UTF_8) }
+    private fun ungzipToString(gzipped: ByteArray): String = GZIPInputStream(ByteArrayInputStream(gzipped)).use { it.readBytes().toString(Charsets.UTF_8) }
 
     /**
      * Recording fake. Default mode rewrites the file naively (substring replace inside the
@@ -590,8 +589,10 @@ class SqlRepairRepositoryAlsRewriteTest {
         val pathOccurrences = Regex("""<Path Value="([^"]+)"></Path>|<Path Value="([^"]+)"/>""")
             .findAll(xml).map { m -> m.groupValues[1].ifEmpty { m.groupValues[2] } }.toList()
         assertEquals(2, pathOccurrences.size, "expected exactly two <Path> occurrences (primary + sibling)")
-        assertTrue(pathOccurrences.all { it == "/new/found.wav" },
-            "both Path values must be the candidate; was $pathOccurrences")
+        assertTrue(
+            pathOccurrences.all { it == "/new/found.wav" },
+            "both Path values must be the candidate; was $pathOccurrences",
+        )
         assertTrue("/old/missing.wav" !in xml, "old path must be gone from both FileRefs")
     }
 

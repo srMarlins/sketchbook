@@ -26,8 +26,7 @@ import kotlin.test.assertTrue
  */
 class JournalParityTest {
 
-    private fun parse(raw: String) =
-        JournalJson.pretty.decodeFromString(JournalBatch.serializer(), raw)
+    private fun parse(raw: String) = JournalJson.pretty.decodeFromString(JournalBatch.serializer(), raw)
 
     private fun jsonEquals(a: String, b: String): Boolean {
         val parser = Json { ignoreUnknownKeys = false }

@@ -24,7 +24,10 @@ import kotlin.test.assertTrue
 class ProposalApplyTest {
 
     private val tmp: Path = createTempDirectory("prop-")
-    @AfterTest fun cleanup() { tmp.toFile().deleteRecursively() }
+
+    @AfterTest fun cleanup() {
+        tmp.toFile().deleteRecursively()
+    }
 
     @Test
     fun applySetTagsAndArchiveCommitsBoth() = runTest {
@@ -96,7 +99,7 @@ class ProposalApplyTest {
                 },
             ),
             ProposalAction(
-                type = "RecolorEverythingToTaupe",   // not a real action
+                type = "RecolorEverythingToTaupe", // not a real action
                 args = buildJsonObject { put("project_id", pid) },
             ),
         )

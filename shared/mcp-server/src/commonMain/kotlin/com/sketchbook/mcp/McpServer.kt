@@ -28,7 +28,10 @@ class McpServer(
     private val serverVersion: String = "0.1.0",
 ) {
 
-    private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        explicitNulls = false
+    }
 
     /**
      * Process a single JSON-RPC request line. Returns the response line, or `null` if the
@@ -72,70 +75,95 @@ class McpServer(
     }
 
     private fun toolsListResult(): JsonObject = buildJsonObject {
-        put("tools", buildJsonArray {
-            add(toolDef(
-                name = "search_projects",
-                description = "Full-text search the catalog by name/plugins/sample filenames. Returns matches ordered by last-modified desc.",
-                schema = buildJsonObject {
-                    put("type", "object")
-                    putJsonObject("properties") {
-                        putJsonObject("query") { put("type", "string"); put("description", "FTS query. Empty matches everything.") }
-                        putJsonObject("limit") { put("type", "integer"); put("description", "Max rows; default 50.") }
-                    }
-                },
-            ))
-            add(toolDef(
-                name = "get_project",
-                description = "Fetch a single project's row by primary key.",
-                schema = buildJsonObject {
-                    put("type", "object")
-                    putJsonObject("properties") {
-                        putJsonObject("project_id") { put("type", "integer") }
-                    }
-                    put("required", buildJsonArray { add(JsonPrimitive("project_id")) })
-                },
-            ))
-            add(toolDef(
-                name = "list_recent",
-                description = "Recently-modified projects, newest first.",
-                schema = buildJsonObject {
-                    put("type", "object")
-                    putJsonObject("properties") {
-                        putJsonObject("limit") { put("type", "integer"); put("description", "Max rows; default 50.") }
-                    }
-                },
-            ))
-            add(toolDef(
-                name = "propose_batch",
-                description = "Submit a proposed batch of write actions for the user to approve. Does not execute.",
-                schema = buildJsonObject {
-                    put("type", "object")
-                    putJsonObject("properties") {
-                        putJsonObject("actions") {
-                            put("type", "array")
-                            putJsonObject("items") {
-                                put("type", "object")
-                                putJsonObject("properties") {
-                                    putJsonObject("type") { put("type", "string") }
-                                    putJsonObject("args") { put("type", "object") }
+        put(
+            "tools",
+            buildJsonArray {
+                add(
+                    toolDef(
+                        name = "search_projects",
+                        description = "Full-text search the catalog by name/plugins/sample filenames. Returns matches ordered by last-modified desc.",
+                        schema = buildJsonObject {
+                            put("type", "object")
+                            putJsonObject("properties") {
+                                putJsonObject("query") {
+                                    put("type", "string")
+                                    put("description", "FTS query. Empty matches everything.")
                                 }
-                                put("required", buildJsonArray { add(JsonPrimitive("type")); add(JsonPrimitive("args")) })
+                                putJsonObject("limit") {
+                                    put("type", "integer")
+                                    put("description", "Max rows; default 50.")
+                                }
                             }
-                        }
-                        putJsonObject("rationale") { put("type", "string") }
-                    }
-                    put("required", buildJsonArray { add(JsonPrimitive("actions")) })
-                },
-            ))
-        })
+                        },
+                    ),
+                )
+                add(
+                    toolDef(
+                        name = "get_project",
+                        description = "Fetch a single project's row by primary key.",
+                        schema = buildJsonObject {
+                            put("type", "object")
+                            putJsonObject("properties") {
+                                putJsonObject("project_id") { put("type", "integer") }
+                            }
+                            put("required", buildJsonArray { add(JsonPrimitive("project_id")) })
+                        },
+                    ),
+                )
+                add(
+                    toolDef(
+                        name = "list_recent",
+                        description = "Recently-modified projects, newest first.",
+                        schema = buildJsonObject {
+                            put("type", "object")
+                            putJsonObject("properties") {
+                                putJsonObject("limit") {
+                                    put("type", "integer")
+                                    put("description", "Max rows; default 50.")
+                                }
+                            }
+                        },
+                    ),
+                )
+                add(
+                    toolDef(
+                        name = "propose_batch",
+                        description = "Submit a proposed batch of write actions for the user to approve. Does not execute.",
+                        schema = buildJsonObject {
+                            put("type", "object")
+                            putJsonObject("properties") {
+                                putJsonObject("actions") {
+                                    put("type", "array")
+                                    putJsonObject("items") {
+                                        put("type", "object")
+                                        putJsonObject("properties") {
+                                            putJsonObject("type") { put("type", "string") }
+                                            putJsonObject("args") { put("type", "object") }
+                                        }
+                                        put(
+                                            "required",
+                                            buildJsonArray {
+                                                add(JsonPrimitive("type"))
+                                                add(JsonPrimitive("args"))
+                                            },
+                                        )
+                                    }
+                                }
+                                putJsonObject("rationale") { put("type", "string") }
+                            }
+                            put("required", buildJsonArray { add(JsonPrimitive("actions")) })
+                        },
+                    ),
+                )
+            },
+        )
     }
 
-    private fun toolDef(name: String, description: String, schema: JsonObject): JsonObject =
-        buildJsonObject {
-            put("name", name)
-            put("description", description)
-            put("inputSchema", schema)
-        }
+    private fun toolDef(name: String, description: String, schema: JsonObject): JsonObject = buildJsonObject {
+        put("name", name)
+        put("description", description)
+        put("inputSchema", schema)
+    }
 
     private suspend fun callToolResult(params: JsonObject?): JsonObject {
         val name = params?.get("name")?.jsonPrimitive?.contentOrNull()
@@ -143,10 +171,14 @@ class McpServer(
         val arguments = (params["arguments"] as? JsonObject) ?: buildJsonObject { }
         val result: Any = when (name) {
             "search_projects" -> tools.searchProjects(json.decodeFromJsonElement(SearchProjectsArgs.serializer(), arguments))
+
             "get_project" -> tools.getProject(json.decodeFromJsonElement(GetProjectArgs.serializer(), arguments))
                 ?: buildJsonObject { put("error", "not found") }
+
             "list_recent" -> tools.listRecent(json.decodeFromJsonElement(ListRecentArgs.serializer(), arguments))
+
             "propose_batch" -> tools.proposeBatch(json.decodeFromJsonElement(ProposeBatchArgs.serializer(), arguments))
+
             else -> throw IllegalArgumentException("unknown tool: $name")
         }
         val payload = when (result) {
@@ -157,12 +189,17 @@ class McpServer(
             else -> error("unhandled result type: ${result::class}")
         }
         return buildJsonObject {
-            put("content", buildJsonArray {
-                add(buildJsonObject {
-                    put("type", "text")
-                    put("text", payload.toString())
-                })
-            })
+            put(
+                "content",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("type", "text")
+                            put("text", payload.toString())
+                        },
+                    )
+                },
+            )
             put("structuredContent", payload)
             put("isError", false)
         }

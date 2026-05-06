@@ -1,10 +1,10 @@
 package com.sketchbook.sync
 
 import com.sketchbook.core.BlobHash
-import kotlin.time.Instant
 import kotlinx.io.Buffer
 import kotlinx.io.RawSource
 import kotlinx.io.write
+import kotlin.time.Instant
 
 /**
  * In-memory [WorkingTree]. Tests build a tree of paths → bytes and a hash function that returns
@@ -32,8 +32,7 @@ class FakeWorkingTree(
         return Buffer().also { it.write(f.bytes) }
     }
 
-    override fun hash(relativePath: String): BlobHash =
-        files[relativePath]?.hash ?: error("missing $relativePath")
+    override fun hash(relativePath: String): BlobHash = files[relativePath]?.hash ?: error("missing $relativePath")
 
     companion object {
         fun hashOf(bytes: ByteArray): BlobHash {
@@ -43,7 +42,6 @@ class FakeWorkingTree(
             return BlobHash(BlobHash.PREFIX + digest.toHex())
         }
 
-        private fun ByteArray.toHex(): String =
-            joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
+        private fun ByteArray.toHex(): String = joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
     }
 }

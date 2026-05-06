@@ -102,6 +102,7 @@ class CatalogFts(private val driver: SqlDriver) {
     companion object {
         const val DEFAULT_LIMIT: Int = 200
         private val WHITESPACE = Regex("\\s+")
+
         // Strip FTS5 syntax characters and the quote we'll be wrapping with.
         private val QUOTE_OR_BAD = Regex("[\"():*^]")
     }

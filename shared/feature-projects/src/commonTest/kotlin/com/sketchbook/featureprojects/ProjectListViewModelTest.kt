@@ -31,8 +31,13 @@ class ProjectListViewModelTest {
 
     private val mainDispatcher = StandardTestDispatcher()
 
-    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
-    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
+    @BeforeTest fun setUpMain() {
+        Dispatchers.setMain(mainDispatcher)
+    }
+
+    @AfterTest fun tearDownMain() {
+        Dispatchers.resetMain()
+    }
 
     private val now = Instant.parse("2026-05-05T12:00:00Z")
     private fun row(
@@ -66,19 +71,20 @@ class ProjectListViewModelTest {
         private val byQuery: Map<String, MutableStateFlow<List<ProjectRow>>> = emptyMap(),
         private val archived: MutableStateFlow<List<ProjectRow>> = MutableStateFlow(emptyList()),
     ) : ProjectRepository {
-        override fun observeProjects(query: String): Flow<List<ProjectRow>> =
-            byQuery[query] ?: byQuery[""] ?: flowOf(emptyList())
+        override fun observeProjects(query: String): Flow<List<ProjectRow>> = byQuery[query] ?: byQuery[""] ?: flowOf(emptyList())
         override fun observeArchivedProjects(): Flow<List<ProjectRow>> = archived
         override fun observeProject(id: ProjectId): Flow<ProjectRow?> = flowOf(null)
         override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> = stub()
         override suspend fun rename(id: ProjectId, newName: String): Result<JournalEntry> = stub()
         override suspend fun archive(id: ProjectId, archived: Boolean): Result<JournalEntry> = stub()
         override suspend fun setTags(id: ProjectId, tags: List<String>): Result<JournalEntry> = stub()
-        private fun stub() = Result.success(JournalEntry(
-            timestamp = Instant.parse("2026-05-05T12:00:00Z"),
-            projectId = ProjectId(1),
-            action = ActionRecord.Archive(false, true),
-        ))
+        private fun stub() = Result.success(
+            JournalEntry(
+                timestamp = Instant.parse("2026-05-05T12:00:00Z"),
+                projectId = ProjectId(1),
+                action = ActionRecord.Archive(false, true),
+            ),
+        )
     }
 
     /**

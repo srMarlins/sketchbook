@@ -23,8 +23,13 @@ class JournalViewModelTest {
 
     private val mainDispatcher = StandardTestDispatcher()
 
-    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
-    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
+    @BeforeTest fun setUpMain() {
+        Dispatchers.setMain(mainDispatcher)
+    }
+
+    @AfterTest fun tearDownMain() {
+        Dispatchers.resetMain()
+    }
 
     @Test
     fun observesAppendedEntries() = runTest(mainDispatcher) {

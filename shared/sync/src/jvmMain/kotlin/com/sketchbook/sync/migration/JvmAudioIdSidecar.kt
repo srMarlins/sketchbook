@@ -36,15 +36,13 @@ class JvmAudioIdSidecar : AudioIdSidecar {
         }
     }
 
-    override fun exists(projectDir: String): Boolean =
-        Files.isRegularFile(sidecarPath(projectDir))
+    override fun exists(projectDir: String): Boolean = Files.isRegularFile(sidecarPath(projectDir))
 
-    private fun sidecarPath(projectDir: String): Path =
-        Paths.get(projectDir).resolve(AUDIO_ID_SIDECAR_NAME)
+    private fun sidecarPath(projectDir: String): Path = Paths.get(projectDir).resolve(AUDIO_ID_SIDECAR_NAME)
 
     private fun parseUuid(raw: String): ProjectUuid? {
         val trimmed = raw
-            .removePrefix("﻿") // strip UTF-8 BOM if present
+            .removePrefix("") // strip UTF-8 BOM if present
             .lineSequence()
             .map { it.trim() }
             .firstOrNull { it.isNotEmpty() && !it.startsWith("#") }

@@ -1,8 +1,8 @@
 package com.sketchbook.repo
 
 import com.sketchbook.core.ProjectId
-import kotlin.time.Instant
 import kotlinx.serialization.Serializable
+import kotlin.time.Instant
 
 /**
  * Append-only record of a state change on a project. Mirrors the v0.1 Python journal so the
@@ -46,7 +46,9 @@ sealed interface ActionRecord {
         val pathAfter: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "Move" }
+        companion object {
+            const val TYPE_KEY: String = "Move"
+        }
     }
 
     @Serializable
@@ -55,7 +57,9 @@ sealed interface ActionRecord {
         val nameAfter: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "Rename" }
+        companion object {
+            const val TYPE_KEY: String = "Rename"
+        }
     }
 
     @Serializable
@@ -64,7 +68,9 @@ sealed interface ActionRecord {
         val isArchived: Boolean,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "Archive" }
+        companion object {
+            const val TYPE_KEY: String = "Archive"
+        }
     }
 
     @Serializable
@@ -73,7 +79,9 @@ sealed interface ActionRecord {
         val after: List<String>,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "SetTags" }
+        companion object {
+            const val TYPE_KEY: String = "SetTags"
+        }
     }
 
     /** Force-take of a lease lock from another host. Carries the prior owner for audit. */
@@ -83,7 +91,9 @@ sealed interface ActionRecord {
         val priorExpiresAtMs: Long?,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "ForceTakeLock" }
+        companion object {
+            const val TYPE_KEY: String = "ForceTakeLock"
+        }
     }
 
     /**
@@ -96,7 +106,9 @@ sealed interface ActionRecord {
         val theirRev: Long,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "PushConflict" }
+        companion object {
+            const val TYPE_KEY: String = "PushConflict"
+        }
     }
 
     /**
@@ -113,7 +125,9 @@ sealed interface ActionRecord {
         val alsOutcome: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "MissingSampleMapped" }
+        companion object {
+            const val TYPE_KEY: String = "MissingSampleMapped"
+        }
     }
 
     /**
@@ -131,7 +145,9 @@ sealed interface ActionRecord {
         val alsOutcome: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "MissingSampleUnmapped" }
+        companion object {
+            const val TYPE_KEY: String = "MissingSampleUnmapped"
+        }
     }
 
     /**
@@ -155,7 +171,9 @@ sealed interface ActionRecord {
         val alsOutcome: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "MacPathRepaired" }
+        companion object {
+            const val TYPE_KEY: String = "MacPathRepaired"
+        }
     }
 
     /**
@@ -180,7 +198,9 @@ sealed interface ActionRecord {
         val kindBefore: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
-        companion object { const val TYPE_KEY: String = "SnapshotRelabeled" }
+        companion object {
+            const val TYPE_KEY: String = "SnapshotRelabeled"
+        }
     }
 
     /**

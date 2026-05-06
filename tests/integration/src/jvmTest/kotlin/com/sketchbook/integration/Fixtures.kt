@@ -157,12 +157,12 @@ object Fixtures {
         buf.put("WAVE".toByteArray())
         buf.put("fmt ".toByteArray())
         buf.putInt(16)
-        buf.putShort(1)               // PCM
-        buf.putShort(1)               // mono
+        buf.putShort(1) // PCM
+        buf.putShort(1) // mono
         buf.putInt(44100)
         buf.putInt(byteRate)
-        buf.putShort(2)               // block align
-        buf.putShort(16)              // bits per sample
+        buf.putShort(2) // block align
+        buf.putShort(16) // bits per sample
         buf.put("data".toByteArray())
         buf.putInt(dataSize)
         repeat(sampleCount) { buf.putShort(0) }

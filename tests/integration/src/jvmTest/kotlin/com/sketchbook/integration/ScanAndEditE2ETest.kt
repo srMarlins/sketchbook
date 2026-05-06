@@ -22,7 +22,10 @@ import kotlin.test.assertTrue
 class ScanAndEditE2ETest {
 
     private val tmp: Path = createTempDirectory("scan-e2e-")
-    @AfterTest fun cleanup() { tmp.toFile().deleteRecursively() }
+
+    @AfterTest fun cleanup() {
+        tmp.toFile().deleteRecursively()
+    }
 
     @Test
     fun scanThenEditRoundTrip() = runTest {
@@ -31,7 +34,7 @@ class ScanAndEditE2ETest {
         Fixtures.writeCleanProject(library)
         Fixtures.writeMissingSamplesProject(library)
         Fixtures.writeMacPathsProject(library)
-        Fixtures.writeParseFailProject(library)   // writes bad.als directly under library
+        Fixtures.writeParseFailProject(library) // writes bad.als directly under library
 
         val handle = CatalogDb.openInMemory()
         val fts = CatalogFts(handle.driver)

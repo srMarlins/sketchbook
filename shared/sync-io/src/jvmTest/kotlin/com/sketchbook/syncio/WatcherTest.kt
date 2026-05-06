@@ -18,7 +18,9 @@ class WatcherTest {
 
     private val root = createTempDirectory("watcher-test-")
 
-    @AfterTest fun cleanup() { root.toFile().deleteRecursively() }
+    @AfterTest fun cleanup() {
+        root.toFile().deleteRecursively()
+    }
 
     @Test
     fun emitsSingleSavedAfterDebounceWindow() = kotlinx.coroutines.runBlocking {

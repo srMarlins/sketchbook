@@ -95,33 +95,31 @@ class SqlProposalsRepository(
 
     override suspend fun approve(proposalId: String): Result<Proposal> = recordDecision(proposalId, "approved")
 
-    override suspend fun reject(proposalId: String): Result<Unit> =
-        recordDecision(proposalId, "rejected").map { }
+    override suspend fun reject(proposalId: String): Result<Unit> = recordDecision(proposalId, "rejected").map { }
 
-    private suspend fun recordDecision(proposalId: String, status: String): Result<Proposal> =
-        withContext(ioDispatcher) {
-            runCatching {
-                catalog.transaction {
-                    catalog.catalogQueries.insertProposalAck(
-                        proposal_key = proposalId,
-                        status = status,
-                        decided_at = now().toString(),
-                    )
-                }
-                ackTick.value = ackTick.value + 1
-                // Fabricate a minimal echoed Proposal so the caller's effect dispatch has
-                // *something* to render; the live-derived flow is the source of truth for the
-                // displayed list, so the exact contents here don't matter beyond proposalId
-                // and status.
-                Proposal(
-                    proposalId = proposalId,
-                    actor = "sketchbook",
-                    actions = emptyList(),
-                    submittedAt = now(),
-                    status = if (status == "approved") ProposalStatus.Approved else ProposalStatus.Rejected,
+    private suspend fun recordDecision(proposalId: String, status: String): Result<Proposal> = withContext(ioDispatcher) {
+        runCatching {
+            catalog.transaction {
+                catalog.catalogQueries.insertProposalAck(
+                    proposal_key = proposalId,
+                    status = status,
+                    decided_at = now().toString(),
                 )
             }
+            ackTick.value = ackTick.value + 1
+            // Fabricate a minimal echoed Proposal so the caller's effect dispatch has
+            // *something* to render; the live-derived flow is the source of truth for the
+            // displayed list, so the exact contents here don't matter beyond proposalId
+            // and status.
+            Proposal(
+                proposalId = proposalId,
+                actor = "sketchbook",
+                actions = emptyList(),
+                submittedAt = now(),
+                status = if (status == "approved") ProposalStatus.Approved else ProposalStatus.Rejected,
+            )
         }
+    }
 
     private companion object {
         /** 18 months in days — matches the legacy Python heuristic. */

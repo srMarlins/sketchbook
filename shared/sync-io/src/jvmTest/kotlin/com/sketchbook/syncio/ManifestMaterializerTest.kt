@@ -38,7 +38,9 @@ class ManifestMaterializerTest {
     private val uuid = ProjectUuid("p-uuid")
     private val rev = SnapshotRev(7)
 
-    @AfterTest fun cleanup() { tmp.toFile().deleteRecursively() }
+    @AfterTest fun cleanup() {
+        tmp.toFile().deleteRecursively()
+    }
 
     @Test
     fun happyPathWritesAllFiles() = runTest {
@@ -47,9 +49,12 @@ class ManifestMaterializerTest {
             "Samples/k.wav" to "wav-bytes".toByteArray(),
         )
         val manifest = manifestFor(files)
-        val cloud = FakeMaterializerCloud(manifest, files.entries.associate { (rel, b) ->
-            manifest.files[rel]!!.hash to b
-        })
+        val cloud = FakeMaterializerCloud(
+            manifest,
+            files.entries.associate { (rel, b) ->
+                manifest.files[rel]!!.hash to b
+            },
+        )
         val handle = CatalogDb.openInMemory()
         val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = { BlobCacheSettings.Default })
         val mat = ManifestMaterializer(cloud, cache) { projectRoot }
@@ -67,9 +72,12 @@ class ManifestMaterializerTest {
         Files.writeString(pre, "old-bytes")
         val files = mapOf("Project.als" to "new-bytes".toByteArray())
         val manifest = manifestFor(files)
-        val cloud = FakeMaterializerCloud(manifest, files.entries.associate { (rel, b) ->
-            manifest.files[rel]!!.hash to b
-        })
+        val cloud = FakeMaterializerCloud(
+            manifest,
+            files.entries.associate { (rel, b) ->
+                manifest.files[rel]!!.hash to b
+            },
+        )
         val handle = CatalogDb.openInMemory()
         val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = { BlobCacheSettings.Default })
         val mat = ManifestMaterializer(cloud, cache) { projectRoot }
@@ -113,9 +121,12 @@ class ManifestMaterializerTest {
     fun rejectsManifestPathThatEscapesProjectRoot() = runTest {
         val files = mapOf("../escape.als" to "evil".toByteArray())
         val manifest = manifestFor(files)
-        val cloud = FakeMaterializerCloud(manifest, files.entries.associate { (rel, b) ->
-            manifest.files[rel]!!.hash to b
-        })
+        val cloud = FakeMaterializerCloud(
+            manifest,
+            files.entries.associate { (rel, b) ->
+                manifest.files[rel]!!.hash to b
+            },
+        )
         val handle = CatalogDb.openInMemory()
         val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = { BlobCacheSettings.Default })
         val mat = ManifestMaterializer(cloud, cache) { projectRoot }
@@ -163,8 +174,7 @@ private class FakeMaterializerCloud(
 ) : CloudBackend {
 
     override suspend fun headBlob(hash: BlobHash, scope: BlobScope): Boolean = true
-    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) =
-        error("not used")
+    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) = error("not used")
     override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource {
         if (hash == failOnHash) throw RuntimeException("simulated fetch failure")
         val bytes = bytesByHash[hash] ?: ByteArray(0)
@@ -174,11 +184,8 @@ private class FakeMaterializerCloud(
     }
     override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest = manifest
     override suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?) = emptyList<ManifestRef>()
-    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest) =
-        Result.failure<Generation>(SketchbookError.Conflict("not used"))
-    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) =
-        LeaseAcquireResult.Acquired(Generation("1"))
-    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation) =
-        LeaseRefreshResult.Refreshed(Generation("1"))
+    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest) = Result.failure<Generation>(SketchbookError.Conflict("not used"))
+    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) = LeaseAcquireResult.Acquired(Generation("1"))
+    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation) = LeaseRefreshResult.Refreshed(Generation("1"))
     override suspend fun releaseLock(uuid: ProjectUuid, expected: Generation) {}
 }

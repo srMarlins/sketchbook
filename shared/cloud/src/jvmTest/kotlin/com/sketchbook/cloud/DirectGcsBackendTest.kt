@@ -19,7 +19,6 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
-import kotlin.time.Instant
 import kotlinx.io.Buffer
 import java.security.KeyPairGenerator
 import java.util.Base64
@@ -27,6 +26,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import kotlin.time.Instant
 
 class DirectGcsBackendTest {
 
@@ -164,12 +164,15 @@ class DirectGcsBackendTest {
         val backend = makeBackend { request ->
             call++
             when (call) {
-                1 -> respond("", HttpStatusCode.PreconditionFailed) // initial CAS write
+                1 -> respond("", HttpStatusCode.PreconditionFailed)
+
+                // initial CAS write
                 2 -> respond(
                     kotlinx.serialization.json.Json.encodeToString(LeaseLock.serializer(), existing),
                     HttpStatusCode.OK,
                     headersOf("x-goog-generation", "55"),
                 )
+
                 else -> fail("unexpected call $call")
             }
         }

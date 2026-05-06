@@ -73,7 +73,7 @@ class LibraryHealthQueryTest {
     private fun seedSample(projectId: Long, isMissing: Boolean) {
         catalog.catalogQueries.insertProjectSampleWithMissing(
             project_id = projectId,
-            sample_path = "/samples/${projectId}_${isMissing}.wav",
+            sample_path = "/samples/${projectId}_$isMissing.wav",
             is_missing = if (isMissing) 1L else 0L,
         )
     }

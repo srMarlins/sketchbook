@@ -26,7 +26,7 @@ class AlsParserTest {
         val md = parse(
             """<?xml version="1.0"?>
             <Ableton MajorVersion="11" MinorVersion="11.3" Creator="Ableton Live 11.3.21">
-            </Ableton>"""
+            </Ableton>""",
         )
         assertEquals("11.3.21", md.lastSavedLiveVersion)
     }
@@ -39,7 +39,7 @@ class AlsParserTest {
               <LiveSet>
                 <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="128.500"/></Tempo></Mixer></DeviceChain></MainTrack>
               </LiveSet>
-            </Ableton>"""
+            </Ableton>""",
         )
         assertEquals(128.5, md.tempo)
     }
@@ -49,7 +49,7 @@ class AlsParserTest {
         // numerator = (encoded % 99) + 1 → for 7/8: encoded = (7-1) + 99*3 = 6 + 297 = 303 (denom index 3 = 8)
         val md = parse(
             """<?xml version="1.0"?>
-            <Ableton><LiveSet><MainTrack><DeviceChain><Mixer><TimeSignature><Manual Value="303"/></TimeSignature></Mixer></DeviceChain></MainTrack></LiveSet></Ableton>"""
+            <Ableton><LiveSet><MainTrack><DeviceChain><Mixer><TimeSignature><Manual Value="303"/></TimeSignature></Mixer></DeviceChain></MainTrack></LiveSet></Ableton>""",
         )
         assertEquals(7, md.timeSignatureNumerator)
         assertEquals(8, md.timeSignatureDenominator)
@@ -60,7 +60,7 @@ class AlsParserTest {
         // 4/4: numerator 4 → encoded % 99 = 3; denom 4 → index 2 → encoded = 3 + 99*2 = 201
         val md = parse(
             """<?xml version="1.0"?>
-            <Ableton><LiveSet><TimeSignature><Manual Value="201"/></TimeSignature></LiveSet></Ableton>"""
+            <Ableton><LiveSet><TimeSignature><Manual Value="201"/></TimeSignature></LiveSet></Ableton>""",
         )
         assertEquals(4, md.timeSignatureNumerator)
         assertEquals(4, md.timeSignatureDenominator)
@@ -75,7 +75,7 @@ class AlsParserTest {
               <MidiTrack/><MidiTrack/>
               <ReturnTrack/>
               <GroupTrack><Tracks><AudioTrack/></Tracks></GroupTrack>
-            </Tracks></LiveSet></Ableton>"""
+            </Tracks></LiveSet></Ableton>""",
         )
         assertEquals(4, md.audioTrackCount) // 3 top-level + 1 nested in GroupTrack
         assertEquals(2, md.midiTrackCount)
@@ -99,7 +99,7 @@ class AlsParserTest {
                   </PluginDesc>
                 </PluginDevice>
               </Devices></DeviceChain>
-            </AudioTrack></Tracks></LiveSet></Ableton>"""
+            </AudioTrack></Tracks></LiveSet></Ableton>""",
         )
         assertEquals(1, md.plugins.size)
         val p = md.plugins[0]
@@ -123,7 +123,7 @@ class AlsParserTest {
                   </PluginDesc>
                 </PluginDevice>
               </Devices></DeviceChain>
-            </AudioTrack></Tracks></LiveSet></Ableton>"""
+            </AudioTrack></Tracks></LiveSet></Ableton>""",
         )
         assertEquals(1, md.plugins.size)
         assertEquals("Serum", md.plugins[0].name)
@@ -146,7 +146,7 @@ class AlsParserTest {
                   </PluginDesc>
                 </PluginDevice>
               </Devices></DeviceChain>
-            </MidiTrack></Tracks></LiveSet></Ableton>"""
+            </MidiTrack></Tracks></LiveSet></Ableton>""",
         )
         assertEquals(1, md.plugins.size)
         assertEquals("Massive", md.plugins[0].name)
@@ -164,7 +164,7 @@ class AlsParserTest {
                   <Name Value="ChromaPhone"/>
                 </AuPluginDevice>
               </Devices></DeviceChain>
-            </MidiTrack></Tracks></LiveSet></Ableton>"""
+            </MidiTrack></Tracks></LiveSet></Ableton>""",
         )
         assertEquals(1, md.plugins.size)
         assertEquals("ChromaPhone", md.plugins[0].name)
@@ -183,7 +183,7 @@ class AlsParserTest {
                 <Compressor2/>
                 <Limiter/>
               </Devices></DeviceChain>
-            </AudioTrack></Tracks></LiveSet></Ableton>"""
+            </AudioTrack></Tracks></LiveSet></Ableton>""",
         )
         val names = md.plugins.map { it.name }
         assertEquals(listOf("Eq8", "Compressor2", "Limiter"), names)
@@ -201,7 +201,7 @@ class AlsParserTest {
                   <Path Value="Samples/Imported/kick.wav"/>
                 </FileRef>
               </SampleRef>
-            </DeviceChain></AudioTrack></Tracks></LiveSet></Ableton>"""
+            </DeviceChain></AudioTrack></Tracks></LiveSet></Ableton>""",
         )
         assertEquals(listOf(SampleRef("Samples/Imported/kick.wav")), md.sampleRefs)
     }
@@ -220,7 +220,7 @@ class AlsParserTest {
                   <Name Value="snare.wav"/>
                 </FileRef>
               </SampleRef>
-            </DeviceChain></AudioTrack></Tracks></LiveSet></Ableton>"""
+            </DeviceChain></AudioTrack></Tracks></LiveSet></Ableton>""",
         )
         assertEquals(listOf(SampleRef("Samples/Imported/snare.wav")), md.sampleRefs)
     }
@@ -241,7 +241,7 @@ class AlsParserTest {
                   </FileRef>
                 </OriginalFileRef>
               </SampleRef>
-            </DeviceChain></AudioTrack></Tracks></LiveSet></Ableton>"""
+            </DeviceChain></AudioTrack></Tracks></LiveSet></Ableton>""",
         )
         assertEquals(1, md.sampleRefs.size)
         assertEquals("Samples/now.wav", md.sampleRefs[0].rawPath)
@@ -255,7 +255,7 @@ class AlsParserTest {
               <SampleRef><FileRef><Path Value="/Users/alice/Samples/k.wav"/></FileRef></SampleRef>
               <SampleRef><FileRef><Path Value="/Volumes/Audio/Samples/h.wav"/></FileRef></SampleRef>
               <SampleRef><FileRef><Path Value="Samples/c.wav"/></FileRef></SampleRef>
-            </LiveSet></Ableton>"""
+            </LiveSet></Ableton>""",
         )
         assertEquals(2, md.macPathsCount)
         assertEquals(3, md.sampleRefs.size)
@@ -271,7 +271,7 @@ class AlsParserTest {
                 <RootNote Value="2"/>
                 <Name Value="Minor"/>
               </ScaleInformation>
-            </LiveSet></Ableton>"""
+            </LiveSet></Ableton>""",
         )
         assertEquals("D Minor", md.keySignature)
     }
@@ -285,7 +285,7 @@ class AlsParserTest {
                 <RootNote Value="6"/>
                 <Name Value="Major"/>
               </ScaleInformation>
-            </LiveSet></Ableton>"""
+            </LiveSet></Ableton>""",
         )
         assertEquals("F# Major", md.keySignature)
     }
@@ -296,7 +296,7 @@ class AlsParserTest {
             """<?xml version="1.0"?>
             <Ableton><LiveSet>
               <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="120"/></Tempo></Mixer></DeviceChain></MainTrack>
-            </LiveSet></Ableton>"""
+            </LiveSet></Ableton>""",
         )
         assertNull(md.keySignature)
     }
@@ -309,7 +309,7 @@ class AlsParserTest {
               <ScaleInformation>
                 <RootNote Value="5"/>
               </ScaleInformation>
-            </LiveSet></Ableton>"""
+            </LiveSet></Ableton>""",
         )
         assertNull(md.keySignature)
     }
@@ -322,7 +322,7 @@ class AlsParserTest {
             <Ableton><LiveSet><Tracks><AudioTrack>
               <Name><EffectiveName Value="Minor"/></Name>
               <DeviceChain/>
-            </AudioTrack></Tracks></LiveSet></Ableton>"""
+            </AudioTrack></Tracks></LiveSet></Ableton>""",
         )
         assertNull(md.keySignature)
     }
@@ -330,7 +330,7 @@ class AlsParserTest {
     @Test
     fun handlesEmptyProject() {
         val md = parse(
-            """<?xml version="1.0"?><Ableton Creator="Ableton Live 12.0.0"><LiveSet/></Ableton>"""
+            """<?xml version="1.0"?><Ableton Creator="Ableton Live 12.0.0"><LiveSet/></Ableton>""",
         )
         assertNull(md.tempo)
         assertNull(md.timeSignatureNumerator)
@@ -350,7 +350,7 @@ class AlsParserTest {
               <DeviceChain>
                 <SampleRef><FileRef><Path Value="Samples/é/ñ/kïck.wav"/></FileRef></SampleRef>
               </DeviceChain>
-            </AudioTrack></Tracks></LiveSet></Ableton>"""
+            </AudioTrack></Tracks></LiveSet></Ableton>""",
         )
         assertEquals(1, md.audioTrackCount)
         assertEquals(1, md.sampleRefs.size)

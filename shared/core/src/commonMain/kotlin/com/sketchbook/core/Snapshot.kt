@@ -1,8 +1,8 @@
 package com.sketchbook.core
 
-import kotlin.time.Instant
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.time.Instant
 
 /**
  * Snapshot kind. See design doc §3.1 / §4.5.
@@ -13,9 +13,14 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 enum class SnapshotKind {
-    @SerialName("auto") Auto,
-    @SerialName("named") Named,
-    @SerialName("branch") Branch,
+    @SerialName("auto")
+    Auto,
+
+    @SerialName("named")
+    Named,
+
+    @SerialName("branch")
+    Branch,
 }
 
 /**

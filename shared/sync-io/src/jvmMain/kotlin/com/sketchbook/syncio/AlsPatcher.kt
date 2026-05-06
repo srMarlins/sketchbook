@@ -105,29 +105,26 @@ class AlsPatcher(
      * `Path`-based core. Repository code in `commonMain` can't reference `java.nio.file.Path`,
      * so the path round-trips through `String`.
      */
-    override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome =
-        when (val o = patch(Paths.get(alsPath), mapping)) {
-            Outcome.Patched -> AlsPatchService.Outcome.Patched
-            Outcome.NoChange -> AlsPatchService.Outcome.NoChange
-            Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
-            is Outcome.Failed -> AlsPatchService.Outcome.Failed
-        }
+    override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome = when (val o = patch(Paths.get(alsPath), mapping)) {
+        Outcome.Patched -> AlsPatchService.Outcome.Patched
+        Outcome.NoChange -> AlsPatchService.Outcome.NoChange
+        Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
+        is Outcome.Failed -> AlsPatchService.Outcome.Failed
+    }
 
-    override suspend fun patch(alsPath: String, edits: List<SampleRefEdit>): AlsPatchService.Outcome =
-        when (val o = patch(Paths.get(alsPath), edits)) {
-            Outcome.Patched -> AlsPatchService.Outcome.Patched
-            Outcome.NoChange -> AlsPatchService.Outcome.NoChange
-            Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
-            is Outcome.Failed -> AlsPatchService.Outcome.Failed
-        }
+    override suspend fun patch(alsPath: String, edits: List<SampleRefEdit>): AlsPatchService.Outcome = when (val o = patch(Paths.get(alsPath), edits)) {
+        Outcome.Patched -> AlsPatchService.Outcome.Patched
+        Outcome.NoChange -> AlsPatchService.Outcome.NoChange
+        Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
+        is Outcome.Failed -> AlsPatchService.Outcome.Failed
+    }
 
-    override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome =
-        when (val o = restore(Paths.get(alsPath), bytes)) {
-            Outcome.Patched -> AlsPatchService.Outcome.Patched
-            Outcome.NoChange -> AlsPatchService.Outcome.NoChange
-            Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
-            is Outcome.Failed -> AlsPatchService.Outcome.Failed
-        }
+    override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome = when (val o = restore(Paths.get(alsPath), bytes)) {
+        Outcome.Patched -> AlsPatchService.Outcome.Patched
+        Outcome.NoChange -> AlsPatchService.Outcome.NoChange
+        Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
+        is Outcome.Failed -> AlsPatchService.Outcome.Failed
+    }
 }
 
 /**

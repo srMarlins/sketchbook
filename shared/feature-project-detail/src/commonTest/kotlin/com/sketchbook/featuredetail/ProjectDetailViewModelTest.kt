@@ -35,8 +35,13 @@ class ProjectDetailViewModelTest {
 
     private val mainDispatcher = StandardTestDispatcher()
 
-    @BeforeTest fun setUpMain() { Dispatchers.setMain(mainDispatcher) }
-    @AfterTest fun tearDownMain() { Dispatchers.resetMain() }
+    @BeforeTest fun setUpMain() {
+        Dispatchers.setMain(mainDispatcher)
+    }
+
+    @AfterTest fun tearDownMain() {
+        Dispatchers.resetMain()
+    }
 
     private val now = Instant.parse("2026-05-05T12:00:00Z")
     private val sampleRow = ProjectRow(
@@ -80,8 +85,7 @@ class ProjectDetailViewModelTest {
     private class FakeSnapshots(private val flow: MutableStateFlow<List<Snapshot>>) : SnapshotRepository {
         override fun observeHistory(uuid: ProjectUuid): Flow<List<Snapshot>> = flow
         override suspend fun recordSnapshot(snapshot: Snapshot, manifestPath: String, manifestHash: String): Result<Unit> = Result.success(Unit)
-        override suspend fun setSnapshotLabel(uuid: ProjectUuid, rev: SnapshotRev, label: String?): Result<JournalEntry> =
-            Result.success(JournalEntry(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto")))
+        override suspend fun setSnapshotLabel(uuid: ProjectUuid, rev: SnapshotRev, label: String?): Result<JournalEntry> = Result.success(JournalEntry(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto")))
         override suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> = Result.success(Unit)
     }
 

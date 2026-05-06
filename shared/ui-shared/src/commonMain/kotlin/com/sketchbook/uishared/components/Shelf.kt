@@ -37,9 +37,12 @@ fun ShelfHeader(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             ProvideContentColor(colors.inkPrimary) {
-                Text(title, style = AppTheme.typography.bodyEmphasis.copy(
-                    fontSize = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp),
-                ))
+                Text(
+                    title,
+                    style = AppTheme.typography.bodyEmphasis.copy(
+                        fontSize = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
+                )
             }
             if (subtitle != null) {
                 ProvideContentColor(colors.inkMuted) {

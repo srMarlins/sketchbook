@@ -12,9 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.core.PluginFormat
 import com.sketchbook.core.PluginRef
 import com.sketchbook.repo.LockStatus
@@ -87,11 +87,14 @@ private fun Header(state: ProjectDetailViewModel.State, vm: ProjectDetailViewMod
 @Composable
 private fun LockSlot(status: LockStatus, vm: ProjectDetailViewModel) {
     when (status) {
-        LockStatus.Free -> Unit // chrome stays clean when there's nothing to say
+        LockStatus.Free -> Unit
+
+        // chrome stays clean when there's nothing to say
         is LockStatus.Ours -> LockBadge(
             label = "editing here",
             color = AppTheme.colors.pinGreen,
         )
+
         is LockStatus.HeldByOther -> LockBadge(
             label = "locked",
             color = AppTheme.colors.accentSecondary,
@@ -99,6 +102,7 @@ private fun LockSlot(status: LockStatus, vm: ProjectDetailViewModel) {
             actionLabel = "Force-take",
             onAction = { vm.dispatch(ProjectDetailViewModel.Intent.ForceTakeLock) },
         )
+
         is LockStatus.Stale -> LockBadge(
             label = "stale lock",
             color = AppTheme.colors.pinOrange,
@@ -208,7 +212,7 @@ private fun PluginsTab(plugins: List<PluginRef>) {
             item(key = "track-$track") {
                 Text(track, style = AppTheme.typography.bodyEmphasis)
             }
-            items(list, key = { "${track}-${it.name}-${it.format}" }) { p ->
+            items(list, key = { "$track-${it.name}-${it.format}" }) { p ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,

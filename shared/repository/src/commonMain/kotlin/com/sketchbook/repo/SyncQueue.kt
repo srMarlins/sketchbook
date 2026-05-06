@@ -38,6 +38,7 @@ enum class ProjectSyncState {
     Uploading,
     Conflict,
     LocalOnly,
+
     /** Cloud has manifests we haven't pulled yet — `cloud_head_rev > local_rev`. */
     RemoteAhead,
     Unknown,

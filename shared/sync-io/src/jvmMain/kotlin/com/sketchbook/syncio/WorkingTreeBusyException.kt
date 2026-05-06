@@ -5,5 +5,4 @@ package com.sketchbook.syncio
  * by another process (typically Ableton Live with the project open). The pull/rewind caller
  * should surface this as "Close project in Ableton to apply" rather than retrying immediately.
  */
-class WorkingTreeBusyException(val busyPaths: List<String>) :
-    Exception("Working tree is busy: ${busyPaths.joinToString(", ")}")
+class WorkingTreeBusyException(val busyPaths: List<String>) : Exception("Working tree is busy: ${busyPaths.joinToString(", ")}")

@@ -68,9 +68,9 @@ data class AppColors(
             val tintRose = Color(0xFFF5E4DD)
             val tintSage = Color(0xFFE8EEE0)
             val tintCream = Color(0xFFF5ECD6)
-            val accent = Color(0xFFB54A3A)        // terracotta
+            val accent = Color(0xFFB54A3A) // terracotta
             val accentPositive = Color(0xFF4F7A4A) // sage green
-            val accentWarning = Color(0xFFC79030)  // mustard
+            val accentWarning = Color(0xFFC79030) // mustard
             AppColors(
                 surfacePage = paperBase,
                 surfaceCard = paperRaised,

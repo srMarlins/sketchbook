@@ -15,9 +15,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 
 /**
  * State machine for the lease lock per design §5. Wraps [CloudBackend.acquireLock] /
@@ -54,6 +54,7 @@ class LeaseLockState(
                 heartbeatJob = scope.launch { heartbeatLoop(result.generation, lock.heartbeatSeq) }
                 LockState.Owned(lock, result.generation)
             }
+
             is LeaseAcquireResult.Held -> LockState.HeldByOther(result.held, result.generation)
         }
         _state.value = outcome
@@ -79,6 +80,7 @@ class LeaseLockState(
                     generation = r.generation
                     _state.value = LockState.Owned(refreshed, generation)
                 }
+
                 LeaseRefreshResult.Stale -> {
                     _state.value = LockState.Lost
                     return

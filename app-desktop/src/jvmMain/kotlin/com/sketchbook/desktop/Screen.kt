@@ -16,10 +16,16 @@ import kotlinx.serialization.Serializable
 @Serializable
 sealed interface Screen : NavKey {
     @Serializable data object Projects : Screen
+
     @Serializable data class ProjectDetail(val id: ProjectId) : Screen
+
     @Serializable data class Timeline(val uuid: ProjectUuid) : Screen
+
     @Serializable data object Proposals : Screen
+
     @Serializable data object NeedsAttention : Screen
+
     @Serializable data object Settings : Screen
+
     @Serializable data object Journal : Screen
 }

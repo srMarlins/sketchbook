@@ -14,12 +14,12 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.time.Clock
-import kotlin.time.Instant
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Instant
 
 /**
  * File-watcher Flow over a directory tree. Wraps `io.methvin:directory-watcher` so callers see
@@ -67,12 +67,14 @@ class Watcher(
                         previous?.cancel()
                         newJob.start()
                     }
+
                     DirectoryChangeEvent.EventType.DELETE -> {
                         // Cancel any in-flight Save debounce for the same path so a delete
                         // immediately after a save doesn't race.
                         pending.remove(target)?.cancel()
                         trySend(SaveEvent.Removed(target, clock.now()))
                     }
+
                     DirectoryChangeEvent.EventType.OVERFLOW -> Unit
                 }
             }

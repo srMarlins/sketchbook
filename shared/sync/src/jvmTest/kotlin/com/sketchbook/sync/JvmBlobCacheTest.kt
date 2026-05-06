@@ -28,7 +28,9 @@ class JvmBlobCacheTest {
 
     private val tmp = createTempDirectory("blob-cache-")
 
-    @AfterTest fun cleanup() { tmp.toFile().deleteRecursively() }
+    @AfterTest fun cleanup() {
+        tmp.toFile().deleteRecursively()
+    }
 
     private val hash = BlobHash("b3:" + "a".repeat(64))
     private val payload = "hello-blob".toByteArray()
@@ -112,14 +114,10 @@ private class CountingCloud(private val payload: ByteArray) : CloudBackend {
         buf.write(payload)
         return buf
     }
-    override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest =
-        error("not used")
+    override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest = error("not used")
     override suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?) = emptyList<ManifestRef>()
-    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest) =
-        Result.failure<Generation>(SketchbookError.Conflict("not used"))
-    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) =
-        LeaseAcquireResult.Acquired(Generation("1"))
-    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation) =
-        LeaseRefreshResult.Refreshed(Generation("1"))
+    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest) = Result.failure<Generation>(SketchbookError.Conflict("not used"))
+    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) = LeaseAcquireResult.Acquired(Generation("1"))
+    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation) = LeaseRefreshResult.Refreshed(Generation("1"))
     override suspend fun releaseLock(uuid: ProjectUuid, expected: Generation) {}
 }

@@ -7,6 +7,7 @@ import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotKind
+import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
@@ -14,14 +15,10 @@ import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProjectSyncState
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
-import kotlin.time.Clock
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.Instant
 import com.sketchbook.sync.ForceSnapshotPipeline
 import com.sketchbook.sync.PipelineInput
 import com.sketchbook.sync.SnapshotPipeline
 import com.sketchbook.sync.SnapshotProgress
-import com.sketchbook.core.SnapshotRev
 import com.sketchbook.syncio.JvmWorkingTree
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +36,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.nio.file.Files
 import java.nio.file.Paths
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * Real cloud-backed `SyncQueue`. Composes:
@@ -73,7 +73,8 @@ class GcsSyncQueue(
      * scheduler so virtual time stays in lockstep with the loop's cloud calls.
      */
     private val ioDispatcher: kotlin.coroutines.CoroutineContext = Dispatchers.IO,
-) : SyncQueue, ForceSnapshotPipeline {
+) : SyncQueue,
+    ForceSnapshotPipeline {
 
     private val uploading = MutableStateFlow<Set<ProjectUuid>>(emptySet())
     private val conflicts = MutableStateFlow<Set<ProjectUuid>>(emptySet())
@@ -94,40 +95,38 @@ class GcsSyncQueue(
     /** Read-side accessor for the detail-panel's conflict caption. */
     fun conflictMessage(uuid: ProjectUuid): String? = conflictMessages.value[uuid]
 
-    override fun observe(): Flow<SyncQueueState> {
-        return combine(
-            syncState.observeVersion().onStart { emit(0L) },
-            uploading,
-        ) { _, up ->
-            val rows = withContext(ioDispatcher) { syncState.all() }
-            SyncQueueState(
-                pending = rows.count { it.dirty },
-                uploading = up.size,
-                downloading = 0,
-                online = true,
-            )
-        }
+    override fun observe(): Flow<SyncQueueState> = combine(
+        syncState.observeVersion().onStart { emit(0L) },
+        uploading,
+    ) { _, up ->
+        val rows = withContext(ioDispatcher) { syncState.all() }
+        SyncQueueState(
+            pending = rows.count { it.dirty },
+            uploading = up.size,
+            downloading = 0,
+            online = true,
+        )
     }
 
-    override fun observeProject(id: ProjectId): Flow<ProjectSyncState> {
-        return combine(
-            syncState.observeVersion().onStart { emit(0L) },
-            uploading,
-            conflicts,
-        ) { _, up, conf ->
-            val uuid = withContext(ioDispatcher) { syncState.identityFor(id) }
-            when {
-                uuid in up -> ProjectSyncState.Uploading
-                uuid in conf -> ProjectSyncState.Conflict
-                else -> {
-                    val row = withContext(ioDispatcher) { syncState.stateOf(uuid) }
-                    when {
-                        row == null -> ProjectSyncState.LocalOnly
-                        row.dirty -> ProjectSyncState.Pending
-                        row.cloudHeadRev > row.localRev -> ProjectSyncState.RemoteAhead
-                        row.localRev > 0 -> ProjectSyncState.Synced
-                        else -> ProjectSyncState.LocalOnly
-                    }
+    override fun observeProject(id: ProjectId): Flow<ProjectSyncState> = combine(
+        syncState.observeVersion().onStart { emit(0L) },
+        uploading,
+        conflicts,
+    ) { _, up, conf ->
+        val uuid = withContext(ioDispatcher) { syncState.identityFor(id) }
+        when {
+            uuid in up -> ProjectSyncState.Uploading
+
+            uuid in conf -> ProjectSyncState.Conflict
+
+            else -> {
+                val row = withContext(ioDispatcher) { syncState.stateOf(uuid) }
+                when {
+                    row == null -> ProjectSyncState.LocalOnly
+                    row.dirty -> ProjectSyncState.Pending
+                    row.cloudHeadRev > row.localRev -> ProjectSyncState.RemoteAhead
+                    row.localRev > 0 -> ProjectSyncState.Synced
+                    else -> ProjectSyncState.LocalOnly
                 }
             }
         }
@@ -211,7 +210,9 @@ class GcsSyncQueue(
                             savedRev = progress.rev.value
                             savedKind = progress.kind
                         }
+
                         is SnapshotProgress.Failed -> failureReason = progress.reason
+
                         else -> Unit
                     }
                 }
@@ -223,15 +224,19 @@ class GcsSyncQueue(
                 // Conflict with an inline message so the user can pull + re-push.
                 if (savedKind == SnapshotKind.Branch) {
                     conflicts.value = conflicts.value + uuid
-                    conflictMessages.value = conflictMessages.value + (uuid to
-                        "Remote diverged — your work was saved as a branch. Pull + re-push to merge.")
+                    conflictMessages.value = conflictMessages.value + (
+                        uuid to
+                            "Remote diverged — your work was saved as a branch. Pull + re-push to merge."
+                        )
                     recordConflictJournal(pid, ourRev = finalRev, theirRev = finalRev - 1)
                 }
                 Result.success(SnapshotRev(finalRev))
             } else {
                 conflicts.value = conflicts.value + uuid
-                conflictMessages.value = conflictMessages.value + (uuid to
-                    (failureReason ?: "Push failed — retry or check Settings → Cloud."))
+                conflictMessages.value = conflictMessages.value + (
+                    uuid to
+                        (failureReason ?: "Push failed — retry or check Settings → Cloud.")
+                    )
                 Result.failure(IllegalStateException(failureReason ?: "pipeline did not complete"))
             }
         } catch (t: Throwable) {
@@ -366,7 +371,9 @@ class GcsSyncQueue(
         val uuid = syncState.identityFor(id)
         return when {
             uuid in uploading.value -> ProjectSyncState.Uploading
+
             uuid in conflicts.value -> ProjectSyncState.Conflict
+
             else -> {
                 val row = syncState.stateOf(uuid)
                 when {

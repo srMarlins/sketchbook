@@ -1,8 +1,8 @@
 package com.sketchbook.sync
 
 import com.sketchbook.core.BlobHash
-import kotlin.time.Instant
 import kotlinx.io.RawSource
+import kotlin.time.Instant
 
 /**
  * The pipeline's view of a project's on-disk tree. Abstracts JVM `Path` walks so [SnapshotPipeline]

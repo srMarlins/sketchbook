@@ -1,8 +1,6 @@
 package com.sketchbook.mcp
 
 import kotlinx.coroutines.test.runTest
-import kotlin.time.Clock
-import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -16,14 +14,21 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 class FileProposalsWriterTest {
 
     private val dir = createTempDirectory("proposals-test-")
-    @AfterTest fun cleanup() { dir.toFile().deleteRecursively() }
+
+    @AfterTest fun cleanup() {
+        dir.toFile().deleteRecursively()
+    }
 
     private val now = Instant.parse("2026-05-05T17:23:45Z")
-    private val fixedClock = object : Clock { override fun now(): Instant = now }
+    private val fixedClock = object : Clock {
+        override fun now(): Instant = now
+    }
 
     @Test
     fun writesProposalWithV01Layout() = runTest {

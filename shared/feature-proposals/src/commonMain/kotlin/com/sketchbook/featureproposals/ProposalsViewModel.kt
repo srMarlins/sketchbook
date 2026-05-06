@@ -4,10 +4,10 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sketchbook.actions.ProposalActionExecutor
+import com.sketchbook.core.AppScope
 import com.sketchbook.repo.Proposal
 import com.sketchbook.repo.ProposalStatus
 import com.sketchbook.repo.ProposalsRepository
-import com.sketchbook.core.AppScope
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
@@ -71,13 +71,20 @@ class ProposalsViewModel(
                     return@launch
                 }
                 val r = repository.approve(intent.proposalId)
-                if (r.isSuccess) _effects.tryEmit(Effect.Approved(intent.proposalId))
-                else _effects.tryEmit(Effect.Failed(intent.proposalId, r.exceptionOrNull()?.message ?: "approve failed"))
+                if (r.isSuccess) {
+                    _effects.tryEmit(Effect.Approved(intent.proposalId))
+                } else {
+                    _effects.tryEmit(Effect.Failed(intent.proposalId, r.exceptionOrNull()?.message ?: "approve failed"))
+                }
             }
+
             is Intent.Reject -> viewModelScope.launch {
                 val r = repository.reject(intent.proposalId)
-                if (r.isSuccess) _effects.tryEmit(Effect.Rejected(intent.proposalId))
-                else _effects.tryEmit(Effect.Failed(intent.proposalId, r.exceptionOrNull()?.message ?: "reject failed"))
+                if (r.isSuccess) {
+                    _effects.tryEmit(Effect.Rejected(intent.proposalId))
+                } else {
+                    _effects.tryEmit(Effect.Failed(intent.proposalId, r.exceptionOrNull()?.message ?: "reject failed"))
+                }
             }
         }
     }
