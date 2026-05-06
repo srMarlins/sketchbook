@@ -12,13 +12,13 @@ You are an inline coauthor in the editor. Lower trust by default. Your suggestio
 - New `expect/actual` declarations.
 - New module dependencies (don't `import` from a module the file has never imported before).
 - New libraries — they must enter via `gradle/libs.versions.toml`, with justification in a PR body. Suggesting a `import com.someotherlib…` will fail review.
-- MVIKotlin, Decompose, Roborazzi, KAPT, Anvil, Realm Kotlin, Moko-resources, `viewmodel-compose`, Koin, Room. Explicitly avoided. See design doc §2.1.
+- MVIKotlin, Decompose, Roborazzi, KAPT, Anvil, Realm Kotlin, Moko-resources, `androidx.lifecycle:viewmodel-compose` (Android-only — the JetBrains KMP fork `org.jetbrains.androidx.lifecycle:*` is the acceptable alternative), Koin, Room. Explicitly avoided. See `docs/ai/CLAUDE.md`.
 
 ## Style anchors
 
 - Prefer plain Kotlin idioms over framework-y ones: `data class`, `sealed interface`, `value class` for IDs.
 - `commonMain` files: no `java.*` imports. Use `kotlinx-io` for paths, `kotlinx-datetime` for time.
-- State-holders use `MutableStateFlow` + sealed `Intent` + `StateFlow<State>` + `SharedFlow<Effect>` (see design doc §2.4).
+- State-holders use `MutableStateFlow` + sealed `Intent` + `StateFlow<State>` + `SharedFlow<Effect>` — see any `shared/feature-*/.../*StateHolder.kt` for the canonical shape.
 - DI: constructor injection. No `Koin`-style service locators.
 - Tests: `kotlin.test`, Kotest assertions, Turbine. Hand-written fakes — no MockK in `commonTest`.
 

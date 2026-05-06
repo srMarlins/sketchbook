@@ -1,6 +1,6 @@
 # Sketchbook — design language
 
-> Companion to `docs/plans/2026-05-04-audio-catalog-design.md`. This document defines the visual and interaction language for the `web/` package and is the source of truth for theme tokens, component vocabulary, motion, assets, accessibility, and AI presence in the UI. Authored 2026-05-04.
+> Visual + interaction language for the Compose Multiplatform desktop app. Source of truth for theme tokens, component vocabulary, motion, assets, accessibility, and AI presence. Originally authored 2026-05-04 alongside the (retired) React frontend; aesthetic principles carried over to Compose. The "tech wiring" section is intentionally kept short — see `shared/ui-shared/` for the Compose implementation and `gradle/libs.versions.toml` for the dependency list.
 
 ---
 
@@ -379,67 +379,17 @@ When a project has unaddressed AI suggestions specific to it (e.g., "candidate r
 
 ## 10. Tech wiring
 
-### Stack within `web/`
+The desktop app is Compose Multiplatform (JVM target via `:app-desktop`). The aesthetic above is implemented in `shared/ui-shared/`:
 
-- **React 18** + **Vite** + **TypeScript (strict)**.
-- **Tailwind CSS** with theme tokens defined as CSS custom properties on `:root` and `[data-theme="dark"]`. Tailwind's `theme.extend.colors` references `var(--…)`. No `dark:` variant — `data-theme` attribute drives the theme and Tailwind classes resolve via vars.
-- **Radix UI primitives** (headless): Dialog, Popover, Tooltip, DropdownMenu, Tabs, ScrollArea, VisuallyHidden, Toast, Slider, Switch, Checkbox, Label, Separator, AccessibleIcon. Skinned in our sketchbook language.
-- **TanStack Table v8 + TanStack Virtual** — virtualized strip list.
-- **TanStack Query** — server state (FastAPI calls).
-- **TanStack Router** — typesafe routing.
-- **Framer Motion** — only for the two carve-outs (proposal-lands, archive-tape-peel) and the corkboard slide. Standard hover lifts use plain CSS transitions.
-- **Zustand** — client UI state (theme, search query, filter chips, selected strip, corkboard open/closed).
-- **No shadcn/ui, MUI, Chakra, Mantine.**
+- `theme/Colors.kt` — semantic + Ableton-14 tokens.
+- `theme/Spacing.kt` — spacing scale.
+- `components/PaperPage.kt`, `RuledPaper.kt`, `Surface.kt` — paper/desk surfaces.
+- `components/SongStrip.kt`, `RowItem.kt` — load-bearing list rows.
+- `components/NotebookSidebar.kt`, `PageHeader.kt`, `Button.kt`, `TextField.kt` — chrome.
 
-### Folder layout
+Per-feature surfaces live in `shared/feature-*/`. Settings persistence uses `java.util.prefs.Preferences` (will move to OS keychain in v1.1). State-holders follow the canonical pattern in `docs/ai/CLAUDE.md` (sealed `Intent`, `data class State`, `state: StateFlow<State>`, `accept(intent)`).
 
-```
-web/src/
-  app/                  # router config, theme provider, top-level providers
-  routes/               # one file per route (Home, Notebook, Corkboard, Proposals, Claude)
-  components/
-    surface/            # Desk, NotebookPage, Shelf, NotebookSpine, CorkboardPanel, TornPagePile
-    data/               # SongStrip, NavStrip, FilterChip, MarginStickyNote, ProposalCard
-    inputs/             # SearchBar, TextInput, Button
-    feedback/           # Toast, EmptyState, LoadingState, ErrorState
-    primitives/         # Radix wrappers re-exported with skin
-  theme/
-    tokens.css          # all CSS custom properties (light + dark)
-    tailwind.config.ts
-    contrast-table.ts   # precomputed text-on-strip color per Ableton color
-  assets/
-    icons/              # individual SVG components when one needs animation
-    sprites.svg         # consolidated sprite sheet (build-time generated)
-  lib/
-    api.ts              # FastAPI client
-    proposals.ts        # proposal queue helpers
-    journal.ts          # journal helpers (read-only)
-    seed.ts             # deterministic jitter from string ids
-  hooks/
-    useTheme.ts
-    useKeyboard.ts      # Cmd-K, /, Esc handling
-  state/
-    ui-store.ts         # Zustand
-```
-
-### Storybook-lite dev route
-
-`/_dev` route in dev builds renders every component in every state (light + dark, with/without data, with/without simulated `prefers-reduced-motion`). Not shipped to prod. Cheap visual regression surface.
-
-### Testing
-
-- **Vitest + React Testing Library** — component unit tests.
-- **Playwright** — two E2E golden paths: (1) browse → search → open corkboard → close, (2) approve a proposal end-to-end against a fixture proposals dir.
-- Visual regression deferred to v0.2 unless trivial; `/_dev` route + screenshots get us there cheaply.
-- Accessibility checks via `@axe-core/react` in dev builds; CI runs axe on `/_dev`.
-
-### Build output
-
-`vite build` → `web/dist/`. FastAPI serves `dist/` as static files in prod (catalog design §3). Single port, 127.0.0.1.
-
-### Settings persistence
-
-Theme choice and any future user prefs in `localStorage` keyed under `sketchbook.*`. No remote sync — single user, single machine.
+The marketing landing page under `site/` mirrors a subset of these tokens for the download splash (see `site/index.html`).
 
 ---
 

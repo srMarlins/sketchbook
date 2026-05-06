@@ -1,12 +1,12 @@
 # Contributing
 
-This repo is the home of the Kotlin/Compose Multiplatform rewrite of the audio catalog + sync app. The active design doc is `docs/plans/2026-05-05-sync-versioning-design.md`. The active implementation plan is `docs/plans/2026-05-05-kotlin-rewrite-impl-plan.md`.
+Sketchbook is a Kotlin + Compose Multiplatform desktop app for cataloging and syncing an Ableton library. Architecture, conventions, and library policy live in `docs/ai/CLAUDE.md`. There is no standing roadmap doc — active work is whatever the user is currently in the middle of.
 
 ## Branches
 
-- All work happens on a feature branch named `pr-<NN>-<slug>`. Examples: `pr-04-catalog-sqldelight`, `pr-12-feature-projects`.
-- `main` is protected: no direct pushes, no force-push, PR + green CI + 1 review required.
-- One PR = one logical merge unit. PRs are chunky but coherent — see the implementation plan for the cut points.
+- All work happens in a worktree at `.claude/worktrees/<branch>/` on a feature branch named `pr-<NN>-<slug>`. Examples: `pr-l-critical-wiring`, `pr-x-key-tempo-filters`.
+- `main` is **not** protected — there is no required-reviews/required-checks ruleset. Local `./gradlew check` passing is the merge gate.
+- One PR = one logical merge unit. PRs are chunky but coherent — see the active plan for cut points.
 
 ## Commits
 
@@ -17,10 +17,10 @@ This repo is the home of the Kotlin/Compose Multiplatform rewrite of the audio c
 ## PR workflow
 
 1. Open the PR with the template filled in (self-review checklist).
-2. Push commits until CI is green (`./gradlew check`).
-3. Request review from the AI agents (`gh pr review …`) — at minimum one Claude Code review.
-4. For UI-touching PRs: attach a screenshot or screen-recording from a local Compose Desktop run (one image per state — empty, loaded, error).
-5. Squash-merge at close. The squash message keeps the Conventional Commits format and links the design-doc section the PR implements.
+2. `./gradlew check` must be green locally before pushing. Local pass = merge gate; do not wait for CI or auto-merge.
+3. For UI-touching PRs: attach a screenshot or screen-recording from a local Compose Desktop run (one image per state — empty, loaded, error).
+4. Self-review the diff cold against the design-doc section the PR claims to implement.
+5. Squash-merge with `gh pr merge <N> --squash --admin`. The squash message keeps the Conventional Commits format and links the design-doc section the PR implements.
 
 ## AI agents
 
@@ -35,9 +35,9 @@ The human reviewer is the final gate.
 ## Library hygiene
 
 - No new library without an entry in `gradle/libs.versions.toml` and a one-line justification in the PR body.
-- No backwards-compat hacks. This is greenfield Kotlin; nothing else consumes our APIs yet. Refactor freely within the PR.
+- No backwards-compat hacks. Nothing external consumes our APIs yet. Refactor freely within the PR.
 - No premature abstractions. `expect/actual` only when a second target exists or is imminent. `interface` only when there are ≥2 implementations or a test fake.
-- Explicitly avoided libraries: MVIKotlin, Decompose, Roborazzi, KAPT, Anvil, Realm Kotlin, Moko-resources, `androidx.lifecycle:viewmodel-compose`, Koin, Room. Reasons live in the design doc §2.1.
+- Explicitly avoided libraries: MVIKotlin, Decompose, Roborazzi, KAPT, Anvil, Realm Kotlin, Moko-resources, `androidx.lifecycle:viewmodel-compose` (Android-only — use the JetBrains KMP fork `org.jetbrains.androidx.lifecycle:*` instead), Koin, Room. Reasons live in `docs/ai/CLAUDE.md`.
 
 ## Testing
 
@@ -45,13 +45,14 @@ The human reviewer is the final gate.
 - Hand-written fakes in `commonTest`. MockK only on JVM-only edges where a hand-written fake is genuinely awkward.
 - TDD for parsers, hashers, signers, repository, sync orchestration: write the test, see it fail, implement, see it pass, commit.
 - Power-Assert is enabled — prefer plain `assert(x == y)` over `assertEquals(x, y)`.
+- Cross-module backend pipelines have integration tests under `tests/integration` (real disk, real in-memory SQLDelight, `FakeCloudBackend`).
 
 ## Visual verification (UI PRs)
 
 For any PR that touches Compose UI:
 
-1. Check out the PR branch.
-2. `./gradlew :app-desktop:run` (or `:app-gallery:run` for primitives).
+1. Check out the worktree branch.
+2. `./gradlew :app-desktop:run`.
 3. Exercise the new feature end-to-end against a copy of the test library at `Z:\User\audio\Projects` — the destructive-test root.
 4. Capture one screenshot per state (empty / loaded / error).
 5. `gh pr comment <pr> --body-file <md>` to drop them into the PR.

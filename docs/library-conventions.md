@@ -1,6 +1,6 @@
 # Library Conventions
 
-Canonical vocabulary for organizing the Ableton project library. This is the single source of truth referenced by the MCP server, the web UI legend, and any AI-driven triage workflow.
+Canonical vocabulary for organizing the Ableton project library. This is the single source of truth referenced by the MCP server (`shared/mcp-server/`), the desktop app's color/tag legends, and any AI-driven triage workflow.
 
 ## Folder structure
 
