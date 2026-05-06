@@ -22,6 +22,8 @@ interface SettingsRepository {
 
     suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit>
 
+    suspend fun setCloudBucket(bucket: String?): Result<Unit>
+
     suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit>
 
     suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit>
@@ -32,7 +34,14 @@ data class Settings(
     val cloudConfigured: Boolean,
     val selfContainedProjects: Set<ProjectUuid>,
     val cacheSettings: BlobCacheSettings = BlobCacheSettings.Default,
-)
+    /** Parsed-on-write GCS service-account JSON. Null when the user hasn't uploaded one. */
+    val cloudCredentialJson: String? = null,
+    /** GCS bucket name for uploads. Null when unconfigured. */
+    val cloudBucket: String? = null,
+) {
+    /** True iff both pieces of cloud config are present (creds + bucket). */
+    val cloudReady: Boolean get() = cloudCredentialJson != null && !cloudBucket.isNullOrBlank()
+}
 
 /**
  * Local blob cache policy. The sync engine consults this on every download to decide whether to

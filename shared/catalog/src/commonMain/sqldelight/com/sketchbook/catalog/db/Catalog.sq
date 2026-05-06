@@ -280,3 +280,9 @@ VALUES (:project_uuid, :local_rev, :cloud_head_rev, :dirty, :self_contained);
 
 selectSyncState:
 SELECT * FROM sync_state WHERE project_uuid = :project_uuid;
+
+selectAllSyncStates:
+SELECT * FROM sync_state;
+
+selectIdentityByUuid:
+SELECT * FROM project_identity WHERE uuid = :uuid;

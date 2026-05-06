@@ -23,8 +23,11 @@ kotlin {
         jvmMain.dependencies {
             implementation(project(":shared:core"))
             implementation(project(":shared:catalog"))
+            implementation(project(":shared:cloud"))
             implementation(project(":shared:parser-als"))
             implementation(project(":shared:repository"))
+            implementation(project(":shared:sync"))
+            implementation(project(":shared:sync-io"))
             implementation(project(":shared:ui-shared"))
             implementation(project(":shared:feature-projects"))
             implementation(project(":shared:feature-project-detail"))
@@ -35,6 +38,8 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.cio)
             implementation(libs.metro.runtime)
             // nav3-ui transitively pulls navigation3-runtime; explicit runtime dep is omitted
             // because the JetBrains fork only publishes navigation3-runtime via the ui artifact.

@@ -228,10 +228,7 @@ fun SettingsScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
                             Text("Cloud sync (preview)", style = AppTheme.typography.bodyEmphasis)
                             Text(
-                                "Sketchbook can back project snapshots up to a Google Cloud Storage bucket so they " +
-                                    "round-trip across machines. To use this, drop in a service-account JSON " +
-                                    "with read/write on your bucket. If you don't know what that means, you " +
-                                    "don't need this — leave it off.",
+                                "Sketchbook backs snapshots up to a Google Cloud Storage bucket so projects round-trip across machines. Drop in a service-account JSON with read/write on the bucket, then enter the bucket name below.",
                                 style = AppTheme.typography.body,
                             )
                             FlowRow(
@@ -239,10 +236,16 @@ fun SettingsScreen(
                                 horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
                             ) {
                                 Badge(
-                                    color = if (state.cloudConfigured) AppTheme.colors.accentPositive else AppTheme.colors.accentSecondary,
+                                    color = if (state.cloudReady) AppTheme.colors.accentPositive
+                                        else if (state.cloudConfigured) AppTheme.colors.accentWarning
+                                        else AppTheme.colors.accentSecondary,
                                 ) {
                                     Text(
-                                        if (state.cloudConfigured) "configured" else "not configured",
+                                        when {
+                                            state.cloudReady -> "ready"
+                                            state.cloudConfigured -> "needs bucket"
+                                            else -> "not configured"
+                                        },
                                         style = AppTheme.typography.caption,
                                     )
                                 }
@@ -256,6 +259,21 @@ fun SettingsScreen(
                                     ) { Text("Clear") }
                                 }
                             }
+                            // Bucket name field. Saved on every keystroke (in-memory store; the
+                            // flow rebuilds the SyncQueue on transition to ready/unready, not
+                            // on every typed char — distinctUntilChanged on cloudReady).
+                            var bucketDraft by remember(state.cloudBucket) {
+                                mutableStateOf(state.cloudBucket.orEmpty())
+                            }
+                            com.sketchbook.uishared.components.TextField(
+                                value = bucketDraft,
+                                onChange = {
+                                    bucketDraft = it
+                                    holder.dispatch(SettingsStateHolder.Intent.SetCloudBucket(it.takeIf { v -> v.isNotBlank() }))
+                                },
+                                placeholder = "Bucket name (e.g. sketchbook-srmarlins)",
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
                     }
                 }

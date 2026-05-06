@@ -52,7 +52,7 @@ import com.sketchbook.featuretimeline.TimelineStateHolder
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.ProjectSyncState
 import com.sketchbook.repo.SyncQueueState
-import com.sketchbook.desktop.repo.InMemorySyncQueue
+import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.uishared.components.ActivityBar
 import com.sketchbook.uishared.components.ActivityState
 import com.sketchbook.uishared.components.InkLoading
@@ -107,9 +107,9 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
     val scanProgress by scanProgressState.collectAsState()
     val syncQueue = graph.syncQueue
     val syncState by syncQueue.observe().collectAsState(initial = SyncQueueState())
-    // Concrete handle so we can call the desktop-only `seedDeterministic` / `pushNowById`. The
-    // public `SyncQueue` interface stays narrow; desktop niceties live on the impl.
-    val syncImpl = syncQueue as? InMemorySyncQueue
+    // Concrete handle for desktop-only helpers (`pushNowById`, `snapshotFor`). The public
+    // `SyncQueue` interface stays narrow; the swappable façade exposes per-row wiring.
+    val syncImpl = syncQueue as? SwappableSyncQueue
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     // Project list now opens detail in a side-panel locally — no nav-stack push. The
@@ -242,7 +242,9 @@ fun RootContent(graph: DesktopAppGraph, backStack: NavBackStack<NavKey>) {
                                             onDismiss = dismiss,
                                             syncStateFor = syncImpl?.let { impl -> { pid -> impl.snapshotFor(pid) } },
                                             onPushNow = syncImpl?.let { impl -> { pid ->
-                                                coroutineScope.launch { impl.pushNowById(pid) }
+                                                coroutineScope.launch {
+                                                    impl.pushNowById(pid)
+                                                }
                                             } },
                                         )
                                     },

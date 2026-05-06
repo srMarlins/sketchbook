@@ -4,13 +4,14 @@ import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.CatalogFts
 import com.sketchbook.catalog.CatalogHandle
 import com.sketchbook.catalog.JvmScanner
+import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.desktop.repo.InMemoryLockRepository
 import com.sketchbook.desktop.repo.InMemoryProposalsRepository
 import com.sketchbook.desktop.repo.InMemoryRepairRepository
 import com.sketchbook.desktop.repo.InMemorySettingsRepository
 import com.sketchbook.desktop.repo.InMemorySnapshotRepository
-import com.sketchbook.desktop.repo.InMemorySyncQueue
+import com.sketchbook.desktop.repo.SwappableSyncQueue
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.ProjectRepository
@@ -58,6 +59,7 @@ interface DesktopAppGraph {
     val catalogHandle: CatalogHandle
     val catalog: Catalog
     val catalogFts: CatalogFts
+    val syncStateStore: SyncStateStore
     val scanner: JvmScanner
     val projectRepository: ProjectRepository
     val journalRepository: JournalRepository
@@ -86,6 +88,9 @@ interface DesktopAppGraph {
     @Provides @SingleIn(AppScope::class)
     fun provideJvmScanner(catalog: Catalog, fts: CatalogFts): JvmScanner =
         JvmScanner(catalog = catalog, fts = fts)
+
+    @Provides @SingleIn(AppScope::class)
+    fun provideSyncStateStore(catalog: Catalog): SyncStateStore = SyncStateStore(catalog)
 
     @Provides @SingleIn(AppScope::class)
     fun provideJournalRepository(): JournalRepository = InMemoryJournalRepository()
@@ -119,9 +124,38 @@ interface DesktopAppGraph {
 
     @Provides @SingleIn(AppScope::class)
     fun provideSyncQueue(
+        settings: SettingsRepository,
         projects: ProjectRepository,
+        store: SyncStateStore,
         scope: CoroutineScope,
-    ): SyncQueue = InMemorySyncQueue(projects = projects, scope = scope)
+    ): SyncQueue = SwappableSyncQueue(
+        settings = settings,
+        projects = projects,
+        syncStateStore = store,
+        scope = scope,
+        hostId = hostIdentity().id,
+        hostName = hostIdentity().name,
+    )
+}
+
+/**
+ * Stable per-machine identity used by the sync pipeline as `hostId` (lease ownership) and
+ * `hostName` (display in conflict messages). The id is generated once and cached at
+ * `<dataDir>/host-id`; the name defaults to `Sketchbook on <hostname>`.
+ */
+private data class HostIdentity(val id: String, val name: String)
+
+private fun hostIdentity(): HostIdentity {
+    val dir = catalogDbPath().parent
+    val idFile = dir.resolve("host-id")
+    val id = if (Files.exists(idFile)) {
+        runCatching { Files.readString(idFile).trim() }.getOrNull()?.takeIf { it.isNotBlank() }
+            ?: java.util.UUID.randomUUID().toString().also { Files.writeString(idFile, it) }
+    } else {
+        java.util.UUID.randomUUID().toString().also { Files.writeString(idFile, it) }
+    }
+    val name = "Sketchbook on " + (runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "unknown")
+    return HostIdentity(id = id, name = name)
 }
 
 /** Application-lifetime scope marker for Metro bindings. */
