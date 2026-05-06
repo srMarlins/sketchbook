@@ -7,6 +7,7 @@ import com.sketchbook.catalog.JvmSampleScanner
 import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.actions.ProposalActionExecutor
+import com.sketchbook.core.AppScope
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.desktop.repo.LeasedLockRepository
 import com.sketchbook.desktop.repo.PreferencesSettingsRepository
@@ -240,9 +241,6 @@ private fun hostIdentity(): HostIdentity {
     val name = "Sketchbook on " + (runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "unknown")
     return HostIdentity(id = id, name = name)
 }
-
-/** Application-lifetime scope marker for Metro bindings. */
-abstract class AppScope private constructor()
 
 /** Builds the graph at runtime — Metro generates the impl class. */
 fun buildDesktopAppGraph(): DesktopAppGraph = createGraph<DesktopAppGraph>()
