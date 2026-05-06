@@ -55,11 +55,17 @@ CREATE TABLE project_plugins (
   project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   plugin_name TEXT NOT NULL,
   plugin_type TEXT NOT NULL,
-  track_name  TEXT
+  track_name  TEXT,
+  -- PR-T: 1 when the plugin file exists in one of the platform-default install dirs (or
+  -- when we couldn't normalize the name), 0 when the user's filesystem is missing it. Default
+  -- 1 so brand-new rows from the parser don't blink to "missing" before the presence probe
+  -- has actually walked the disk; the probe flips them to 0 if no match is found.
+  is_installed INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX idx_pp_project ON project_plugins(project_id);
 CREATE INDEX idx_pp_name ON project_plugins(plugin_name);
+CREATE INDEX idx_pp_is_installed ON project_plugins(is_installed);
 
 CREATE TABLE project_samples (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -336,6 +342,51 @@ ORDER BY p.last_modified DESC;
 
 selectSamplesForProject:
 SELECT sample_path FROM project_samples WHERE project_id = :project_id;
+
+-- PR-T: distinct (plugin_name, plugin_type) pairs across the entire catalog. The presence probe
+-- iterates this list, normalizes each name, and flips is_installed in bulk via the marker
+-- queries below. DISTINCT collapses the same plugin loaded across many projects/tracks into one
+-- row so we don't normalize the same string thousands of times on each probe.
+selectAllDistinctPlugins:
+SELECT DISTINCT plugin_name, plugin_type FROM project_plugins;
+
+-- PR-T: bulk flip the `is_installed` flag for every row matching a (name, type) pair. The probe
+-- calls this twice per pair (once per outcome) so the UPDATE is idempotent — running the probe
+-- a second time over the same disk produces no net change. Indexed on (plugin_name) so the
+-- catalog-wide UPDATE only touches the matching rows.
+markPluginsInstalledByNameAndType:
+UPDATE project_plugins
+SET is_installed = :is_installed
+WHERE plugin_name = :plugin_name AND plugin_type = :plugin_type;
+
+-- PR-T: aggregate "missing plugins by (name, type)" view that powers the Home coverage chip's
+-- popup list. Grouped on (name, type) so a plugin loaded as both VST2 and VST3 surfaces twice if
+-- *both* formats are missing — that mirrors how the user sees them in Live's plugin browser, and
+-- a user with VST3 installed but not VST2 of the same name should only see the VST2 row as
+-- missing. Archived projects are excluded so a project the user already shelved doesn't keep
+-- inflating the affected-projects column.
+selectMissingPluginCoverage:
+SELECT pp.plugin_name AS name,
+       pp.plugin_type AS type,
+       COUNT(DISTINCT pp.project_id) AS affected_projects
+FROM project_plugins pp
+JOIN projects p ON p.id = pp.project_id
+WHERE pp.is_installed = 0 AND p.is_archived = 0
+GROUP BY pp.plugin_name, pp.plugin_type
+ORDER BY affected_projects DESC, pp.plugin_name ASC;
+
+-- PR-T: scalar summary for the Home chip itself ("N plugins missing affecting M projects"). One
+-- row, two counts. The compound key in `missing_count` (`name || '|' || type`) treats VST2/VST3
+-- as separate entries to match the coverage list above. `COUNT(DISTINCT … || '|' || …)` is the
+-- portable trick — SQLite has no `COUNT(DISTINCT name, type)` syntax. Archived projects are
+-- excluded for the same reason as the coverage query.
+selectMissingPluginSummary:
+SELECT COUNT(DISTINCT pp.plugin_name || '|' || pp.plugin_type) AS missing_count,
+       COUNT(DISTINCT pp.project_id) AS affected_projects
+FROM project_plugins pp
+JOIN projects p ON p.id = pp.project_id
+WHERE pp.is_installed = 0 AND p.is_archived = 0;
+
 
 selectSampleEntriesForProject:
 SELECT sample_path, is_missing, size_bytes FROM project_samples WHERE project_id = :project_id;

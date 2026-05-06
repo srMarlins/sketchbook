@@ -127,6 +127,8 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
     val scanProgress by chrome.scanProgress.collectAsStateWithLifecycle()
     val proposalCount by chrome.proposalCount.collectAsStateWithLifecycle()
     val attentionCount by chrome.attentionCount.collectAsStateWithLifecycle()
+    val missingPluginSummary by chrome.missingPluginSummary.collectAsStateWithLifecycle()
+    val missingPluginCoverage by chrome.missingPluginCoverage.collectAsStateWithLifecycle()
 
     val current = backStack.lastOrNull() ?: Screen.Projects
     val items = sidebarItems(current, proposalCount, attentionCount)
@@ -203,7 +205,20 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                     backStack.add(target)
                 },
                 statusText = statusText,
-                footerSlot = { HealthChip(health = libraryHealth) },
+                footerSlot = {
+                    androidx.compose.foundation.layout.Column(
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+                    ) {
+                        // PR-T coverage chip stacks above the health chip when there are missing
+                        // plugins; the chip self-hides when the summary is null/empty so this row
+                        // is invisible for users with healthy libraries.
+                        MissingPluginsChip(
+                            summary = missingPluginSummary,
+                            coverage = missingPluginCoverage,
+                        )
+                        HealthChip(health = libraryHealth)
+                    }
+                },
             )
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxHeight().fillMaxWidth()) {

@@ -1,5 +1,6 @@
 plugins {
     id("kmp-test")
+    alias(libs.plugins.metro)
 }
 
 kotlin {
@@ -9,6 +10,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.io.core)
+            implementation(libs.metro.runtime)
         }
         jvmMain.dependencies {
             implementation(project(":shared:sync"))

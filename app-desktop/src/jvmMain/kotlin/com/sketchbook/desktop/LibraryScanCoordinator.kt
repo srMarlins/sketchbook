@@ -4,6 +4,7 @@ import com.sketchbook.catalog.JvmSampleScanner
 import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.core.AppScope
 import com.sketchbook.repo.LibraryRoot
+import com.sketchbook.repo.PluginPresenceProbe
 import com.sketchbook.repo.SettingsRepository
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -33,6 +34,7 @@ class LibraryScanCoordinator(
     private val sampleScanner: JvmSampleScanner,
     private val settings: SettingsRepository,
     private val scope: CoroutineScope,
+    private val pluginPresenceProbe: PluginPresenceProbe,
 ) {
 
     private val _progress = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
@@ -68,6 +70,13 @@ class LibraryScanCoordinator(
                     runCatching { sampleScanner.scan(sampleRoot) }
                 }
             }
+            // PR-T: once the parser has populated `project_plugins`, walk the platform-default
+            // plugin install directories and flip `is_installed` per (name, type). Best-effort —
+            // a probe failure must not invalidate the (succeeded) project scan, so wrap in
+            // runCatching. The probe's own internal try/catch already swallows missing-dir errors;
+            // this outer layer guards against a SQL hiccup (extremely unlikely) so the user still
+            // sees their indexed projects.
+            runCatching { pluginPresenceProbe.probe() }
         }
     }
 
