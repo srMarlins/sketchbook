@@ -49,6 +49,10 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.desktop.currentOs)
         }
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }
 
