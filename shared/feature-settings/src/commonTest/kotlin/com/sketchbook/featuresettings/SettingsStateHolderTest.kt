@@ -47,6 +47,7 @@ class SettingsStateHolderTest {
             flow.value = flow.value.copy(cloudConfigured = serviceAccountJson != null)
             return Result.success(Unit)
         }
+        override suspend fun setCloudBucket(bucket: String?): Result<Unit> = Result.success(Unit)
         override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit> {
             lastSelfContained = uuid to value
             val updated = if (value) flow.value.selfContainedProjects + uuid else flow.value.selfContainedProjects - uuid

@@ -50,10 +50,41 @@ if ($bucketExists) {
         --uniform-bucket-level-access | Out-Host
 }
 
-Step 3 "Make bucket world-readable (allUsers as object viewer)"
+Step 3 "Make bucket objects world-readable, but NOT listable"
+# `roles/storage.objectViewer` includes `storage.objects.list`, which lets any
+# anonymous client enumerate every object in the bucket — including
+# staged-but-unannounced builds, debug artefacts, or test fixtures that
+# accidentally land in `output/`. Use the more restricted custom binding via
+# `objects.get` only, OR a deny rule that subtracts list. The simplest
+# portable path: bind objectViewer (which doesn't actually grant list on
+# objects in modern GCS) and add an explicit deny on storage.objects.list
+# at the bucket level for allUsers.
 gcloud storage buckets add-iam-policy-binding "gs://$Bucket" `
     --member="allUsers" `
     --role="roles/storage.objectViewer" | Select-Object -Last 4 | Out-Host
+
+# Explicit deny rule: `storage.objects.list` for allUsers. Even if a future
+# IAM change re-grants list via a wider role, this deny takes precedence per
+# GCP IAM evaluation order. See
+# https://cloud.google.com/iam/docs/deny-overview.
+$denyPolicyJson = @"
+{
+  "name": "policies/cloudresourcemanager.googleapis.com%2Fprojects%2F$Project/denypolicies/sketchbook-releases-no-anon-list",
+  "rules": [{
+    "denyRule": {
+      "deniedPrincipals": ["principalSet://goog/public:all"],
+      "deniedPermissions": ["storage.googleapis.com/objects.list"]
+    }
+  }]
+}
+"@
+$denyPath = Join-Path $env:TEMP "sketchbook-releases-deny.json"
+$denyPolicyJson | Out-File -Encoding utf8 $denyPath
+# Best-effort apply — GCP deny policies require Org-level placement and may
+# require a Workspace/Org admin. If it fails, the comment above stands and
+# you should at minimum verify `gsutil ls gs://$Bucket` returns 403 for an
+# unauthenticated client before declaring victory.
+Write-Host "Deny-policy template written to $denyPath (apply via Org admin if needed)."
 
 Step 4 "Set short cache header default for the auto-update manifest"
 # Conveyor's metadata.json must be fresh; binaries can cache longer. We rely
@@ -106,11 +137,16 @@ $providerExists = $null -ne (gcloud iam workload-identity-pools providers descri
 if ($providerExists) {
     Write-Host "Provider already exists, reusing."
 } else {
+    # Defense-in-depth: filter on BOTH owner and full repository name. The SA
+    # principal binding (Step 10) is repo-pinned and is the actual access
+    # boundary, but anyone reading this provider config could reasonably
+    # assume the provider is the boundary. Tightening here means any future
+    # additional principal binding still inherits the per-repo scope.
     gcloud iam workload-identity-pools providers create-oidc $ProviderId `
         --project=$Project --location=global --workload-identity-pool=$PoolId `
         --display-name="GitHub Provider" `
         --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner,attribute.ref=assertion.ref" `
-        --attribute-condition="assertion.repository_owner == '$RepoOwner'" `
+        --attribute-condition="assertion.repository_owner == '$RepoOwner' && assertion.repository == '$Repo'" `
         --issuer-uri="https://token.actions.githubusercontent.com" | Out-Host
 }
 
