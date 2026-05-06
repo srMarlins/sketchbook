@@ -96,7 +96,7 @@ fun NeedsAttentionScreen(
                 )
                 return@Column
             }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)) {
+            LazyColumn {
                 if (state.macEntries.isNotEmpty()) {
                     macSection(
                         entries = state.macEntries,
@@ -106,10 +106,13 @@ fun NeedsAttentionScreen(
                         onOpen = onOpenMac,
                     )
                 }
-                if (state.missingByConfidence.autoMatch.isNotEmpty() ||
+                val hasMissing = state.missingByConfidence.autoMatch.isNotEmpty() ||
                     state.missingByConfidence.multiCandidate.isNotEmpty() ||
                     state.missingByConfidence.noCandidate.isNotEmpty()
-                ) {
+                if (state.macEntries.isNotEmpty() && hasMissing) {
+                    item(key = "between-cards") { SectionGap() }
+                }
+                if (hasMissing) {
                     missingSection(
                         buckets = state.missingByConfidence,
                         truncatedShown = if (state.missingSamplesTruncated) {
@@ -371,6 +374,16 @@ private fun SubSectionHeader(
 }
 
 @Composable
+private fun SectionGap() {
+    Spacer(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(AppTheme.spacing.md)
+            .background(AppTheme.colors.surfacePage),
+    )
+}
+
+@Composable
 private fun CardFooter() {
     Box(
         modifier = Modifier
@@ -392,12 +405,7 @@ private fun MacImportRow(
     onOpen: () -> Unit,
     onRepair: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(AppTheme.colors.surfaceCard)
-            .padding(horizontal = AppTheme.spacing.md),
-    ) {
+    Column(modifier = Modifier.fillMaxWidth().background(AppTheme.colors.surfaceCard)) {
         if (isProjectBoundary) Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
         GroupRow(onClick = { if (!isPending) onOpen() }, last = isLast) {
             ProvideContentColor(if (isPending) AppTheme.colors.inkMuted else AppTheme.colors.inkPrimary) {
@@ -448,12 +456,7 @@ private fun MissingSampleRow(
     isPending: Boolean,
     onOpen: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(AppTheme.colors.surfaceCard)
-            .padding(horizontal = AppTheme.spacing.md),
-    ) {
+    Column(modifier = Modifier.fillMaxWidth().background(AppTheme.colors.surfaceCard)) {
         if (isProjectBoundary) Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
         GroupRow(onClick = { if (!isPending) onOpen() }, last = isLast) {
             Badge(color = AppTheme.colors.tintCream) {
