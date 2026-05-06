@@ -88,6 +88,7 @@ fun SongStrip(
     val bg = if (isHovered) colors.surfaceSunken else colors.surfaceCard
     val colorVar = data.colorTag?.let { AbletonPalette[it] } ?: colors.ruleLineStrong
     val isGroup = data.variantCount > 1
+    val borderColor = if (data.warning != null) colors.accentDanger.copy(alpha = 0.4f) else colors.ruleLine
 
     Box(modifier = modifier.fillMaxWidth()) {
         if (isGroup) {
@@ -105,7 +106,7 @@ fun SongStrip(
                 .fillMaxWidth()
                 .clip(shape)
                 .background(bg)
-                .border(1.dp, colors.ruleLine, shape)
+                .border(1.dp, borderColor, shape)
                 .clickable(
                     interactionSource = interaction,
                     indication = null,
@@ -171,7 +172,13 @@ fun SongStrip(
                         if (showLength) Stat("length", fmtSeconds(data.lengthSeconds), 42.dp)
                         // Effort 0..100 (matches web SongStrip + Python compute_effort). >=60 hits the
                         // forgotten-gem threshold so it earns a terracotta accent.
-                        Stat("effort", data.effortScore?.toString() ?: "—", 36.dp, accent = (data.effortScore ?: 0) >= 60)
+                        Stat(
+                            label = "effort",
+                            value = data.effortScore?.toString() ?: "—",
+                            width = 36.dp,
+                            accent = (data.effortScore ?: 0) >= 60,
+                            empty = data.effortScore == null || data.effortScore == 0,
+                        )
                     }
                     Spacer(Modifier.width(4.dp))
                     // Sync pip
@@ -228,6 +235,7 @@ private fun Stat(
     value: String,
     width: androidx.compose.ui.unit.Dp,
     accent: Boolean = false,
+    empty: Boolean = false,
 ) {
     val colors = AppTheme.colors
     Column(
@@ -237,7 +245,12 @@ private fun Stat(
         ProvideContentColor(colors.inkMuted) {
             Text(label, style = AppTheme.typography.mono.copy(fontSize = 9.sp(), letterSpacing = 0.5.sp()))
         }
-        ProvideContentColor(if (accent) colors.accentAction else colors.inkSecondary) {
+        val tone = when {
+            empty -> colors.inkFaint
+            accent -> colors.accentAction
+            else -> colors.inkSecondary
+        }
+        ProvideContentColor(tone) {
             Text(
                 value,
                 style = AppTheme.typography.mono.copy(
