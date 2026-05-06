@@ -358,6 +358,21 @@ class AlsParserTest {
     }
 
     @Test
+    fun extractsLive12SampleRefMetadataAndOriginalFileRefSibling() {
+        val md = javaClass.getResourceAsStream("/live12-sampleref.xml.gz")!!.use {
+            AlsParser.parse(it)
+        }
+        assertEquals(1, md.sampleRefs.size)
+        val s = md.sampleRefs[0]
+        assertEquals("D:/Audio/Project/Samples/Imported/kick.wav", s.rawPath)
+        assertEquals(3, s.relativePathType)
+        assertEquals(58394528L, s.originalFileSize)
+        assertEquals(7866L, s.originalCrc)
+        assertEquals(1694844696L, s.lastModDate)
+        assertTrue(s.hasOriginalFileRefSibling)
+    }
+
+    @Test
     fun parserBoundedMemoryAgainstLargeSyntheticInput() {
         // Build a synthetic .als with one project shell + N huge inert <Clip> blobs that the
         // parser must skip. Verifies no DOM accumulation: heap stays well under 256 MB even

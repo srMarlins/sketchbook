@@ -98,6 +98,15 @@ object AlsParser {
         val relParts: MutableList<String> = mutableListOf()
         var relName: String? = null
 
+        var relativePathType: Int? = null
+        var originalFileSize: Long? = null
+        var originalCrc: Long? = null
+        var lastModDate: Long? = null
+        var hasOriginalFileRefSibling: Boolean = false
+
+        /** True while StAX cursor is inside the primary FileRef (the direct SampleRef child). */
+        var insidePrimaryFileRef: Boolean = false
+
         fun resolvedPath(): String? {
             collectedPath?.let { return it }
             val joined = (relParts + listOfNotNull(relName)).joinToString("/")
@@ -244,14 +253,24 @@ object AlsParser {
                 }
             }
 
-            // Sample path extraction. Look for `<SampleRef><FileRef>...` constructs.
+            // Sample path + Live 11/12 metadata extraction.
             pendingSample?.let { samp ->
-                if (parentTag() == "FileRef" && grandparentTag() == "SampleRef") {
+                // Track primary-FileRef boundaries: the FileRef whose direct parent is SampleRef.
+                if (tag == "FileRef" && parentTag() == "SampleRef") {
+                    samp.insidePrimaryFileRef = true
+                }
+                if (tag == "OriginalFileRef" && pathStack.contains("SampleRef")) {
+                    samp.hasOriginalFileRefSibling = true
+                }
+                if (samp.insidePrimaryFileRef && parentTag() == "FileRef") {
                     when (tag) {
                         "Path" -> if (samp.collectedPath == null) {
                             start.attr("Value")?.let { samp.collectedPath = it }
                         }
                         "Name" -> start.attr("Value")?.let { samp.relName = it }
+                        "RelativePathType" -> start.attr("Value")?.toIntOrNull()?.let { samp.relativePathType = it }
+                        "OriginalFileSize" -> start.attr("Value")?.toLongOrNull()?.let { samp.originalFileSize = it }
+                        "OriginalCrc" -> start.attr("Value")?.toLongOrNull()?.let { samp.originalCrc = it }
                     }
                 }
                 if (tag == "RelativePathElement" && grandparentTag() == "FileRef") {
@@ -259,6 +278,10 @@ object AlsParser {
                     if (greatGrand == "SampleRef") {
                         start.attr("Dir")?.takeIf { it.isNotEmpty() }?.let { samp.relParts += it }
                     }
+                }
+                // LastModDate lives on SampleRef directly, not FileRef.
+                if (tag == "LastModDate" && parentTag() == "SampleRef") {
+                    start.attr("Value")?.toLongOrNull()?.let { samp.lastModDate = it }
                 }
             }
 
@@ -295,8 +318,23 @@ object AlsParser {
                 pendingPlugin = null
             }
 
+            if (tag == "FileRef") {
+                pendingSample?.let { if (parentTag() == "SampleRef") it.insidePrimaryFileRef = false }
+            }
+
             if (tag == "SampleRef") {
-                pendingSample?.resolvedPath()?.let { samples += SampleRef(rawPath = it) }
+                pendingSample?.let { ps ->
+                    ps.resolvedPath()?.let { path ->
+                        samples += SampleRef(
+                            rawPath = path,
+                            relativePathType = ps.relativePathType,
+                            originalFileSize = ps.originalFileSize,
+                            originalCrc = ps.originalCrc,
+                            lastModDate = ps.lastModDate,
+                            hasOriginalFileRefSibling = ps.hasOriginalFileRefSibling,
+                        )
+                    }
+                }
                 pendingSample = null
             }
 

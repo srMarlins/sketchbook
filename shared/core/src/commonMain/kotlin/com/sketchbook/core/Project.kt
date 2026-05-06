@@ -78,7 +78,21 @@ enum class PluginFormat { Vst2, Vst3, Au, AbletonNative, Unknown }
 /**
  * Sample reference recovered from a `.als` file. The [rawPath] is whatever Live wrote — relative,
  * absolute, Mac-style, etc. Resolution to a real file (and size/exists) happens later.
+ *
+ * Live 11/12 SampleRef metadata fields used during repair. All nullable because:
+ *  - older Live (≤10) stores them differently or not at all,
+ *  - the parser may encounter malformed/partial entries and we don't want to fail the whole scan.
+ *
+ * [hasOriginalFileRefSibling] reflects whether the parser saw a
+ * `<SampleRef>/<SourceContext>/<SourceContext>/<OriginalFileRef>/<FileRef>` block alongside the
+ * primary `<FileRef>`. Live re-derives paths from this sibling under some operations, so any
+ * repair must rewrite both copies atomically — see AlsRewriter.
  */
 data class SampleRef(
     val rawPath: String,
+    val relativePathType: Int? = null,
+    val originalFileSize: Long? = null,
+    val originalCrc: Long? = null,
+    val lastModDate: Long? = null,
+    val hasOriginalFileRefSibling: Boolean = false,
 )

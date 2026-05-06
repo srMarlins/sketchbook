@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.ProjectId
+import com.sketchbook.als.AlsRewriter
 import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
 import java.io.ByteArrayInputStream
@@ -64,9 +65,58 @@ class SqlRepairRepositoryAlsRewriteTest {
 </Ableton>
 """.toByteArray(Charsets.UTF_8)
 
+    /**
+     * Live 11/12-shaped fixture: SampleRef has a primary FileRef AND a
+     * `SourceContext/SourceContext/OriginalFileRef/FileRef` sibling, both with the same path.
+     * Used to prove the rewrite patches both copies atomically (the bug fixed by
+     * AlsRewriter.rewriteSampleRefs).
+     */
+    private val sampleRefWithOriginalSiblingXml = """<?xml version="1.0" encoding="UTF-8"?>
+<Ableton MajorVersion="12" MinorVersion="12.0" Creator="Ableton Live 12.0.5">
+  <LiveSet>
+    <Tracks>
+      <AudioTrack>
+        <DeviceChain>
+          <MainSequencer>
+            <ClipSlotList>
+              <AudioClip>
+                <SampleRef>
+                  <FileRef>
+                    <Name Value="missing.wav"/>
+                    <Path Value="/old/missing.wav"/>
+                    <RelativePath Value="rel/missing.wav"/>
+                  </FileRef>
+                  <SourceContext>
+                    <SourceContext>
+                      <OriginalFileRef>
+                        <FileRef>
+                          <Name Value="missing.wav"/>
+                          <Path Value="/old/missing.wav"/>
+                          <RelativePath Value="rel/missing.wav"/>
+                        </FileRef>
+                      </OriginalFileRef>
+                    </SourceContext>
+                  </SourceContext>
+                </SampleRef>
+              </AudioClip>
+            </ClipSlotList>
+          </MainSequencer>
+        </DeviceChain>
+      </AudioTrack>
+    </Tracks>
+  </LiveSet>
+</Ableton>
+""".toByteArray(Charsets.UTF_8)
+
     private fun gzipBytes(): ByteArray {
         val out = ByteArrayOutputStream(oneSampleRefXml.size + 64)
         GZIPOutputStream(out).use { it.write(oneSampleRefXml) }
+        return out.toByteArray()
+    }
+
+    private fun gzipBytesWithSibling(): ByteArray {
+        val out = ByteArrayOutputStream(sampleRefWithOriginalSiblingXml.size + 64)
+        GZIPOutputStream(out).use { it.write(sampleRefWithOriginalSiblingXml) }
         return out.toByteArray()
     }
 
@@ -406,5 +456,52 @@ class SqlRepairRepositoryAlsRewriteTest {
             assertEquals("SkippedBusy", unmap.alsOutcome)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    /**
+     * Patch service that exercises the *real* StAX rewriter (not substring replace), so the
+     * test can assert atomic rewrites of both the primary `<Path>` and the OriginalFileRef
+     * sibling within one SampleRef.
+     */
+    private class RealRewriterPatchService : AlsPatchService {
+        override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
+            val path = Path.of(alsPath)
+            val original = Files.readAllBytes(path)
+            val rewritten = AlsRewriter.rewriteSamplePaths(original, mapping)
+            if (rewritten.contentEquals(original)) return AlsPatchService.Outcome.NoChange
+            Files.write(path, rewritten)
+            return AlsPatchService.Outcome.Patched
+        }
+
+        override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome {
+            Files.write(Path.of(alsPath), bytes)
+            return AlsPatchService.Outcome.Patched
+        }
+    }
+
+    @Test
+    fun `missing sample match patches both FileRef and OriginalFileRef`() = runTest {
+        val tmp = createTempDirectory("repo-rewrite-sibling")
+        val als = tmp.resolve("Sibling.als").also { Files.write(it, gzipBytesWithSibling()) }
+        val patcher = RealRewriterPatchService()
+        val (catalog, _, repo) = setup(patcher)
+        val projectId = seedProjectWithMissingSample(catalog, als, missingPath = "/old/missing.wav")
+
+        repo.applyMissingSampleMatch(
+            projectId = projectId,
+            missingPath = "/old/missing.wav",
+            candidatePath = "/new/found.wav",
+        ).getOrThrow()
+
+        // Both `<Path Value="…"/>` occurrences (primary FileRef + OriginalFileRef sibling) must
+        // now point at the candidate. The StAX writer may emit either self-closing or
+        // open/close form, so accept both.
+        val xml = ungzipToString(Files.readAllBytes(als))
+        val pathOccurrences = Regex("""<Path Value="([^"]+)"></Path>|<Path Value="([^"]+)"/>""")
+            .findAll(xml).map { m -> m.groupValues[1].ifEmpty { m.groupValues[2] } }.toList()
+        assertEquals(2, pathOccurrences.size, "expected exactly two <Path> occurrences (primary + sibling)")
+        assertTrue(pathOccurrences.all { it == "/new/found.wav" },
+            "both Path values must be the candidate; was $pathOccurrences")
+        assertTrue("/old/missing.wav" !in xml, "old path must be gone from both FileRefs")
     }
 }

@@ -1,5 +1,6 @@
 package com.sketchbook.syncio
 
+import com.sketchbook.als.AlsParser
 import com.sketchbook.als.AlsRewriter
 import com.sketchbook.repo.AlsPatchService
 import java.nio.channels.FileChannel
@@ -20,6 +21,7 @@ import java.nio.file.StandardOpenOption
  */
 class AlsPatcher(
     private val busyDetector: (Path) -> Boolean = ::isFileLockedByAnotherProcess,
+    private val rewriter: (ByteArray, Map<String, String>) -> ByteArray = AlsRewriter::rewriteSamplePaths,
 ) : AlsPatchService {
     sealed interface Outcome {
         object Patched : Outcome
@@ -32,14 +34,23 @@ class AlsPatcher(
         if (mapping.isEmpty()) return Outcome.NoChange
         if (busyDetector(als)) return Outcome.SkippedBusy
         return runCatching {
-            val original = Files.readAllBytes(als)
-            val rewritten = AlsRewriter.rewriteSamplePaths(original, mapping)
-            if (rewritten.contentEquals(original)) return Outcome.NoChange
+            // Janitor: drop any stale temp left by a prior crashed run. CREATE_NEW would otherwise throw.
             val temp = als.resolveSibling("${als.fileName}.patcher-tmp")
+            Files.deleteIfExists(temp)
+            val original = Files.readAllBytes(als)
+            val rewritten = rewriter(original, mapping)
+            if (rewritten.contentEquals(original)) return Outcome.NoChange
+            // Validation: re-parse the rewritten bytes end-to-end. AlsParser uses StAX; bad gzip
+            // or malformed XML throws here, before we touch the original on disk.
+            AlsParser.parse(rewritten.inputStream())
             Files.write(temp, rewritten, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
             Files.move(temp, als, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             Outcome.Patched as Outcome
-        }.getOrElse { Outcome.Failed(it) }
+        }.getOrElse {
+            // Make sure no temp leftover survives a validation/move failure.
+            runCatching { Files.deleteIfExists(als.resolveSibling("${als.fileName}.patcher-tmp")) }
+            Outcome.Failed(it)
+        }
     }
 
     /**
@@ -51,10 +62,14 @@ class AlsPatcher(
         if (busyDetector(als)) return Outcome.SkippedBusy
         return runCatching {
             val temp = als.resolveSibling("${als.fileName}.patcher-tmp")
+            Files.deleteIfExists(temp)
             Files.write(temp, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
             Files.move(temp, als, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             Outcome.Patched as Outcome
-        }.getOrElse { Outcome.Failed(it) }
+        }.getOrElse {
+            runCatching { Files.deleteIfExists(als.resolveSibling("${als.fileName}.patcher-tmp")) }
+            Outcome.Failed(it)
+        }
     }
 
     /**
