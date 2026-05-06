@@ -151,6 +151,95 @@ class JvmScannerTest {
     }
 
     @Test
+    fun persistsStageInferredFromHeuristic() = runTest {
+        // Project with a Limiter and a recent mtime: hits the Mixing branch.
+        val root = createTempDirectory("scanner-stage-")
+        try {
+            writeAls(
+                root.resolve("Projects/Mixed/Mixed.als"),
+                """<?xml version="1.0"?>
+                <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
+                  <Tracks>
+                    <AudioTrack/><AudioTrack/><AudioTrack/><AudioTrack/><AudioTrack/>
+                    <AudioTrack/><AudioTrack/><AudioTrack/><AudioTrack/><AudioTrack/>
+                    <AudioTrack><DeviceChain><Devices>
+                      <PluginDevice>
+                        <PluginDesc>
+                          <VstPluginInfo><PlugName Value="FabFilter Pro-L 2"/></VstPluginInfo>
+                        </PluginDesc>
+                      </PluginDevice>
+                    </Devices></DeviceChain></AudioTrack>
+                  </Tracks>
+                </LiveSet></Ableton>"""
+            )
+            // Sketchy project — small + just touched, no mastering chain.
+            writeAls(
+                root.resolve("Projects/Sketchy/Sketchy.als"),
+                """<?xml version="1.0"?>
+                <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
+                  <Tracks>
+                    <AudioTrack/><AudioTrack/>
+                  </Tracks>
+                </LiveSet></Ableton>"""
+            )
+
+            val handle = CatalogDb.openInMemory()
+            val catalog = handle.catalog
+            val scanner = JvmScanner(catalog, CatalogFts(handle.driver), ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)
+            scanner.scan(root).toList()
+
+            val rows = catalog.catalogQueries.selectAllProjects().executeAsList()
+            val mixed = rows.first { it.name == "Mixed" }
+            val sketchy = rows.first { it.name == "Sketchy" }
+            // The mtime is `now` (we just wrote the file) so daysSinceEdit ≈ 0; with a Limiter
+            // present the heuristic must return Mixing. Sketchy hits the Sketch branch.
+            assertEquals("Mixing", mixed.stage_inferred)
+            assertEquals("Sketch", sketchy.stage_inferred)
+            assertEquals(null, mixed.stage_override)
+            assertEquals(0L, mixed.has_local_bounce)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun preservesStageOverrideAcrossRescan() = runTest {
+        val root = createTempDirectory("scanner-stage-override-")
+        try {
+            writeAls(
+                root.resolve("Projects/Pinned/Pinned.als"),
+                """<?xml version="1.0"?>
+                <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
+                  <Tracks><AudioTrack/></Tracks>
+                </LiveSet></Ableton>"""
+            )
+            val handle = CatalogDb.openInMemory()
+            val catalog = handle.catalog
+            val scanner = JvmScanner(catalog, CatalogFts(handle.driver), ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)
+            scanner.scan(root).toList()
+
+            // Manually pin an override (as the user would via the detail panel context menu).
+            val firstId = catalog.catalogQueries.selectAllProjects().executeAsList()
+                .first { it.name == "Pinned" }.id
+            catalog.catalogQueries.updateStageOverride(stage_override = "Done", id = firstId)
+
+            // Re-scan — touch mtime to force a re-parse rather than the skip path.
+            java.nio.file.Files.setLastModifiedTime(
+                root.resolve("Projects/Pinned/Pinned.als"),
+                java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 1000),
+            )
+            scanner.scan(root).toList()
+
+            val row = catalog.catalogQueries.selectAllProjects().executeAsList()
+                .first { it.name == "Pinned" }
+            // Override survives the INSERT OR REPLACE.
+            assertEquals("Done", row.stage_override)
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun populatesSampleSizeBytesFromDisk() = runTest {
         val root = createTempDirectory("scanner-sample-size-")
         try {

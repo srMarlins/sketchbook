@@ -30,7 +30,15 @@ data class ProjectRow(
     /** Project root key + scale (e.g. "D Minor", "F# Major"); null when the .als has no
      *  ScaleInformation block or the parser hasn't run. Source: [ProjectMetadata.keySignature]. */
     val key: String? = null,
-)
+    /** PR-R: scanner-computed lifecycle classification. Null = no rule matched ("no chip"). */
+    val stageInferred: Stage? = null,
+    /** PR-R: user's manual override. When non-null this is what the chip displays; null falls
+     *  back to [stageInferred]. */
+    val stageOverride: Stage? = null,
+) {
+    /** PR-R: effective stage for display — override wins, falls through to inferred, else null. */
+    val stage: Stage? get() = stageOverride ?: stageInferred
+}
 
 enum class ParseStatus { Pending, Ok, Failed }
 

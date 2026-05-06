@@ -35,7 +35,14 @@ CREATE TABLE projects (
   has_project_info INTEGER,
   file_size_bytes INTEGER,
   is_missing      INTEGER NOT NULL DEFAULT 0,
-  last_seen       REAL
+  last_seen       REAL,
+  -- PR-R: auto-inferred stage classification ("Sketch" | "InProgress" | "Mixing" | "Done" |
+  -- "Stuck"). NULL = no chip. The scanner recomputes `stage_inferred` on every parse;
+  -- `stage_override` is the user's manual pin (NULL falls back to inferred). `has_local_bounce`
+  -- is the cached "is there a bounce file alongside the .als" check that drives Done/Stuck.
+  stage_inferred  TEXT,
+  stage_override  TEXT,
+  has_local_bounce INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX idx_projects_parent_dir ON projects(parent_dir);
@@ -218,6 +225,29 @@ SELECT DISTINCT key FROM projects WHERE key IS NOT NULL ORDER BY key;
 insertOrReplaceProject:
 INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, key, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes)
 VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :key, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :parse_error, :mac_paths_count, :effort_score, :effort_breakdown, :file_size_bytes);
+
+-- PR-R: scanner-driven update of the inferred stage + cached bounce flag. Called from
+-- JvmScanner.persistOk after insertOrReplaceProject. Kept separate from insertOrReplaceProject
+-- so existing call sites (test fixtures, sync migrations) that build rows without the stage
+-- fields don't have to fabricate values they don't care about; the scanner is the only writer
+-- that runs the heuristic.
+updateStageInference:
+UPDATE projects SET stage_inferred = :stage_inferred, has_local_bounce = :has_local_bounce
+WHERE path = :path;
+
+-- PR-R: read just the override for a given path. The scanner reads this BEFORE
+-- insertOrReplaceProject (which wipes the override since INSERT OR REPLACE deletes the prior
+-- row), then writes it back via updateStageOverrideByPath afterwards.
+selectStageOverrideByPath:
+SELECT stage_override FROM projects WHERE path = :path;
+
+-- PR-R: scanner-side override restore (preserves the user's pin across re-parses).
+updateStageOverrideByPath:
+UPDATE projects SET stage_override = :stage_override WHERE path = :path;
+
+-- PR-R: user-driven override. NULL clears the override and the chip falls back to stage_inferred.
+updateStageOverride:
+UPDATE projects SET stage_override = :stage_override WHERE id = :id;
 
 insertProjectSampleWithMissing:
 INSERT INTO project_samples (project_id, sample_path, is_missing) VALUES (:project_id, :sample_path, :is_missing);

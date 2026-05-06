@@ -5,6 +5,9 @@ import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.EffortScore
 import com.sketchbook.core.PluginFormat
 import com.sketchbook.core.ProjectMetadata
+import com.sketchbook.core.StageInferrer
+import com.sketchbook.core.StageInputs
+import kotlin.time.Clock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -239,6 +242,9 @@ class JvmScanner(
         val effortBreakdown = o.effort?.breakdown?.entries?.joinToString(",") {
             "${it.key}:${it.value}"
         }
+        // PR-R: capture any prior user override BEFORE the INSERT OR REPLACE wipes the row.
+        val priorOverride = catalog.catalogQueries.selectStageOverrideByPath(o.abs)
+            .executeAsOneOrNull()?.stage_override
         catalog.catalogQueries.insertOrReplaceProject(
             path = o.abs,
             name = o.name,
@@ -261,6 +267,30 @@ class JvmScanner(
             effort_breakdown = effortBreakdown,
             file_size_bytes = o.sizeBytes,
         )
+        // PR-R: stage inference + cached bounce flag. Bounce probe is one Files.list() per
+        // project (cheap; the project folder typically has tens of files at most).
+        val hasBounce = hasLocalBounceFor(o.projectDir, o.name)
+        val stageInputs = StageInputs(
+            trackCount = o.md.totalTrackCount,
+            lastModified = kotlin.time.Instant.fromEpochMilliseconds((o.mtimeSec * 1000).toLong()),
+            pluginNames = o.md.plugins.map { it.name },
+            hasLocalBounce = hasBounce,
+        )
+        val inferred = StageInferrer.infer(stageInputs, Clock.System.now())
+        catalog.catalogQueries.updateStageInference(
+            stage_inferred = inferred?.name,
+            has_local_bounce = if (hasBounce) 1L else 0L,
+            path = o.abs,
+        )
+        // PR-R: restore the user's override, if any. We read it *before* INSERT OR REPLACE
+        // (which wipes the column) and write it back here. Skipping the UPDATE when null leaves
+        // the column at the default NULL written by the upsert — same end state, one fewer write.
+        if (priorOverride != null) {
+            catalog.catalogQueries.updateStageOverrideByPath(
+                stage_override = priorOverride,
+                path = o.abs,
+            )
+        }
         val id = catalog.catalogQueries.selectProjectIdByPath(path = o.abs).executeAsOne()
         catalog.catalogQueries.deletePluginsForProject(project_id = id)
         for (p in o.md.plugins) {
@@ -294,6 +324,9 @@ class JvmScanner(
     }
 
     private fun persistFailed(o: ParseOutcome.Failed, now: Double) {
+        // PR-R: preserve any prior override across the OR REPLACE wipe (same logic as persistOk).
+        val priorOverride = catalog.catalogQueries.selectStageOverrideByPath(o.abs)
+            .executeAsOneOrNull()?.stage_override
         catalog.catalogQueries.insertOrReplaceProject(
             path = o.abs,
             name = o.name,
@@ -319,6 +352,9 @@ class JvmScanner(
         val id = catalog.catalogQueries.selectProjectIdByPath(path = o.abs).executeAsOne()
         catalog.catalogQueries.deletePluginsForProject(project_id = id)
         catalog.catalogQueries.deleteSamplesForProject(project_id = id)
+        if (priorOverride != null) {
+            catalog.catalogQueries.updateStageOverrideByPath(stage_override = priorOverride, path = o.abs)
+        }
         fts.delete(id)
         fts.upsert(
             rowid = id,
@@ -408,3 +444,32 @@ private fun Path.none(predicate: (Path) -> Boolean): Boolean {
 
 @Suppress("unused")
 private fun PluginFormat.normalize(): String = name.lowercase()
+
+/**
+ * PR-R helper: probe the project's parent folder for a bounce file. Returns true when an
+ * audio file (.wav/.mp3/.aiff) exists alongside the .als whose filename contains [projectName]
+ * (case-insensitive). Returns false on any I/O error — the bounce signal is best-effort and
+ * the scanner must never fail because the folder couldn't be listed.
+ *
+ * One-level deep on purpose: producers usually drop bounces directly next to the .als, and
+ * walking the entire tree would be expensive on a Live folder containing megabytes of
+ * recorded clips. The Live skip-list (Backup/Samples/Ableton Project Info) is already filtered
+ * by the outer scanner walk; here we only enumerate direct siblings.
+ */
+private val BOUNCE_EXTENSIONS = setOf(".wav", ".mp3", ".aiff", ".aif")
+
+internal fun hasLocalBounceFor(projectDir: Path, projectName: String): Boolean {
+    if (projectName.isBlank()) return false
+    val needle = projectName.lowercase()
+    return runCatching {
+        Files.list(projectDir).use { stream ->
+            stream.asSequence().any { candidate ->
+                if (!candidate.isRegularFile()) return@any false
+                val lower = candidate.fileName.toString().lowercase()
+                val ext = "." + lower.substringAfterLast('.', missingDelimiterValue = "")
+                if (ext !in BOUNCE_EXTENSIONS) return@any false
+                lower.contains(needle)
+            }
+        }
+    }.getOrDefault(false)
+}
