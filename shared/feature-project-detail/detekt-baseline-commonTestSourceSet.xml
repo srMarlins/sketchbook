@@ -12,6 +12,7 @@
     <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$(JournalEntry(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto")))</ID>
     <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$(Unit)</ID>
     <ID>ArgumentListWrapping:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$(rev.value, null, label, "auto")</ID>
+    <ID>FunctionSignature:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeProjects$override suspend fun setStageOverride: Result&lt;JournalEntry&gt;</ID>
     <ID>FunctionSignature:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeProjects$private fun stub</ID>
     <ID>FunctionSignature:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$override suspend fun recordSnapshot: Result&lt;Unit&gt;</ID>
     <ID>FunctionSignature:ProjectDetailViewModelTest.kt:ProjectDetailViewModelTest.FakeSnapshots$override suspend fun setSnapshotLabel: Result&lt;JournalEntry&gt;</ID>

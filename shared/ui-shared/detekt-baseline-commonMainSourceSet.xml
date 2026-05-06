@@ -9,6 +9,7 @@
     <ID>ArgumentListWrapping:Typography.kt:AppTypography.Companion$(fontFamily = FontFamily.SansSerif, fontSize = 14.sp, fontWeight = FontWeight.Medium)</ID>
     <ID>ClassSignature:HighlightsStrip.kt:HighlightChip</ID>
     <ID>ClassSignature:NotebookSidebar.kt:SidebarItem</ID>
+    <ID>ClassSignature:SongStrip.kt:SongStageChip</ID>
     <ID>CompositionLocalAllowlist:Colors.kt:val LocalAppColors = staticCompositionLocalOf&lt;AppColors&gt; { AppColors.Light }</ID>
     <ID>CompositionLocalAllowlist:ContentColor.kt:/** * Cascading content color. Components downstream resolve text/icon tint from `LocalContentColor` * so a primary button's white-on-red text doesn't require every callsite to pass a color * explicitly. */ val LocalContentColor = compositionLocalOf&lt;Color&gt; { Color.Black }</ID>
     <ID>CompositionLocalAllowlist:Spacing.kt:val LocalAppSpacing = staticCompositionLocalOf&lt;AppSpacing&gt; { AppSpacing.Default }</ID>
@@ -36,6 +37,7 @@
     <ID>FunctionNaming:Shelf.kt:@Composable private fun ShelfHeaderAction</ID>
     <ID>FunctionNaming:SongStrip.kt:@Composable fun SongStrip</ID>
     <ID>FunctionNaming:SongStrip.kt:@Composable private fun LaunchIcon</ID>
+    <ID>FunctionNaming:SongStrip.kt:@Composable private fun StageChip</ID>
     <ID>FunctionNaming:SongStrip.kt:@Composable private fun Stat</ID>
     <ID>FunctionNaming:SongStrip.kt:@Composable private fun SyncPip</ID>
     <ID>FunctionNaming:SongStrip.kt:@Composable private fun TagChip</ID>

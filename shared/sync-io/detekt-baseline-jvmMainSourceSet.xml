@@ -8,8 +8,10 @@
     <ID>ArgumentListWrapping:AlsPatcher.kt:AlsPatcher$(alsPath)</ID>
     <ID>ArgumentListWrapping:WorkingTreeBusyException.kt:WorkingTreeBusyException$(", ")</ID>
     <ID>ArgumentListWrapping:WorkingTreeBusyException.kt:WorkingTreeBusyException$("Working tree is busy: ${busyPaths.joinToString(", ")}")</ID>
+    <ID>ClassSignature:JvmPluginPresenceProbe.kt:JvmPluginPresenceProbe : PluginPresenceProbe</ID>
     <ID>ClassSignature:Watcher.kt:Watcher</ID>
     <ID>ClassSignature:WorkingTreeBusyException.kt:WorkingTreeBusyException : Exception</ID>
+    <ID>ForbiddenComment:JvmPluginPresenceProbe.kt:JvmPluginPresenceProbe.Companion$// TODO: surface a "this isn't a supported platform yet" signal in the chip.</ID>
     <ID>FunctionSignature:AlsPatcher.kt:AlsPatcher$override suspend fun patch: AlsPatchService.Outcome</ID>
     <ID>FunctionSignature:AlsPatcher.kt:AlsPatcher$override suspend fun restore: AlsPatchService.Outcome</ID>
     <ID>MaxLineLength:AlsPatcher.kt:AlsPatcher$override suspend</ID>

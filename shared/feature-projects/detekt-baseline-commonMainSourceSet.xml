@@ -14,7 +14,6 @@
     <ID>ArgumentListWrapping:ProjectListScreen.kt:(shelf)</ID>
     <ID>ArgumentListWrapping:ProjectListScreen.kt:(vm)</ID>
     <ID>BinaryExpressionWrapping:ProjectListScreen.kt:missingSampleCount &gt; 0</ID>
-    <ID>ClassSignature:ProjectListViewModel.kt:ProjectListViewModel : ViewModel</ID>
     <ID>FunctionLiteral:ProjectListScreen.kt:&lt;anonymous&gt;</ID>
     <ID>FunctionNaming:ProjectListScreen.kt:@Composable fun ProjectListScreen</ID>
     <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun BackToOverview</ID>
@@ -27,9 +26,13 @@
     <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun SearchOverlayPanel</ID>
     <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun Shelf</ID>
     <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun SongStripRow</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun StageFilterPopup</ID>
+    <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun StageFilterRow</ID>
     <ID>FunctionNaming:ProjectListScreen.kt:@Composable private fun TempoFilterPopup</ID>
     <ID>FunctionSignature:ProjectListScreen.kt:@Composable private fun KeyFilterPopup</ID>
+    <ID>FunctionSignature:ProjectListScreen.kt:@Composable private fun StageFilterPopup</ID>
     <ID>LongMethod:ProjectListScreen.kt:@Composable fun ProjectListScreen</ID>
+    <ID>LongMethod:ProjectListScreen.kt:@Composable private fun FilterChipsRow</ID>
     <ID>MagicNumber:ProjectListScreen.kt:30</ID>
     <ID>MagicNumber:ProjectListScreen.kt:365</ID>
     <ID>MatchingDeclarationName:ProjectGroups.kt:ProjectGroup</ID>

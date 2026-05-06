@@ -11,6 +11,9 @@
     <ID>Filename:Errors.kt:com.sketchbook.core.Errors.kt</ID>
     <ID>FunctionSignature:Ids.kt:private fun Char.isSafeIdChar: Boolean</ID>
     <ID>MagicNumber:EffortScore.kt:EffortScore$10_000.0</ID>
+    <ID>MagicNumber:Stage.kt:StageInferrer$10</ID>
+    <ID>MagicNumber:Stage.kt:StageInferrer$5</ID>
     <ID>MatchingDeclarationName:Errors.kt:SketchbookError : Exception</ID>
+    <ID>ReturnCount:Stage.kt:StageInferrer$fun infer: Stage?</ID>
   </CurrentIssues>
 </SmellBaseline>

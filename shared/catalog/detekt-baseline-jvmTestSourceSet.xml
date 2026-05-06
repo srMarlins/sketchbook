@@ -4,6 +4,7 @@
   <CurrentIssues>
     <ID>ArgumentListWrapping:JvmScannerTest.kt:JvmScannerTest$(catalog, CatalogFts(handle.driver), ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)</ID>
     <ID>ArgumentListWrapping:JvmScannerTest.kt:JvmScannerTest$(handle.driver)</ID>
+    <ID>ArgumentListWrapping:LibraryHealthQueryTest.kt:LibraryHealthQueryTest$(7L, row.plugin_installed, "plugin_installed should be 7 (p1..p7 — p8/p9/p10 each have a missing plugin)")</ID>
     <ID>FunctionSignature:LibraryHealthQueryTest.kt:LibraryHealthQueryTest$private fun seedProject: Long</ID>
     <ID>NoUnusedImports:JvmScannerTest.kt:com.sketchbook.catalog.JvmScannerTest.kt</ID>
     <ID>PropertyWrapping:JvmScannerTest.kt:JvmScannerTest$val scanner = JvmScanner(catalog, CatalogFts(handle.driver), ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined)</ID>

@@ -18,10 +18,15 @@
     <ID>ArgumentListWrapping:ManifestMaterializerTest.kt:FakeMaterializerCloud$(Generation("1"))</ID>
     <ID>ArgumentListWrapping:ManifestMaterializerTest.kt:FakeMaterializerCloud$(SketchbookError.Conflict("not used"))</ID>
     <ID>ClassSignature:ManifestMaterializerBusyTest.kt:CountingCloud : CloudBackend</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:JvmPluginPresenceProbeTest.kt:JvmPluginPresenceProbeTest$val (catalog, _, _, cleanup) = setupCatalogWithPlugin( pluginName = "Serum", pluginType = "vst3", )</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:JvmPluginPresenceProbeTest.kt:JvmPluginPresenceProbeTest$val (catalog, _, pluginDir, cleanup) = setupCatalogWithPlugin( pluginName = "FabFilter Pro-Q 3", pluginType = "vst3", )</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:JvmPluginPresenceProbeTest.kt:JvmPluginPresenceProbeTest$val (catalog, driver, pluginDir, cleanup) = setupCatalogWithPlugin( pluginName = "GhostPlugin", pluginType = "vst3", )</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:JvmPluginPresenceProbeTest.kt:JvmPluginPresenceProbeTest$val (catalog, driver, pluginDir, cleanup) = setupCatalogWithPlugin( pluginName = "Serum", pluginType = "vst3", )</ID>
     <ID>EmptyFunctionBlock:ManifestMaterializerBusyTest.kt:CountingCloud${}</ID>
     <ID>EmptyFunctionBlock:ManifestMaterializerTest.kt:FakeMaterializerCloud${}</ID>
     <ID>FunctionLiteral:AlsPatcherTest.kt:AlsPatcherTest$&lt;anonymous&gt;</ID>
     <ID>FunctionSignature:AlsPatcherTest.kt:AlsPatcherTest$private fun ungzipToString: String</ID>
+    <ID>FunctionSignature:JvmPluginPresenceProbeTest.kt:JvmPluginPresenceProbeTest$private fun setupCatalogWithPlugin: TestEnv</ID>
     <ID>FunctionSignature:ManifestMaterializerBusyTest.kt:CountingCloud$override suspend fun appendManifestHead</ID>
     <ID>FunctionSignature:ManifestMaterializerBusyTest.kt:CountingCloud$override suspend fun refreshLock</ID>
     <ID>FunctionSignature:ManifestMaterializerTest.kt:FakeMaterializerCloud$override suspend fun appendManifestHead</ID>
@@ -32,6 +37,7 @@
     <ID>MaxLineLength:ManifestMaterializerTest.kt:FakeMaterializerCloud$override suspend fun appendManifestHead</ID>
     <ID>MaxLineLength:ManifestMaterializerTest.kt:FakeMaterializerCloud$override suspend fun refreshLock</ID>
     <ID>NoUnusedImports:AlsPatcherTest.kt:com.sketchbook.syncio.AlsPatcherTest.kt</ID>
+    <ID>NoUnusedImports:JvmPluginPresenceProbeTest.kt:com.sketchbook.syncio.JvmPluginPresenceProbeTest.kt</ID>
     <ID>NoUnusedImports:WatcherTest.kt:com.sketchbook.syncio.WatcherTest.kt</ID>
     <ID>ParameterListWrapping:ManifestMaterializerBusyTest.kt:CountingCloud$(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest)</ID>
     <ID>ParameterListWrapping:ManifestMaterializerBusyTest.kt:CountingCloud$(uuid: ProjectUuid, lock: LeaseLock, expected: Generation)</ID>
