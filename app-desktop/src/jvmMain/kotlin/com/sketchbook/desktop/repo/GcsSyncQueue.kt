@@ -17,9 +17,11 @@ import com.sketchbook.repo.SyncQueueState
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import com.sketchbook.sync.ForceSnapshotPipeline
 import com.sketchbook.sync.PipelineInput
 import com.sketchbook.sync.SnapshotPipeline
 import com.sketchbook.sync.SnapshotProgress
+import com.sketchbook.core.SnapshotRev
 import com.sketchbook.syncio.JvmWorkingTree
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -71,7 +73,7 @@ class GcsSyncQueue(
      * scheduler so virtual time stays in lockstep with the loop's cloud calls.
      */
     private val ioDispatcher: kotlin.coroutines.CoroutineContext = Dispatchers.IO,
-) : SyncQueue {
+) : SyncQueue, ForceSnapshotPipeline {
 
     private val uploading = MutableStateFlow<Set<ProjectUuid>>(emptySet())
     private val conflicts = MutableStateFlow<Set<ProjectUuid>>(emptySet())
@@ -138,16 +140,33 @@ class GcsSyncQueue(
     override suspend fun pushNow(uuid: ProjectUuid): Result<Unit> {
         val pid = syncState.projectIdFor(uuid)
             ?: return Result.failure(IllegalStateException("no local project for uuid $uuid"))
-        return runPipeline(pid, uuid)
+        return runPipeline(pid, uuid).map { }
     }
 
     /** Convenience for the desktop UI's "Sync now" button (works in [ProjectId] terms). */
     suspend fun pushNowById(id: ProjectId): Result<Unit> {
         val uuid = withContext(ioDispatcher) { syncState.identityFor(id) }
-        return runPipeline(id, uuid)
+        return runPipeline(id, uuid).map { }
     }
 
-    private suspend fun runPipeline(pid: ProjectId, uuid: ProjectUuid): Result<Unit> {
+    /**
+     * Z3 quick-capture entry-point: writes a Named manifest of the project's current bytes,
+     * tagged with [label]. Goes through the same [SnapshotPipeline] as auto-save so blob upload,
+     * lease lifecycle, and journaling all run via the normal path. CAS conflicts still demote
+     * the result to a Branch — divergence wins over Named, mirroring auto-save semantics.
+     */
+    override suspend fun recordForcedNamed(uuid: ProjectUuid, label: String): Result<SnapshotRev> {
+        val pid = withContext(ioDispatcher) { syncState.projectIdFor(uuid) }
+            ?: return Result.failure(IllegalStateException("no local project for uuid $uuid"))
+        return runPipeline(pid, uuid, kind = SnapshotKind.Named, label = label)
+    }
+
+    private suspend fun runPipeline(
+        pid: ProjectId,
+        uuid: ProjectUuid,
+        kind: SnapshotKind = SnapshotKind.Auto,
+        label: String? = null,
+    ): Result<SnapshotRev> {
         val row: ProjectRow = projects.observeProject(pid).first()
             ?: return Result.failure(IllegalStateException("project row $pid not found"))
         // ProjectPath.fromPlatform strips leading slashes for portable storage. Restore the
@@ -178,6 +197,8 @@ class GcsSyncQueue(
                 lastKnownManifest = null,
                 expectedHeadGeneration = expectedHead,
                 selfContained = current?.selfContained ?: false,
+                kind = kind,
+                label = label,
             )
 
             var savedRev: Long? = null
@@ -206,7 +227,7 @@ class GcsSyncQueue(
                         "Remote diverged — your work was saved as a branch. Pull + re-push to merge.")
                     recordConflictJournal(pid, ourRev = finalRev, theirRev = finalRev - 1)
                 }
-                Result.success(Unit)
+                Result.success(SnapshotRev(finalRev))
             } else {
                 conflicts.value = conflicts.value + uuid
                 conflictMessages.value = conflictMessages.value + (uuid to
