@@ -155,6 +155,7 @@ class JvmFirstRunMigration(
             cloud_head_rev = 0L,
             dirty = 0L,
             self_contained = 0L,
+            updated_at = clock.now().toEpochMilliseconds(),
         )
     }
 }

@@ -136,8 +136,13 @@ CREATE TABLE sync_state (
   self_contained   INTEGER NOT NULL DEFAULT 0,
   lock_owner       TEXT,
   lock_expires     TEXT,
-  last_pulled      TEXT
+  last_pulled      TEXT,
+  -- Epoch millis of the last write that touched this row. Drives drainOldestFirst() so the
+  -- background sync drain processes longest-pending dirty work first (FIFO fairness).
+  updated_at       INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE INDEX idx_sync_state_dirty_updated_at ON sync_state(dirty, updated_at);
 
 CREATE TABLE pending_uploads (
   hash         TEXT PRIMARY KEY,
@@ -309,8 +314,8 @@ SELECT * FROM snapshots WHERE project_uuid = :project_uuid ORDER BY rev DESC;
 
 -- sync_state
 insertOrReplaceSyncState:
-INSERT OR REPLACE INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained)
-VALUES (:project_uuid, :local_rev, :cloud_head_rev, :dirty, :self_contained);
+INSERT OR REPLACE INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained, updated_at)
+VALUES (:project_uuid, :local_rev, :cloud_head_rev, :dirty, :self_contained, :updated_at);
 
 selectSyncState:
 SELECT * FROM sync_state WHERE project_uuid = :project_uuid;
@@ -318,14 +323,18 @@ SELECT * FROM sync_state WHERE project_uuid = :project_uuid;
 selectAllSyncStates:
 SELECT * FROM sync_state;
 
+-- PR-H: drain selection — dirty rows oldest-first by updated_at.
+selectDirtyOldestFirst:
+SELECT * FROM sync_state WHERE dirty != 0 ORDER BY updated_at ASC, project_uuid ASC;
+
 selectIdentityByUuid:
 SELECT * FROM project_identity WHERE uuid = :uuid;
 
 -- sync_state — PR-F: PullPoller-driven cloud_head_rev advance.
 markSyncStateCloudHead:
-INSERT INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained)
-VALUES (:project_uuid, 0, :cloud_head_rev, 0, 0)
-ON CONFLICT(project_uuid) DO UPDATE SET cloud_head_rev = :cloud_head_rev;
+INSERT INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained, updated_at)
+VALUES (:project_uuid, 0, :cloud_head_rev, 0, 0, :updated_at)
+ON CONFLICT(project_uuid) DO UPDATE SET cloud_head_rev = :cloud_head_rev, updated_at = :updated_at;
 
 -- blob_cache — PR-F: JvmBlobCache LRU bookkeeping.
 insertBlobCache:

@@ -80,6 +80,22 @@ class SyncStateStore(private val catalog: Catalog) {
         }
 
     /**
+     * Dirty rows ordered oldest-first by `updated_at`. Used by the GcsSyncQueue background
+     * drain to pick the longest-pending project off the queue. Tiebreaker is uuid for
+     * determinism (matters in tests; users won't notice).
+     */
+    fun dirtyOldestFirst(): List<SyncStateRow> =
+        catalog.catalogQueries.selectDirtyOldestFirst().executeAsList().map { r ->
+            SyncStateRow(
+                uuid = ProjectUuid(r.project_uuid),
+                localRev = r.local_rev,
+                cloudHeadRev = r.cloud_head_rev,
+                dirty = r.dirty != 0L,
+                selfContained = r.self_contained != 0L,
+            )
+        }
+
+    /**
      * Commit the result of a successful push: clamp dirty=0, set local_rev = cloud_head_rev =
      * [newRev]. Idempotent.
      */
@@ -91,6 +107,7 @@ class SyncStateStore(private val catalog: Catalog) {
                 cloud_head_rev = newRev,
                 dirty = 0L,
                 self_contained = stateOf(uuid)?.let { if (it.selfContained) 1L else 0L } ?: 0L,
+                updated_at = nowMillis(),
             )
         }
         version.value = version.value + 1
@@ -106,6 +123,7 @@ class SyncStateStore(private val catalog: Catalog) {
                 cloud_head_rev = existing?.cloudHeadRev ?: 0L,
                 dirty = 1L,
                 self_contained = if (existing?.selfContained == true) 1L else 0L,
+                updated_at = nowMillis(),
             )
         }
         version.value = version.value + 1
@@ -122,6 +140,7 @@ class SyncStateStore(private val catalog: Catalog) {
             catalog.catalogQueries.markSyncStateCloudHead(
                 project_uuid = uuid.value,
                 cloud_head_rev = rev,
+                updated_at = nowMillis(),
             )
         }
         version.value = version.value + 1
@@ -147,10 +166,13 @@ class SyncStateStore(private val catalog: Catalog) {
                 cloud_head_rev = existing?.cloudHeadRev ?: 0L,
                 dirty = if (existing?.dirty == true) 1L else 0L,
                 self_contained = if (value) 1L else 0L,
+                updated_at = nowMillis(),
             )
         }
         version.value = version.value + 1
     }
+
+    private fun nowMillis(): Long = Clock.System.now().toEpochMilliseconds()
 
     private fun generateUuid(): String {
         // Plain UUIDv4 — the design doc allows ULIDs but UUIDv4 round-trips through the existing

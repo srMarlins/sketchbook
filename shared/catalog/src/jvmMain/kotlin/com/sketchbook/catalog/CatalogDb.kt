@@ -110,8 +110,9 @@ object CatalogDb {
         val current = readUserVersion(driver)
         val target = Catalog.Schema.version
         // Existing DBs created before user_version tracking landed will report 0 even though the
-        // tables are already present. Detect that case via sqlite_master and adopt `target`
-        // without re-running CREATE (which would fail with "already exists").
+        // tables are already present. Detect that case via sqlite_master and probe known columns
+        // to figure out which schema version they're actually at, then run only the migrations
+        // missing from there to the current target.
         val schemaPresent = tableExists(driver, "projects")
         when {
             !schemaPresent -> {
@@ -119,7 +120,17 @@ object CatalogDb {
                 writeUserVersion(driver, target)
             }
             current == 0L && schemaPresent -> {
-                // Pre-tracking DB; record current version as target so future launches no-op.
+                // Pre-tracking DB. Probe per-version markers to derive the actual installed
+                // schema version. Each marker is a column added in the corresponding `<n>.sqm`
+                // migration; presence means migrations up to and including <n> have already
+                // been applied. List in *ascending* order so the lowest missing marker wins.
+                val detected = when {
+                    !columnExists(driver, "sync_state", "updated_at") -> 1L  // before 1.sqm
+                    else -> target
+                }
+                if (detected < target) {
+                    Catalog.Schema.migrate(driver, detected, target)
+                }
                 writeUserVersion(driver, target)
             }
             current < target -> {
@@ -128,6 +139,26 @@ object CatalogDb {
             }
             // current >= target: schema is up to date; nothing to do.
         }
+    }
+
+    private fun columnExists(driver: SqlDriver, table: String, column: String): Boolean {
+        var found = false
+        driver.executeQuery(
+            identifier = null,
+            sql = "PRAGMA table_info($table)",
+            mapper = { c: SqlCursor ->
+                while (c.next().value) {
+                    // table_info columns: cid, name, type, notnull, dflt_value, pk
+                    if (c.getString(1) == column) {
+                        found = true
+                        break
+                    }
+                }
+                QueryResult.Unit
+            },
+            parameters = 0,
+        )
+        return found
     }
 
     private fun tableExists(driver: SqlDriver, name: String): Boolean {
