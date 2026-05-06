@@ -86,6 +86,7 @@ class GcsSyncQueue(
                     when {
                         row == null -> ProjectSyncState.LocalOnly
                         row.dirty -> ProjectSyncState.Pending
+                        row.cloudHeadRev > row.localRev -> ProjectSyncState.RemoteAhead
                         row.localRev > 0 -> ProjectSyncState.Synced
                         else -> ProjectSyncState.LocalOnly
                     }
@@ -179,6 +180,7 @@ class GcsSyncQueue(
                 when {
                     row == null -> ProjectSyncState.LocalOnly
                     row.dirty -> ProjectSyncState.Pending
+                    row.cloudHeadRev > row.localRev -> ProjectSyncState.RemoteAhead
                     row.localRev > 0 -> ProjectSyncState.Synced
                     else -> ProjectSyncState.LocalOnly
                 }

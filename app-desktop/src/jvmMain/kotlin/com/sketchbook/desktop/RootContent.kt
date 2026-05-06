@@ -822,6 +822,7 @@ private fun SyncPill(state: ProjectSyncState, theme: com.sketchbook.uishared.the
         ProjectSyncState.Pending -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "PENDING")
         ProjectSyncState.Uploading -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "UPLOADING…")
         ProjectSyncState.Conflict -> Triple(theme.colors.tintRose, theme.colors.inkPrimary, "CONFLICT")
+        ProjectSyncState.RemoteAhead -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "REMOTE AHEAD")
         ProjectSyncState.LocalOnly -> Triple(theme.colors.surfaceSunken, theme.colors.inkSecondary, "LOCAL ONLY")
         ProjectSyncState.Unknown -> Triple(theme.colors.surfaceSunken, theme.colors.inkMuted, "—")
     }
