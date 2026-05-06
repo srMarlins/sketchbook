@@ -15,6 +15,8 @@ kotlin {
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.utils.jvm)
+            implementation(libs.ktor.io.jvm)
         }
         commonTest.dependencies {
             implementation(libs.kotlinx.coroutines.test)

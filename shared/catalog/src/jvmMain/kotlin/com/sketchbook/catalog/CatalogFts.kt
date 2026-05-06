@@ -48,9 +48,23 @@ class CatalogFts(private val driver: SqlDriver) {
         }
     }
 
-    /** Return matching project rowids ordered by relevance (bm25 ascending = best first). */
-    fun search(query: String): List<Long> {
-        val out = mutableListOf<Long>()
+    /**
+     * Return matching project rowids ordered by relevance (bm25 ascending = best first).
+     *
+     * Bounds the result set at [DEFAULT_LIMIT] to keep search responsive — a bare-stem query
+     * like `s` against an FTS5 index over a 1,628-project catalog can return thousands of
+     * rowids that the caller would then re-fetch and ship through the Compose differ.
+     *
+     * Sanitises caller input by quoting it as a single FTS5 phrase. Without this, characters
+     * with FTS5 syntactic meaning (`-`, `:`, `"`, `(`, `)`, `*`, `^`, AND/OR/NOT) raise a
+     * SyntaxException out of the SQLite engine on user typing — e.g. searching for "co-write".
+     * Phrase-quoting also gives prefix queries a stable shape (the caller can append `*` per
+     * the FTS5 prefix-match docs once we surface that as a UI choice).
+     */
+    fun search(query: String, limit: Int = DEFAULT_LIMIT): List<Long> {
+        val sanitized = sanitize(query)
+        if (sanitized.isEmpty()) return emptyList()
+        val out = ArrayList<Long>(minOf(limit, 64))
         driver.executeQuery(
             identifier = null,
             sql = """
@@ -58,6 +72,7 @@ class CatalogFts(private val driver: SqlDriver) {
                 FROM projects_fts
                 WHERE projects_fts MATCH ?
                 ORDER BY bm25(projects_fts)
+                LIMIT ?
             """.trimIndent(),
             mapper = { cursor: SqlCursor ->
                 while (cursor.next().value) {
@@ -65,11 +80,30 @@ class CatalogFts(private val driver: SqlDriver) {
                 }
                 QueryResult.Unit
             },
-            parameters = 1,
+            parameters = 2,
         ) {
-            bindString(0, query)
+            bindString(0, sanitized)
+            bindLong(1, limit.toLong())
         }
         return out
+    }
+
+    private fun sanitize(raw: String): String {
+        // Strip everything that isn't a word character or whitespace, then re-quote each
+        // surviving token as a phrase. FTS5 treats unquoted `-`, `:`, etc. as operators and
+        // raises a SyntaxException; quoted phrases turn them back into literals.
+        val tokens = raw.trim().split(WHITESPACE)
+            .map { it.replace(QUOTE_OR_BAD, "") }
+            .filter { it.isNotBlank() }
+        if (tokens.isEmpty()) return ""
+        return tokens.joinToString(" ") { "\"$it\"" }
+    }
+
+    companion object {
+        const val DEFAULT_LIMIT: Int = 200
+        private val WHITESPACE = Regex("\\s+")
+        // Strip FTS5 syntax characters and the quote we'll be wrapping with.
+        private val QUOTE_OR_BAD = Regex("[\"():*^]")
     }
 }
 

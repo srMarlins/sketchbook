@@ -51,9 +51,12 @@ class SqlProjectRepository(
                 .map { rows -> rows.map { it.toDomain() } }
         } else {
             // FTS search produces a row-id list; map back to full rows. Re-runs whenever
-            // ftsTrigger ticks (after writes that may invalidate prior search results).
+            // ftsTrigger ticks (after writes that may invalidate prior search results). The
+            // FTS callback is a blocking JDBC call, so hop to ioDispatcher before invoking it
+            // — the caller's dispatcher is typically the UI's stateIn scope, where blocking
+            // SQLite would stall recomposition.
             ftsTrigger.flatMapLatest {
-                val ids = ftsSearch(q)
+                val ids = withContext(ioDispatcher) { ftsSearch(q) }
                 if (ids.isEmpty()) flowOf(emptyList()) else loadByIds(ids)
             }
         }

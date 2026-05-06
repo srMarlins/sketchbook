@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.sketchbook.core.SnapshotKind
@@ -40,7 +41,10 @@ fun TimelineScreen(
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
     ) {
         Header(state, holder)
-        val groups = holder.visibleGroups(state)
+        // visibleGroups does filter+sort+groupBy+sortedMap on every call. The state ticks
+        // frequently while a rewind is in progress; recompute only when the inputs that
+        // actually feed the result change.
+        val groups = remember(state.history, state.showAll) { holder.visibleGroups(state) }
         if (groups.isEmpty()) {
             EmptyState(
                 title = if (state.loading) "Loading…" else "No snapshots yet",
