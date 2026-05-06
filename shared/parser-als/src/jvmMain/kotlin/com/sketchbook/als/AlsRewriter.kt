@@ -61,30 +61,16 @@ object AlsRewriter {
     /**
      * Rewrites SampleRef path attributes in [gzipped] using [mapping] (literal source -> target).
      * Returns a freshly gzipped byte array. If [mapping] is empty the input is returned as-is.
+     *
+     * **Thin wrapper** over [rewriteSampleRefs] — each mapping entry becomes a [SampleRefEdit]
+     * matched on either the primary `<Path>` or the primary `<RelativePath>` attribute. When the
+     * SampleRef matches, both the primary FileRef and its `OriginalFileRef` sibling are updated
+     * atomically (sibling-stale-revert is the bug this fixes).
      */
     fun rewriteSamplePaths(gzipped: ByteArray, mapping: Map<String, String>): ByteArray {
         if (mapping.isEmpty()) return gzipped
-        val outBuf = ByteArrayOutputStream(gzipped.size + 1024)
-        GZIPOutputStream(outBuf).use { gzOut ->
-            GZIPInputStream(ByteArrayInputStream(gzipped)).use { gzIn ->
-                val reader = INPUT_FACTORY.createXMLStreamReader(gzIn, "UTF-8")
-                val writer = OUTPUT_FACTORY.createXMLStreamWriter(gzOut, "UTF-8")
-                try {
-                    identityWithRewrite(reader, writer, mapping)
-                    writer.flush()
-                } catch (t: Throwable) {
-                    // On failure: do NOT flush partial output. Close reader/writer best-effort
-                    // (any close() exceptions are recorded as suppressed) and rethrow so the
-                    // caller never sees a half-written ByteArray + gzip trailer.
-                    runCatching { writer.close() }.exceptionOrNull()?.let(t::addSuppressed)
-                    runCatching { reader.close() }.exceptionOrNull()?.let(t::addSuppressed)
-                    throw t
-                }
-                writer.close()
-                reader.close()
-            }
-        }
-        return outBuf.toByteArray()
+        val edits = mapping.map { (old, new) -> SampleRefEdit(oldPath = old, newPath = new) }
+        return rewriteSampleRefs(gzipped, edits)
     }
 
     /**
@@ -135,8 +121,8 @@ object AlsRewriter {
                     when (reader.next()) {
                         XMLStreamConstants.START_ELEMENT -> {
                             val name = reader.localName
-                            // Primary Path: SampleRef → FileRef → Path
-                            if (name == "Path" && stack.size >= 2 &&
+                            // Primary Path or RelativePath: SampleRef → FileRef → (Path|RelativePath)
+                            if ((name == "Path" || name == "RelativePath") && stack.size >= 2 &&
                                 stack.last() == "FileRef" && stack[stack.size - 2] == "SampleRef"
                             ) {
                                 for (i in 0 until reader.attributeCount) {
@@ -240,12 +226,17 @@ object AlsRewriter {
                 if (type == XMLStreamConstants.END_ELEMENT) {
                     depthInsideSampleRef--
                     if (depthInsideSampleRef == 0) {
-                        // Buffer now holds the entire <SampleRef>...</SampleRef>. Find primary Path
-                        // (the <Path Value=…/> whose ancestor chain is SampleRef → FileRef, NOT
-                        // SampleRef → SourceContext → … → OriginalFileRef → FileRef → Path).
-                        val primaryPath = findPrimaryPath(buffer)
+                        // Buffer holds the entire <SampleRef>...</SampleRef>. Match by either
+                        // the primary `<Path>` or the primary `<RelativePath>` (the ones whose
+                        // grandparent is SampleRef — NOT the OriginalFileRef sibling). Path takes
+                        // precedence; RelativePath is the fallback so callers that pass a relative
+                        // mapping (e.g. legacy Mac-path repair) still match.
+                        val (primaryPath, primaryRelative) = findPrimaryPathAndRelative(buffer)
                         val edit = primaryPath?.let { byOldPath[it] }
-                        val patched = if (edit != null) applyEdit(buffer, edit) else buffer
+                            ?: primaryRelative?.let { byOldPath[it] }
+                        val patched = if (edit != null) {
+                            applyEdit(buffer, edit, primaryPath, primaryRelative)
+                        } else buffer
                         patched.forEach(::emit)
                         buffer.clear()
                     }
@@ -262,29 +253,57 @@ object AlsRewriter {
         }
     }
 
-    /** Returns the value of the `<Path Value="…"/>` whose grandparent is SampleRef. */
-    private fun findPrimaryPath(buf: List<BufferedEvent>): String? {
+    /**
+     * Returns `(primaryPath, primaryRelativePath)` from the buffered SampleRef events. Each is the
+     * `Value` attribute of the `<Path>` / `<RelativePath>` whose direct parent is `<FileRef>` and
+     * whose grandparent is `<SampleRef>` (the primary FileRef — NOT the OriginalFileRef sibling).
+     */
+    private fun findPrimaryPathAndRelative(buf: List<BufferedEvent>): Pair<String?, String?> {
         val stack = ArrayDeque<String>()
+        var path: String? = null
+        var relative: String? = null
         for (e in buf) {
             when (e.type) {
                 XMLStreamConstants.START_ELEMENT -> {
                     val name = e.name!!
-                    if (name == "Path" && stack.size >= 2 &&
-                        stack.last() == "FileRef" && stack[stack.size - 2] == "SampleRef"
-                    ) {
-                        return e.attrs.firstOrNull { it.first == "Value" }?.second
+                    if (stack.size >= 2 && stack.last() == "FileRef" && stack[stack.size - 2] == "SampleRef") {
+                        if (name == "Path" && path == null) {
+                            path = e.attrs.firstOrNull { it.first == "Value" }?.second
+                        } else if (name == "RelativePath" && relative == null) {
+                            relative = e.attrs.firstOrNull { it.first == "Value" }?.second
+                        }
                     }
                     stack.addLast(name)
                 }
                 XMLStreamConstants.END_ELEMENT -> stack.removeLastOrNull()
             }
         }
-        return null
+        return path to relative
     }
 
-    /** Returns a new buffer with every Path/RelativePath/RelativePathType/OriginalFileSize/
-     *  OriginalCrc inside any FileRef updated, plus LastModDate on the SampleRef itself. */
-    private fun applyEdit(buf: List<BufferedEvent>, edit: SampleRefEdit): List<BufferedEvent> {
+    /**
+     * Returns a new buffer with the SampleRef's primary FileRef and its OriginalFileRef sibling
+     * updated according to [edit]:
+     *  - `Path` is rewritten to `edit.newPath` only when the SampleRef matched on Path
+     *    (i.e. `edit.oldPath == primaryPath`); otherwise Path is left as-is so a
+     *    RelativePath-only mapping doesn't clobber the absolute path.
+     *  - `RelativePath` is rewritten to `edit.newRelativePath` if non-null, else to
+     *    `edit.newPath` only when the SampleRef matched on RelativePath
+     *    (`edit.oldPath == primaryRelativePath`).
+     *  - `RelativePathType`/`OriginalFileSize`/`OriginalCrc` inside any `FileRef` are updated
+     *    when the corresponding `new*` field is non-null.
+     *  - `LastModDate` directly under `SampleRef` is updated when `newLastModDate` is non-null.
+     */
+    private fun applyEdit(
+        buf: List<BufferedEvent>,
+        edit: SampleRefEdit,
+        primaryPath: String?,
+        primaryRelative: String?,
+    ): List<BufferedEvent> {
+        val matchedOnPath = primaryPath != null && primaryPath == edit.oldPath
+        val matchedOnRelative = !matchedOnPath && primaryRelative != null && primaryRelative == edit.oldPath
+        val newRelativeToWrite: String? = edit.newRelativePath
+            ?: if (matchedOnRelative) edit.newPath else null
         val stack = ArrayDeque<String>()
         return buf.map { e ->
             when (e.type) {
@@ -292,10 +311,10 @@ object AlsRewriter {
                     val name = e.name!!
                     val parent = stack.lastOrNull()
                     val newAttrs = when {
-                        name == "Path" && parent == "FileRef" ->
+                        name == "Path" && parent == "FileRef" && matchedOnPath ->
                             e.attrs.map { if (it.first == "Value") "Value" to edit.newPath else it }
-                        name == "RelativePath" && parent == "FileRef" && edit.newRelativePath != null ->
-                            e.attrs.map { if (it.first == "Value") "Value" to edit.newRelativePath else it }
+                        name == "RelativePath" && parent == "FileRef" && newRelativeToWrite != null ->
+                            e.attrs.map { if (it.first == "Value") "Value" to newRelativeToWrite else it }
                         name == "RelativePathType" && parent == "FileRef" && edit.newRelativePathType != null ->
                             e.attrs.map { if (it.first == "Value") "Value" to edit.newRelativePathType.toString() else it }
                         name == "OriginalFileSize" && parent == "FileRef" && edit.newOriginalFileSize != null ->
@@ -318,48 +337,4 @@ object AlsRewriter {
         }
     }
 
-    private fun identityWithRewrite(
-        reader: XMLStreamReader,
-        writer: XMLStreamWriter,
-        mapping: Map<String, String>,
-    ) {
-        var inSampleRef = 0
-        // First event when XMLStreamReader is constructed is START_DOCUMENT — surface it explicitly
-        // so we emit `<?xml version="1.0" encoding="UTF-8"?>` before walking.
-        if (reader.eventType == XMLStreamConstants.START_DOCUMENT) {
-            writer.writeStartDocument(reader.encoding ?: "UTF-8", reader.version ?: "1.0")
-        }
-        while (reader.hasNext()) {
-            when (reader.next()) {
-                XMLStreamConstants.START_ELEMENT -> {
-                    val name = reader.localName
-                    if (name == "SampleRef") inSampleRef++
-                    writer.writeStartElement(name)
-                    for (i in 0 until reader.attributeCount) {
-                        val attrLocal = reader.getAttributeLocalName(i)
-                        var attrValue = reader.getAttributeValue(i)
-                        if (inSampleRef > 0 &&
-                            (name == "Path" || name == "RelativePath") &&
-                            attrLocal == "Value"
-                        ) {
-                            mapping[attrValue]?.let { attrValue = it }
-                        }
-                        writer.writeAttribute(attrLocal, attrValue)
-                    }
-                }
-                XMLStreamConstants.END_ELEMENT -> {
-                    if (reader.localName == "SampleRef") inSampleRef--
-                    writer.writeEndElement()
-                }
-                XMLStreamConstants.CHARACTERS -> writer.writeCharacters(reader.text)
-                XMLStreamConstants.CDATA -> writer.writeCData(reader.text)
-                XMLStreamConstants.COMMENT -> writer.writeComment(reader.text)
-                XMLStreamConstants.PROCESSING_INSTRUCTION ->
-                    writer.writeProcessingInstruction(reader.piTarget, reader.piData ?: "")
-                XMLStreamConstants.SPACE -> writer.writeCharacters(reader.text)
-                XMLStreamConstants.END_DOCUMENT -> writer.writeEndDocument()
-                else -> { /* DTD, ENTITY_REFERENCE, etc. — .als never uses these */ }
-            }
-        }
-    }
 }

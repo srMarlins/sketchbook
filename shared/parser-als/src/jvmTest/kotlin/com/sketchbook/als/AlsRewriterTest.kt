@@ -121,6 +121,15 @@ class AlsRewriterTest {
         assertTrue(pathOccurrences.all { it == "E:/NewLocation/kick.wav" })
     }
 
+    @Test fun rewriteSamplePathsStillWorksAsThinWrapper() {
+        val gz = javaClass.getResourceAsStream("/live12-sampleref.xml.gz")!!.readBytes()
+        val out = AlsRewriter.rewriteSamplePaths(
+            gz, mapOf("D:/Audio/Project/Samples/Imported/kick.wav" to "E:/x/kick.wav"),
+        )
+        val md = AlsParser.parse(out.inputStream())
+        assertEquals("E:/x/kick.wav", md.sampleRefs[0].rawPath)
+    }
+
     @Test fun rewriteSampleRefsIsIdempotentWhenOldPathDoesNotMatch() {
         val gz = javaClass.getResourceAsStream("/live12-sampleref.xml.gz")!!.readBytes()
         val edit = SampleRefEdit(oldPath = "no-such-path.wav", newPath = "x.wav")
