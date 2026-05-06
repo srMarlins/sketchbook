@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.ProjectId
+import com.sketchbook.core.SampleRefEdit
 import com.sketchbook.als.AlsRewriter
 import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
@@ -140,6 +141,8 @@ class SqlRepairRepositoryAlsRewriteTest {
             private set
         var lastMapping: Map<String, String>? = null
             private set
+        var lastEdits: List<SampleRefEdit>? = null
+            private set
         var restoreCalls: Int = 0
             private set
         var lastRestorePath: String? = null
@@ -147,10 +150,7 @@ class SqlRepairRepositoryAlsRewriteTest {
         var lastRestoreBytes: ByteArray? = null
             private set
 
-        override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
-            calls++
-            lastPath = alsPath
-            lastMapping = mapping
+        private fun rewriteMapping(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
             if (forcedOutcome != null) return forcedOutcome
             // Round-trip rewrite: ungzip → string-replace each mapping → re-gzip.
             val path = Path.of(alsPath)
@@ -169,6 +169,23 @@ class SqlRepairRepositoryAlsRewriteTest {
             GZIPOutputStream(out).use { it.write(text.toByteArray(Charsets.UTF_8)) }
             Files.write(path, out.toByteArray())
             return AlsPatchService.Outcome.Patched
+        }
+
+        override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
+            calls++
+            lastPath = alsPath
+            lastMapping = mapping
+            return rewriteMapping(alsPath, mapping)
+        }
+
+        override suspend fun patch(alsPath: String, edits: List<SampleRefEdit>): AlsPatchService.Outcome {
+            calls++
+            lastPath = alsPath
+            lastEdits = edits
+            // Reuse the substring rewrite by projecting edits to oldPath -> newPath. Good enough
+            // for catalog↔journal↔patch sequencing assertions; richer rewrites are covered by the
+            // real AlsRewriter end-to-end tests via [RealRewriterPatchService].
+            return rewriteMapping(alsPath, edits.associate { it.oldPath to it.newPath })
         }
 
         override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome {
@@ -468,6 +485,15 @@ class SqlRepairRepositoryAlsRewriteTest {
             val path = Path.of(alsPath)
             val original = Files.readAllBytes(path)
             val rewritten = AlsRewriter.rewriteSamplePaths(original, mapping)
+            if (rewritten.contentEquals(original)) return AlsPatchService.Outcome.NoChange
+            Files.write(path, rewritten)
+            return AlsPatchService.Outcome.Patched
+        }
+
+        override suspend fun patch(alsPath: String, edits: List<SampleRefEdit>): AlsPatchService.Outcome {
+            val path = Path.of(alsPath)
+            val original = Files.readAllBytes(path)
+            val rewritten = AlsRewriter.rewriteSampleRefs(original, edits)
             if (rewritten.contentEquals(original)) return AlsPatchService.Outcome.NoChange
             Files.write(path, rewritten)
             return AlsPatchService.Outcome.Patched

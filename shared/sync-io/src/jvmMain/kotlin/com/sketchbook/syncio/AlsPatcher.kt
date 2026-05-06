@@ -2,6 +2,7 @@ package com.sketchbook.syncio
 
 import com.sketchbook.als.AlsParser
 import com.sketchbook.als.AlsRewriter
+import com.sketchbook.core.SampleRefEdit
 import com.sketchbook.repo.AlsPatchService
 import java.nio.channels.FileChannel
 import java.nio.file.Files
@@ -22,6 +23,7 @@ import java.nio.file.StandardOpenOption
 class AlsPatcher(
     private val busyDetector: (Path) -> Boolean = ::isFileLockedByAnotherProcess,
     private val rewriter: (ByteArray, Map<String, String>) -> ByteArray = AlsRewriter::rewriteSamplePaths,
+    private val editsRewriter: (ByteArray, List<SampleRefEdit>) -> ByteArray = AlsRewriter::rewriteSampleRefs,
 ) : AlsPatchService {
     sealed interface Outcome {
         object Patched : Outcome
@@ -54,6 +56,32 @@ class AlsPatcher(
     }
 
     /**
+     * Rich-edit overload of [patch]. Mirrors the mapping-based path: same janitor, same temp+rename,
+     * same post-patch re-parse validation. Each [SampleRefEdit] is matched on the SampleRef's
+     * primary `<Path>`/`<RelativePath>`; on match the primary FileRef and the OriginalFileRef
+     * sibling are updated atomically by [AlsRewriter.rewriteSampleRefs].
+     */
+    fun patch(als: Path, edits: List<SampleRefEdit>): Outcome {
+        if (edits.isEmpty()) return Outcome.NoChange
+        if (busyDetector(als)) return Outcome.SkippedBusy
+        return runCatching {
+            val temp = als.resolveSibling("${als.fileName}.patcher-tmp")
+            Files.deleteIfExists(temp)
+            val original = Files.readAllBytes(als)
+            val rewritten = editsRewriter(original, edits)
+            if (rewritten.contentEquals(original)) return Outcome.NoChange
+            // Validation: re-parse the rewritten bytes end-to-end before installing.
+            AlsParser.parse(rewritten.inputStream())
+            Files.write(temp, rewritten, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+            Files.move(temp, als, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            Outcome.Patched as Outcome
+        }.getOrElse {
+            runCatching { Files.deleteIfExists(als.resolveSibling("${als.fileName}.patcher-tmp")) }
+            Outcome.Failed(it)
+        }
+    }
+
+    /**
      * Restore [als] to the supplied [bytes]. PR-W W4 Undo path: the repository captured the
      * pre-patch bytes; this puts them back. Same atomic temp+rename dance as [patch] so a
      * concurrent reader never sees a half-written file.
@@ -79,6 +107,14 @@ class AlsPatcher(
      */
     override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome =
         when (val o = patch(Paths.get(alsPath), mapping)) {
+            Outcome.Patched -> AlsPatchService.Outcome.Patched
+            Outcome.NoChange -> AlsPatchService.Outcome.NoChange
+            Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
+            is Outcome.Failed -> AlsPatchService.Outcome.Failed
+        }
+
+    override suspend fun patch(alsPath: String, edits: List<SampleRefEdit>): AlsPatchService.Outcome =
+        when (val o = patch(Paths.get(alsPath), edits)) {
             Outcome.Patched -> AlsPatchService.Outcome.Patched
             Outcome.NoChange -> AlsPatchService.Outcome.NoChange
             Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy

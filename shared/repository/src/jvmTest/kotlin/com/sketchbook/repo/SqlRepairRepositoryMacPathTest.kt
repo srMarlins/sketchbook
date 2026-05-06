@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.ProjectId
+import com.sketchbook.core.SampleRefEdit
 import com.sketchbook.repo.impl.InMemoryJournalRepository
 import com.sketchbook.repo.impl.SqlRepairRepository
 import java.io.ByteArrayInputStream
@@ -116,11 +117,10 @@ class SqlRepairRepositoryMacPathTest {
             private set
         var lastMapping: Map<String, String>? = null
             private set
+        var lastEdits: List<SampleRefEdit>? = null
+            private set
 
-        override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
-            calls++
-            lastPath = alsPath
-            lastMapping = mapping
+        private fun rewriteMapping(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
             if (forcedOutcome != null) return forcedOutcome
             if (mapping.isEmpty()) return AlsPatchService.Outcome.NoChange
             val path = Path.of(alsPath)
@@ -139,6 +139,20 @@ class SqlRepairRepositoryMacPathTest {
             GZIPOutputStream(out).use { it.write(text.toByteArray(Charsets.UTF_8)) }
             Files.write(path, out.toByteArray())
             return AlsPatchService.Outcome.Patched
+        }
+
+        override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome {
+            calls++
+            lastPath = alsPath
+            lastMapping = mapping
+            return rewriteMapping(alsPath, mapping)
+        }
+
+        override suspend fun patch(alsPath: String, edits: List<SampleRefEdit>): AlsPatchService.Outcome {
+            calls++
+            lastPath = alsPath
+            lastEdits = edits
+            return rewriteMapping(alsPath, edits.associate { it.oldPath to it.newPath })
         }
 
         override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome {
