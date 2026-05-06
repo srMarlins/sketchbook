@@ -1,23 +1,28 @@
 # Claude Code — agent guidelines
 
-You are the primary implementer on this repo. The Python tree is the parity reference; the Kotlin tree under `shared/` + `app-desktop/` is the real product.
+You are the primary implementer on this repo. Sketchbook is a Kotlin + Compose Multiplatform desktop app (mobile is a design intent, not yet a target). Active code lives under `shared/`, `app-desktop/`, `app-mcp/`, and `tests/integration/`.
 
 ## Authoritative documents — read these before writing code
 
-1. `docs/plans/2026-05-05-sync-versioning-design.md` — the architecture. If a PR contradicts the design doc, raise the contradiction; do not silently diverge.
-2. `docs/plans/2026-05-05-kotlin-rewrite-impl-plan.md` — the PR-by-PR roadmap. Each PR has Goal / Files / Tasks / Acceptance / Test plan. Follow the tasks in order.
-3. `CONTRIBUTING.md` — branch naming, commits, PR workflow.
-4. `docs/runbooks/release.md` — release/auto-update flow (only relevant when touching release tooling, but read before changing `conveyor.conf`, `tools/release.ps1`, or `.github/workflows/release.yml`).
+1. This file — module boundaries, state-holder pattern, library policy, credential rules, release rules.
+2. `CONTRIBUTING.md` — worktrees, branch naming, commits, PR workflow.
+3. `docs/runbooks/release.md` — release/auto-update flow (read before changing `conveyor.conf`, `tools/release.ps1`, or `.github/workflows/release.yml`).
+4. `docs/runbooks/recover-local-catalog.md` — when the local catalog DB is broken.
+5. `docs/library-conventions.md` — canonical color/tag vocabulary the MCP server and UI consume.
+6. `docs/design-language.md` — visual + interaction language for the Compose UI.
+
+The user keeps active implementation plans in conversation memory and tells you what to work on. There is no standing roadmap doc in the repo — when a plan ships, it's deleted. If you need a multi-step plan for a non-trivial task, write one with the user, then execute, then delete it.
 
 ## Module boundaries (strict, acyclic)
 
 ```
 core ── parser-als
 core ── catalog ── repository ── sync ── sync-io
-core ── ui-shared ── feature-* ── app-desktop
+core ── ui-shared ── feature-{projects,project-detail,timeline,proposals,needs-attention,settings,journal} ── app-desktop
 core ── cloud ── sync
 core ── actions ── repository
-core ── mcp-server ── repository
+core ── mcp-server ── repository ── app-mcp
+tests:integration ── (everything above, JVM-only)
 ```
 
 - `core` is leaf: domain models, value classes, errors. Pure Kotlin, no platform deps.
@@ -25,12 +30,13 @@ core ── mcp-server ── repository
 - `repository` is THE seam. Features and sync engine both write through it; nothing reaches past it into SQLDelight or `cloud`.
 - `sync` and `actions` go through `repository` so journal entries get emitted; they never touch `catalog` directly.
 - State-holders live in `feature-*` modules in `commonMain`. `app-desktop` is a thin shell.
+- `tests:integration` is the cross-module JVM-only test surface.
 
 If a task asks you to import something that breaks one of these arrows, stop and raise it in the PR.
 
 ## State-holder pattern (canonical)
 
-Every screen has one state-holder following design-doc §2.4. Sealed `Intent`, data class `State`, sealed `Effect`, `state: StateFlow<State>`, `accept(intent)`, `effects: SharedFlow<Effect>`. Compose collects state, dispatches intents, observes effects via `LaunchedEffect` once at screen root. No MVI library — just plain Kotlin.
+Every screen has one state-holder. Sealed `Intent`, data class `State`, sealed `Effect`, `state: StateFlow<State>`, `accept(intent)`, `effects: SharedFlow<Effect>`. Compose collects state, dispatches intents, observes effects via `LaunchedEffect` once at screen root. No MVI library — just plain Kotlin.
 
 ## Repository as the only data seam
 
@@ -40,7 +46,7 @@ Every screen has one state-holder following design-doc §2.4. Sealed `Intent`, d
 
 ## Metro DI
 
-- One root `@DependencyGraph(AppScope::class)` per app shell (`app-desktop`, future `app-mobile`, `app-mcp`).
+- One root `@DependencyGraph(AppScope::class)` per app shell (`app-desktop`, `app-mcp`; `app-mobile` is a future shell).
 - Modules contribute via `@ContributesTo(AppScope::class)` interfaces.
 - Per-screen lifetimes via `@GraphExtension`. State-holder scopes die with their screen.
 - Never inject a concrete impl across module boundaries — inject the interface.
@@ -50,6 +56,7 @@ Every screen has one state-holder following design-doc §2.4. Sealed `Intent`, d
 - `kotlin.test` runner, Kotest assertions, Turbine for Flow.
 - Hand-written fakes in `commonTest`. No MockK in `commonMain`/`commonTest`.
 - TDD for: parsers, hashers, SigV4, repository, sync orchestration, state-holders.
+- Cross-module pipelines have JVM integration tests under `tests/integration` (real disk, real in-memory SQLDelight, `FakeCloudBackend`).
 - Run `./gradlew :module:check` after every change you intend to commit. Don't claim "tests pass" without running them.
 - Power-Assert is on — write `assert(x == y)` rather than `assertEquals`.
 
@@ -63,38 +70,42 @@ Every screen has one state-holder following design-doc §2.4. Sealed `Intent`, d
 ## Avoid these libraries (and why)
 
 - **MVIKotlin / Decompose** — adds vocabulary on top of plain Kotlin/Flow we don't need.
-- **Roborazzi** — visual review happens in `app-gallery` + PR screenshots; no need for snapshot tests.
+- **Roborazzi** — visual review happens in PR screenshots; no need for snapshot tests.
 - **KAPT / Anvil** — Metro covers DI; KAPT pulls heavy JVM-only annotation processing.
 - **Realm Kotlin / Room** — SQLDelight wins for FTS5 + KMP.
 - **Koin** — Metro is compile-time-checked.
-- **Moko-resources / `viewmodel-compose`** — not needed in v1; would couple us to Android-isms.
+- **Moko-resources** — not needed in v1; would couple us to Android-isms.
+- **`androidx.lifecycle:viewmodel-compose`** — Android-only. The JetBrains KMP fork (`org.jetbrains.androidx.lifecycle:*`) is the only acceptable lifecycle/ViewModel surface. Don't substitute one for the other.
 
-If the design doc adds an exception, follow it. Otherwise, do not introduce these.
+If the user explicitly approves an exception, follow it. Otherwise, do not introduce any of these.
 
 ## Non-obvious rules from prior conversations
 
 - **`.als` parser must stream.** A DOM parse blew RAM to 25 GB on a 543 MB project. Use StAX `XMLInputFactory` + the free-subtree pattern (null out subtree references after each `<Track>` / `<DeviceChain>`). Tested with a heap cap.
 - **No batch checkpoints during plan execution.** Drive through all tasks within a PR. The user reviews at PR boundaries, not between tasks.
-- **Layer onto existing UI; never redesign.** When the Python `web/` is still alive (parity period), additions go on as small chips/details on existing components. The stationery aesthetic is intentional.
-- **App owns the scan; DB is the source of truth.** Never ship CLI-only flows for routine work. The desktop app runs scan/backfill on launch with a progress bar.
+- **Layer onto existing UI; never redesign.** Additions go on as small chips/details on existing components. The stationery aesthetic is intentional — keep the palette uniform and reuse existing tokens (`pinGreen`, `pinOrange`, `accentAction`, `accentSecondary`, `tintBlue/Rose/Sage/Cream`, ink/rule tones from `AppColors`).
+- **App owns the scan; DB is the source of truth.** Never ship CLI-only flows for routine work. The desktop app runs scan/backfill on launch with a progress bar + live row updates.
 - **No unnecessary libraries.** The user has explicitly rejected MVI libs, screenshot tests, and navigation frameworks. Plain Kotlin StateFlow + sealed-class intents.
+- **One PR at a time.** When asked to "fix all", deliver one focused PR, not a 3-4 PR sequence.
+- **Local build is the merge gate.** `main` is unprotected; when local `./gradlew check` passes, merge with `gh pr merge --admin --squash` immediately. Don't wait on CI or auto-merge.
+- **Always work in a worktree.** Implementation happens in `.claude/worktrees/<branch>/`, never in the main checkout.
 
 ## PR workflow
 
-1. Branch off `main` as `pr-<NN>-<slug>`.
+1. Create a worktree at `.claude/worktrees/<branch>/` and branch off `main` as `pr-<NN>-<slug>`.
 2. Implement task-by-task per the plan. Many small commits.
 3. `./gradlew check` must be green locally before pushing.
-4. UI PR? Run `:app-desktop:run` (or `:app-gallery:run`), capture screenshots per state, attach via `gh pr comment <pr> --body-file <md>`.
+4. UI PR? Run `:app-desktop:run`, capture screenshots per state, attach via `gh pr comment <pr> --body-file <md>`.
 5. Self-review: walk the diff cold against the design-doc section the PR claims to implement.
 6. `gh pr review <pr> --comment` with concrete `file:line` citations for any concerns; approve only after tests pass and design alignment is confirmed.
-7. Squash-merge.
+7. Squash-merge with `gh pr merge <pr> --squash --admin` (no branch protection).
 
 ## Cloud auth & credential handling
 
 Sketchbook v1 authenticates to Google Cloud Storage with a **service-account JSON key** (long-lived RSA keypair issued by GCP). The flow:
 
 1. Settings stores the path to `gcp-sa.json` (parsed and validated; *contents* live in the OS keychain in v1.1, in `java.util.prefs.Preferences` in v1).
-2. `GcsAuth.signJwt(...)` constructs a JWT every ~50 minutes: claims `iss=client_email`, `scope=https://www.googleapis.com/auth/devstorage.read_write`, `aud=https://oauth2.googleapis.com/token`, `iat=now`, `exp=now+3600`. RS256-signed with the JSON's `private_key`.
+2. `GcsAuth.signJwt(...)` constructs a JWT every ~50 minutes: claims `iss=client_email`, `scope=https://www.googleapis.com/auth/devstorage.read_write`, `aud=https://oauth2.googleapis.com/token`, `iat=now`, `exp=now+3600`. RS256-signed with the JSON's `private_key`. JWT JSON is built via `kotlinx.serialization`, not string concatenation.
 3. `GcsAuth.exchangeJwtForAccessToken()` POSTs the JWT to `https://oauth2.googleapis.com/token` with `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`. Returns a 1-hour bearer token.
 4. `GcsAuth.tokenManager()` holds the current token, proactively refreshes at the 50-minute mark, exposes `suspend fun token(): String`. Single in-flight refresh; concurrent callers de-duplicated.
 5. `DirectGcsBackend` injects the bearer on every API call (`Authorization: Bearer ya29...`).

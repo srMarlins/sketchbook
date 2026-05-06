@@ -10,7 +10,7 @@ There is no bug bounty.
 
 ## Scope
 
-Sketchbook is a desktop app for managing a local Ableton Live library, with optional cloud-sync to a Cloudflare R2 / Backblaze B2 bucket the user owns. Issues we'd like to hear about:
+Sketchbook is a desktop app for managing a local Ableton Live library, with optional cloud-sync to a Google Cloud Storage bucket the user owns (authenticated via service-account JSON in v1; per-user OAuth in v1.2). Issues we'd like to hear about:
 
 - **Local code execution** triggered by a malicious `.als` file or a malicious filename in a project root.
 - **Path traversal / sandbox escape** in the library scanner, sample resolver, or `.als` parser.
@@ -40,8 +40,6 @@ We aim to ship a fix within 90 days of a confirmed in-scope report. After the fi
 - Gitleaks runs on every PR + push; Dependabot runs grouped weekly.
 
 ## What we'd like to do
-
-These are tracked in `docs/plans/2026-05-06-1.0-release-readiness-plan.md` (PR-I) and the original 6-reviewer audit:
 
 - Apple Developer ID / Authenticode signing on the installers.
 - OS-keychain credential storage (currently plaintext `Preferences`; v1.1).

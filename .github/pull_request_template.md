@@ -4,7 +4,7 @@
 
 ## Why
 
-<!-- Link to the design doc section + plan PR number. Example: implements §4.2 of `docs/plans/2026-05-05-sync-versioning-design.md` (PR-9 in the impl plan). -->
+<!-- One paragraph: motivation + intent. Reference any standing rule it touches (e.g. "tightens the credential redaction rule from CLAUDE.md"). -->
 
 ## How
 
@@ -24,7 +24,7 @@
 
 ## UI verification (delete if non-UI)
 
-- [ ] `./gradlew :app-desktop:run` (or `:app-gallery:run`) launched locally.
+- [ ] `./gradlew :app-desktop:run` launched locally.
 - [ ] Screenshot per state attached below: empty / loaded / error.
 
 <!-- Drop screenshots here. Use `gh pr comment <pr> --body-file <md>` if pasting via CLI. -->
