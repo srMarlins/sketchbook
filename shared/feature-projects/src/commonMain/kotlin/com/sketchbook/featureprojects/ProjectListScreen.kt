@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -103,7 +102,6 @@ fun ProjectListScreen(
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isWide = maxWidth.value >= WIDE_THRESHOLD_DP
-        val rootMaxHeight = maxHeight
 
         Column(
             modifier = Modifier
@@ -194,11 +192,9 @@ fun ProjectListScreen(
                                 onClick = { holder.dispatch(ProjectListStateHolder.Intent.Search("")) },
                             ),
                     )
-                    // Results panel: full panel width, capped height with internal scroll, top-anchored.
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = (rootMaxHeight * 0.6f))
                             .align(Alignment.TopCenter),
                     ) {
                         SearchResults(
