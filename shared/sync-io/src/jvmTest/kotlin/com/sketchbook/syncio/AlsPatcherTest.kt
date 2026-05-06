@@ -160,6 +160,21 @@ class AlsPatcherTest {
     }
 
     @Test
+    fun `patch refuses to install corrupted output`() {
+        val tmpDir = createTempDirectory("patcher-corrupt")
+        val als = tmpDir.resolve("a.als")
+        val originalBytes = gzipBytesOf("rewriter/oneSampleRef.als.xml")
+        Files.write(als, originalBytes)
+        val patcher = AlsPatcher(
+            busyDetector = { false },
+            rewriter = { _, _ -> byteArrayOf(0x1F.toByte(), 0x8B.toByte(), 0xFF.toByte()) },  // truncated gzip
+        )
+        val outcome = patcher.patch(als, mapOf("x" to "y"))
+        assertTrue(outcome is AlsPatcher.Outcome.Failed)
+        assertContentEquals(originalBytes, Files.readAllBytes(als))         // file unchanged
+    }
+
+    @Test
     fun `patch cleans up stale temp from prior crash`() {
         val tmpDir = createTempDirectory("patcher-stale")
         val als = tmpDir.resolve("a.als")
