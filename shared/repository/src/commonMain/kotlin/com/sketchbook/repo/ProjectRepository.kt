@@ -25,6 +25,9 @@ interface ProjectRepository {
      */
     fun observeProjects(query: String = ""): Flow<List<ProjectRow>>
 
+    /** Live list of archived projects, newest first. Excluded from [observeProjects]. */
+    fun observeArchivedProjects(): Flow<List<ProjectRow>> = kotlinx.coroutines.flow.flowOf(emptyList())
+
     /** Live single-project view by local PK. Emits new state whenever the row mutates. */
     fun observeProject(id: ProjectId): Flow<ProjectRow?>
 

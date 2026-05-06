@@ -19,7 +19,12 @@ import kotlin.test.assertTrue
 class ProjectListStateHolderTest {
 
     private val now = Instant.parse("2026-05-05T12:00:00Z")
-    private fun row(id: Long, name: String, tags: List<String> = emptyList()) = ProjectRow(
+    private fun row(
+        id: Long,
+        name: String,
+        tags: List<String> = emptyList(),
+        archived: Boolean = false,
+    ) = ProjectRow(
         id = ProjectId(id),
         name = name,
         path = ProjectPath("Projects/2026/$name/Project.als"),
@@ -29,13 +34,16 @@ class ProjectListStateHolderTest {
         updatedAt = now,
         tags = tags,
         colorTag = null,
+        archived = archived,
     )
 
     private class FakeRepo(
         private val byQuery: Map<String, MutableStateFlow<List<ProjectRow>>> = emptyMap(),
+        private val archived: MutableStateFlow<List<ProjectRow>> = MutableStateFlow(emptyList()),
     ) : ProjectRepository {
         override fun observeProjects(query: String): Flow<List<ProjectRow>> =
             byQuery[query] ?: byQuery[""] ?: flowOf(emptyList())
+        override fun observeArchivedProjects(): Flow<List<ProjectRow>> = archived
         override fun observeProject(id: ProjectId): Flow<ProjectRow?> = flowOf(null)
         override suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry> = stub()
         override suspend fun rename(id: ProjectId, newName: String): Result<JournalEntry> = stub()
@@ -83,6 +91,23 @@ class ProjectListStateHolderTest {
             while (s.query != "kick" || s.rows.size != 1) s = awaitItem()
             assertEquals("kick", s.query)
             assertEquals(listOf("kick"), s.rows.map { it.name })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun archivedRowsExposedSeparatelyFromActiveRows() = runTest {
+        val active = MutableStateFlow(listOf(row(1, "kick")))
+        val archived = MutableStateFlow(listOf(row(2, "old-snare", archived = true)))
+        val repo = FakeRepo(mapOf("" to active), archived)
+        val holder = ProjectListStateHolder(repo, backgroundScope)
+
+        holder.state.test {
+            var s = awaitItem()
+            while (s.rows.isEmpty() || s.archivedRows.isEmpty()) s = awaitItem()
+            assertEquals(listOf("kick"), s.rows.map { it.name })
+            assertEquals(listOf("old-snare"), s.archivedRows.map { it.name })
+            assertTrue(s.rows.none { it.archived })
             cancelAndIgnoreRemainingEvents()
         }
     }

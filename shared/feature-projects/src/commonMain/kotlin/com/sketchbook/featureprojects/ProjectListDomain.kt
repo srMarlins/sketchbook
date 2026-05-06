@@ -14,6 +14,7 @@ data class Buckets(
     val hasPotential: List<ProjectGroup>,
     val untriaged: List<ProjectGroup>,
     val broken: List<ProjectGroup>,
+    val archived: List<ProjectGroup>,
     val all: List<ProjectGroup>,
 ) {
     companion object {
@@ -24,6 +25,7 @@ data class Buckets(
             hasPotential = emptyList(),
             untriaged = emptyList(),
             broken = emptyList(),
+            archived = emptyList(),
             all = emptyList(),
         )
     }
@@ -40,7 +42,8 @@ enum class ShelfId(val id: String) {
     AlmostDone("almost-done"),
     HasPotential("has-potential"),
     Untriaged("untriaged"),
-    Broken("broken");
+    Broken("broken"),
+    Archived("archived");
 
     fun title(): String = when (this) {
         CurrentlyWorking -> "Currently working on"
@@ -49,6 +52,7 @@ enum class ShelfId(val id: String) {
         HasPotential -> "Has potential"
         Untriaged -> "Untriaged"
         Broken -> "Broken"
+        Archived -> "Archived"
     }
 
     fun subtitle(): String = when (this) {
@@ -58,6 +62,7 @@ enum class ShelfId(val id: String) {
         HasPotential -> "Purple-tagged sketches marked for revisit."
         Untriaged -> "No color tag yet — needs a glance."
         Broken -> "Failed to parse, or referencing missing samples."
+        Archived -> "Set aside from the active library."
     }
 
     fun bucket(b: Buckets): List<ProjectGroup> = when (this) {
@@ -67,6 +72,7 @@ enum class ShelfId(val id: String) {
         HasPotential -> b.hasPotential
         Untriaged -> b.untriaged
         Broken -> b.broken
+        Archived -> b.archived
     }
 
     companion object {
@@ -100,7 +106,7 @@ private val GEM_EXCLUDE_COLORS = setOf(6, 7) // green-ish (shipped), red-ish (ki
  *
  * A group can appear in multiple shelves; chip counts and shelves are computed independently.
  */
-fun bucketize(all: List<ProjectGroup>): Buckets {
+fun bucketize(all: List<ProjectGroup>, archived: List<ProjectGroup> = emptyList()): Buckets {
     val nowMs = kotlin.time.Clock.System.now().toEpochMilliseconds()
     val currentlyWorking = all.filter { g ->
         g.representative.colorTag == BLUE || (nowMs - g.updatedAtMs) < FOURTEEN_DAYS_MS
@@ -128,6 +134,7 @@ fun bucketize(all: List<ProjectGroup>): Buckets {
         hasPotential = hasPotential,
         untriaged = untriaged,
         broken = broken,
+        archived = archived,
         all = all,
     )
 }

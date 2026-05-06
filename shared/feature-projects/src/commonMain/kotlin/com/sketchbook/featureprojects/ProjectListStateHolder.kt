@@ -54,10 +54,12 @@ class ProjectListStateHolder(
 
     // Rows track the query — repository's `observeProjects` does FTS5 narrowing for us.
     private val rowsFlow: Flow<List<ProjectRow>> = query.flatMapLatest { repository.observeProjects(it) }
+    private val archivedRowsFlow: Flow<List<ProjectRow>> = repository.observeArchivedProjects()
 
     val state: StateFlow<State> = combine(
         query,
         rowsFlow,
+        archivedRowsFlow,
         gemsShuffleSeed,
         zoomShelf,
         openDetailId,
@@ -67,13 +69,16 @@ class ProjectListStateHolder(
         val q = values[0] as String
         @Suppress("UNCHECKED_CAST")
         val rows = values[1] as List<ProjectRow>
-        val seed = values[2] as Int
-        val zoom = values[3] as ShelfId?
-        val openId = values[4] as ProjectId?
-        val selectedIdx = values[5] as Int
+        @Suppress("UNCHECKED_CAST")
+        val archivedRows = values[2] as List<ProjectRow>
+        val seed = values[3] as Int
+        val zoom = values[4] as ShelfId?
+        val openId = values[5] as ProjectId?
+        val selectedIdx = values[6] as Int
 
         val groups = deriveProjectGroups(rows)
-        val buckets = bucketize(groups)
+        val archivedGroups = deriveProjectGroups(archivedRows)
+        val buckets = bucketize(groups, archivedGroups)
         val gemsView = if (seed == 0) {
             buckets.forgottenGems
         } else {
@@ -85,6 +90,7 @@ class ProjectListStateHolder(
         State(
             query = q,
             rows = rows,
+            archivedRows = archivedRows,
             groups = groups,
             buckets = buckets,
             gemsView = gemsView,
@@ -132,6 +138,7 @@ class ProjectListStateHolder(
     data class State(
         val query: String = "",
         val rows: List<ProjectRow> = emptyList(),
+        val archivedRows: List<ProjectRow> = emptyList(),
         val groups: List<ProjectGroup> = emptyList(),
         val buckets: Buckets = Buckets.EMPTY,
         val gemsView: List<ProjectGroup> = emptyList(),

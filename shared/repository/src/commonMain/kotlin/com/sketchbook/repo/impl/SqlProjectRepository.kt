@@ -75,6 +75,19 @@ class SqlProjectRepository(
         }
     }
 
+    override fun observeArchivedProjects(): Flow<List<ProjectRow>> =
+        combine(
+            catalog.catalogQueries.selectArchivedProjectsWithMissing()
+                .asFlow()
+                .mapToList(ioDispatcher),
+            catalog.catalogQueries.selectAllProjectTagPairs()
+                .asFlow()
+                .mapToList(ioDispatcher),
+        ) { rows, pairs ->
+            val tagsByProject = pairs.groupBy({ it.project_id }, { it.name })
+            rows.map { it.toDomain(tags = tagsByProject[it.id].orEmpty()) }
+        }
+
     override fun observeProject(id: ProjectId): Flow<ProjectRow?> =
         combine(
             catalog.catalogQueries.selectProjectByIdWithMissing(id.value)

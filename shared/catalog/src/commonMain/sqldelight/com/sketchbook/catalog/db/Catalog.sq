@@ -182,6 +182,14 @@ FROM projects p
 WHERE p.is_archived = 0
 ORDER BY p.last_modified DESC;
 
+selectArchivedProjectsWithMissing:
+SELECT p.*,
+       COALESCE((SELECT COUNT(*) FROM project_samples ps
+                 WHERE ps.project_id = p.id AND ps.is_missing = 1), 0) AS missing_sample_count
+FROM projects p
+WHERE p.is_archived = 1
+ORDER BY p.last_modified DESC;
+
 selectProjectByIdWithMissing:
 SELECT p.*,
        COALESCE((SELECT COUNT(*) FROM project_samples ps

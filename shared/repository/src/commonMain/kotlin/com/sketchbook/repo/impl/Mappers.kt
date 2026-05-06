@@ -2,6 +2,7 @@ package com.sketchbook.repo.impl
 
 import com.sketchbook.catalog.db.Projects
 import com.sketchbook.catalog.db.SelectAllProjectsWithMissing
+import com.sketchbook.catalog.db.SelectArchivedProjectsWithMissing
 import com.sketchbook.catalog.db.SelectProjectByIdWithMissing
 import com.sketchbook.core.ParseStatus
 import com.sketchbook.core.ProjectId
@@ -34,6 +35,7 @@ internal fun Projects.toDomain(
     fileSizeBytes = file_size_bytes,
     tags = tags,
     missingSampleCount = missingSampleCount,
+    archived = is_archived != 0L,
 )
 
 internal fun SelectAllProjectsWithMissing.toDomain(
@@ -52,6 +54,26 @@ internal fun SelectAllProjectsWithMissing.toDomain(
     fileSizeBytes = file_size_bytes,
     tags = tags,
     missingSampleCount = missing_sample_count.toInt(),
+    archived = is_archived != 0L,
+)
+
+internal fun SelectArchivedProjectsWithMissing.toDomain(
+    tags: List<String> = emptyList(),
+): ProjectRow = build(
+    id = id,
+    name = name,
+    path = path,
+    tempo = tempo,
+    trackCount = track_count,
+    liveVersion = live_version,
+    lastModifiedSec = last_modified,
+    colorTag = color_tag,
+    effortScore = effort_score,
+    parseStatus = parse_status,
+    fileSizeBytes = file_size_bytes,
+    tags = tags,
+    missingSampleCount = missing_sample_count.toInt(),
+    archived = is_archived != 0L,
 )
 
 internal fun SelectProjectByIdWithMissing.toDomain(
@@ -70,6 +92,7 @@ internal fun SelectProjectByIdWithMissing.toDomain(
     fileSizeBytes = file_size_bytes,
     tags = tags,
     missingSampleCount = missing_sample_count.toInt(),
+    archived = is_archived != 0L,
 )
 
 @Suppress("LongParameterList")
@@ -87,6 +110,7 @@ private fun build(
     fileSizeBytes: Long?,
     tags: List<String>,
     missingSampleCount: Int,
+    archived: Boolean,
 ): ProjectRow = ProjectRow(
     id = ProjectId(id),
     name = name,
@@ -101,6 +125,7 @@ private fun build(
     parseStatus = parseStatusFor(parseStatus),
     missingSampleCount = missingSampleCount,
     fileSizeBytes = fileSizeBytes ?: 0L,
+    archived = archived,
 )
 
 private fun parseStatusFor(raw: String?): ParseStatus = when (raw) {
