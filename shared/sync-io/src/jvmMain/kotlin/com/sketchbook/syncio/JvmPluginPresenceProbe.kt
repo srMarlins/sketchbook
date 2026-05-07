@@ -19,11 +19,10 @@ import kotlin.io.path.name
 import kotlin.streams.asSequence
 
 /**
- * Filesystem-walking [PluginPresenceProbe]. Resolves the platform-default plugin directories
- * (Windows: `%CommonProgramFiles%\VST3` + friends; macOS: `/Library/Audio/Plug-Ins/{VST3,VST,Components}`),
- * shallow-walks each one for `vst3 / vst / dll / component` files, normalizes filenames into a
- * comparable token set, and flips `project_plugins.is_installed` for every (name, type) pair in
- * the catalog by either-direction prefix match against that set.
+ * Filesystem-walking [PluginPresenceProbe]. Resolves a list of plugin directories (from settings,
+ * with OS-default fallback), shallow-walks each one for `vst3 / vst / dll / component` files,
+ * normalizes filenames into a comparable token set, and flips `project_plugins.is_installed` for
+ * every (name, type) pair in the catalog by either-direction prefix match against that set.
  *
  * **Why prefix-match either way.** "FabFilter Pro-Q 3" written by Live vs `FabFilter Pro-Q 3.vst3`
  * on disk both normalize to `fabfilterproq` (trailing-digit strip), but `Serum 1.35` (Live) →
@@ -128,25 +127,8 @@ class JvmPluginPresenceProbe(
         private val TRAILING_DIGITS_REGEX = Regex("\\d+$")
 
         /**
-         * Test seam: build a probe with custom plugin dirs + dispatcher. Wraps [installedDirs] in
-         * a minimal `SettingsRepository` whose `pluginFolders` reflects the supplied paths, so the
-         * production `probe()` path runs unchanged from production. Use [forTest] with an explicit
-         * `settings` argument when you need to test fallback or settings-driven behavior.
-         */
-        internal fun forTest(
-            catalog: Catalog,
-            installedDirs: List<Path>,
-            ioDispatcher: CoroutineDispatcher,
-        ): JvmPluginPresenceProbe = forTest(
-            catalog = catalog,
-            settings = StaticSettingsRepository(installedDirs.map { it.toString() }),
-            ioDispatcher = ioDispatcher,
-        )
-
-        /**
          * Test seam taking an explicit [SettingsRepository]. Lets tests assert the probe's read of
-         * `pluginFolders` and the empty-list fallback, both behaviors that the path-only overload
-         * can't exercise on its own.
+         * `pluginFolders` and the empty-list fallback path through the production `probe()` flow.
          */
         internal fun forTest(
             catalog: Catalog,
@@ -199,31 +181,4 @@ class JvmPluginPresenceProbe(
             }
         }
     }
-}
-
-/**
- * Test-only `SettingsRepository` that emits a static [Settings] containing the supplied
- * `pluginFolders`. Backs the path-only `JvmPluginPresenceProbe.forTest` overload so legacy tests
- * keep their original signature without re-implementing the full repository surface.
- */
-private class StaticSettingsRepository(
-    pluginFolders: List<String>,
-) : com.sketchbook.repo.SettingsRepository {
-    private val snapshot = com.sketchbook.repo.Settings(
-        libraryRoots = emptyList(),
-        cloudConfigured = false,
-        selfContainedProjects = emptySet(),
-        pluginFolders = pluginFolders,
-    )
-    private val flow = kotlinx.coroutines.flow.MutableStateFlow(snapshot)
-    override fun observe(): kotlinx.coroutines.flow.Flow<com.sketchbook.repo.Settings> = flow
-    override suspend fun upsertRoot(root: com.sketchbook.repo.LibraryRoot): Result<Unit> = Result.success(Unit)
-    override suspend fun removeRoot(root: com.sketchbook.repo.LibraryRoot): Result<Unit> = Result.success(Unit)
-    override suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit> = Result.success(Unit)
-    override suspend fun setCloudBucket(bucket: String?): Result<Unit> = Result.success(Unit)
-    override suspend fun setSelfContained(uuid: com.sketchbook.core.ProjectUuid, value: Boolean): Result<Unit> = Result.success(Unit)
-    override suspend fun setCacheSettings(settings: com.sketchbook.repo.BlobCacheSettings): Result<Unit> = Result.success(Unit)
-    override suspend fun markFirstRunComplete(skipFlags: com.sketchbook.repo.OnboardingSkipFlags): Result<Unit> = Result.success(Unit)
-    override suspend fun dismissOnboardingPrompt(kind: com.sketchbook.repo.OnboardingPromptKind): Result<Unit> = Result.success(Unit)
-    override suspend fun setPluginFolders(folders: List<String>): Result<Unit> = Result.success(Unit)
 }

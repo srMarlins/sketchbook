@@ -18,7 +18,6 @@ import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class JvmPluginPresenceProbeTest {
@@ -48,7 +47,7 @@ class JvmPluginPresenceProbeTest {
             Files.write(pluginDir.resolve("Serum.vst3"), ByteArray(8))
             val probe = JvmPluginPresenceProbe.forTest(
                 catalog = catalog,
-                installedDirs = listOf(pluginDir),
+                settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
                 ioDispatcher = Dispatchers.Unconfined,
             )
 
@@ -73,7 +72,7 @@ class JvmPluginPresenceProbeTest {
             // Empty dir — no matching file. Probe should flip is_installed to 0.
             val probe = JvmPluginPresenceProbe.forTest(
                 catalog = catalog,
-                installedDirs = listOf(pluginDir),
+                settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
                 ioDispatcher = Dispatchers.Unconfined,
             )
 
@@ -98,7 +97,9 @@ class JvmPluginPresenceProbeTest {
             // gets marked missing (we have no evidence of installation).
             val probe = JvmPluginPresenceProbe.forTest(
                 catalog = catalog,
-                installedDirs = listOf(Path.of("/this/path/does/not/exist/plugins")),
+                settings = FakePluginSettings(
+                    pluginFolders = listOf(Path.of("/this/path/does/not/exist/plugins").toString()),
+                ),
                 ioDispatcher = Dispatchers.Unconfined,
             )
 
@@ -123,7 +124,7 @@ class JvmPluginPresenceProbeTest {
             Files.write(pluginDir.resolve("Serum.vst3"), ByteArray(8))
             val probe = JvmPluginPresenceProbe.forTest(
                 catalog = catalog,
-                installedDirs = listOf(pluginDir),
+                settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
                 ioDispatcher = Dispatchers.Unconfined,
             )
 
@@ -182,7 +183,49 @@ class JvmPluginPresenceProbeTest {
     }
 
     @Test
-    fun fallsBackToOsDefaultsWhenSettingsListIsEmpty() = runTest {
+    fun nonEmptyConfiguredListWithGarbagePathsFlagsEveryPluginMissing() = runTest {
+        // Direct proof of no-silent-fallback: configured list is non-empty but points at paths that
+        // don't exist. Probe must NOT walk OS defaults — every plugin must come back missing, even
+        // ones that are likely installed on the host's default plugin dirs. `GhostPlugin` and
+        // `Massive` are seeded; the former is fictional so it can't accidentally match anything,
+        // the latter is a real common plugin and pins the rule even if the host has Massive.vst3
+        // sitting in `%CommonProgramFiles%\VST3`.
+        val (catalog, driver, _, cleanup) = setupCatalogWithPlugin(
+            pluginName = "GhostPlugin",
+            pluginType = "vst3",
+        )
+        try {
+            val projectId = catalog.catalogQueries.selectProjectIdByPath("/lib/song.als").executeAsOne()
+            catalog.catalogQueries.insertProjectPlugin(
+                project_id = projectId,
+                plugin_name = "Massive",
+                plugin_type = "vst3",
+                track_name = "Track 2",
+            )
+            val fakeSettings = FakePluginSettings(
+                pluginFolders = listOf("/nonexistent/path/that/doesnt/exist"),
+            )
+            val probe = JvmPluginPresenceProbe.forTest(
+                catalog = catalog,
+                settings = fakeSettings,
+                ioDispatcher = Dispatchers.Unconfined,
+            )
+
+            val result = probe.probe()
+
+            assertEquals(0, result.installedCount)
+            val rows = catalog.catalogQueries.selectAllDistinctPlugins().executeAsList()
+            assertTrue(
+                rows.all { !isInstalled(driver, it.plugin_name, it.plugin_type) },
+                "no plugin should be flagged installed when configured paths don't exist",
+            )
+        } finally {
+            cleanup()
+        }
+    }
+
+    @Test
+    fun doesNotThrowWhenSettingsListIsEmpty() = runTest {
         // T3: an empty configured list is the explicit signal "use platform defaults". With an
         // unwritable / nonexistent default set on a sandboxed test machine, the probe should
         // simply walk an empty installed-set and mark everything missing — the key behavior is
@@ -221,7 +264,7 @@ class JvmPluginPresenceProbeTest {
             Files.write(pluginDir.resolve("FabFilter Pro-Q 3.vst3"), ByteArray(8))
             val probe = JvmPluginPresenceProbe.forTest(
                 catalog = catalog,
-                installedDirs = listOf(pluginDir),
+                settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
                 ioDispatcher = Dispatchers.Unconfined,
             )
 
