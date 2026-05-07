@@ -101,7 +101,12 @@ class SwappableSyncQueue(
                 .collect { (auth, bucket) ->
                     val previous = delegate.value
                     val next = if (auth is AuthState.SignedIn && !bucket.isNullOrBlank()) {
-                        buildGcsQueue(authSession = authSession, userId = auth.userId, bucket = bucket)
+                        buildGcsQueue(
+                            authSession = authSession,
+                            userId = auth.userId,
+                            bucket = bucket,
+                            cacheSettings = settings.observe().first().cacheSettings,
+                        )
                     } else {
                         currentMaterializer = null
                         _currentCloud.value = null
@@ -119,7 +124,12 @@ class SwappableSyncQueue(
         }
     }
 
-    private fun buildGcsQueue(authSession: AuthSession, userId: UserId, bucket: String): SyncQueue = runCatching {
+    private fun buildGcsQueue(
+        authSession: AuthSession,
+        userId: UserId,
+        bucket: String,
+        cacheSettings: BlobCacheSettings,
+    ): SyncQueue = runCatching {
         val credentials = OAuthCloudCredentials(authSession)
         val backend = DirectGcsBackend(
             http = httpClient,
@@ -133,14 +143,13 @@ class SwappableSyncQueue(
             hostId = hostId,
             hostName = hostName,
         )
-        // Build the materializer alongside the queue so Timeline rewind works the moment creds
-        // land. Both lambdas suspend: eviction runs from JvmBlobCache.getOrFetch and path
-        // resolution runs from ManifestMaterializer.materialize, both already suspend, so
-        // suspension propagates naturally. Previous wiring used runBlocking inside the lambdas,
-        // which blocked the calling dispatcher thread on every cache eviction check / rewind.
-        val cacheSettings: suspend () -> BlobCacheSettings = {
-            settings.observe().first().cacheSettings
-        }
+        // Materializer is built alongside the queue so Timeline rewind works the moment creds
+        // land. Cache settings are snapshot-on-build (passed in by the caller, which collects
+        // settings.observe() in its suspend collect): a cache-policy change forces the user to
+        // re-toggle creds today, which is rare and acceptable. The previous wiring used a
+        // `() -> BlobCacheSettings` lambda with runBlocking around `settings.observe().first()`
+        // on every cache eviction check; that hot-path call is now eliminated. projectRoot
+        // legitimately needs late binding (different uuid per call) and stays a suspend lambda.
         val blobCache = JvmBlobCache(
             catalog = catalog,
             cacheRoot = blobCacheRoot,

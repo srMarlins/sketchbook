@@ -37,6 +37,7 @@ class CatalogDbMigrationWalkTest {
     @AfterTest
     fun cleanup() {
         tempFiles.forEach { it.deleteIfExists() }
+        tempFiles.clear()
     }
 
     @Test

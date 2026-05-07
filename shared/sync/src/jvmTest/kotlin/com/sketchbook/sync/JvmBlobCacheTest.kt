@@ -39,7 +39,7 @@ class JvmBlobCacheTest {
     fun fetchOnMissThenServeFromCacheOnHit() = runTest {
         val cloud = CountingCloud(payload)
         val handle = CatalogDb.openInMemory()
-        val cache = JvmBlobCache(handle.catalog, tmp, cloud, cacheSettings = { BlobCacheSettings.Default })
+        val cache = JvmBlobCache(handle.catalog, tmp, cloud, cacheSettings = BlobCacheSettings.Default)
 
         val first = cache.getOrFetch(hash, BlobScope.Shared)
         assertTrue(Files.exists(first))
@@ -55,7 +55,7 @@ class JvmBlobCacheTest {
     fun separateScopesAreSeparateCacheKeys() = runTest {
         val cloud = CountingCloud(payload)
         val handle = CatalogDb.openInMemory()
-        val cache = JvmBlobCache(handle.catalog, tmp, cloud, cacheSettings = { BlobCacheSettings.Default })
+        val cache = JvmBlobCache(handle.catalog, tmp, cloud, cacheSettings = BlobCacheSettings.Default)
         val privateScope = BlobScope.Private(ProjectUuid("p"))
 
         cache.getOrFetch(hash, BlobScope.Shared)
@@ -75,7 +75,7 @@ class JvmBlobCacheTest {
         val largePayload = ByteArray(sizeBytes) { (it % 251).toByte() }
         val cloud = CountingCloud(largePayload)
         val handle = CatalogDb.openInMemory()
-        val cache = JvmBlobCache(handle.catalog, tmp, cloud, cacheSettings = { BlobCacheSettings.Default })
+        val cache = JvmBlobCache(handle.catalog, tmp, cloud, cacheSettings = BlobCacheSettings.Default)
 
         val path = cache.getOrFetch(hash, BlobScope.Shared)
 
@@ -90,7 +90,7 @@ class JvmBlobCacheTest {
         val handle = CatalogDb.openInMemory()
         // Budget tighter than two payloads; second insert should evict the first.
         val tinySettings = BlobCacheSettings(maxSizeBytes = (payload.size + 1).toLong(), lruEnabled = true)
-        val cache = JvmBlobCache(handle.catalog, tmp, cloud, cacheSettings = { tinySettings })
+        val cache = JvmBlobCache(handle.catalog, tmp, cloud, cacheSettings = tinySettings)
         val h2 = BlobHash("b3:" + "b".repeat(64))
 
         cache.getOrFetch(hash, BlobScope.Shared)

@@ -56,7 +56,7 @@ class ManifestMaterializerTest {
             },
         )
         val handle = CatalogDb.openInMemory()
-        val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = { BlobCacheSettings.Default })
+        val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = BlobCacheSettings.Default)
         val mat = ManifestMaterializer(cloud, cache) { projectRoot }
 
         val r = mat.materialize(uuid, rev)
@@ -79,7 +79,7 @@ class ManifestMaterializerTest {
             },
         )
         val handle = CatalogDb.openInMemory()
-        val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = { BlobCacheSettings.Default })
+        val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = BlobCacheSettings.Default)
         val mat = ManifestMaterializer(cloud, cache) { projectRoot }
 
         val r = mat.materialize(uuid, rev)
@@ -103,7 +103,7 @@ class ManifestMaterializerTest {
             failOnHash = failHash,
         )
         val handle = CatalogDb.openInMemory()
-        val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = { BlobCacheSettings.Default })
+        val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = BlobCacheSettings.Default)
         val mat = ManifestMaterializer(cloud, cache) { projectRoot }
 
         val r = mat.materialize(uuid, rev)
@@ -128,7 +128,7 @@ class ManifestMaterializerTest {
             },
         )
         val handle = CatalogDb.openInMemory()
-        val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = { BlobCacheSettings.Default })
+        val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = BlobCacheSettings.Default)
         val mat = ManifestMaterializer(cloud, cache) { projectRoot }
 
         val r = mat.materialize(uuid, rev)
