@@ -120,11 +120,7 @@ class SwappableSyncQueue(
         }
     }
 
-    private fun buildGcsQueue(
-        authSession: AuthSession,
-        userId: UserId,
-        bucket: String,
-    ): SyncQueue = runCatching {
+    private fun buildGcsQueue(authSession: AuthSession, userId: UserId, bucket: String): SyncQueue = runCatching {
         val credentials = OAuthCloudCredentials(authSession)
         val backend = DirectGcsBackend(
             http = httpClient,

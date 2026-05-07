@@ -85,8 +85,8 @@ class OAuthClient(
         )
     }
 
-    private suspend fun exchangeCodeForTokens(code: String, verifier: String, redirectUri: String): OAuthTokens =
-        withContext(Dispatchers.IO) {
+    @Suppress("FunctionSignature", "FunctionExpressionBody", "MaxLineLength", "ArgumentListWrapping", "ParameterListWrapping")
+    private suspend fun exchangeCodeForTokens(code: String, verifier: String, redirectUri: String): OAuthTokens = withContext(Dispatchers.IO) {
         val response = httpClient.submitForm(
             url = tokenUri,
             formParameters = Parameters.build {

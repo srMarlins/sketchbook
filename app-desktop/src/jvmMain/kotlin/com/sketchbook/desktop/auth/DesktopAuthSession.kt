@@ -39,6 +39,7 @@ class DesktopAuthSession(
                         identityStore.save(innerState)
                         _state.value = innerState
                     }
+
                     AuthState.SignedOut -> {
                         identityStore.clear()
                         _state.value = AuthState.SignedOut
