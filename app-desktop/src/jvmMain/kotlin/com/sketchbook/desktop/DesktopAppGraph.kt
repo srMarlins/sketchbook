@@ -207,6 +207,7 @@ interface DesktopAppGraph : ViewModelGraph {
     @Provides
     @SingleIn(AppScope::class)
     fun provideSyncQueue(
+        authSession: AuthSession,
         settings: SettingsRepository,
         projects: ProjectRepository,
         store: SyncStateStore,
@@ -214,6 +215,7 @@ interface DesktopAppGraph : ViewModelGraph {
         journal: JournalRepository,
         scope: CoroutineScope,
     ): SyncQueue = SwappableSyncQueue(
+        authSession = authSession,
         settings = settings,
         projects = projects,
         syncStateStore = store,
