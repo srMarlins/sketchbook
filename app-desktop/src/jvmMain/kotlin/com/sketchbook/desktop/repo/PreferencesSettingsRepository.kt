@@ -4,6 +4,8 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.ExternalKind
 import com.sketchbook.repo.LibraryRoot
+import com.sketchbook.repo.OnboardingPromptKind
+import com.sketchbook.repo.OnboardingSkipFlags
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
 import kotlinx.coroutines.CoroutineDispatcher
@@ -17,7 +19,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import java.nio.file.Paths
 import java.util.prefs.Preferences
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * `java.util.prefs.Preferences`-backed settings store. Keys are versioned (`*_v1`) so the v1.1
@@ -111,6 +116,49 @@ class PreferencesSettingsRepository(
         Result.success(Unit)
     }
 
+    override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit> = withContext(ioDispatcher) {
+        mutex.withLock {
+            val now = Clock.System.now()
+            // Atomic: write all keys, flush once, then publish a single Settings emission so
+            // observers see timestamp + flags together (never one without the other).
+            node.put(KEY_FIRST_RUN_COMPLETED_AT, now.toString())
+            node.putBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, skipFlags.samplesSkipped)
+            node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, skipFlags.samplesPromptDismissed)
+            node.flush()
+            state.value = state.value.copy(
+                firstRunCompletedAt = now,
+                onboardingSkipped = skipFlags,
+            )
+        }
+        Result.success(Unit)
+    }
+
+    override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> = withContext(ioDispatcher) {
+        mutex.withLock {
+            val current = state.value.onboardingSkipped
+            val updated = when (kind) {
+                OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
+            }
+            node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, updated.samplesPromptDismissed)
+            node.flush()
+            state.value = state.value.copy(onboardingSkipped = updated)
+        }
+        Result.success(Unit)
+    }
+
+    override suspend fun setPluginFolders(folders: List<String>): Result<Unit> = withContext(ioDispatcher) {
+        val normalized = folders
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map { Paths.get(it).toAbsolutePath().normalize().toString() }
+            .distinct()
+            .toList()
+        writePluginFolders(normalized)
+        state.value = state.value.copy(pluginFolders = normalized)
+        Result.success(Unit)
+    }
+
     // ---- read helpers --------------------------------------------------------------------------
 
     private fun read(): Settings {
@@ -118,11 +166,21 @@ class PreferencesSettingsRepository(
         val bucket = node.get(KEY_CLOUD_BUCKET, null)?.takeIf { it.isNotBlank() }
         val selfContained = readSelfContained()
         val cache = readCacheSettings()
+        val firstRunCompletedAt = node.get(KEY_FIRST_RUN_COMPLETED_AT, null)
+            ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+        val onboardingSkipped = OnboardingSkipFlags(
+            samplesSkipped = node.getBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, false),
+            samplesPromptDismissed = node.getBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, false),
+        )
+        val pluginFolders = readPluginFolders()
         return Settings(
             libraryRoots = roots,
             selfContainedProjects = selfContained,
             cacheSettings = cache,
             cloudBucket = bucket,
+            firstRunCompletedAt = firstRunCompletedAt,
+            onboardingSkipped = onboardingSkipped,
+            pluginFolders = pluginFolders,
         )
     }
 
@@ -158,6 +216,22 @@ class PreferencesSettingsRepository(
             values.map { it.value },
         )
         node.put(KEY_SELF_CONTAINED, payload)
+        node.flush()
+    }
+
+    private fun readPluginFolders(): List<String> {
+        val raw = node.get(KEY_PLUGIN_FOLDERS, null) ?: return emptyList()
+        return runCatching {
+            json.decodeFromString(ListSerializer(String.serializer()), raw)
+        }.getOrDefault(emptyList())
+    }
+
+    private fun writePluginFolders(folders: List<String>) {
+        val payload = json.encodeToString(
+            ListSerializer(String.serializer()),
+            folders,
+        )
+        node.put(KEY_PLUGIN_FOLDERS, payload)
         node.flush()
     }
 
@@ -212,6 +286,10 @@ class PreferencesSettingsRepository(
         const val KEY_SELF_CONTAINED = "self_contained_uuids_v1"
         const val KEY_CACHE_MAX_BYTES = "cache_max_bytes"
         const val KEY_CACHE_LRU = "cache_lru_enabled"
+        const val KEY_FIRST_RUN_COMPLETED_AT = "first_run_completed_at_v1"
+        const val KEY_ONBOARDING_SAMPLES_SKIPPED = "onboarding_samples_skipped_v1"
+        const val KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED = "onboarding_samples_prompt_dismissed_v1"
+        const val KEY_PLUGIN_FOLDERS = "plugin_folders_v1"
 
         /**
          * Pre-OAuth builds wrote a service-account JSON blob under this key. Cleared at startup so
