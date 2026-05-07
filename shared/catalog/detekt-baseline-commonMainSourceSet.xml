@@ -416,6 +416,7 @@
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertJournalEntry: QueryResult&lt;Long&gt;</ID>
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertOrReplaceProject: QueryResult&lt;Long&gt;</ID>
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertOrReplaceSyncState: QueryResult&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertProject: QueryResult&lt;Long&gt;</ID>
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertProjectIdentityIfAbsent: QueryResult&lt;Long&gt;</ID>
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertProjectPlugin: QueryResult&lt;Long&gt;</ID>
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun insertProjectSampleWithMissing: QueryResult&lt;Long&gt;</ID>
@@ -455,6 +456,7 @@
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectStageOverrideById: Query&lt;SelectStageOverrideById&gt;</ID>
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun selectTagPairsForProjects: Query&lt;SelectTagPairsForProjects&gt;</ID>
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun sumBlobCacheBytes: Query&lt;Long&gt;</ID>
+    <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun updateProjectByPath: QueryResult&lt;Long&gt;</ID>
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun updateProjectName: QueryResult&lt;Long&gt;</ID>
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun updateProjectPath: QueryResult&lt;Long&gt;</ID>
     <ID>FunctionSignature:CatalogQueries.kt:CatalogQueries$public fun updateSnapshotLabel: QueryResult&lt;Long&gt;</ID>
@@ -492,6 +494,7 @@
     <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$5</ID>
     <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$6</ID>
     <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$7</ID>
+    <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$8</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$10</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$11</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$12</ID>
@@ -516,12 +519,14 @@
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_467_951_626</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_468_320_824</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_511_278_358</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_527_216_564</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_544_916_559</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_544_976_361</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_590_593_884</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_623_456_485</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_644_417_816</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_658_774_633</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_716_120_608</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_802_219_307</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_850_581_817</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$1_932_854_116</ID>
@@ -724,12 +729,14 @@
     <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE sync_state ( | project_uuid TEXT PRIMARY KEY, | local_rev INTEGER NOT NULL, | cloud_head_rev INTEGER NOT NULL, | dirty INTEGER NOT NULL DEFAULT 0, | self_contained INTEGER NOT NULL DEFAULT 0, | lock_owner TEXT, | lock_expires TEXT, | last_pulled TEXT, | -- Epoch millis of the last write that touched this row. Drives drainOldestFirst() so the | -- background sync drain processes longest-pending dirty work first (FIFO fairness). | updated_at INTEGER NOT NULL DEFAULT 0 |) """.trimMargin(), 0)</ID>
     <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE TABLE tags ( | id INTEGER PRIMARY KEY AUTOINCREMENT, | name TEXT NOT NULL UNIQUE |) """.trimMargin(), 0)</ID>
     <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |CREATE VIRTUAL TABLE projects_fts USING fts5( | name, parent_dir, plugin_names, sample_filenames, notes, | tokenize='porter unicode61' |) """.trimMargin(), 0)</ID>
+    <ID>Wrapping:CatalogImpl.kt:CatalogImpl.Schema$(null, """ |UPDATE journal_entries |SET project_name = (SELECT p.name FROM projects p WHERE p.id = journal_entries.project_id) |WHERE project_name IS NULL | AND EXISTS (SELECT 1 FROM projects p WHERE p.id = journal_entries.project_id) """.trimMargin(), 0)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_050_669_632, """ |INSERT INTO journal_entries(occurred_at, actor, action_type, project_id, payload_json, project_name) |VALUES (?, ?, ?, ?, ?, ?) """.trimMargin(), 6)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_091_400_297, """ |INSERT OR REPLACE INTO repair_acks (scope, project_id, payload, acked_at) |VALUES (?, ?, ?, ?) """.trimMargin(), 4)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_181_229_771, arrayOf("project_plugins", "projects"), driver, "Catalog.sq", "selectMissingPluginSummary", """ |SELECT COUNT(DISTINCT pp.plugin_name || '|' || pp.plugin_type) AS missing_count, | COUNT(DISTINCT pp.project_id) AS affected_projects |FROM project_plugins pp |JOIN projects p ON p.id = pp.project_id |WHERE pp.is_installed = 0 AND p.is_archived = 0 """.trimMargin())</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_511_278_358, """ |INSERT OR REPLACE INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained, updated_at) |VALUES (?, ?, ?, ?, ?, ?) """.trimMargin(), 6)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_658_774_633, """ |UPDATE project_samples |SET sample_path = ?, is_missing = 0 |WHERE project_id = ? AND sample_path = ? """.trimMargin(), 3)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_716_120_608, """ |UPDATE projects |SET name = ?, | parent_dir = ?, | tempo = ?, | time_sig_num = ?, | time_sig_den = ?, | key = ?, | track_count = ?, | audio_tracks = ?, | midi_tracks = ?, | return_tracks = ?, | live_version = ?, | last_modified = ?, | last_scanned = ?, | parse_status = ?, | parse_error = ?, | mac_paths_count = ?, | effort_score = ?, | effort_breakdown = ?, | file_size_bytes = ? |WHERE path = ? """.trimMargin(), 20)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_932_854_116, arrayOf("projects", "project_samples"), driver, "Catalog.sq", "selectArchivedProjectsWithMissing", """ |SELECT p.id, p.path, p.name, p.parent_dir, p.tempo, p.time_sig_num, p.time_sig_den, p.key, p.track_count, p.audio_tracks, p.midi_tracks, p.return_tracks, p.length_seconds, p.live_version, p.last_modified, p.last_scanned, p.file_hash, p.is_archived, p.color_tag, p.notes, p.effort_score, p.effort_breakdown, p.parse_status, p.parse_error, p.mac_paths_count, p.has_project_info, p.file_size_bytes, p.is_missing, p.last_seen, p.stage_inferred, p.stage_override, p.has_local_bounce, | COALESCE((SELECT COUNT(*) FROM project_samples ps | WHERE ps.project_id = p.id AND ps.is_missing = 1), 0) AS missing_sample_count |FROM projects p |WHERE p.is_archived = 1 |ORDER BY p.last_modified DESC """.trimMargin())</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-1_996_300_723, """ |INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, key, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes) |VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """.trimMargin(), 20)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(-287_056_024, """ |INSERT OR IGNORE INTO project_identity (project_id, uuid, created_at) |VALUES (?, ?, ?) """.trimMargin(), 3)</ID>
@@ -747,6 +754,7 @@
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_282_746_806, """ |INSERT INTO project_samples (project_id, sample_path, is_missing, size_bytes) |VALUES (?, ?, ?, ?) """.trimMargin(), 4)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_382_644_361, """ |INSERT INTO snapshots (project_uuid, rev, parent_rev, timestamp, host_id, kind, label, manifest_path, manifest_hash, file_count, total_bytes, new_bytes) |VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """.trimMargin(), 12)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_468_320_824, """ |INSERT INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained, updated_at) |VALUES (?, 0, ?, 0, 0, ?) |ON CONFLICT(project_uuid) DO UPDATE SET cloud_head_rev = ?, updated_at = ? """.trimMargin(), 5)</ID>
+    <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_527_216_564, """ |INSERT INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, key, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes) |VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) """.trimMargin(), 20)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_590_593_884, """ |INSERT OR REPLACE INTO project_identity (project_id, uuid, created_at) |VALUES (?, ?, ?) """.trimMargin(), 3)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(1_623_456_485, """ |DELETE FROM repair_acks |WHERE scope = ? AND project_id = ? AND payload = ? """.trimMargin(), 3)</ID>
     <ID>Wrapping:CatalogQueries.kt:CatalogQueries$(233_103_807, arrayOf("project_tags", "tags"), driver, "Catalog.sq", "selectAllProjectTagPairs", """ |SELECT pt.project_id, t.name FROM project_tags pt |JOIN tags t ON t.id = pt.tag_id |ORDER BY pt.project_id, t.name """.trimMargin())</ID>

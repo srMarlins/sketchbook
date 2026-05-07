@@ -238,6 +238,41 @@ insertOrReplaceProject:
 INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, key, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes)
 VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :key, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :parse_error, :mac_paths_count, :effort_score, :effort_breakdown, :file_size_bytes);
 
+-- Plain INSERT — preserves the AUTOINCREMENT id semantics. Used by the rescan upsert path
+-- (read-then-update-or-insert) so a brand-new project gets a freshly-minted id while existing
+-- rows are reached via updateProjectByPath instead. Mirrors the column set of
+-- insertOrReplaceProject; do not switch this to OR REPLACE — that would re-introduce the
+-- delete-and-reinsert id churn this whole change is designed to prevent.
+insertProject:
+INSERT INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, key, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes)
+VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :key, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :parse_error, :mac_paths_count, :effort_score, :effort_breakdown, :file_size_bytes);
+
+-- Id-preserving update used by the rescan path. Same column set as insertOrReplaceProject minus
+-- the unique key (path stays put) and the autoincrement id. Targets by `path` because that's the
+-- column with the UNIQUE constraint scans key on.
+updateProjectByPath:
+UPDATE projects
+SET name = :name,
+    parent_dir = :parent_dir,
+    tempo = :tempo,
+    time_sig_num = :time_sig_num,
+    time_sig_den = :time_sig_den,
+    key = :key,
+    track_count = :track_count,
+    audio_tracks = :audio_tracks,
+    midi_tracks = :midi_tracks,
+    return_tracks = :return_tracks,
+    live_version = :live_version,
+    last_modified = :last_modified,
+    last_scanned = :last_scanned,
+    parse_status = :parse_status,
+    parse_error = :parse_error,
+    mac_paths_count = :mac_paths_count,
+    effort_score = :effort_score,
+    effort_breakdown = :effort_breakdown,
+    file_size_bytes = :file_size_bytes
+WHERE path = :path;
+
 insertProjectSampleWithMissing:
 INSERT INTO project_samples (project_id, sample_path, is_missing) VALUES (:project_id, :sample_path, :is_missing);
 

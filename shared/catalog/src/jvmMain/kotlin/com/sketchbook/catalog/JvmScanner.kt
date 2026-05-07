@@ -244,37 +244,69 @@ class JvmScanner(
         val effortBreakdown = o.effort?.breakdown?.entries?.joinToString(",") {
             "${it.key}:${it.value}"
         }
-        // PR-R R1: capture the user's stage override (if any) BEFORE the insertOrReplaceProject
-        // wipes it. The INSERT OR REPLACE flow doesn't bind `stage_override`, so without the
+        // PR-R R1: capture the user's stage override (if any) BEFORE the upsert wipes it. The
+        // existing INSERT OR REPLACE flow didn't bind `stage_override`, so without the
         // read-then-restore the user's manual classification would be reset on every rescan.
+        // The id-preserving upsert below makes this strictly cleaner — the row keeps its id
+        // across rescans now — but the override column is still not part of the upsert column
+        // set, so the read+restore stays.
         val priorIdForPath: Long? =
             catalog.catalogQueries.selectProjectIdByPath(path = o.abs).executeAsOneOrNull()
         val priorStageOverride: String? =
             priorIdForPath?.let { id ->
                 catalog.catalogQueries.selectStageOverrideById(id).executeAsOneOrNull()?.stage_override
             }
-        catalog.catalogQueries.insertOrReplaceProject(
-            path = o.abs,
-            name = o.name,
-            parent_dir = o.parent,
-            tempo = o.md.tempo,
-            time_sig_num = o.md.timeSignatureNumerator?.toLong(),
-            time_sig_den = o.md.timeSignatureDenominator?.toLong(),
-            key = o.md.keySignature,
-            track_count = o.md.totalTrackCount.toLong(),
-            audio_tracks = o.md.audioTrackCount.toLong(),
-            midi_tracks = o.md.midiTrackCount.toLong(),
-            return_tracks = o.md.returnTrackCount.toLong(),
-            live_version = o.md.lastSavedLiveVersion,
-            last_modified = o.mtimeSec,
-            last_scanned = now,
-            parse_status = "ok",
-            parse_error = null,
-            mac_paths_count = o.md.macPathsCount.toLong(),
-            effort_score = effortScore,
-            effort_breakdown = effortBreakdown,
-            file_size_bytes = o.sizeBytes,
-        )
+        // Id-preserving upsert. SQLite's `INSERT OR REPLACE` deletes-and-reinserts on UNIQUE
+        // conflict, minting a new AUTOINCREMENT id every rescan and orphaning every dependent
+        // table that keys on `project_id` (journal_entries, repair_acks, project_samples,
+        // project_plugins, project_tags). Read-then-update-or-insert keeps the id stable.
+        if (priorIdForPath != null) {
+            catalog.catalogQueries.updateProjectByPath(
+                name = o.name,
+                parent_dir = o.parent,
+                tempo = o.md.tempo,
+                time_sig_num = o.md.timeSignatureNumerator?.toLong(),
+                time_sig_den = o.md.timeSignatureDenominator?.toLong(),
+                key = o.md.keySignature,
+                track_count = o.md.totalTrackCount.toLong(),
+                audio_tracks = o.md.audioTrackCount.toLong(),
+                midi_tracks = o.md.midiTrackCount.toLong(),
+                return_tracks = o.md.returnTrackCount.toLong(),
+                live_version = o.md.lastSavedLiveVersion,
+                last_modified = o.mtimeSec,
+                last_scanned = now,
+                parse_status = "ok",
+                parse_error = null,
+                mac_paths_count = o.md.macPathsCount.toLong(),
+                effort_score = effortScore,
+                effort_breakdown = effortBreakdown,
+                file_size_bytes = o.sizeBytes,
+                path = o.abs,
+            )
+        } else {
+            catalog.catalogQueries.insertProject(
+                path = o.abs,
+                name = o.name,
+                parent_dir = o.parent,
+                tempo = o.md.tempo,
+                time_sig_num = o.md.timeSignatureNumerator?.toLong(),
+                time_sig_den = o.md.timeSignatureDenominator?.toLong(),
+                key = o.md.keySignature,
+                track_count = o.md.totalTrackCount.toLong(),
+                audio_tracks = o.md.audioTrackCount.toLong(),
+                midi_tracks = o.md.midiTrackCount.toLong(),
+                return_tracks = o.md.returnTrackCount.toLong(),
+                live_version = o.md.lastSavedLiveVersion,
+                last_modified = o.mtimeSec,
+                last_scanned = now,
+                parse_status = "ok",
+                parse_error = null,
+                mac_paths_count = o.md.macPathsCount.toLong(),
+                effort_score = effortScore,
+                effort_breakdown = effortBreakdown,
+                file_size_bytes = o.sizeBytes,
+            )
+        }
         val id = catalog.catalogQueries.selectProjectIdByPath(path = o.abs).executeAsOne()
         // PR-R R1: write the inferred stage (+ cached bounce-probe result) and restore the
         // pre-existing override if one was present. Done as two UPDATEs on top of the
@@ -337,28 +369,56 @@ class JvmScanner(
     }
 
     private fun persistFailed(o: ParseOutcome.Failed, now: Double) {
-        catalog.catalogQueries.insertOrReplaceProject(
-            path = o.abs,
-            name = o.name,
-            parent_dir = o.parent,
-            tempo = null,
-            time_sig_num = null,
-            time_sig_den = null,
-            key = null,
-            track_count = 0L,
-            audio_tracks = 0L,
-            midi_tracks = 0L,
-            return_tracks = 0L,
-            live_version = null,
-            last_modified = o.mtimeSec,
-            last_scanned = now,
-            parse_status = "failed",
-            parse_error = o.reason,
-            mac_paths_count = null,
-            effort_score = null,
-            effort_breakdown = null,
-            file_size_bytes = o.sizeBytes,
-        )
+        // Id-preserving upsert — see persistOk for rationale.
+        val priorIdForPath: Long? =
+            catalog.catalogQueries.selectProjectIdByPath(path = o.abs).executeAsOneOrNull()
+        if (priorIdForPath != null) {
+            catalog.catalogQueries.updateProjectByPath(
+                name = o.name,
+                parent_dir = o.parent,
+                tempo = null,
+                time_sig_num = null,
+                time_sig_den = null,
+                key = null,
+                track_count = 0L,
+                audio_tracks = 0L,
+                midi_tracks = 0L,
+                return_tracks = 0L,
+                live_version = null,
+                last_modified = o.mtimeSec,
+                last_scanned = now,
+                parse_status = "failed",
+                parse_error = o.reason,
+                mac_paths_count = null,
+                effort_score = null,
+                effort_breakdown = null,
+                file_size_bytes = o.sizeBytes,
+                path = o.abs,
+            )
+        } else {
+            catalog.catalogQueries.insertProject(
+                path = o.abs,
+                name = o.name,
+                parent_dir = o.parent,
+                tempo = null,
+                time_sig_num = null,
+                time_sig_den = null,
+                key = null,
+                track_count = 0L,
+                audio_tracks = 0L,
+                midi_tracks = 0L,
+                return_tracks = 0L,
+                live_version = null,
+                last_modified = o.mtimeSec,
+                last_scanned = now,
+                parse_status = "failed",
+                parse_error = o.reason,
+                mac_paths_count = null,
+                effort_score = null,
+                effort_breakdown = null,
+                file_size_bytes = o.sizeBytes,
+            )
+        }
         val id = catalog.catalogQueries.selectProjectIdByPath(path = o.abs).executeAsOne()
         catalog.catalogQueries.deletePluginsForProject(project_id = id)
         catalog.catalogQueries.deleteSamplesForProject(project_id = id)
