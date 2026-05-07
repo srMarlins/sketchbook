@@ -22,12 +22,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.featureonboarding.steps.DoneStep
+import com.sketchbook.featureonboarding.steps.ProjectsRootsStep
 import com.sketchbook.featureonboarding.steps.WelcomeStep
 import com.sketchbook.uishared.components.PaperPage
 import com.sketchbook.uishared.components.Text
@@ -87,7 +89,15 @@ fun OnboardingScreen(
                             WelcomeStep(onContinue = { vm.dispatch(OnboardingIntent.Continue) })
                         OnboardingStep.Done ->
                             DoneStep(onFinish = { vm.dispatch(OnboardingIntent.Finish) })
-                        OnboardingStep.ProjectsRoots,
+                        OnboardingStep.ProjectsRoots -> ProjectsRootsStep(
+                            paths = state.projectsRoots,
+                            osDefaultSuggestion = remember { defaultProjectsRootSuggestion() },
+                            onAddPath = { vm.dispatch(OnboardingIntent.AddProjectsRoot(it)) },
+                            onRemovePath = { vm.dispatch(OnboardingIntent.RemoveProjectsRoot(it)) },
+                            onPickFolder = onPickFolder,
+                            onContinue = { vm.dispatch(OnboardingIntent.Continue) },
+                            canContinue = state.canContinue,
+                        )
                         OnboardingStep.SampleRoots,
                         OnboardingStep.PluginFolders -> StepPlaceholder(state.steps[index])
                     }
