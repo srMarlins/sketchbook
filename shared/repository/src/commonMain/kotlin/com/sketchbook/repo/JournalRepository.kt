@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
  * adds the disk writer; this interface stays storage-agnostic.
  */
 interface JournalRepository {
-
     /** Live tail, most recent first, capped at [limit]. */
     fun observeRecent(limit: Int = 100): Flow<List<JournalEntry>>
 

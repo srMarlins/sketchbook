@@ -24,12 +24,15 @@ class CoalesceJob(
     private val namedGap: Duration = 30.minutes,
     private val idleAfter: Duration = 10.minutes,
 ) {
-
     /**
      * Run a single coalesce pass over [history]. Returns the promotion to apply (or null if
      * nothing qualifies). The caller persists the result via their repository.
      */
-    fun evaluate(uuid: ProjectUuid, history: List<Snapshot>, now: Instant = clock.now()): Promotion? {
+    fun evaluate(
+        uuid: ProjectUuid,
+        history: List<Snapshot>,
+        now: Instant = clock.now(),
+    ): Promotion? {
         if (history.isEmpty()) return null
         val newest = history.maxByOrNull { it.rev.value } ?: return null
         if (now - newest.timestamp < idleAfter) return null
@@ -37,8 +40,9 @@ class CoalesceJob(
         val newestNamed = history.filter { it.kind == SnapshotKind.Named }.maxByOrNull { it.rev.value }
         if (newestNamed != null && now - newestNamed.timestamp < namedGap) return null
 
-        val targetAuto = history.filter { it.kind == SnapshotKind.Auto }.maxByOrNull { it.rev.value }
-            ?: return null
+        val targetAuto =
+            history.filter { it.kind == SnapshotKind.Auto }.maxByOrNull { it.rev.value }
+                ?: return null
         if (newestNamed != null && targetAuto.rev <= newestNamed.rev) return null
 
         val label = "checkpoint ${formatTimestamp(now)}"
@@ -52,5 +56,9 @@ class CoalesceJob(
             now.toString().substringAfter(':').substringBefore(':')
     }
 
-    data class Promotion(val uuid: ProjectUuid, val rev: SnapshotRev, val label: String)
+    data class Promotion(
+        val uuid: ProjectUuid,
+        val rev: SnapshotRev,
+        val label: String,
+    )
 }

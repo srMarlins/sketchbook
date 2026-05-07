@@ -12,11 +12,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.time.Clock
 
 internal class FakeSettingsRepository(
-    initial: Settings = Settings(
-        libraryRoots = emptyList(),
-
-        selfContainedProjects = emptySet(),
-    ),
+    initial: Settings =
+        Settings(
+            libraryRoots = emptyList(),
+            selfContainedProjects = emptySet(),
+        ),
     /**
      * Paths in this set will cause [upsertRoot] to return [Result.failure] without mutating the
      * settings flow. The attempt is still recorded in [attemptedUpserts].
@@ -57,15 +57,21 @@ internal class FakeSettingsRepository(
     }
 
     override suspend fun setCloudBucket(bucket: String?): Result<Unit> = Result.success(Unit)
-    override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit> = Result.success(Unit)
+
+    override suspend fun setSelfContained(
+        uuid: ProjectUuid,
+        value: Boolean,
+    ): Result<Unit> = Result.success(Unit)
+
     override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> = Result.success(Unit)
 
     override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit> {
         markCompleteCalls += skipFlags
-        flow.value = flow.value.copy(
-            firstRunCompletedAt = Clock.System.now(),
-            onboardingSkipped = skipFlags,
-        )
+        flow.value =
+            flow.value.copy(
+                firstRunCompletedAt = Clock.System.now(),
+                onboardingSkipped = skipFlags,
+            )
         return Result.success(Unit)
     }
 
@@ -78,16 +84,18 @@ internal class FakeSettingsRepository(
     }
 
     override suspend fun resetFirstRun(): Result<Unit> {
-        flow.value = flow.value.copy(
-            firstRunCompletedAt = null,
-            onboardingSkipped = OnboardingSkipFlags(),
-        )
+        flow.value =
+            flow.value.copy(
+                firstRunCompletedAt = null,
+                onboardingSkipped = OnboardingSkipFlags(),
+            )
         return Result.success(Unit)
     }
 }
 
 internal class FakeScanTrigger : ScanTrigger {
     var scanCount: Int = 0
+
     override fun triggerScan() {
         scanCount++
     }

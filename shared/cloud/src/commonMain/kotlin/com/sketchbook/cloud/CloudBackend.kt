@@ -12,9 +12,11 @@ import kotlinx.io.RawSource
  * types and provider-neutral [Generation] tokens.
  */
 interface CloudBackend {
-
     /** True iff a blob with [hash] exists in the bucket within [scope]. */
-    suspend fun headBlob(hash: BlobHash, scope: BlobScope = BlobScope.Shared): Boolean
+    suspend fun headBlob(
+        hash: BlobHash,
+        scope: BlobScope = BlobScope.Shared,
+    ): Boolean
 
     /**
      * Upload a blob at the content-addressed path within [scope]. No-op (returns successfully)
@@ -29,13 +31,22 @@ interface CloudBackend {
     )
 
     /** Download a blob. Caller closes the returned [RawSource]. */
-    suspend fun getBlob(hash: BlobHash, scope: BlobScope = BlobScope.Shared): RawSource
+    suspend fun getBlob(
+        hash: BlobHash,
+        scope: BlobScope = BlobScope.Shared,
+    ): RawSource
 
     /** Read a single manifest by `(uuid, rev)`. */
-    suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest
+    suspend fun readManifest(
+        uuid: ProjectUuid,
+        rev: SnapshotRev,
+    ): Manifest
 
     /** List manifests for a project, optionally only those after [sinceRev] (for incremental pull). */
-    suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?): List<ManifestRef>
+    suspend fun listManifests(
+        uuid: ProjectUuid,
+        sinceRev: SnapshotRev?,
+    ): List<ManifestRef>
 
     /**
      * Append a new manifest as the project's HEAD. CAS via [expectedHead]:
@@ -53,11 +64,21 @@ interface CloudBackend {
     ): Result<Generation>
 
     /** CAS-acquire the lease lock for a project. */
-    suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock): LeaseAcquireResult
+    suspend fun acquireLock(
+        uuid: ProjectUuid,
+        lock: LeaseLock,
+    ): LeaseAcquireResult
 
     /** Heartbeat-refresh an existing lease lock; fails if our generation no longer matches. */
-    suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation): LeaseRefreshResult
+    suspend fun refreshLock(
+        uuid: ProjectUuid,
+        lock: LeaseLock,
+        expected: Generation,
+    ): LeaseRefreshResult
 
     /** Release our lease lock. */
-    suspend fun releaseLock(uuid: ProjectUuid, expected: Generation)
+    suspend fun releaseLock(
+        uuid: ProjectUuid,
+        expected: Generation,
+    )
 }

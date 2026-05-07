@@ -5,7 +5,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class BlobHashTest {
-
     @Test
     fun parsesValidB3Hash() {
         val hash = BlobHash("b3:" + "a".repeat(64))

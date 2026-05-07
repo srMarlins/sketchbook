@@ -14,7 +14,6 @@ import kotlin.test.assertEquals
  * covers the join shapes the new clauses will read.
  */
 class LibraryHealthQueryTest {
-
     private val handle = CatalogDb.openInMemory()
     private val catalog: Catalog get() = handle.catalog
 
@@ -51,7 +50,10 @@ class LibraryHealthQueryTest {
         return id
     }
 
-    private fun seedIdentity(projectId: Long, uuid: String) {
+    private fun seedIdentity(
+        projectId: Long,
+        uuid: String,
+    ) {
         catalog.catalogQueries.insertProjectIdentityIfAbsent(
             project_id = projectId,
             uuid = uuid,
@@ -59,7 +61,12 @@ class LibraryHealthQueryTest {
         )
     }
 
-    private fun seedSyncState(uuid: String, dirty: Long, localRev: Long, cloudHeadRev: Long) {
+    private fun seedSyncState(
+        uuid: String,
+        dirty: Long,
+        localRev: Long,
+        cloudHeadRev: Long,
+    ) {
         catalog.catalogQueries.insertOrReplaceSyncState(
             project_uuid = uuid,
             local_rev = localRev,
@@ -70,7 +77,10 @@ class LibraryHealthQueryTest {
         )
     }
 
-    private fun seedSample(projectId: Long, isMissing: Boolean) {
+    private fun seedSample(
+        projectId: Long,
+        isMissing: Boolean,
+    ) {
         catalog.catalogQueries.insertProjectSampleWithMissing(
             project_id = projectId,
             sample_path = "/samples/${projectId}_$isMissing.wav",
@@ -78,7 +88,11 @@ class LibraryHealthQueryTest {
         )
     }
 
-    private fun seedPlugin(projectId: Long, name: String, isInstalled: Boolean) {
+    private fun seedPlugin(
+        projectId: Long,
+        name: String,
+        isInstalled: Boolean,
+    ) {
         // insertProjectPlugin defaults is_installed=1 via the schema; seed an explicit row
         // when we need is_installed=0 to test the missing-plugin signal.
         catalog.catalogQueries.insertProjectPlugin(
@@ -96,7 +110,10 @@ class LibraryHealthQueryTest {
         }
     }
 
-    private fun seedStageInferred(projectId: Long, stage: String?) {
+    private fun seedStageInferred(
+        projectId: Long,
+        stage: String?,
+    ) {
         catalog.catalogQueries.updateStageInferred(
             stage_inferred = stage,
             has_local_bounce = 0L,

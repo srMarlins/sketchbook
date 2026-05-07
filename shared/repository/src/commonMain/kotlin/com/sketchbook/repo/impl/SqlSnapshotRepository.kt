@@ -42,92 +42,102 @@ class SqlSnapshotRepository(
     private val materialize: suspend (ProjectUuid, SnapshotRev) -> Result<Unit> =
         { _, _ -> Result.success(Unit) },
 ) : SnapshotRepository {
-
-    override fun observeHistory(uuid: ProjectUuid): Flow<List<Snapshot>> = catalog.catalogQueries.selectSnapshotsForProject(uuid.value)
-        .asFlow()
-        .mapToList(ioDispatcher)
-        .map { rows -> rows.map { it.toDomain() } }
+    override fun observeHistory(uuid: ProjectUuid): Flow<List<Snapshot>> =
+        catalog.catalogQueries
+            .selectSnapshotsForProject(uuid.value)
+            .asFlow()
+            .mapToList(ioDispatcher)
+            .map { rows -> rows.map { it.toDomain() } }
 
     override suspend fun recordSnapshot(
         snapshot: Snapshot,
         manifestPath: String,
         manifestHash: String,
-    ): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
-            catalog.transaction {
-                catalog.catalogQueries.insertSnapshot(
-                    project_uuid = snapshot.projectUuid.value,
-                    rev = snapshot.rev.value,
-                    parent_rev = snapshot.parentRev?.value,
-                    timestamp = snapshot.timestamp.toString(),
-                    host_id = snapshot.hostId,
-                    kind = snapshot.kind.dbName(),
-                    label = snapshot.label,
-                    manifest_path = manifestPath,
-                    manifest_hash = manifestHash,
-                    file_count = snapshot.fileCount.toLong(),
-                    total_bytes = snapshot.totalBytes,
-                    new_bytes = snapshot.newBytes,
-                )
+    ): Result<Unit> =
+        withContext(ioDispatcher) {
+            runCatching {
+                catalog.transaction {
+                    catalog.catalogQueries.insertSnapshot(
+                        project_uuid = snapshot.projectUuid.value,
+                        rev = snapshot.rev.value,
+                        parent_rev = snapshot.parentRev?.value,
+                        timestamp = snapshot.timestamp.toString(),
+                        host_id = snapshot.hostId,
+                        kind = snapshot.kind.dbName(),
+                        label = snapshot.label,
+                        manifest_path = manifestPath,
+                        manifest_hash = manifestHash,
+                        file_count = snapshot.fileCount.toLong(),
+                        total_bytes = snapshot.totalBytes,
+                        new_bytes = snapshot.newBytes,
+                    )
+                }
             }
         }
-    }
 
     override suspend fun setSnapshotLabel(
         uuid: ProjectUuid,
         rev: SnapshotRev,
         label: String?,
-    ): Result<JournalEntry> = withContext(ioDispatcher) {
-        // Capture before-state, write, journal — all atomic under one transaction so a concurrent
-        // observer never sees the row mutated without the journal entry's row also visible.
-        // Cancellation discipline mirrors SqlJournalRepository: re-throw, wrap everything else.
-        try {
-            val before = catalog.catalogQueries
-                .selectSnapshotByRev(uuid.value, rev.value)
-                .executeAsOneOrNull()
-                ?: return@withContext Result.failure<JournalEntry>(
-                    SketchbookError.NotFound("snapshot ${uuid.value}@${rev.value} not found"),
-                )
-            // Resolve the project_id for the JournalEntry. Snapshots key on project_uuid; the
-            // journal keys on project_id (legacy v0.1 schema). project_identity is the bridge.
-            // Fall back to 1L when the identity row is missing — `ProjectId(0)` would fail the
-            // value-class precondition and crash the journal append. The "orphan" case (snapshot
-            // without an identity row) shouldn't happen in practice, but a synthetic-1 audit row
-            // is preferable to a thrown exception for a label-edit hotpath.
-            val resolvedProjectId = catalog.catalogQueries
-                .selectIdentityByUuid(uuid.value)
-                .executeAsOneOrNull()
-                ?.project_id
-                ?.takeIf { it > 0L }
-                ?: 1L
-            catalog.transaction {
-                catalog.catalogQueries.updateSnapshotLabel(
-                    label = label,
-                    project_uuid = uuid.value,
-                    rev = rev.value,
-                )
+    ): Result<JournalEntry> =
+        withContext(ioDispatcher) {
+            // Capture before-state, write, journal — all atomic under one transaction so a concurrent
+            // observer never sees the row mutated without the journal entry's row also visible.
+            // Cancellation discipline mirrors SqlJournalRepository: re-throw, wrap everything else.
+            try {
+                val before =
+                    catalog.catalogQueries
+                        .selectSnapshotByRev(uuid.value, rev.value)
+                        .executeAsOneOrNull()
+                        ?: return@withContext Result.failure<JournalEntry>(
+                            SketchbookError.NotFound("snapshot ${uuid.value}@${rev.value} not found"),
+                        )
+                // Resolve the project_id for the JournalEntry. Snapshots key on project_uuid; the
+                // journal keys on project_id (legacy v0.1 schema). project_identity is the bridge.
+                // Fall back to 1L when the identity row is missing — `ProjectId(0)` would fail the
+                // value-class precondition and crash the journal append. The "orphan" case (snapshot
+                // without an identity row) shouldn't happen in practice, but a synthetic-1 audit row
+                // is preferable to a thrown exception for a label-edit hotpath.
+                val resolvedProjectId =
+                    catalog.catalogQueries
+                        .selectIdentityByUuid(uuid.value)
+                        .executeAsOneOrNull()
+                        ?.project_id
+                        ?.takeIf { it > 0L }
+                        ?: 1L
+                catalog.transaction {
+                    catalog.catalogQueries.updateSnapshotLabel(
+                        label = label,
+                        project_uuid = uuid.value,
+                        rev = rev.value,
+                    )
+                }
+                val entry =
+                    JournalEntry(
+                        timestamp = clock.now(),
+                        projectId = ProjectId(resolvedProjectId),
+                        action =
+                            ActionRecord.SnapshotRelabeled(
+                                rev = rev.value,
+                                labelBefore = before.label,
+                                labelAfter = label,
+                                kindBefore = before.kind,
+                            ),
+                    )
+                // No journal wired (test path that doesn't care about audit) → fabricate the entry
+                // so callers can still assert action contents without a side-channel.
+                journal?.append(entry) ?: Result.success(entry)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Result.failure(t)
             }
-            val entry = JournalEntry(
-                timestamp = clock.now(),
-                projectId = ProjectId(resolvedProjectId),
-                action = ActionRecord.SnapshotRelabeled(
-                    rev = rev.value,
-                    labelBefore = before.label,
-                    labelAfter = label,
-                    kindBefore = before.kind,
-                ),
-            )
-            // No journal wired (test path that doesn't care about audit) → fabricate the entry
-            // so callers can still assert action contents without a side-channel.
-            journal?.append(entry) ?: Result.success(entry)
-        } catch (c: CancellationException) {
-            throw c
-        } catch (t: Throwable) {
-            Result.failure(t)
         }
-    }
 
-    override suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> {
+    override suspend fun materializeAt(
+        uuid: ProjectUuid,
+        rev: SnapshotRev,
+    ): Result<Unit> {
         val r = materialize(uuid, rev)
         if (r.isFailure) return r
         // Record the rewind itself as a synthetic snapshot row so the Timeline reflects it.
@@ -139,7 +149,10 @@ class SqlSnapshotRepository(
                     project_uuid = uuid.value,
                     rev = nextRev,
                     parent_rev = rev.value,
-                    timestamp = kotlin.time.Clock.System.now().toString(),
+                    timestamp =
+                        kotlin.time.Clock.System
+                            .now()
+                            .toString(),
                     host_id = "local",
                     kind = "auto",
                     label = "rewind to rev ${rev.value}",
@@ -155,32 +168,35 @@ class SqlSnapshotRepository(
     }
 }
 
-private fun SnapshotKind.dbName(): String = when (this) {
-    SnapshotKind.Auto -> "auto"
-    SnapshotKind.Named -> "named"
-    SnapshotKind.Branch -> "branch"
-}
+private fun SnapshotKind.dbName(): String =
+    when (this) {
+        SnapshotKind.Auto -> "auto"
+        SnapshotKind.Named -> "named"
+        SnapshotKind.Branch -> "branch"
+    }
 
-private fun parseSnapshotKind(raw: String): SnapshotKind = when (raw) {
-    "auto" -> SnapshotKind.Auto
-    "named" -> SnapshotKind.Named
-    "branch" -> SnapshotKind.Branch
-    else -> SnapshotKind.Auto
-}
+private fun parseSnapshotKind(raw: String): SnapshotKind =
+    when (raw) {
+        "auto" -> SnapshotKind.Auto
+        "named" -> SnapshotKind.Named
+        "branch" -> SnapshotKind.Branch
+        else -> SnapshotKind.Auto
+    }
 
-private fun com.sketchbook.catalog.db.Snapshots.toDomain(): Snapshot = Snapshot(
-    projectUuid = ProjectUuid(project_uuid),
-    rev = SnapshotRev(rev),
-    parentRev = parent_rev?.let { SnapshotRev(it) },
-    timestamp = Instant.parse(timestamp),
-    hostId = host_id,
-    // The DB doesn't carry hostName separately yet; reuse hostId as a placeholder so the
-    // Timeline UI has something to render. Remote pulls (PR-22) will add a host_name column.
-    hostName = host_id,
-    kind = parseSnapshotKind(kind),
-    label = label,
-    selfContained = false, // tracked on sync_state, not the snapshot row.
-    fileCount = file_count.toInt(),
-    totalBytes = total_bytes,
-    newBytes = new_bytes,
-)
+private fun com.sketchbook.catalog.db.Snapshots.toDomain(): Snapshot =
+    Snapshot(
+        projectUuid = ProjectUuid(project_uuid),
+        rev = SnapshotRev(rev),
+        parentRev = parent_rev?.let { SnapshotRev(it) },
+        timestamp = Instant.parse(timestamp),
+        hostId = host_id,
+        // The DB doesn't carry hostName separately yet; reuse hostId as a placeholder so the
+        // Timeline UI has something to render. Remote pulls (PR-22) will add a host_name column.
+        hostName = host_id,
+        kind = parseSnapshotKind(kind),
+        label = label,
+        selfContained = false, // tracked on sync_state, not the snapshot row.
+        fileCount = file_count.toInt(),
+        totalBytes = total_bytes,
+        newBytes = new_bytes,
+    )

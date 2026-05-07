@@ -27,7 +27,10 @@ import com.sketchbook.uishared.theme.AppTheme
  * File-internal so each step shares the same pattern without each pasting the same 30 lines.
  */
 @Composable
-internal fun FolderRow(path: String, onRemove: () -> Unit) {
+internal fun FolderRow(
+    path: String,
+    onRemove: () -> Unit,
+) {
     val colors = AppTheme.colors
     // Stamp animation: scale 0.92 → 1.0 + 180ms fade. Wrapped here (not at the callsite)
     // so every step gets it for free. Each row is keyed by `path` upstream via the
@@ -54,13 +57,14 @@ internal fun FolderRow(path: String, onRemove: () -> Unit) {
                 // Glyph-as-icon — RootContent uses the same pattern; we don't have a real icon
                 // system in ui-shared yet, and pulling one in for a single × is overkill.
                 Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
-                        .clickable(onClick = onRemove)
-                        .padding(
-                            horizontal = AppTheme.spacing.sm,
-                            vertical = AppTheme.spacing.xs,
-                        ),
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
+                            .clickable(onClick = onRemove)
+                            .padding(
+                                horizontal = AppTheme.spacing.sm,
+                                vertical = AppTheme.spacing.xs,
+                            ),
                 ) {
                     ProvideContentColor(colors.inkMuted) {
                         Text(

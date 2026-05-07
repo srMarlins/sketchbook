@@ -44,21 +44,23 @@ fun GroupCard(
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(AppTheme.colors.tintCream)
-                    .clickable(onClick = onToggle)
-                    .padding(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.md),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(AppTheme.colors.tintCream)
+                        .clickable(onClick = onToggle)
+                        .padding(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.md),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
             ) {
                 // Accent ribbon — small strip in front of the title that picks up the rule-margin
                 // color. Marks the header band as a distinct affordance vs the row strip below.
                 Box(
-                    modifier = Modifier
-                        .height(18.dp)
-                        .width(3.dp)
-                        .background(AppTheme.colors.ruleMargin),
+                    modifier =
+                        Modifier
+                            .height(18.dp)
+                            .width(3.dp)
+                            .background(AppTheme.colors.ruleMargin),
                 )
                 ProvideContentColor(AppTheme.colors.inkSecondary) {
                     Text(if (expanded) "▾" else "▸", style = AppTheme.typography.mono)
@@ -80,12 +82,13 @@ fun GroupCard(
             if (expanded) {
                 StrongDivider()
                 Column(
-                    modifier = Modifier.padding(
-                        start = AppTheme.spacing.lg,
-                        end = AppTheme.spacing.lg,
-                        top = AppTheme.spacing.xs,
-                        bottom = AppTheme.spacing.xs,
-                    ),
+                    modifier =
+                        Modifier.padding(
+                            start = AppTheme.spacing.lg,
+                            end = AppTheme.spacing.lg,
+                            top = AppTheme.spacing.xs,
+                            bottom = AppTheme.spacing.xs,
+                        ),
                 ) { body() }
             }
         }
@@ -104,10 +107,11 @@ fun SubGroupHeader(
     actions: @Composable (() -> Unit)? = null,
 ) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(AppTheme.colors.surfaceSunken)
-            .padding(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .background(AppTheme.colors.surfaceSunken)
+                .padding(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
@@ -139,10 +143,11 @@ fun GroupRow(
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.sm),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
         ) { content() }
@@ -153,19 +158,21 @@ fun GroupRow(
 @Composable
 private fun HairlineDivider() {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(AppTheme.colors.ruleLine),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(AppTheme.colors.ruleLine),
     )
 }
 
 @Composable
 private fun StrongDivider() {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(AppTheme.colors.ruleLineStrong),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(AppTheme.colors.ruleLineStrong),
     )
 }

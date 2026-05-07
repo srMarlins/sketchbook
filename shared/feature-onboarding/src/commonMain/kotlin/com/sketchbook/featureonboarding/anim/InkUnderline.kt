@@ -21,7 +21,10 @@ import androidx.compose.ui.graphics.Color
  * edge of the modified box in the supplied [color].
  */
 @Composable
-fun Modifier.inkUnderline(active: Boolean, color: Color): Modifier {
+fun Modifier.inkUnderline(
+    active: Boolean,
+    color: Color,
+): Modifier {
     val progress by animateFloatAsState(
         targetValue = if (active) 1f else 0f,
         animationSpec = tween(durationMillis = 220, easing = EmphasizedDecelerate),

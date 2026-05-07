@@ -15,18 +15,21 @@ import java.util.zip.GZIPOutputStream
  * can see exactly what the parser will see.
  */
 object Fixtures {
-
     // Common preamble. Live's parser checks Creator for the version string.
     private const val PREAMBLE =
         """<?xml version="1.0" encoding="UTF-8"?><Ableton MajorVersion="11" MinorVersion="11.3" Creator="Ableton Live 11.3.21">"""
     private const val POSTAMBLE = "</Ableton>"
 
     /** Clean project: parses ok, 1 audio track, 1 sample present on disk, no mac paths. */
-    fun writeCleanProject(parent: Path, name: String = "clean"): Path {
+    fun writeCleanProject(
+        parent: Path,
+        name: String = "clean",
+    ): Path {
         val dir = ensureProjectDir(parent, name)
         val sample = "loop.wav"
         writeWav(dir.resolve("Samples").resolve(sample))
-        val xml = """
+        val xml =
+            """
             $PREAMBLE
               <LiveSet>
                 <Tracks><AudioTrack/></Tracks>
@@ -42,7 +45,7 @@ object Fixtures {
                 </SampleRef>
               </LiveSet>
             $POSTAMBLE
-        """.trimIndent()
+            """.trimIndent()
         // Live's "Project Folder" convention: the .als is named after the project, not "Project.als".
         // The scanner derives `projects.name` from the .als filename, so naming it after the
         // fixture's `name` keeps each project distinguishable post-scan.
@@ -51,12 +54,16 @@ object Fixtures {
     }
 
     /** References two samples but only one is on disk — the second drives a missing finding. */
-    fun writeMissingSamplesProject(parent: Path, name: String = "missing_samples"): Path {
+    fun writeMissingSamplesProject(
+        parent: Path,
+        name: String = "missing_samples",
+    ): Path {
         val dir = ensureProjectDir(parent, name)
         val foundName = "found.wav"
         val missingName = "missing.wav"
         writeWav(dir.resolve("Samples").resolve(foundName))
-        val xml = """
+        val xml =
+            """
             $PREAMBLE
               <LiveSet>
                 <Tracks><AudioTrack/></Tracks>
@@ -78,15 +85,19 @@ object Fixtures {
                 </SampleRef>
               </LiveSet>
             $POSTAMBLE
-        """.trimIndent()
+            """.trimIndent()
         writeGzippedAls(dir.resolve("$name.als"), xml)
         return dir
     }
 
     /** Sample paths are Mac-style absolute paths -> `mac_paths_count > 0`. */
-    fun writeMacPathsProject(parent: Path, name: String = "mac_paths"): Path {
+    fun writeMacPathsProject(
+        parent: Path,
+        name: String = "mac_paths",
+    ): Path {
         val dir = ensureProjectDir(parent, name)
-        val xml = """
+        val xml =
+            """
             $PREAMBLE
               <LiveSet>
                 <Tracks><AudioTrack/></Tracks>
@@ -99,7 +110,7 @@ object Fixtures {
                 </SampleRef>
               </LiveSet>
             $POSTAMBLE
-        """.trimIndent()
+            """.trimIndent()
         writeGzippedAls(dir.resolve("$name.als"), xml)
         return dir
     }
@@ -108,7 +119,10 @@ object Fixtures {
      * Parse-fail fixture: writes a `.als` with non-gzipped garbage bytes so [AlsParser.parse]
      * throws. Returns the file path (no project dir wrapping needed).
      */
-    fun writeParseFailProject(parent: Path, name: String = "bad"): Path {
+    fun writeParseFailProject(
+        parent: Path,
+        name: String = "bad",
+    ): Path {
         Files.createDirectories(parent)
         val file = parent.resolve("$name.als")
         Files.write(file, "this is not a gzipped als".toByteArray())
@@ -130,7 +144,10 @@ object Fixtures {
 
     // -------------------------------------------------------------- private
 
-    private fun ensureProjectDir(parent: Path, name: String): Path {
+    private fun ensureProjectDir(
+        parent: Path,
+        name: String,
+    ): Path {
         val dir = parent.resolve("$name Project")
         Files.createDirectories(dir)
         Files.createDirectories(dir.resolve("Samples"))
@@ -138,7 +155,10 @@ object Fixtures {
         return dir
     }
 
-    private fun writeGzippedAls(target: Path, xml: String) {
+    private fun writeGzippedAls(
+        target: Path,
+        xml: String,
+    ) {
         Files.createDirectories(target.parent)
         val out = ByteArrayOutputStream()
         GZIPOutputStream(out).use { it.write(xml.toByteArray(Charsets.UTF_8)) }

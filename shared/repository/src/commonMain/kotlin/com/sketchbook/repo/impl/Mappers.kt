@@ -22,91 +22,89 @@ import kotlin.time.Instant
 internal fun Projects.toDomain(
     tags: List<String> = emptyList(),
     missingSampleCount: Int = 0,
-): ProjectRow = build(
-    id = id,
-    name = name,
-    path = path,
-    tempo = tempo,
-    trackCount = track_count,
-    liveVersion = live_version,
-    lastModifiedSec = last_modified,
-    colorTag = color_tag,
-    effortScore = effort_score,
-    parseStatus = parse_status,
-    fileSizeBytes = file_size_bytes,
-    tags = tags,
-    missingSampleCount = missingSampleCount,
-    archived = is_archived != 0L,
-    key = key,
-    stageInferred = stage_inferred,
-    stageOverride = stage_override,
-)
+): ProjectRow =
+    build(
+        id = id,
+        name = name,
+        path = path,
+        tempo = tempo,
+        trackCount = track_count,
+        liveVersion = live_version,
+        lastModifiedSec = last_modified,
+        colorTag = color_tag,
+        effortScore = effort_score,
+        parseStatus = parse_status,
+        fileSizeBytes = file_size_bytes,
+        tags = tags,
+        missingSampleCount = missingSampleCount,
+        archived = is_archived != 0L,
+        key = key,
+        stageInferred = stage_inferred,
+        stageOverride = stage_override,
+    )
 
-internal fun SelectAllProjectsWithMissing.toDomain(
-    tags: List<String> = emptyList(),
-): ProjectRow = build(
-    id = id,
-    name = name,
-    path = path,
-    tempo = tempo,
-    trackCount = track_count,
-    liveVersion = live_version,
-    lastModifiedSec = last_modified,
-    colorTag = color_tag,
-    effortScore = effort_score,
-    parseStatus = parse_status,
-    fileSizeBytes = file_size_bytes,
-    tags = tags,
-    missingSampleCount = missing_sample_count.toInt(),
-    archived = is_archived != 0L,
-    key = key,
-    stageInferred = stage_inferred,
-    stageOverride = stage_override,
-)
+internal fun SelectAllProjectsWithMissing.toDomain(tags: List<String> = emptyList()): ProjectRow =
+    build(
+        id = id,
+        name = name,
+        path = path,
+        tempo = tempo,
+        trackCount = track_count,
+        liveVersion = live_version,
+        lastModifiedSec = last_modified,
+        colorTag = color_tag,
+        effortScore = effort_score,
+        parseStatus = parse_status,
+        fileSizeBytes = file_size_bytes,
+        tags = tags,
+        missingSampleCount = missing_sample_count.toInt(),
+        archived = is_archived != 0L,
+        key = key,
+        stageInferred = stage_inferred,
+        stageOverride = stage_override,
+    )
 
-internal fun SelectArchivedProjectsWithMissing.toDomain(
-    tags: List<String> = emptyList(),
-): ProjectRow = build(
-    id = id,
-    name = name,
-    path = path,
-    tempo = tempo,
-    trackCount = track_count,
-    liveVersion = live_version,
-    lastModifiedSec = last_modified,
-    colorTag = color_tag,
-    effortScore = effort_score,
-    parseStatus = parse_status,
-    fileSizeBytes = file_size_bytes,
-    tags = tags,
-    missingSampleCount = missing_sample_count.toInt(),
-    archived = is_archived != 0L,
-    key = key,
-    stageInferred = stage_inferred,
-    stageOverride = stage_override,
-)
+internal fun SelectArchivedProjectsWithMissing.toDomain(tags: List<String> = emptyList()): ProjectRow =
+    build(
+        id = id,
+        name = name,
+        path = path,
+        tempo = tempo,
+        trackCount = track_count,
+        liveVersion = live_version,
+        lastModifiedSec = last_modified,
+        colorTag = color_tag,
+        effortScore = effort_score,
+        parseStatus = parse_status,
+        fileSizeBytes = file_size_bytes,
+        tags = tags,
+        missingSampleCount = missing_sample_count.toInt(),
+        archived = is_archived != 0L,
+        key = key,
+        stageInferred = stage_inferred,
+        stageOverride = stage_override,
+    )
 
-internal fun SelectProjectByIdWithMissing.toDomain(
-    tags: List<String> = emptyList(),
-): ProjectRow = build(
-    id = id,
-    name = name,
-    path = path,
-    tempo = tempo,
-    trackCount = track_count,
-    liveVersion = live_version,
-    lastModifiedSec = last_modified,
-    colorTag = color_tag,
-    effortScore = effort_score,
-    parseStatus = parse_status,
-    fileSizeBytes = file_size_bytes,
-    tags = tags,
-    missingSampleCount = missing_sample_count.toInt(),
-    archived = is_archived != 0L,
-    key = key,
-    stageInferred = stage_inferred,
-    stageOverride = stage_override,
-)
+internal fun SelectProjectByIdWithMissing.toDomain(tags: List<String> = emptyList()): ProjectRow =
+    build(
+        id = id,
+        name = name,
+        path = path,
+        tempo = tempo,
+        trackCount = track_count,
+        liveVersion = live_version,
+        lastModifiedSec = last_modified,
+        colorTag = color_tag,
+        effortScore = effort_score,
+        parseStatus = parse_status,
+        fileSizeBytes = file_size_bytes,
+        tags = tags,
+        missingSampleCount = missing_sample_count.toInt(),
+        archived = is_archived != 0L,
+        key = key,
+        stageInferred = stage_inferred,
+        stageOverride = stage_override,
+    )
 
 @Suppress("LongParameterList")
 private fun build(
@@ -127,28 +125,30 @@ private fun build(
     key: String?,
     stageInferred: String?,
     stageOverride: String?,
-): ProjectRow = ProjectRow(
-    id = ProjectId(id),
-    name = name,
-    path = ProjectPath.fromPlatform(path),
-    tempo = tempo,
-    trackCount = trackCount.toInt(),
-    lastSavedLiveVersion = liveVersion,
-    updatedAt = Instant.fromEpochMilliseconds((lastModifiedSec * 1000).toLong()),
-    tags = tags,
-    colorTag = colorTag?.toInt(),
-    effortScore = effortScore?.toInt(),
-    parseStatus = parseStatusFor(parseStatus),
-    missingSampleCount = missingSampleCount,
-    fileSizeBytes = fileSizeBytes ?: 0L,
-    archived = archived,
-    key = key,
-    stageInferred = Stage.parseOrNull(stageInferred),
-    stageOverride = Stage.parseOrNull(stageOverride),
-)
+): ProjectRow =
+    ProjectRow(
+        id = ProjectId(id),
+        name = name,
+        path = ProjectPath.fromPlatform(path),
+        tempo = tempo,
+        trackCount = trackCount.toInt(),
+        lastSavedLiveVersion = liveVersion,
+        updatedAt = Instant.fromEpochMilliseconds((lastModifiedSec * 1000).toLong()),
+        tags = tags,
+        colorTag = colorTag?.toInt(),
+        effortScore = effortScore?.toInt(),
+        parseStatus = parseStatusFor(parseStatus),
+        missingSampleCount = missingSampleCount,
+        fileSizeBytes = fileSizeBytes ?: 0L,
+        archived = archived,
+        key = key,
+        stageInferred = Stage.parseOrNull(stageInferred),
+        stageOverride = Stage.parseOrNull(stageOverride),
+    )
 
-private fun parseStatusFor(raw: String?): ParseStatus = when (raw) {
-    "ok" -> ParseStatus.Ok
-    "failed" -> ParseStatus.Failed
-    else -> ParseStatus.Pending
-}
+private fun parseStatusFor(raw: String?): ParseStatus =
+    when (raw) {
+        "ok" -> ParseStatus.Ok
+        "failed" -> ParseStatus.Failed
+        else -> ParseStatus.Pending
+    }

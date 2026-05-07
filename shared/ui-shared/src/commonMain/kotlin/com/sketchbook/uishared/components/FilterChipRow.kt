@@ -20,7 +20,11 @@ import com.sketchbook.uishared.theme.AppTheme
  * Single option in a [FilterChipRow]. [count] is rendered as a parenthesised caption next
  * to [label] when non-null (e.g. "Pending (12)").
  */
-data class FilterChipOption<T>(val value: T, val label: String, val count: Int? = null)
+data class FilterChipOption<T>(
+    val value: T,
+    val label: String,
+    val count: Int? = null,
+)
 
 /**
  * Stateless single-select chip row. Generic over [T] so it can drive any sealed-class /
@@ -50,12 +54,13 @@ fun <T> FilterChipRow(
             val bg = if (isSelected) AppTheme.colors.accentSoft else AppTheme.colors.surfaceCard
             val fg = if (isSelected) AppTheme.colors.inkPrimary else AppTheme.colors.inkSecondary
             Row(
-                modifier = Modifier
-                    .clip(shape)
-                    .background(bg)
-                    .border(1.dp, AppTheme.colors.ruleLine, shape)
-                    .clickable { onSelected(opt.value) }
-                    .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
+                modifier =
+                    Modifier
+                        .clip(shape)
+                        .background(bg)
+                        .border(1.dp, AppTheme.colors.ruleLine, shape)
+                        .clickable { onSelected(opt.value) }
+                        .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
                 horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

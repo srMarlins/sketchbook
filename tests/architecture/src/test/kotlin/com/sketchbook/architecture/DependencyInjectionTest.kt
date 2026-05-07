@@ -21,13 +21,13 @@ import kotlin.test.Test
  *   `commonMain`, `jvmMain`, etc. all show up via `Konsist.scopeFromProject()`.
  */
 class DependencyInjectionTest {
-
     // ---------- §2 — Binding services ----------
 
     /** §2: state-holding singletons use `@ContributesBinding` (interface bind), not field/companion. */
     @Test
     fun `services with @ContributesBinding are also @Inject`() {
-        Konsist.scopeFromProject()
+        Konsist
+            .scopeFromProject()
             .classes()
             .filter { it.hasAnnotation { ann -> ann.name == "ContributesBinding" } }
             .assertTrue { klass ->
@@ -42,7 +42,8 @@ class DependencyInjectionTest {
         // Loosened: only flags the literal `instance` name. The doc rules out
         // `companion object { val instance = … }` style locators specifically; other companion
         // `val`s (DEFAULT, KEY constants, factory builders) are fine.
-        Konsist.scopeFromProject()
+        Konsist
+            .scopeFromProject()
             .objects(includeNested = true)
             .filter { it.hasCompanionModifier }
             .flatMap { it.properties() }
@@ -54,7 +55,8 @@ class DependencyInjectionTest {
     /** §3.1: every `*ViewModel` (concrete) is `@ContributesIntoMap` + `@ViewModelKey` + `@Inject`. */
     @Test
     fun `concrete ViewModel classes have Metro VM trio annotations`() {
-        Konsist.scopeFromProject()
+        Konsist
+            .scopeFromProject()
             .classes()
             .withoutAbstractModifier()
             .filter { it.name.endsWith("ViewModel") }
@@ -70,7 +72,8 @@ class DependencyInjectionTest {
     /** §3.1: VMs use `viewModelScope`; never accept `CoroutineScope` as a constructor parameter. */
     @Test
     fun `ViewModel constructors do not take CoroutineScope`() {
-        Konsist.scopeFromProject()
+        Konsist
+            .scopeFromProject()
             .classes()
             .withoutAbstractModifier()
             .filter { it.name.endsWith("ViewModel") && it.name != "ViewModel" }
@@ -94,7 +97,8 @@ class DependencyInjectionTest {
      */
     @Test
     fun `ViewModel constructors do not take SavedStateHandle`() {
-        Konsist.scopeFromProject()
+        Konsist
+            .scopeFromProject()
             .classes()
             .withoutAbstractModifier()
             .filter { it.name.endsWith("ViewModel") && it.name != "ViewModel" }
@@ -126,15 +130,15 @@ class DependencyInjectionTest {
      */
     @Test
     fun `@Assisted VM ctor params live on @AssistedInject classes`() {
-        Konsist.scopeFromProject()
+        Konsist
+            .scopeFromProject()
             .classes()
             .withoutAbstractModifier()
             .filter { it.name.endsWith("ViewModel") && it.name != "ViewModel" }
             .filter { vm ->
                 val ctor = vm.primaryConstructor ?: return@filter false
                 ctor.parameters.any { p -> p.hasAnnotation { it.name == "Assisted" } }
-            }
-            .assertTrue { vm ->
+            }.assertTrue { vm ->
                 vm.hasAnnotation { it.name == "AssistedInject" }
             }
     }
@@ -147,7 +151,8 @@ class DependencyInjectionTest {
         // Loosened from a "must extend an interface" structural check. The doc forbids binding
         // anything other than a normal class to an interface; data/value classes in particular
         // tend to indicate value-types-as-services or service locators.
-        Konsist.scopeFromProject()
+        Konsist
+            .scopeFromProject()
             .classes()
             .filter { it.hasAnnotation { ann -> ann.name == "ContributesBinding" } }
             .assertFalse { klass ->

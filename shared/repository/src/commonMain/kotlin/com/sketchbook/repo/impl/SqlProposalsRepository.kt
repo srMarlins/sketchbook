@@ -49,43 +49,52 @@ class SqlProposalsRepository(
     private val ioDispatcher: CoroutineDispatcher,
     private val now: () -> Instant = { Clock.System.now() },
 ) : ProposalsRepository {
-
     /** Bumped on ack write so the derived flow re-emits with the new dismissal applied. */
     private val ackTick = MutableStateFlow(0L)
 
     override fun observe(): Flow<List<Proposal>> {
         val cutoffSecs = (now() - ARCHIVE_AGE).epochSeconds.toDouble()
-        val candidatesFlow = catalog.catalogQueries.selectArchiveCandidates(cutoffSecs)
-            .asFlow()
-            .mapToList(ioDispatcher)
+        val candidatesFlow =
+            catalog.catalogQueries
+                .selectArchiveCandidates(cutoffSecs)
+                .asFlow()
+                .mapToList(ioDispatcher)
         return combine(candidatesFlow, ackTick.onStart { emit(0L) }) { rows, _ ->
-            val acks = withContext(ioDispatcher) {
-                rows.associate { row ->
-                    val key = archiveKey(row.id)
-                    key to catalog.catalogQueries.selectProposalAck(key).executeAsOneOrNull()?.status
+            val acks =
+                withContext(ioDispatcher) {
+                    rows.associate { row ->
+                        val key = archiveKey(row.id)
+                        key to
+                            catalog.catalogQueries
+                                .selectProposalAck(key)
+                                .executeAsOneOrNull()
+                                ?.status
+                    }
                 }
-            }
             rows.map { row ->
                 val key = archiveKey(row.id)
-                val status = when (acks[key]) {
-                    "approved" -> ProposalStatus.Approved
-                    "rejected" -> ProposalStatus.Rejected
-                    else -> ProposalStatus.Pending
-                }
+                val status =
+                    when (acks[key]) {
+                        "approved" -> ProposalStatus.Approved
+                        "rejected" -> ProposalStatus.Rejected
+                        else -> ProposalStatus.Pending
+                    }
                 Proposal(
                     proposalId = key,
                     actor = "sketchbook",
                     rationale = "Untouched for over 18 months and uncolored — likely safe to archive.",
-                    actions = listOf(
-                        ProposalAction(
-                            type = "ArchiveProject",
-                            args = buildJsonObject {
-                                put("project_id", JsonPrimitive(row.id))
-                                put("path", JsonPrimitive(row.path))
-                                put("name", JsonPrimitive(row.name))
-                            },
+                    actions =
+                        listOf(
+                            ProposalAction(
+                                type = "ArchiveProject",
+                                args =
+                                    buildJsonObject {
+                                        put("project_id", JsonPrimitive(row.id))
+                                        put("path", JsonPrimitive(row.path))
+                                        put("name", JsonPrimitive(row.name))
+                                    },
+                            ),
                         ),
-                    ),
                     // Use the project's last-modified time so the displayed "Nh ago" stays stable
                     // across flow re-emits (an ack write triggers ackTick → re-derivation; if we
                     // used `now()` here every other proposal would suddenly read "0s ago").
@@ -100,29 +109,33 @@ class SqlProposalsRepository(
 
     override suspend fun reject(proposalId: String): Result<Unit> = recordDecision(proposalId, "rejected").map { }
 
-    private suspend fun recordDecision(proposalId: String, status: String): Result<Proposal> = withContext(ioDispatcher) {
-        runCatching {
-            catalog.transaction {
-                catalog.catalogQueries.insertProposalAck(
-                    proposal_key = proposalId,
-                    status = status,
-                    decided_at = now().toString(),
+    private suspend fun recordDecision(
+        proposalId: String,
+        status: String,
+    ): Result<Proposal> =
+        withContext(ioDispatcher) {
+            runCatching {
+                catalog.transaction {
+                    catalog.catalogQueries.insertProposalAck(
+                        proposal_key = proposalId,
+                        status = status,
+                        decided_at = now().toString(),
+                    )
+                }
+                ackTick.value = ackTick.value + 1
+                // Fabricate a minimal echoed Proposal so the caller's effect dispatch has
+                // *something* to render; the live-derived flow is the source of truth for the
+                // displayed list, so the exact contents here don't matter beyond proposalId
+                // and status.
+                Proposal(
+                    proposalId = proposalId,
+                    actor = "sketchbook",
+                    actions = emptyList(),
+                    submittedAt = now(),
+                    status = if (status == "approved") ProposalStatus.Approved else ProposalStatus.Rejected,
                 )
             }
-            ackTick.value = ackTick.value + 1
-            // Fabricate a minimal echoed Proposal so the caller's effect dispatch has
-            // *something* to render; the live-derived flow is the source of truth for the
-            // displayed list, so the exact contents here don't matter beyond proposalId
-            // and status.
-            Proposal(
-                proposalId = proposalId,
-                actor = "sketchbook",
-                actions = emptyList(),
-                submittedAt = now(),
-                status = if (status == "approved") ProposalStatus.Approved else ProposalStatus.Rejected,
-            )
         }
-    }
 
     private companion object {
         /** 18 months in days — matches the legacy Python heuristic. */

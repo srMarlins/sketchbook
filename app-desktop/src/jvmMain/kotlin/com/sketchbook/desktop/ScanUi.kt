@@ -16,9 +16,20 @@ import java.nio.file.Paths
  */
 sealed interface ScanUiState {
     data object Idle : ScanUiState
-    data class Scanning(val total: Int, val done: Int) : ScanUiState
-    data class Done(val indexed: Int, val failed: Int) : ScanUiState
-    data class Failed(val message: String) : ScanUiState
+
+    data class Scanning(
+        val total: Int,
+        val done: Int,
+    ) : ScanUiState
+
+    data class Done(
+        val indexed: Int,
+        val failed: Int,
+    ) : ScanUiState
+
+    data class Failed(
+        val message: String,
+    ) : ScanUiState
 }
 
 /**

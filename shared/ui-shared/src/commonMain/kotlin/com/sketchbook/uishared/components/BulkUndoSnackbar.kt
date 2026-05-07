@@ -30,7 +30,9 @@ import kotlinx.coroutines.launch
  * `onUndo` is optional: when `null`, the snackbar renders informationally (no Undo button) and
  * [undo] is a no-op. Used by needs-attention bulk effects, which v1 cannot meaningfully revert.
  */
-class BulkUndoSnackbarState(private val scope: CoroutineScope) {
+class BulkUndoSnackbarState(
+    private val scope: CoroutineScope,
+) {
     data class Visible(
         val message: String,
         val onUndo: (() -> Unit)?,
@@ -45,19 +47,24 @@ class BulkUndoSnackbarState(private val scope: CoroutineScope) {
 
     private var job: Job? = null
 
-    fun show(message: String, onUndo: (() -> Unit)? = null, onExpire: (() -> Unit)? = null) {
+    fun show(
+        message: String,
+        onUndo: (() -> Unit)? = null,
+        onExpire: (() -> Unit)? = null,
+    ) {
         commitInFlight()
         _current.value = Visible(message, onUndo, onExpire)
         _secondsRemaining.value = 5
-        job = scope.launch {
-            repeat(5) {
-                delay(1_000)
-                _secondsRemaining.value = _secondsRemaining.value - 1
+        job =
+            scope.launch {
+                repeat(5) {
+                    delay(1_000)
+                    _secondsRemaining.value = _secondsRemaining.value - 1
+                }
+                val v = _current.value
+                _current.value = null
+                v?.onExpire?.invoke()
             }
-            val v = _current.value
-            _current.value = null
-            v?.onExpire?.invoke()
-        }
     }
 
     fun undo() {
@@ -77,7 +84,10 @@ class BulkUndoSnackbarState(private val scope: CoroutineScope) {
 }
 
 @Composable
-fun BulkUndoSnackbar(state: BulkUndoSnackbarState, modifier: Modifier = Modifier) {
+fun BulkUndoSnackbar(
+    state: BulkUndoSnackbarState,
+    modifier: Modifier = Modifier,
+) {
     val current by state.current.collectAsState()
     val seconds by state.secondsRemaining.collectAsState()
     val v = current ?: return

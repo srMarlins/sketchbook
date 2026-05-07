@@ -79,47 +79,46 @@ fun TextField(
     val innerShadow = if (colors.isDark) Color(0x66000000) else Color(0x18281C12)
     val highlight = if (colors.isDark) Color(0x10F5ECD8) else Color(0x55FFFAEE)
     Row(
-        modifier = modifier
-            .clip(shape)
-            .background(colors.surfaceCard)
-            .drawBehind {
-                val r = cornerDp.toPx()
-                drawRect(
-                    Brush.verticalGradient(
-                        colorStops = arrayOf(0f to innerShadow, 1f to Color.Transparent),
-                        startY = 0f,
-                        endY = 4f * density,
-                    ),
-                    topLeft = Offset(0f, 0f),
-                    size = Size(size.width, 4f * density),
-                )
-                drawRect(
-                    color = highlight,
-                    topLeft = Offset(0f, size.height - 1f),
-                    size = Size(size.width, 1f),
-                )
-                drawRoundRect(
-                    color = colors.ruleLineStrong,
-                    topLeft = Offset(0f, 0f),
-                    size = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(r, r),
-                    style = Stroke(width = 1f),
-                )
-                if (isFocused) {
-                    drawLine(
-                        color = colors.accentAction,
-                        start = Offset(r * 0.8f, size.height - 0.5f),
-                        end = Offset(size.width - r * 0.8f, size.height - 0.5f),
-                        strokeWidth = 1.5f,
+        modifier =
+            modifier
+                .clip(shape)
+                .background(colors.surfaceCard)
+                .drawBehind {
+                    val r = cornerDp.toPx()
+                    drawRect(
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(0f to innerShadow, 1f to Color.Transparent),
+                            startY = 0f,
+                            endY = 4f * density,
+                        ),
+                        topLeft = Offset(0f, 0f),
+                        size = Size(size.width, 4f * density),
                     )
-                }
-            }
-            .clickable(
-                interactionSource = rowInteraction,
-                indication = null,
-                onClick = { focusRequester.requestFocus() },
-            )
-            .padding(PaddingValues(horizontal = AppTheme.spacing.md, vertical = 12.dp)),
+                    drawRect(
+                        color = highlight,
+                        topLeft = Offset(0f, size.height - 1f),
+                        size = Size(size.width, 1f),
+                    )
+                    drawRoundRect(
+                        color = colors.ruleLineStrong,
+                        topLeft = Offset(0f, 0f),
+                        size = Size(size.width, size.height),
+                        cornerRadius = CornerRadius(r, r),
+                        style = Stroke(width = 1f),
+                    )
+                    if (isFocused) {
+                        drawLine(
+                            color = colors.accentAction,
+                            start = Offset(r * 0.8f, size.height - 0.5f),
+                            end = Offset(size.width - r * 0.8f, size.height - 0.5f),
+                            strokeWidth = 1.5f,
+                        )
+                    }
+                }.clickable(
+                    interactionSource = rowInteraction,
+                    indication = null,
+                    onClick = { focusRequester.requestFocus() },
+                ).padding(PaddingValues(horizontal = AppTheme.spacing.md, vertical = 12.dp)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
@@ -136,9 +135,10 @@ fun TextField(
                 interactionSource = interaction,
                 textStyle = AppTheme.typography.body.copy(color = colors.inkPrimary),
                 cursorBrush = SolidColor(colors.inkPrimary),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
             )
             if (local.isEmpty() && placeholder != null) {
                 ProvideContentColor(colors.inkMuted) {

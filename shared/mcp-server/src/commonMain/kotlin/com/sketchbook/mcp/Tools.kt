@@ -22,7 +22,6 @@ class Tools(
     private val repository: ProjectRepository,
     private val proposalsWriter: ProposalsWriter,
 ) {
-
     suspend fun searchProjects(args: SearchProjectsArgs): SearchResult {
         val rows = repository.observeProjects(args.query.orEmpty()).first()
         // Coerce caller-supplied limits into a sane window. A negative or oversized limit from a
@@ -62,17 +61,18 @@ class Tools(
         return ProposeBatchResult(proposalId = proposalId)
     }
 
-    private fun ProjectRow.toRow(): ProjectRowDto = ProjectRowDto(
-        projectId = id.value,
-        name = name,
-        path = path.value,
-        tempo = tempo,
-        trackCount = trackCount,
-        liveVersion = lastSavedLiveVersion,
-        updatedAt = updatedAt.toString(),
-        tags = tags,
-        colorTag = colorTag,
-    )
+    private fun ProjectRow.toRow(): ProjectRowDto =
+        ProjectRowDto(
+            projectId = id.value,
+            name = name,
+            path = path.value,
+            tempo = tempo,
+            trackCount = trackCount,
+            liveVersion = lastSavedLiveVersion,
+            updatedAt = updatedAt.toString(),
+            tags = tags,
+            colorTag = colorTag,
+        )
 
     companion object {
         const val DEFAULT_LIMIT: Int = 50
@@ -84,16 +84,17 @@ class Tools(
          * Python wire format and the [com.sketchbook.actions.ActionRecord] sealed type
          * SerialNames so a Python proposal file round-trips with a Kotlin one byte-for-byte.
          */
-        val ALLOWED_ACTION_TYPES: Set<String> = setOf(
-            "MoveProject",
-            "RenameProject",
-            "ArchiveProject",
-            "SetTags",
-            "SetColorTag",
-            "RelinkMissingSamples",
-            "RepairMacPaths",
-            "Undo",
-        )
+        val ALLOWED_ACTION_TYPES: Set<String> =
+            setOf(
+                "MoveProject",
+                "RenameProject",
+                "ArchiveProject",
+                "SetTags",
+                "SetColorTag",
+                "RelinkMissingSamples",
+                "RepairMacPaths",
+                "Undo",
+            )
     }
 }
 
@@ -131,10 +132,14 @@ data class ProposedAction(
 )
 
 @Serializable
-data class SearchResult(val matches: List<ProjectRowDto>)
+data class SearchResult(
+    val matches: List<ProjectRowDto>,
+)
 
 @Serializable
-data class ProjectDetail(val row: ProjectRowDto)
+data class ProjectDetail(
+    val row: ProjectRowDto,
+)
 
 @Serializable
 data class ProjectRowDto(
@@ -160,5 +165,8 @@ data class ProposeBatchResult(
  * `proposal_id, actor, actions, rationale`.
  */
 interface ProposalsWriter {
-    suspend fun write(actions: List<ProposedAction>, rationale: String?): String
+    suspend fun write(
+        actions: List<ProposedAction>,
+        rationale: String?,
+    ): String
 }

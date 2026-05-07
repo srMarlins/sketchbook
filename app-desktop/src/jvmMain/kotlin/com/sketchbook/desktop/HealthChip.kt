@@ -56,40 +56,44 @@ fun HealthChip(
     val colors = AppTheme.colors
     var open by remember { mutableStateOf(false) }
     val percent = (health.compositePercent * 100).toInt()
-    val numberColor: Color = when {
-        health.total <= 0 -> colors.inkMuted
-        percent >= 90 -> colors.accentAction
-        percent >= 70 -> colors.accentWarning
-        else -> colors.accentDanger
-    }
+    val numberColor: Color =
+        when {
+            health.total <= 0 -> colors.inkMuted
+            percent >= 90 -> colors.accentAction
+            percent >= 70 -> colors.accentWarning
+            else -> colors.accentDanger
+        }
     val label = if (health.total <= 0) "Health: —" else "Health: $percent%"
 
     Box(modifier = modifier) {
         Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(colors.surfaceCard)
-                .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(50))
-                .clickable(enabled = health.total > 0) { open = !open }
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(colors.surfaceCard)
+                    .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(50))
+                    .clickable(enabled = health.total > 0) { open = !open }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ProvideContentColor(colors.inkSecondary) {
                 Text(
                     "Health: ".uppercase(),
-                    style = AppTheme.typography.mono.copy(
-                        fontSize = TextUnit(10f, TextUnitType.Sp),
-                        letterSpacing = TextUnit(0.8f, TextUnitType.Sp),
-                    ),
+                    style =
+                        AppTheme.typography.mono.copy(
+                            fontSize = TextUnit(10f, TextUnitType.Sp),
+                            letterSpacing = TextUnit(0.8f, TextUnitType.Sp),
+                        ),
                 )
             }
             ProvideContentColor(numberColor) {
                 Text(
                     if (health.total <= 0) "—" else "$percent%",
-                    style = AppTheme.typography.mono.copy(
-                        fontSize = TextUnit(10f, TextUnitType.Sp),
-                        letterSpacing = TextUnit(0.8f, TextUnitType.Sp),
-                    ),
+                    style =
+                        AppTheme.typography.mono.copy(
+                            fontSize = TextUnit(10f, TextUnitType.Sp),
+                            letterSpacing = TextUnit(0.8f, TextUnitType.Sp),
+                        ),
                 )
             }
         }
@@ -131,12 +135,13 @@ private fun HealthBreakdownPopup(
 ) {
     val colors = AppTheme.colors
     Column(
-        modifier = Modifier
-            .widthIn(min = 240.dp, max = 280.dp)
-            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
-            .background(colors.surfaceCard)
-            .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard))
-            .padding(AppTheme.spacing.md),
+        modifier =
+            Modifier
+                .widthIn(min = 240.dp, max = 280.dp)
+                .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+                .background(colors.surfaceCard)
+                .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard))
+                .padding(AppTheme.spacing.md),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
         ProvideContentColor(colors.inkSecondary) {
@@ -184,11 +189,12 @@ private fun BreakdownRow(
     val colors = AppTheme.colors
     val percent = if (total <= 0) 0 else ((count.toFloat() / total) * 100).toInt()
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ProvideContentColor(colors.inkPrimary) {
@@ -197,9 +203,10 @@ private fun BreakdownRow(
         ProvideContentColor(colors.inkMuted) {
             Text(
                 "$percent% ($count / $total)",
-                style = AppTheme.typography.mono.copy(
-                    fontSize = TextUnit(11f, TextUnitType.Sp),
-                ),
+                style =
+                    AppTheme.typography.mono.copy(
+                        fontSize = TextUnit(11f, TextUnitType.Sp),
+                    ),
             )
         }
     }

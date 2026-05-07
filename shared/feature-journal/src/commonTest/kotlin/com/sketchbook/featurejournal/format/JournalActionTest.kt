@@ -6,12 +6,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class JournalActionTest {
-
     @Test fun moveShowsBeforeAndAfterDirs() {
-        val a = ActionRecord.Move(
-            pathBefore = "/lib/old/foo.als",
-            pathAfter = "/lib/new/foo.als",
-        )
+        val a =
+            ActionRecord.Move(
+                pathBefore = "/lib/old/foo.als",
+                pathAfter = "/lib/new/foo.als",
+            )
         assertEquals("Moved foo.als — /lib/old/ → /lib/new/", humanReadable(a))
     }
 
@@ -20,11 +20,12 @@ class JournalActionTest {
     }
 
     @Test fun missingSampleMappedAppendsBusyOutcome() {
-        val a = ActionRecord.MissingSampleMapped(
-            missingPath = "/old/k.wav",
-            candidatePath = "/lib/Drums/k.wav",
-            alsOutcome = "SkippedBusy",
-        )
+        val a =
+            ActionRecord.MissingSampleMapped(
+                missingPath = "/old/k.wav",
+                candidatePath = "/lib/Drums/k.wav",
+                alsOutcome = "SkippedBusy",
+            )
         val text = humanReadable(a)
         assertTrue("text='$text'") { text.startsWith("Relink k.wav → /lib/Drums/") }
         assertTrue("text='$text'") { text.endsWith(".als open in Live — skipped)") }
@@ -36,22 +37,24 @@ class JournalActionTest {
     }
 
     @Test fun snapshotRelabeledShowsBeforeAfter() {
-        val a = ActionRecord.SnapshotRelabeled(
-            rev = 12L,
-            labelBefore = "wip",
-            labelAfter = "ship it",
-            kindBefore = "auto",
-        )
+        val a =
+            ActionRecord.SnapshotRelabeled(
+                rev = 12L,
+                labelBefore = "wip",
+                labelAfter = "ship it",
+                kindBefore = "auto",
+            )
         assertEquals("Relabel snapshot wip → ship it", humanReadable(a))
     }
 
     @Test fun snapshotRelabeledHandlesBlankLabels() {
-        val a = ActionRecord.SnapshotRelabeled(
-            rev = 12L,
-            labelBefore = null,
-            labelAfter = "",
-            kindBefore = "auto",
-        )
+        val a =
+            ActionRecord.SnapshotRelabeled(
+                rev = 12L,
+                labelBefore = null,
+                labelAfter = "",
+                kindBefore = "auto",
+            )
         assertEquals("Relabel snapshot (unlabeled) → (unlabeled)", humanReadable(a))
     }
 }

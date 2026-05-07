@@ -35,7 +35,6 @@ class WatcherToSyncState(
     private val catalog: Catalog,
     private val syncState: SyncStateStore,
 ) {
-
     @OptIn(ExperimentalCoroutinesApi::class)
     fun watchAll(roots: List<Path>): Flow<SaveEvent> {
         val flows = roots.map { watcher.watch(it) }
@@ -45,9 +44,10 @@ class WatcherToSyncState(
             } else {
                 merge(*flows.toTypedArray())
             }
-        return merged.onEach { event ->
-            if (event is SaveEvent.Saved) handleSave(event.path)
-        }.flowOn(Dispatchers.IO)
+        return merged
+            .onEach { event ->
+                if (event is SaveEvent.Saved) handleSave(event.path)
+            }.flowOn(Dispatchers.IO)
     }
 
     private fun handleSave(savedPath: Path) {
@@ -62,9 +62,10 @@ class WatcherToSyncState(
         // the next save will retry. (Shared modules don't log; we'll surface persistent failures
         // through the existing sync-state observability if it becomes a problem.)
         runCatching {
-            val ids = catalog.catalogQueries
-                .selectProjectIdsByParentDir(parent_dir = projectDir.toString())
-                .executeAsList()
+            val ids =
+                catalog.catalogQueries
+                    .selectProjectIdsByParentDir(parent_dir = projectDir.toString())
+                    .executeAsList()
             for (rawId in ids) {
                 val uuid = syncState.identityFor(ProjectId(rawId))
                 syncState.markDirty(uuid)

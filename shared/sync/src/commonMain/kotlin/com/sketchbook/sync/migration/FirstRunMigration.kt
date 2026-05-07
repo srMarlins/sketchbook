@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.Flow
  * resolves to [ProjectMigrationOutcome.AlreadyMigrated]).
  */
 interface FirstRunMigration {
-
     /**
      * Runs the migration end-to-end. Emits per-project [MigrationProgress.Project] events as
      * each row resolves, then a single [MigrationProgress.Completed] when done.
@@ -33,7 +32,9 @@ interface FirstRunMigration {
 }
 
 sealed interface MigrationProgress {
-    data class Started(val totalProjects: Int) : MigrationProgress
+    data class Started(
+        val totalProjects: Int,
+    ) : MigrationProgress
 
     /** A single project has resolved (success or skip). */
     data class Project(
@@ -55,10 +56,15 @@ sealed interface MigrationProgress {
 
 sealed interface ProjectMigrationOutcome {
     /** First time this project saw migration; UUID minted and sidecar written. */
-    data class Migrated(val uuid: ProjectUuid, val sidecarWritten: Boolean) : ProjectMigrationOutcome
+    data class Migrated(
+        val uuid: ProjectUuid,
+        val sidecarWritten: Boolean,
+    ) : ProjectMigrationOutcome
 
     /** DB and sidecar already aligned; nothing to do. */
-    data class AlreadyMigrated(val uuid: ProjectUuid) : ProjectMigrationOutcome
+    data class AlreadyMigrated(
+        val uuid: ProjectUuid,
+    ) : ProjectMigrationOutcome
 
     /**
      * Sidecar UUID differs from the UUID stored in `project_identity`. The sidecar wins; DB row
@@ -70,5 +76,7 @@ sealed interface ProjectMigrationOutcome {
     ) : ProjectMigrationOutcome
 
     /** Per-project failure (project dir missing, sidecar unwritable, etc.). */
-    data class Failed(val reason: String) : ProjectMigrationOutcome
+    data class Failed(
+        val reason: String,
+    ) : ProjectMigrationOutcome
 }

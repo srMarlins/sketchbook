@@ -22,33 +22,41 @@ import kotlinx.serialization.json.long
  */
 @SingleIn(AppScope::class)
 @Inject
-class ProposalActionExecutor(private val projects: ProjectRepository) {
-
+class ProposalActionExecutor(
+    private val projects: ProjectRepository,
+) {
     suspend fun apply(actions: List<ProposalAction>): Result<Unit> {
         for (a in actions) {
-            val r: Result<*> = when (a.type) {
-                "ArchiveProject" -> projects.archive(
-                    id = ProjectId(a.args.projectIdLong()),
-                    archived = true,
-                )
+            val r: Result<*> =
+                when (a.type) {
+                    "ArchiveProject" -> {
+                        projects.archive(
+                            id = ProjectId(a.args.projectIdLong()),
+                            archived = true,
+                        )
+                    }
 
-                "SetTags" -> {
-                    val id = ProjectId(a.args.projectIdLong())
-                    val tags = (a.args["tags"] as? JsonArray)
-                        ?.map { it.jsonPrimitive.content }
-                        ?: emptyList()
-                    projects.setTags(id, tags)
+                    "SetTags" -> {
+                        val id = ProjectId(a.args.projectIdLong())
+                        val tags =
+                            (a.args["tags"] as? JsonArray)
+                                ?.map { it.jsonPrimitive.content }
+                                ?: emptyList()
+                        projects.setTags(id, tags)
+                    }
+
+                    else -> {
+                        Result.failure<Unit>(
+                            IllegalArgumentException("unknown proposal action ${a.type}"),
+                        )
+                    }
                 }
-
-                else -> Result.failure<Unit>(
-                    IllegalArgumentException("unknown proposal action ${a.type}"),
-                )
-            }
             if (r.isFailure) return Result.failure(r.exceptionOrNull()!!)
         }
         return Result.success(Unit)
     }
 
-    private fun JsonObject.projectIdLong(): Long = this["project_id"]?.jsonPrimitive?.long
-        ?: error("ProposalAction.args missing project_id")
+    private fun JsonObject.projectIdLong(): Long =
+        this["project_id"]?.jsonPrimitive?.long
+            ?: error("ProposalAction.args missing project_id")
 }

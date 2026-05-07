@@ -19,7 +19,10 @@ interface ForceSnapshotPipeline {
      * [SnapshotRev] on success. On CAS conflict the underlying pipeline still falls back to a
      * Branch manifest — the divergence path wins over Named, mirroring auto-save semantics.
      */
-    suspend fun recordForcedNamed(uuid: ProjectUuid, label: String): Result<SnapshotRev>
+    suspend fun recordForcedNamed(
+        uuid: ProjectUuid,
+        label: String,
+    ): Result<SnapshotRev>
 }
 
 /**
@@ -33,8 +36,10 @@ interface ForceSnapshotPipeline {
 class ForceSnapshotUseCase(
     private val pipeline: ForceSnapshotPipeline,
 ) {
-
-    suspend operator fun invoke(uuid: ProjectUuid, label: String): Result<SnapshotRev> {
+    suspend operator fun invoke(
+        uuid: ProjectUuid,
+        label: String,
+    ): Result<SnapshotRev> {
         val trimmed = label.trim()
         if (trimmed.isEmpty()) {
             return Result.failure(IllegalArgumentException("snapshot label must not be blank"))

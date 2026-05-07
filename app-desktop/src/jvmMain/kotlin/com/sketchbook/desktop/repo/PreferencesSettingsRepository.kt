@@ -44,7 +44,6 @@ class PreferencesSettingsRepository(
     private val node: Preferences,
     private val ioDispatcher: CoroutineDispatcher,
 ) : SettingsRepository {
-
     private val mutex = Mutex()
     private val state = MutableStateFlow(read())
 
@@ -60,122 +59,143 @@ class PreferencesSettingsRepository(
 
     override fun observe(): Flow<Settings> = state
 
-    override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> = withContext(ioDispatcher) {
-        mutex.withLock {
-            val current = readRoots().toMutableList()
-            current.removeAll { it.path == root.path }
-            current += root
-            writeRoots(current)
-            state.value = state.value.copy(libraryRoots = current.toList())
-        }
-        Result.success(Unit)
-    }
-
-    override suspend fun removeRoot(root: LibraryRoot): Result<Unit> = withContext(ioDispatcher) {
-        mutex.withLock {
-            val current = readRoots().toMutableList()
-            // Match by path — UI passes the full data class, but path is the stable identity.
-            val changed = current.removeAll { it.path == root.path }
-            if (changed) {
+    override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> =
+        withContext(ioDispatcher) {
+            mutex.withLock {
+                val current = readRoots().toMutableList()
+                current.removeAll { it.path == root.path }
+                current += root
                 writeRoots(current)
                 state.value = state.value.copy(libraryRoots = current.toList())
             }
+            Result.success(Unit)
         }
-        Result.success(Unit)
-    }
 
-    override suspend fun setCloudBucket(bucket: String?): Result<Unit> = withContext(ioDispatcher) {
-        val normalized = bucket?.takeIf { it.isNotBlank() }
-        if (normalized == null) {
-            node.remove(KEY_CLOUD_BUCKET)
-        } else {
-            node.put(KEY_CLOUD_BUCKET, normalized)
-        }
-        node.flush()
-        state.value = state.value.copy(cloudBucket = normalized)
-        Result.success(Unit)
-    }
-
-    override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit> = withContext(ioDispatcher) {
-        mutex.withLock {
-            val current = readSelfContained().toMutableSet()
-            val changed = if (value) current.add(uuid) else current.remove(uuid)
-            if (changed) {
-                writeSelfContained(current)
-                state.value = state.value.copy(selfContainedProjects = current.toSet())
+    override suspend fun removeRoot(root: LibraryRoot): Result<Unit> =
+        withContext(ioDispatcher) {
+            mutex.withLock {
+                val current = readRoots().toMutableList()
+                // Match by path — UI passes the full data class, but path is the stable identity.
+                val changed = current.removeAll { it.path == root.path }
+                if (changed) {
+                    writeRoots(current)
+                    state.value = state.value.copy(libraryRoots = current.toList())
+                }
             }
+            Result.success(Unit)
         }
-        Result.success(Unit)
-    }
 
-    override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> = withContext(ioDispatcher) {
-        node.putLong(KEY_CACHE_MAX_BYTES, settings.maxSizeBytes)
-        node.putBoolean(KEY_CACHE_LRU, settings.lruEnabled)
-        node.flush()
-        state.value = state.value.copy(cacheSettings = settings)
-        Result.success(Unit)
-    }
-
-    override suspend fun markFirstRunComplete(flags: OnboardingSkipFlags): Result<Unit> = withContext(ioDispatcher) {
-        mutex.withLock {
-            val now = Clock.System.now()
-            // Atomic: write all keys, flush once, then publish a single Settings emission so
-            // observers see timestamp + flags together (never one without the other).
-            node.put(KEY_FIRST_RUN_COMPLETED_AT, now.toString())
-            node.putBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, flags.samplesSkipped)
-            node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, flags.samplesPromptDismissed)
-            node.flush()
-            state.value = state.value.copy(
-                firstRunCompletedAt = now,
-                onboardingSkipped = flags,
-            )
-        }
-        Result.success(Unit)
-    }
-
-    override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> = withContext(ioDispatcher) {
-        mutex.withLock {
-            val current = state.value.onboardingSkipped
-            val updated = when (kind) {
-                OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
+    override suspend fun setCloudBucket(bucket: String?): Result<Unit> =
+        withContext(ioDispatcher) {
+            val normalized = bucket?.takeIf { it.isNotBlank() }
+            if (normalized == null) {
+                node.remove(KEY_CLOUD_BUCKET)
+            } else {
+                node.put(KEY_CLOUD_BUCKET, normalized)
             }
-            node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, updated.samplesPromptDismissed)
             node.flush()
-            state.value = state.value.copy(onboardingSkipped = updated)
+            state.value = state.value.copy(cloudBucket = normalized)
+            Result.success(Unit)
         }
-        Result.success(Unit)
-    }
 
-    override suspend fun resetFirstRun(): Result<Unit> = withContext(ioDispatcher) {
-        mutex.withLock {
-            // Atomic: clear all three onboarding-gate keys, flush once, then publish a single
-            // Settings emission so observers see the reset state in one shot. Roots / plugin
-            // folders / cloud config are intentionally untouched — this is only for re-triggering
-            // the onboarding flow in dev.
-            node.remove(KEY_FIRST_RUN_COMPLETED_AT)
-            node.remove(KEY_ONBOARDING_SAMPLES_SKIPPED)
-            node.remove(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED)
+    override suspend fun setSelfContained(
+        uuid: ProjectUuid,
+        value: Boolean,
+    ): Result<Unit> =
+        withContext(ioDispatcher) {
+            mutex.withLock {
+                val current = readSelfContained().toMutableSet()
+                val changed = if (value) current.add(uuid) else current.remove(uuid)
+                if (changed) {
+                    writeSelfContained(current)
+                    state.value = state.value.copy(selfContainedProjects = current.toSet())
+                }
+            }
+            Result.success(Unit)
+        }
+
+    override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> =
+        withContext(ioDispatcher) {
+            node.putLong(KEY_CACHE_MAX_BYTES, settings.maxSizeBytes)
+            node.putBoolean(KEY_CACHE_LRU, settings.lruEnabled)
             node.flush()
-            state.value = state.value.copy(
-                firstRunCompletedAt = null,
-                onboardingSkipped = OnboardingSkipFlags(),
-            )
+            state.value = state.value.copy(cacheSettings = settings)
+            Result.success(Unit)
         }
-        Result.success(Unit)
-    }
 
-    override suspend fun setPluginFolders(folders: List<String>): Result<Unit> = withContext(ioDispatcher) {
-        val normalized = folders
-            .asSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .map { Paths.get(it).toAbsolutePath().normalize().toString() }
-            .distinct()
-            .toList()
-        writePluginFolders(normalized)
-        state.value = state.value.copy(pluginFolders = normalized)
-        Result.success(Unit)
-    }
+    override suspend fun markFirstRunComplete(flags: OnboardingSkipFlags): Result<Unit> =
+        withContext(ioDispatcher) {
+            mutex.withLock {
+                val now = Clock.System.now()
+                // Atomic: write all keys, flush once, then publish a single Settings emission so
+                // observers see timestamp + flags together (never one without the other).
+                node.put(KEY_FIRST_RUN_COMPLETED_AT, now.toString())
+                node.putBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, flags.samplesSkipped)
+                node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, flags.samplesPromptDismissed)
+                node.flush()
+                state.value =
+                    state.value.copy(
+                        firstRunCompletedAt = now,
+                        onboardingSkipped = flags,
+                    )
+            }
+            Result.success(Unit)
+        }
+
+    override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> =
+        withContext(ioDispatcher) {
+            mutex.withLock {
+                val current = state.value.onboardingSkipped
+                val updated =
+                    when (kind) {
+                        OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
+                    }
+                node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, updated.samplesPromptDismissed)
+                node.flush()
+                state.value = state.value.copy(onboardingSkipped = updated)
+            }
+            Result.success(Unit)
+        }
+
+    override suspend fun resetFirstRun(): Result<Unit> =
+        withContext(ioDispatcher) {
+            mutex.withLock {
+                // Atomic: clear all three onboarding-gate keys, flush once, then publish a single
+                // Settings emission so observers see the reset state in one shot. Roots / plugin
+                // folders / cloud config are intentionally untouched — this is only for re-triggering
+                // the onboarding flow in dev.
+                node.remove(KEY_FIRST_RUN_COMPLETED_AT)
+                node.remove(KEY_ONBOARDING_SAMPLES_SKIPPED)
+                node.remove(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED)
+                node.flush()
+                state.value =
+                    state.value.copy(
+                        firstRunCompletedAt = null,
+                        onboardingSkipped = OnboardingSkipFlags(),
+                    )
+            }
+            Result.success(Unit)
+        }
+
+    override suspend fun setPluginFolders(folders: List<String>): Result<Unit> =
+        withContext(ioDispatcher) {
+            val normalized =
+                folders
+                    .asSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .map {
+                        Paths
+                            .get(it)
+                            .toAbsolutePath()
+                            .normalize()
+                            .toString()
+                    }.distinct()
+                    .toList()
+            writePluginFolders(normalized)
+            state.value = state.value.copy(pluginFolders = normalized)
+            Result.success(Unit)
+        }
 
     // ---- read helpers --------------------------------------------------------------------------
 
@@ -184,12 +204,15 @@ class PreferencesSettingsRepository(
         val bucket = node.get(KEY_CLOUD_BUCKET, null)?.takeIf { it.isNotBlank() }
         val selfContained = readSelfContained()
         val cache = readCacheSettings()
-        val firstRunCompletedAt = node.get(KEY_FIRST_RUN_COMPLETED_AT, null)
-            ?.let { runCatching { Instant.parse(it) }.getOrNull() }
-        val onboardingSkipped = OnboardingSkipFlags(
-            samplesSkipped = node.getBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, false),
-            samplesPromptDismissed = node.getBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, false),
-        )
+        val firstRunCompletedAt =
+            node
+                .get(KEY_FIRST_RUN_COMPLETED_AT, null)
+                ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+        val onboardingSkipped =
+            OnboardingSkipFlags(
+                samplesSkipped = node.getBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, false),
+                samplesPromptDismissed = node.getBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, false),
+            )
         val pluginFolders = readPluginFolders()
         return Settings(
             libraryRoots = roots,
@@ -205,16 +228,18 @@ class PreferencesSettingsRepository(
     private fun readRoots(): List<LibraryRoot> {
         val raw = node.get(KEY_ROOTS, null) ?: return emptyList()
         return runCatching {
-            json.decodeFromString(ListSerializer(StoredRoot.serializer()), raw)
+            json
+                .decodeFromString(ListSerializer(StoredRoot.serializer()), raw)
                 .map { it.toDomain() }
         }.getOrDefault(emptyList())
     }
 
     private fun writeRoots(roots: List<LibraryRoot>) {
-        val payload = json.encodeToString(
-            ListSerializer(StoredRoot.serializer()),
-            roots.map { StoredRoot.fromDomain(it) },
-        )
+        val payload =
+            json.encodeToString(
+                ListSerializer(StoredRoot.serializer()),
+                roots.map { StoredRoot.fromDomain(it) },
+            )
         node.put(KEY_ROOTS, payload)
         node.flush()
     }
@@ -222,17 +247,19 @@ class PreferencesSettingsRepository(
     private fun readSelfContained(): Set<ProjectUuid> {
         val raw = node.get(KEY_SELF_CONTAINED, null) ?: return emptySet()
         return runCatching {
-            json.decodeFromString(ListSerializer(String.serializer()), raw)
+            json
+                .decodeFromString(ListSerializer(String.serializer()), raw)
                 .map { ProjectUuid(it) }
                 .toSet()
         }.getOrDefault(emptySet())
     }
 
     private fun writeSelfContained(values: Set<ProjectUuid>) {
-        val payload = json.encodeToString(
-            ListSerializer(String.serializer()),
-            values.map { it.value },
-        )
+        val payload =
+            json.encodeToString(
+                ListSerializer(String.serializer()),
+                values.map { it.value },
+            )
         node.put(KEY_SELF_CONTAINED, payload)
         node.flush()
     }
@@ -245,10 +272,11 @@ class PreferencesSettingsRepository(
     }
 
     private fun writePluginFolders(folders: List<String>) {
-        val payload = json.encodeToString(
-            ListSerializer(String.serializer()),
-            folders,
-        )
+        val payload =
+            json.encodeToString(
+                ListSerializer(String.serializer()),
+                folders,
+            )
         node.put(KEY_PLUGIN_FOLDERS, payload)
         node.flush()
     }
@@ -267,34 +295,51 @@ class PreferencesSettingsRepository(
         val alias: String? = null,
         @SerialName("external_kind") val externalKind: String? = null,
     ) {
-        fun toDomain(): LibraryRoot = when (kind) {
-            "projects" -> LibraryRoot.Projects(path)
+        fun toDomain(): LibraryRoot =
+            when (kind) {
+                "projects" -> {
+                    LibraryRoot.Projects(path)
+                }
 
-            "user_samples" -> LibraryRoot.UserSamples(path)
+                "user_samples" -> {
+                    LibraryRoot.UserSamples(path)
+                }
 
-            "external" -> LibraryRoot.External(
-                path = path,
-                alias = alias.orEmpty(),
-                kind = externalKind?.let { runCatching { ExternalKind.valueOf(it) }.getOrNull() }
-                    ?: ExternalKind.Other,
-            )
+                "external" -> {
+                    LibraryRoot.External(
+                        path = path,
+                        alias = alias.orEmpty(),
+                        kind =
+                            externalKind?.let { runCatching { ExternalKind.valueOf(it) }.getOrNull() }
+                                ?: ExternalKind.Other,
+                    )
+                }
 
-            else -> LibraryRoot.Projects(path)
-        }
+                else -> {
+                    LibraryRoot.Projects(path)
+                }
+            }
 
         companion object {
-            fun fromDomain(root: LibraryRoot): StoredRoot = when (root) {
-                is LibraryRoot.Projects -> StoredRoot(kind = "projects", path = root.path)
+            fun fromDomain(root: LibraryRoot): StoredRoot =
+                when (root) {
+                    is LibraryRoot.Projects -> {
+                        StoredRoot(kind = "projects", path = root.path)
+                    }
 
-                is LibraryRoot.UserSamples -> StoredRoot(kind = "user_samples", path = root.path)
+                    is LibraryRoot.UserSamples -> {
+                        StoredRoot(kind = "user_samples", path = root.path)
+                    }
 
-                is LibraryRoot.External -> StoredRoot(
-                    kind = "external",
-                    path = root.path,
-                    alias = root.alias,
-                    externalKind = root.kind.name,
-                )
-            }
+                    is LibraryRoot.External -> {
+                        StoredRoot(
+                            kind = "external",
+                            path = root.path,
+                            alias = root.alias,
+                            externalKind = root.kind.name,
+                        )
+                    }
+                }
         }
     }
 
@@ -316,9 +361,10 @@ class PreferencesSettingsRepository(
          */
         const val KEY_LEGACY_CLOUD_CREDENTIAL = "cloud_credential_json"
 
-        val json: Json = Json {
-            ignoreUnknownKeys = true
-            encodeDefaults = false
-        }
+        val json: Json =
+            Json {
+                ignoreUnknownKeys = true
+                encodeDefaults = false
+            }
     }
 }

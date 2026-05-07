@@ -5,7 +5,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class PaletteTest {
-
     @Test
     fun abletonPaletteCovers1Through14() {
         val keys = AbletonPalette.keys.sorted()

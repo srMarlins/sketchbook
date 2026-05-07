@@ -15,7 +15,6 @@ import kotlin.test.assertTrue
  * plumbed through `MetroViewModelFactory`.
  */
 class OrchestrationTest {
-
     // ---------- §4 — RootContent is rendering-only ----------
 
     /**
@@ -34,9 +33,11 @@ class OrchestrationTest {
      */
     @Test
     fun `RootContent has no observe+side-effect LaunchedEffect at top level`() {
-        val rootContent = Konsist.scopeFromProject()
-            .functions()
-            .firstOrNull { it.name == "RootContent" && it.isTopLevel }
+        val rootContent =
+            Konsist
+                .scopeFromProject()
+                .functions()
+                .firstOrNull { it.name == "RootContent" && it.isTopLevel }
         assertNotNull(rootContent, "RootContent function not found in project scope.")
 
         val body = rootContent.text
@@ -65,9 +66,11 @@ class OrchestrationTest {
      */
     @Test
     fun `DesktopAppGraph is annotated DependencyGraph`() {
-        val graph = Konsist.scopeFromProject()
-            .interfaces()
-            .firstOrNull { it.name == "DesktopAppGraph" }
+        val graph =
+            Konsist
+                .scopeFromProject()
+                .interfaces()
+                .firstOrNull { it.name == "DesktopAppGraph" }
         assertNotNull(graph, "DesktopAppGraph interface not found.")
         assertTrue(
             graph.hasAnnotation { it.name == "DependencyGraph" },
@@ -81,9 +84,11 @@ class OrchestrationTest {
      */
     @Test
     fun `DesktopAppGraph extends ViewModelGraph`() {
-        val graph = Konsist.scopeFromProject()
-            .interfaces()
-            .firstOrNull { it.name == "DesktopAppGraph" }
+        val graph =
+            Konsist
+                .scopeFromProject()
+                .interfaces()
+                .firstOrNull { it.name == "DesktopAppGraph" }
         assertNotNull(graph, "DesktopAppGraph interface not found.")
         // `parents()` returns both `extends` and `implements` for classes; for an interface, only
         // the extended interface list. Match by simple name to avoid pulling Metro types onto the
@@ -118,12 +123,17 @@ class OrchestrationTest {
     }
 
     /** Index of the `}` matching the `{` at [openIndex], or -1 if unbalanced. */
-    private fun matchingBrace(text: String, openIndex: Int): Int {
+    private fun matchingBrace(
+        text: String,
+        openIndex: Int,
+    ): Int {
         var depth = 0
         var i = openIndex
         while (i < text.length) {
             when (text[i]) {
-                '{' -> depth++
+                '{' -> {
+                    depth++
+                }
 
                 '}' -> {
                     depth--
@@ -167,14 +177,19 @@ class OrchestrationTest {
      * Walks past the parenthesised args (with paren-depth tracking) and then expects `{`.
      * Returns -1 if the lambda is missing or the parens are unbalanced.
      */
-    private fun findLambdaStart(text: String, callIndex: Int): Int {
+    private fun findLambdaStart(
+        text: String,
+        callIndex: Int,
+    ): Int {
         val parenStart = text.indexOf('(', callIndex)
         if (parenStart == -1) return -1
         var depth = 0
         var i = parenStart
         while (i < text.length) {
             when (text[i]) {
-                '(' -> depth++
+                '(' -> {
+                    depth++
+                }
 
                 ')' -> {
                     depth--

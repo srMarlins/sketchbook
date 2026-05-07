@@ -11,8 +11,9 @@ import app.cash.sqldelight.db.SqlPreparedStatement
  * drive FTS through `SqlDriver.execute` / `executeQuery` directly. The schema for `projects_fts`
  * still lives in `Catalog.sq` so migrations stay in one place.
  */
-class CatalogFts(private val driver: SqlDriver) {
-
+class CatalogFts(
+    private val driver: SqlDriver,
+) {
     fun upsert(
         rowid: Long,
         name: String,
@@ -23,10 +24,11 @@ class CatalogFts(private val driver: SqlDriver) {
     ) {
         driver.execute(
             identifier = null,
-            sql = """
+            sql =
+                """
                 INSERT INTO projects_fts (rowid, name, parent_dir, plugin_names, sample_filenames, notes)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """.trimIndent(),
+                """.trimIndent(),
             parameters = 6,
         ) {
             bindLong(0, rowid)
@@ -61,19 +63,23 @@ class CatalogFts(private val driver: SqlDriver) {
      * Phrase-quoting also gives prefix queries a stable shape (the caller can append `*` per
      * the FTS5 prefix-match docs once we surface that as a UI choice).
      */
-    fun search(query: String, limit: Int = DEFAULT_LIMIT): List<Long> {
+    fun search(
+        query: String,
+        limit: Int = DEFAULT_LIMIT,
+    ): List<Long> {
         val sanitized = sanitize(query)
         if (sanitized.isEmpty()) return emptyList()
         val out = ArrayList<Long>(minOf(limit, 64))
         driver.executeQuery(
             identifier = null,
-            sql = """
+            sql =
+                """
                 SELECT rowid
                 FROM projects_fts
                 WHERE projects_fts MATCH ?
                 ORDER BY bm25(projects_fts)
                 LIMIT ?
-            """.trimIndent(),
+                """.trimIndent(),
             mapper = { cursor: SqlCursor ->
                 while (cursor.next().value) {
                     cursor.getLong(0)?.let { out += it }
@@ -92,9 +98,12 @@ class CatalogFts(private val driver: SqlDriver) {
         // Strip everything that isn't a word character or whitespace, then re-quote each
         // surviving token as a phrase. FTS5 treats unquoted `-`, `:`, etc. as operators and
         // raises a SyntaxException; quoted phrases turn them back into literals.
-        val tokens = raw.trim().split(WHITESPACE)
-            .map { it.replace(QUOTE_OR_BAD, "") }
-            .filter { it.isNotBlank() }
+        val tokens =
+            raw
+                .trim()
+                .split(WHITESPACE)
+                .map { it.replace(QUOTE_OR_BAD, "") }
+                .filter { it.isNotBlank() }
         if (tokens.isEmpty()) return ""
         return tokens.joinToString(" ") { "\"$it\"" }
     }

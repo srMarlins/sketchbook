@@ -39,9 +39,12 @@ fun ShelfHeader(
             ProvideContentColor(colors.inkPrimary) {
                 Text(
                     title,
-                    style = AppTheme.typography.bodyEmphasis.copy(
-                        fontSize = androidx.compose.ui.unit.TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    ),
+                    style =
+                        AppTheme.typography.bodyEmphasis.copy(
+                            fontSize =
+                                androidx.compose.ui.unit
+                                    .TextUnit(15f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        ),
                 )
             }
             if (subtitle != null) {
@@ -60,21 +63,30 @@ fun ShelfHeader(
 }
 
 @Composable
-private fun ShelfHeaderAction(label: String, onClick: () -> Unit) {
+private fun ShelfHeaderAction(
+    label: String,
+    onClick: () -> Unit,
+) {
     val colors = AppTheme.colors
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
     ) {
         ProvideContentColor(colors.inkMuted) {
             Text(
                 label,
-                style = AppTheme.typography.mono.copy(
-                    fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
-                ),
+                style =
+                    AppTheme.typography.mono.copy(
+                        fontSize =
+                            androidx.compose.ui.unit
+                                .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        letterSpacing =
+                            androidx.compose.ui.unit
+                                .TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
             )
         }
     }

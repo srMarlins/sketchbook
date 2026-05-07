@@ -14,8 +14,10 @@ import kotlin.time.Instant
 class FakeWorkingTree(
     private val files: Map<String, FileBlob>,
 ) : WorkingTree {
-
-    data class FileBlob(val bytes: ByteArray, val mtime: Instant) {
+    data class FileBlob(
+        val bytes: ByteArray,
+        val mtime: Instant,
+    ) {
         val size: Long get() = bytes.size.toLong()
         val hash: BlobHash by lazy { hashOf(bytes) }
     }

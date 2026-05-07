@@ -29,41 +29,74 @@ import javax.xml.stream.events.StartElement
  * field, modulo casing.
  */
 object AlsParser {
-
-    private val factory: XMLInputFactory = XMLInputFactory.newInstance().apply {
-        setProperty(XMLInputFactory.SUPPORT_DTD, false)
-        setProperty("javax.xml.stream.isSupportingExternalEntities", false)
-        setProperty(XMLInputFactory.IS_REPLACING_ENTITY_REFERENCES, false)
-        // Caps entity expansion regardless of DTD settings; defense-in-depth on user-supplied .als.
-        runCatching { setProperty(XMLConstants.FEATURE_SECURE_PROCESSING, true) }
-        // .als never uses CDATA for bulk data and the Driver ignores Characters events anyway.
-        setProperty(XMLInputFactory.IS_COALESCING, false)
-    }
+    private val factory: XMLInputFactory =
+        XMLInputFactory.newInstance().apply {
+            setProperty(XMLInputFactory.SUPPORT_DTD, false)
+            setProperty("javax.xml.stream.isSupportingExternalEntities", false)
+            setProperty(XMLInputFactory.IS_REPLACING_ENTITY_REFERENCES, false)
+            // Caps entity expansion regardless of DTD settings; defense-in-depth on user-supplied .als.
+            runCatching { setProperty(XMLConstants.FEATURE_SECURE_PROCESSING, true) }
+            // .als never uses CDATA for bulk data and the Driver ignores Characters events anyway.
+            setProperty(XMLInputFactory.IS_COALESCING, false)
+        }
 
     private val creatorRegex = Regex("""Ableton Live\s+([\d.]+)""")
 
     /** Live's encoded time-signature value uses this denominator table; numerator = (val % 99) + 1. */
     private val denomTable = intArrayOf(1, 2, 4, 8, 16, 32, 64)
 
-    private val trackTags = setOf(
-        "MidiTrack",
-        "AudioTrack",
-        "ReturnTrack",
-        "GroupTrack",
-        "MasterTrack",
-        "MainTrack",
-    )
+    private val trackTags =
+        setOf(
+            "MidiTrack",
+            "AudioTrack",
+            "ReturnTrack",
+            "GroupTrack",
+            "MasterTrack",
+            "MainTrack",
+        )
 
-    private val nativeDeviceTags = setOf(
-        "Eq8", "EqEight", "Compressor2", "Compressor", "Limiter", "Saturator",
-        "AutoFilter", "Reverb", "Delay", "Echo", "Operator", "Wavetable",
-        "Simpler", "Sampler", "DrumGroupDevice", "InstrumentRack",
-        "AudioEffectGroupDevice", "MidiEffectGroupDevice", "InstrumentGroupDevice",
-        "Utility", "Gate", "Glue", "MultibandDynamics", "Spectrum", "Tuner",
-        "Phaser", "Chorus", "Flanger", "AutoPan", "BeatRepeat", "Vocoder",
-        "FrequencyShifter", "GrainDelay", "DrumBuss", "Pedal", "Amp", "Cabinet",
-        "Erosion", "Overdrive",
-    )
+    private val nativeDeviceTags =
+        setOf(
+            "Eq8",
+            "EqEight",
+            "Compressor2",
+            "Compressor",
+            "Limiter",
+            "Saturator",
+            "AutoFilter",
+            "Reverb",
+            "Delay",
+            "Echo",
+            "Operator",
+            "Wavetable",
+            "Simpler",
+            "Sampler",
+            "DrumGroupDevice",
+            "InstrumentRack",
+            "AudioEffectGroupDevice",
+            "MidiEffectGroupDevice",
+            "InstrumentGroupDevice",
+            "Utility",
+            "Gate",
+            "Glue",
+            "MultibandDynamics",
+            "Spectrum",
+            "Tuner",
+            "Phaser",
+            "Chorus",
+            "Flanger",
+            "AutoPan",
+            "BeatRepeat",
+            "Vocoder",
+            "FrequencyShifter",
+            "GrainDelay",
+            "DrumBuss",
+            "Pedal",
+            "Amp",
+            "Cabinet",
+            "Erosion",
+            "Overdrive",
+        )
 
     private val macPathPrefixes = listOf("/Volumes/", "/Users/", "/Library/", "/Applications/", "/private/")
 
@@ -88,7 +121,10 @@ object AlsParser {
 
     // ---- internals ----
 
-    private class TrackFrame(val tag: String, var name: String? = null)
+    private class TrackFrame(
+        val tag: String,
+        var name: String? = null,
+    )
 
     private class PendingPlugin(
         val track: String?,
@@ -119,8 +155,9 @@ object AlsParser {
         }
     }
 
-    private class Driver(private val reader: XMLEventReader) {
-
+    private class Driver(
+        private val reader: XMLEventReader,
+    ) {
         private val pathStack = ArrayDeque<String>()
         private val trackStack = ArrayDeque<TrackFrame>()
 
@@ -143,8 +180,14 @@ object AlsParser {
             while (reader.hasNext()) {
                 val event = reader.nextEvent()
                 when {
-                    event.isStartElement -> handleStart(event.asStartElement())
-                    event.isEndElement -> handleEnd(event.asEndElement())
+                    event.isStartElement -> {
+                        handleStart(event.asStartElement())
+                    }
+
+                    event.isEndElement -> {
+                        handleEnd(event.asEndElement())
+                    }
+
                     else -> {}
                 }
             }
@@ -201,12 +244,16 @@ object AlsParser {
             // Project root key: <ScaleInformation><RootNote Value="N"/><Name Value="Major|Minor|..."/></ScaleInformation>.
             if (parentTag() == "ScaleInformation") {
                 when (tag) {
-                    "RootNote" -> if (rootNote == null) {
-                        rootNote = start.attr("Value")?.toIntOrNull()
+                    "RootNote" -> {
+                        if (rootNote == null) {
+                            rootNote = start.attr("Value")?.toIntOrNull()
+                        }
                     }
 
-                    "Name" -> if (scaleName == null) {
-                        scaleName = start.attr("Value")
+                    "Name" -> {
+                        if (scaleName == null) {
+                            scaleName = start.attr("Value")
+                        }
                     }
                 }
             }
@@ -229,40 +276,62 @@ object AlsParser {
 
             // Plugin device boundaries.
             when (tag) {
-                "PluginDevice" -> pendingPlugin = PendingPlugin(track = currentTrackName())
-
-                "AuPluginDevice" -> if (!isInsidePluginDevice()) {
-                    pendingPlugin = PendingPlugin(track = currentTrackName(), forcedFormat = PluginFormat.Au)
+                "PluginDevice" -> {
+                    pendingPlugin = PendingPlugin(track = currentTrackName())
                 }
 
-                "SampleRef" -> pendingSample = PendingSample()
+                "AuPluginDevice" -> {
+                    if (!isInsidePluginDevice()) {
+                        pendingPlugin = PendingPlugin(track = currentTrackName(), forcedFormat = PluginFormat.Au)
+                    }
+                }
+
+                "SampleRef" -> {
+                    pendingSample = PendingSample()
+                }
             }
 
             // Plugin name extraction.
             pendingPlugin?.let { plug ->
                 when (tag) {
-                    "Vst3PluginInfo" -> plug.format = PluginFormat.Vst3
+                    "Vst3PluginInfo" -> {
+                        plug.format = PluginFormat.Vst3
+                    }
 
-                    "VstPluginInfo" -> plug.format = PluginFormat.Vst2
+                    "VstPluginInfo" -> {
+                        plug.format = PluginFormat.Vst2
+                    }
 
-                    "AuPluginInfo" -> if (plug.forcedFormat == null) plug.format = PluginFormat.Au
+                    "AuPluginInfo" -> {
+                        if (plug.forcedFormat == null) plug.format = PluginFormat.Au
+                    }
 
-                    "Name" -> when (parentTag()) {
-                        "Vst3PluginInfo", "AuPluginInfo" -> plug.name = start.attr("Value") ?: plug.name
+                    "Name" -> {
+                        when (parentTag()) {
+                            "Vst3PluginInfo", "AuPluginInfo" -> {
+                                plug.name = start.attr("Value") ?: plug.name
+                            }
 
-                        "AuPluginDevice" -> if (plug.forcedFormat == PluginFormat.Au) {
+                            "AuPluginDevice" -> {
+                                if (plug.forcedFormat == PluginFormat.Au) {
+                                    plug.name = start.attr("Value") ?: plug.name
+                                }
+                            }
+                        }
+                    }
+
+                    "PlugName" -> {
+                        if (parentTag() == "VstPluginInfo") {
                             plug.name = start.attr("Value") ?: plug.name
                         }
                     }
 
-                    "PlugName" -> if (parentTag() == "VstPluginInfo") {
-                        plug.name = start.attr("Value") ?: plug.name
-                    }
-
-                    "Manufacturer" -> if (plug.name == null &&
-                        (parentTag() == "AuPluginInfo" || parentTag() == "AuPluginDevice")
-                    ) {
-                        plug.name = start.attr("Value") ?: plug.name
+                    "Manufacturer" -> {
+                        if (plug.name == null &&
+                            (parentTag() == "AuPluginInfo" || parentTag() == "AuPluginDevice")
+                        ) {
+                            plug.name = start.attr("Value") ?: plug.name
+                        }
                     }
                 }
             }
@@ -278,17 +347,27 @@ object AlsParser {
                 }
                 if (samp.insidePrimaryFileRef && parentTag() == "FileRef") {
                     when (tag) {
-                        "Path" -> if (samp.collectedPath == null) {
-                            start.attr("Value")?.let { samp.collectedPath = it }
+                        "Path" -> {
+                            if (samp.collectedPath == null) {
+                                start.attr("Value")?.let { samp.collectedPath = it }
+                            }
                         }
 
-                        "Name" -> start.attr("Value")?.let { samp.relName = it }
+                        "Name" -> {
+                            start.attr("Value")?.let { samp.relName = it }
+                        }
 
-                        "RelativePathType" -> start.attr("Value")?.toIntOrNull()?.let { samp.relativePathType = it }
+                        "RelativePathType" -> {
+                            start.attr("Value")?.toIntOrNull()?.let { samp.relativePathType = it }
+                        }
 
-                        "OriginalFileSize" -> start.attr("Value")?.toLongOrNull()?.let { samp.originalFileSize = it }
+                        "OriginalFileSize" -> {
+                            start.attr("Value")?.toLongOrNull()?.let { samp.originalFileSize = it }
+                        }
 
-                        "OriginalCrc" -> start.attr("Value")?.toLongOrNull()?.let { samp.originalCrc = it }
+                        "OriginalCrc" -> {
+                            start.attr("Value")?.toLongOrNull()?.let { samp.originalCrc = it }
+                        }
                     }
                 }
                 // Live ≤10 fallback: per-sample metadata lives in a nested
@@ -301,12 +380,16 @@ object AlsParser {
                     grandparentTag() == "FileRef"
                 ) {
                     when (tag) {
-                        "FileSize" -> if (samp.originalFileSize == null) {
-                            start.attr("Value")?.toLongOrNull()?.let { samp.originalFileSize = it }
+                        "FileSize" -> {
+                            if (samp.originalFileSize == null) {
+                                start.attr("Value")?.toLongOrNull()?.let { samp.originalFileSize = it }
+                            }
                         }
 
-                        "Crc" -> if (samp.originalCrc == null) {
-                            start.attr("Value")?.toLongOrNull()?.let { samp.originalCrc = it }
+                        "Crc" -> {
+                            if (samp.originalCrc == null) {
+                                start.attr("Value")?.toLongOrNull()?.let { samp.originalCrc = it }
+                            }
                         }
                     }
                 }
@@ -346,11 +429,12 @@ object AlsParser {
                 pendingPlugin = null
             } else if (tag == "AuPluginDevice" && pendingPlugin?.forcedFormat == PluginFormat.Au) {
                 pendingPlugin?.let { p ->
-                    plugins += PluginRef(
-                        name = p.name ?: defaultNameFor(PluginFormat.Au),
-                        format = PluginFormat.Au,
-                        trackName = p.track,
-                    )
+                    plugins +=
+                        PluginRef(
+                            name = p.name ?: defaultNameFor(PluginFormat.Au),
+                            format = PluginFormat.Au,
+                            trackName = p.track,
+                        )
                 }
                 pendingPlugin = null
             }
@@ -362,14 +446,15 @@ object AlsParser {
             if (tag == "SampleRef") {
                 pendingSample?.let { ps ->
                     ps.resolvedPath()?.let { path ->
-                        samples += SampleRef(
-                            rawPath = path,
-                            relativePathType = ps.relativePathType,
-                            originalFileSize = ps.originalFileSize,
-                            originalCrc = ps.originalCrc,
-                            lastModDate = ps.lastModDate,
-                            hasOriginalFileRefSibling = ps.hasOriginalFileRefSibling,
-                        )
+                        samples +=
+                            SampleRef(
+                                rawPath = path,
+                                relativePathType = ps.relativePathType,
+                                originalFileSize = ps.originalFileSize,
+                                originalCrc = ps.originalCrc,
+                                lastModDate = ps.lastModDate,
+                                hasOriginalFileRefSibling = ps.hasOriginalFileRefSibling,
+                            )
                     }
                 }
                 pendingSample = null
@@ -392,23 +477,30 @@ object AlsParser {
         }
 
         private fun parentTag(): String? = pathStack.elementAtOrNull(pathStack.size - 2)
+
         private fun grandparentTag(): String? = pathStack.elementAtOrNull(pathStack.size - 3)
+
         private fun isInsidePluginDevice(): Boolean = pathStack.contains("PluginDevice")
+
         private fun currentTrackName(): String? = trackStack.lastOrNull()?.name
     }
 
-    private fun defaultNameFor(fmt: PluginFormat): String = when (fmt) {
-        PluginFormat.Vst3 -> "Unknown VST3"
-        PluginFormat.Vst2 -> "Unknown VST"
-        PluginFormat.Au -> "Unknown AU"
-        PluginFormat.AbletonNative -> "Unknown Native"
-        PluginFormat.Unknown -> "Unknown"
-    }
+    private fun defaultNameFor(fmt: PluginFormat): String =
+        when (fmt) {
+            PluginFormat.Vst3 -> "Unknown VST3"
+            PluginFormat.Vst2 -> "Unknown VST"
+            PluginFormat.Au -> "Unknown AU"
+            PluginFormat.AbletonNative -> "Unknown Native"
+            PluginFormat.Unknown -> "Unknown"
+        }
 
     /** Live root-note encoding: 0=C ascending chromatic to 11=B. Modulo canonicalises out-of-range values. */
     private val pitchClasses = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
-    private fun deriveKeySignature(rootNote: Int?, scaleName: String?): String? {
+    private fun deriveKeySignature(
+        rootNote: Int?,
+        scaleName: String?,
+    ): String? {
         if (rootNote == null || scaleName.isNullOrBlank()) return null
         val pitch = pitchClasses[((rootNote % 12) + 12) % 12]
         val name = scaleName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }

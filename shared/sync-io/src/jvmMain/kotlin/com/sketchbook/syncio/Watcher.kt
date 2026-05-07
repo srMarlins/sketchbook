@@ -39,54 +39,58 @@ class Watcher(
     private val debounce: Duration = 300.milliseconds,
     private val clock: Clock = Clock.System,
 ) {
+    fun watch(root: Path): Flow<SaveEvent> =
+        channelFlow {
+            // Per-path pending debounce job. Atomic replace+cancel pattern: each new event swaps in
+            // a fresh job and cancels whatever was there. Cleared by the job itself once it fires.
+            val pending = ConcurrentHashMap<Path, Job>()
+            val saveScope = this
 
-    fun watch(root: Path): Flow<SaveEvent> = channelFlow {
-        // Per-path pending debounce job. Atomic replace+cancel pattern: each new event swaps in
-        // a fresh job and cancels whatever was there. Cleared by the job itself once it fires.
-        val pending = ConcurrentHashMap<Path, Job>()
-        val saveScope = this
+            val watcher =
+                DirectoryWatcher
+                    .builder()
+                    .path(root)
+                    .listener { event ->
+                        if (!saveScope.isActive) return@listener
+                        val target = event.path() ?: return@listener
+                        when (event.eventType()) {
+                            DirectoryChangeEvent.EventType.CREATE,
+                            DirectoryChangeEvent.EventType.MODIFY,
+                            -> {
+                                val newJob =
+                                    saveScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
+                                        delay(debounce)
+                                        val now = clock.now()
+                                        // Only emit if we're still the registered job for this path.
+                                        // If a later event swapped us out, our cancellation already fired.
+                                        pending.remove(target, coroutineContext[Job])
+                                        trySend(SaveEvent.Saved(target, now))
+                                    }
+                                val previous = pending.put(target, newJob)
+                                previous?.cancel()
+                                newJob.start()
+                            }
 
-        val watcher = DirectoryWatcher.builder()
-            .path(root)
-            .listener { event ->
-                if (!saveScope.isActive) return@listener
-                val target = event.path() ?: return@listener
-                when (event.eventType()) {
-                    DirectoryChangeEvent.EventType.CREATE,
-                    DirectoryChangeEvent.EventType.MODIFY,
-                    -> {
-                        val newJob = saveScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
-                            delay(debounce)
-                            val now = clock.now()
-                            // Only emit if we're still the registered job for this path.
-                            // If a later event swapped us out, our cancellation already fired.
-                            pending.remove(target, coroutineContext[Job])
-                            trySend(SaveEvent.Saved(target, now))
+                            DirectoryChangeEvent.EventType.DELETE -> {
+                                // Cancel any in-flight Save debounce for the same path so a delete
+                                // immediately after a save doesn't race.
+                                pending.remove(target)?.cancel()
+                                trySend(SaveEvent.Removed(target, clock.now()))
+                            }
+
+                            DirectoryChangeEvent.EventType.OVERFLOW -> {
+                                Unit
+                            }
                         }
-                        val previous = pending.put(target, newJob)
-                        previous?.cancel()
-                        newJob.start()
-                    }
+                    }.build()
 
-                    DirectoryChangeEvent.EventType.DELETE -> {
-                        // Cancel any in-flight Save debounce for the same path so a delete
-                        // immediately after a save doesn't race.
-                        pending.remove(target)?.cancel()
-                        trySend(SaveEvent.Removed(target, clock.now()))
-                    }
-
-                    DirectoryChangeEvent.EventType.OVERFLOW -> Unit
-                }
+            watcher.watchAsync()
+            awaitClose {
+                // Cancel any outstanding debouncers so a graceful shutdown doesn't strand
+                // coroutines that would emit after the channel is closed.
+                pending.values.forEach { it.cancel() }
+                pending.clear()
+                watcher.close()
             }
-            .build()
-
-        watcher.watchAsync()
-        awaitClose {
-            // Cancel any outstanding debouncers so a graceful shutdown doesn't strand
-            // coroutines that would emit after the channel is closed.
-            pending.values.forEach { it.cancel() }
-            pending.clear()
-            watcher.close()
         }
-    }
 }

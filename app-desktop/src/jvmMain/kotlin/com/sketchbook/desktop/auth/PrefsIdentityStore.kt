@@ -13,8 +13,9 @@ import java.util.prefs.Preferences
  * Keys are versioned (`*_v1`) so a future schema change can ignore stale entries instead of
  * mis-decoding them.
  */
-class PrefsIdentityStore(private val node: Preferences) {
-
+class PrefsIdentityStore(
+    private val node: Preferences,
+) {
     fun load(): AuthState.SignedIn? {
         val sub = node.get(KEY_SUB, null) ?: return null
         val email = node.get(KEY_EMAIL, null) ?: return null

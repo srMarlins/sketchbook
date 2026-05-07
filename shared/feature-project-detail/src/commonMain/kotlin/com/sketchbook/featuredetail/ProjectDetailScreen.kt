@@ -54,10 +54,11 @@ internal fun ProjectDetailContent(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(AppTheme.colors.surfacePage)
-            .padding(PaddingValues(AppTheme.spacing.md)),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(AppTheme.colors.surfacePage)
+                .padding(PaddingValues(AppTheme.spacing.md)),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
     ) {
         Header(
@@ -106,36 +107,50 @@ private fun Header(
 }
 
 @Composable
-private fun LockSlot(status: LockStatus, onForceTakeLock: () -> Unit) {
+private fun LockSlot(
+    status: LockStatus,
+    onForceTakeLock: () -> Unit,
+) {
     when (status) {
-        LockStatus.Free -> Unit
+        LockStatus.Free -> {
+            Unit
+        }
 
         // chrome stays clean when there's nothing to say
-        is LockStatus.Ours -> LockBadge(
-            label = "editing here",
-            color = AppTheme.colors.pinGreen,
-        )
+        is LockStatus.Ours -> {
+            LockBadge(
+                label = "editing here",
+                color = AppTheme.colors.pinGreen,
+            )
+        }
 
-        is LockStatus.HeldByOther -> LockBadge(
-            label = "locked",
-            color = AppTheme.colors.accentSecondary,
-            detail = status.ownerHostName,
-            actionLabel = "Force-take",
-            onAction = onForceTakeLock,
-        )
+        is LockStatus.HeldByOther -> {
+            LockBadge(
+                label = "locked",
+                color = AppTheme.colors.accentSecondary,
+                detail = status.ownerHostName,
+                actionLabel = "Force-take",
+                onAction = onForceTakeLock,
+            )
+        }
 
-        is LockStatus.Stale -> LockBadge(
-            label = "stale lock",
-            color = AppTheme.colors.pinOrange,
-            detail = status.ownerHostName,
-            actionLabel = "Take",
-            onAction = onForceTakeLock,
-        )
+        is LockStatus.Stale -> {
+            LockBadge(
+                label = "stale lock",
+                color = AppTheme.colors.pinOrange,
+                detail = status.ownerHostName,
+                actionLabel = "Take",
+                onAction = onForceTakeLock,
+            )
+        }
     }
 }
 
 @Composable
-private fun Tabs(current: ProjectDetailViewModel.Tab, onSelect: (ProjectDetailViewModel.Tab) -> Unit) {
+private fun Tabs(
+    current: ProjectDetailViewModel.Tab,
+    onSelect: (ProjectDetailViewModel.Tab) -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
@@ -249,13 +264,14 @@ private fun PluginsTab(plugins: List<PluginRef>) {
     }
 }
 
-private fun pluginFormatLabel(format: PluginFormat): String = when (format) {
-    PluginFormat.Vst3 -> "VST3"
-    PluginFormat.Vst2 -> "VST"
-    PluginFormat.Au -> "AU"
-    PluginFormat.AbletonNative -> "LIVE"
-    PluginFormat.Unknown -> "?"
-}
+private fun pluginFormatLabel(format: PluginFormat): String =
+    when (format) {
+        PluginFormat.Vst3 -> "VST3"
+        PluginFormat.Vst2 -> "VST"
+        PluginFormat.Au -> "AU"
+        PluginFormat.AbletonNative -> "LIVE"
+        PluginFormat.Unknown -> "?"
+    }
 
 @Composable
 private fun HistoryTab(state: ProjectDetailViewModel.State) {

@@ -5,20 +5,20 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class CatalogFtsTest {
-
     private fun seed(): Pair<com.sketchbook.catalog.db.Catalog, CatalogFts> {
         val handle = CatalogDb.openInMemory()
         val catalog = handle.catalog
         val fts = CatalogFts(handle.driver)
         // Five fake projects. Vary on `name` + `plugin_names` + `sample_filenames` so we can
         // disambiguate which gets the highest bm25 score for "kick".
-        val rows = listOf(
-            Triple("kick_drum_lab", "Drumbus Saturator", "kick.wav snare.wav hat.wav"),
-            Triple("punchy_kick_test", "Eq8 Compressor2", "kick_thump.wav"),
-            Triple("ambient_pad", "Reverb Echo", "pad.wav"),
-            Triple("bass_track", "Limiter", "sub.wav"),
-            Triple("kicks_sample_pack", "Operator", "kick.wav kick2.wav kick3.wav"),
-        )
+        val rows =
+            listOf(
+                Triple("kick_drum_lab", "Drumbus Saturator", "kick.wav snare.wav hat.wav"),
+                Triple("punchy_kick_test", "Eq8 Compressor2", "kick_thump.wav"),
+                Triple("ambient_pad", "Reverb Echo", "pad.wav"),
+                Triple("bass_track", "Limiter", "sub.wav"),
+                Triple("kicks_sample_pack", "Operator", "kick.wav kick2.wav kick3.wav"),
+            )
         rows.forEachIndexed { idx, (name, plug, samp) ->
             catalog.catalogQueries.insertOrReplaceProject(
                 path = "/lib/$name.als",
@@ -69,13 +69,14 @@ class CatalogFtsTest {
         val (_, fts) = seed()
         val ids = fts.search("kick")
         // Lookup names for the returned rowids.
-        val idToName = listOf(
-            "kick_drum_lab",
-            "punchy_kick_test",
-            "ambient_pad",
-            "bass_track",
-            "kicks_sample_pack",
-        ).withIndex().associate { (i, n) -> (i + 1L) to n }
+        val idToName =
+            listOf(
+                "kick_drum_lab",
+                "punchy_kick_test",
+                "ambient_pad",
+                "bass_track",
+                "kicks_sample_pack",
+            ).withIndex().associate { (i, n) -> (i + 1L) to n }
         val orderedNames = ids.map { idToName[it] ?: "?" }
         // The "kicks_sample_pack" entry has 3 kick* sample filenames + "kicks" in name → high density.
         // The "kick_drum_lab" entry has 1 kick.wav + "kick" in name.

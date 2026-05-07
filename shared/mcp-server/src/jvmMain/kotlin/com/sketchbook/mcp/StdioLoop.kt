@@ -12,13 +12,18 @@ import java.io.PrintStream
  *
  * Keeps the stdio plumbing out of the server class so it stays testable in commonTest.
  */
-fun runStdio(server: McpServer, input: java.io.InputStream = System.`in`, output: PrintStream = System.out): Unit = runBlocking {
-    val reader = BufferedReader(InputStreamReader(input, Charsets.UTF_8))
-    while (true) {
-        val line = withContext(Dispatchers.IO) { reader.readLine() } ?: break
-        if (line.isBlank()) continue
-        val response = server.handle(line) ?: continue
-        output.println(response)
-        output.flush()
+fun runStdio(
+    server: McpServer,
+    input: java.io.InputStream = System.`in`,
+    output: PrintStream = System.out,
+): Unit =
+    runBlocking {
+        val reader = BufferedReader(InputStreamReader(input, Charsets.UTF_8))
+        while (true) {
+            val line = withContext(Dispatchers.IO) { reader.readLine() } ?: break
+            if (line.isBlank()) continue
+            val response = server.handle(line) ?: continue
+            output.println(response)
+            output.flush()
+        }
     }
-}

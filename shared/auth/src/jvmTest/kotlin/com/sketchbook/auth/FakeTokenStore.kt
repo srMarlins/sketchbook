@@ -1,9 +1,13 @@
 package com.sketchbook.auth
 
-class FakeTokenStore(initial: String? = null) : TokenStore {
+class FakeTokenStore(
+    initial: String? = null,
+) : TokenStore {
     @Volatile private var token: String? = initial
     val writes = mutableListOf<String>()
-    val clears = java.util.concurrent.atomic.AtomicInteger(0)
+    val clears =
+        java.util.concurrent.atomic
+            .AtomicInteger(0)
 
     override suspend fun read(): String? = token
 

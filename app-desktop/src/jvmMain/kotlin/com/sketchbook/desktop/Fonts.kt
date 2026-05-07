@@ -26,7 +26,6 @@ import org.jetbrains.skia.FontMgr
  * platform sans/mono so the app still renders.
  */
 object Fonts {
-
     fun load(): AppTypography {
         val interFamily = loadFamily("/fonts/inter-variable.woff2") ?: FontFamily.SansSerif
         val monoFamily = loadFamily("/fonts/space-mono-400.woff2") ?: FontFamily.Monospace
@@ -43,9 +42,10 @@ object Fonts {
 
     private fun loadFamily(resource: String): FontFamily? {
         val bytes = readResource(resource) ?: return null
-        val skiaTypeface = runCatching {
-            FontMgr.default.makeFromData(Data.makeFromBytes(bytes))
-        }.getOrNull() ?: return null
+        val skiaTypeface =
+            runCatching {
+                FontMgr.default.makeFromData(Data.makeFromBytes(bytes))
+            }.getOrNull() ?: return null
         return FontFamily(Typeface(skiaTypeface))
     }
 

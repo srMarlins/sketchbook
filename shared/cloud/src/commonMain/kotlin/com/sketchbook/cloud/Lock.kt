@@ -18,14 +18,21 @@ data class LeaseLock(
 
 sealed interface LeaseAcquireResult {
     /** Lock acquired; [generation] is the object generation we just wrote. */
-    data class Acquired(val generation: Generation) : LeaseAcquireResult
+    data class Acquired(
+        val generation: Generation,
+    ) : LeaseAcquireResult
 
     /** Another host holds the lock; [held] describes who, [generation] is theirs. */
-    data class Held(val held: LeaseLock, val generation: Generation) : LeaseAcquireResult
+    data class Held(
+        val held: LeaseLock,
+        val generation: Generation,
+    ) : LeaseAcquireResult
 }
 
 sealed interface LeaseRefreshResult {
-    data class Refreshed(val generation: Generation) : LeaseRefreshResult
+    data class Refreshed(
+        val generation: Generation,
+    ) : LeaseRefreshResult
 
     /** Our generation no longer matches — someone else took the lock. */
     data object Stale : LeaseRefreshResult

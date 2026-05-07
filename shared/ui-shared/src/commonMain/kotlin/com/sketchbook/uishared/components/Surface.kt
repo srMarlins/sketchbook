@@ -44,32 +44,32 @@ fun Surface(
     val edgeDark = if (colors.isDark) Color(0x55000000) else Color(0x14281C12)
     val edgeLight = if (colors.isDark) Color(0x14F5ECD8) else Color(0x66FFFAEE)
     Box(
-        modifier = modifier
-            .let { if (elevation > 0.dp) it.shadow(elevation, shape, clip = false) else it }
-            .clip(shape)
-            .background(color)
-            .drawBehind {
-                val r = cornerDp.toPx()
-                // Bottom + right hairline edge: drawn as a 1px stroke offset by 0.5px so it
-                // lives entirely inside the corner radius.
-                drawRoundRect(
-                    color = edgeDark,
-                    topLeft = Offset(0f, 0f),
-                    size = Size(size.width, size.height),
-                    cornerRadius = CornerRadius(r, r),
-                    style = Stroke(width = 1f),
-                )
-                // Top highlight — second stroke offset 1px down so only the top arc shows
-                // through. Subtle but reads as paper.
-                drawRoundRect(
-                    color = edgeLight,
-                    topLeft = Offset(0.5f, 0.5f),
-                    size = Size(size.width - 1f, size.height - 1f),
-                    cornerRadius = CornerRadius(r - 0.5f, r - 0.5f),
-                    style = Stroke(width = 0.6f),
-                )
-            }
-            .padding(padding),
+        modifier =
+            modifier
+                .let { if (elevation > 0.dp) it.shadow(elevation, shape, clip = false) else it }
+                .clip(shape)
+                .background(color)
+                .drawBehind {
+                    val r = cornerDp.toPx()
+                    // Bottom + right hairline edge: drawn as a 1px stroke offset by 0.5px so it
+                    // lives entirely inside the corner radius.
+                    drawRoundRect(
+                        color = edgeDark,
+                        topLeft = Offset(0f, 0f),
+                        size = Size(size.width, size.height),
+                        cornerRadius = CornerRadius(r, r),
+                        style = Stroke(width = 1f),
+                    )
+                    // Top highlight — second stroke offset 1px down so only the top arc shows
+                    // through. Subtle but reads as paper.
+                    drawRoundRect(
+                        color = edgeLight,
+                        topLeft = Offset(0.5f, 0.5f),
+                        size = Size(size.width - 1f, size.height - 1f),
+                        cornerRadius = CornerRadius(r - 0.5f, r - 0.5f),
+                        style = Stroke(width = 0.6f),
+                    )
+                }.padding(padding),
     ) {
         content()
     }

@@ -17,14 +17,18 @@ enum class VerbTint { Action, Add, Remove, Repair, Neutral }
  * still render as a pill (just uncolored).
  */
 @Composable
-fun VerbPill(verb: String, tint: VerbTint) {
-    val bg = when (tint) {
-        VerbTint.Action -> AppTheme.colors.tintBlue
-        VerbTint.Add -> AppTheme.colors.tintSage
-        VerbTint.Remove -> AppTheme.colors.tintRose
-        VerbTint.Repair -> AppTheme.colors.tintCream
-        VerbTint.Neutral -> AppTheme.colors.surfaceSunken
-    }
+fun VerbPill(
+    verb: String,
+    tint: VerbTint,
+) {
+    val bg =
+        when (tint) {
+            VerbTint.Action -> AppTheme.colors.tintBlue
+            VerbTint.Add -> AppTheme.colors.tintSage
+            VerbTint.Remove -> AppTheme.colors.tintRose
+            VerbTint.Repair -> AppTheme.colors.tintCream
+            VerbTint.Neutral -> AppTheme.colors.surfaceSunken
+        }
     Badge(color = bg) {
         ProvideContentColor(AppTheme.colors.inkPrimary) {
             Text(verb.uppercase(), style = AppTheme.typography.caption, softWrap = false, maxLines = 1)

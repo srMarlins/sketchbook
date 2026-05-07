@@ -66,31 +66,34 @@ fun MissingPluginsChip(
 
     Box(modifier = modifier) {
         Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .background(colors.surfaceCard)
-                .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(50))
-                .clickable { open = !open }
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(colors.surfaceCard)
+                    .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(50))
+                    .clickable { open = !open }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ProvideContentColor(colors.accentDanger) {
                 Text(
                     "${summary.missingPluginCount} $pluginsLabel missing".uppercase(),
-                    style = AppTheme.typography.mono.copy(
-                        fontSize = TextUnit(10f, TextUnitType.Sp),
-                        letterSpacing = TextUnit(0.8f, TextUnitType.Sp),
-                    ),
+                    style =
+                        AppTheme.typography.mono.copy(
+                            fontSize = TextUnit(10f, TextUnitType.Sp),
+                            letterSpacing = TextUnit(0.8f, TextUnitType.Sp),
+                        ),
                 )
             }
             Spacer(Modifier.padding(horizontal = 4.dp))
             ProvideContentColor(colors.inkSecondary) {
                 Text(
                     "· ${summary.affectedProjects} $projectsLabel".uppercase(),
-                    style = AppTheme.typography.mono.copy(
-                        fontSize = TextUnit(10f, TextUnitType.Sp),
-                        letterSpacing = TextUnit(0.8f, TextUnitType.Sp),
-                    ),
+                    style =
+                        AppTheme.typography.mono.copy(
+                            fontSize = TextUnit(10f, TextUnitType.Sp),
+                            letterSpacing = TextUnit(0.8f, TextUnitType.Sp),
+                        ),
                 )
             }
         }
@@ -115,13 +118,14 @@ private fun MissingPluginsPopup(
 ) {
     val colors = AppTheme.colors
     Column(
-        modifier = Modifier
-            .widthIn(min = 280.dp, max = 360.dp)
-            .heightIn(max = 360.dp)
-            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
-            .background(colors.surfaceCard)
-            .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard))
-            .padding(AppTheme.spacing.md),
+        modifier =
+            Modifier
+                .widthIn(min = 280.dp, max = 360.dp)
+                .heightIn(max = 360.dp)
+                .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+                .background(colors.surfaceCard)
+                .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard))
+                .padding(AppTheme.spacing.md),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
         ProvideContentColor(colors.inkSecondary) {
@@ -134,9 +138,10 @@ private fun MissingPluginsPopup(
             }
         } else {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 for (row in coverage) {
@@ -153,20 +158,22 @@ private fun MissingPluginRowView(
     onClick: () -> Unit,
 ) {
     val colors = AppTheme.colors
-    val formatTag = when (row.format) {
-        PluginFormat.Vst2 -> "VST2"
-        PluginFormat.Vst3 -> "VST3"
-        PluginFormat.Au -> "AU"
-        PluginFormat.AbletonNative -> "Native"
-        PluginFormat.Unknown -> ""
-    }
+    val formatTag =
+        when (row.format) {
+            PluginFormat.Vst2 -> "VST2"
+            PluginFormat.Vst3 -> "VST3"
+            PluginFormat.Au -> "AU"
+            PluginFormat.AbletonNative -> "Native"
+            PluginFormat.Unknown -> ""
+        }
     val countLabel = if (row.affectedProjects == 1) "1 project" else "${row.affectedProjects} projects"
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ProvideContentColor(colors.inkPrimary) {
@@ -179,9 +186,10 @@ private fun MissingPluginRowView(
         ProvideContentColor(colors.accentDanger) {
             Text(
                 countLabel,
-                style = AppTheme.typography.mono.copy(
-                    fontSize = TextUnit(11f, TextUnitType.Sp),
-                ),
+                style =
+                    AppTheme.typography.mono.copy(
+                        fontSize = TextUnit(11f, TextUnitType.Sp),
+                    ),
             )
         }
     }

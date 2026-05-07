@@ -30,59 +30,65 @@ class JvmFirstRunMigration(
     private val clock: Clock = Clock.System,
     private val uuidGen: () -> String = { UUID.randomUUID().toString() },
 ) : FirstRunMigration {
+    override fun run(): Flow<MigrationProgress> =
+        flow {
+            val rows = catalog.catalogQueries.selectAllProjectsForMigration().executeAsList()
+            emit(MigrationProgress.Started(totalProjects = rows.size))
 
-    override fun run(): Flow<MigrationProgress> = flow {
-        val rows = catalog.catalogQueries.selectAllProjectsForMigration().executeAsList()
-        emit(MigrationProgress.Started(totalProjects = rows.size))
+            var migrated = 0
+            var alreadyMigrated = 0
+            var conflicts = 0
+            var failed = 0
 
-        var migrated = 0
-        var alreadyMigrated = 0
-        var conflicts = 0
-        var failed = 0
-
-        rows.forEachIndexed { index, row ->
-            val outcome = migrateOne(
-                projectId = ProjectId(row.id),
-                alsPath = row.path,
-            )
-            when (outcome) {
-                is ProjectMigrationOutcome.Migrated -> migrated++
-                is ProjectMigrationOutcome.AlreadyMigrated -> alreadyMigrated++
-                is ProjectMigrationOutcome.SidecarConflictResolved -> conflicts++
-                is ProjectMigrationOutcome.Failed -> failed++
+            rows.forEachIndexed { index, row ->
+                val outcome =
+                    migrateOne(
+                        projectId = ProjectId(row.id),
+                        alsPath = row.path,
+                    )
+                when (outcome) {
+                    is ProjectMigrationOutcome.Migrated -> migrated++
+                    is ProjectMigrationOutcome.AlreadyMigrated -> alreadyMigrated++
+                    is ProjectMigrationOutcome.SidecarConflictResolved -> conflicts++
+                    is ProjectMigrationOutcome.Failed -> failed++
+                }
+                emit(
+                    MigrationProgress.Project(
+                        projectId = ProjectId(row.id),
+                        path = row.path,
+                        outcome = outcome,
+                        processed = index + 1,
+                        total = rows.size,
+                    ),
+                )
             }
+
             emit(
-                MigrationProgress.Project(
-                    projectId = ProjectId(row.id),
-                    path = row.path,
-                    outcome = outcome,
-                    processed = index + 1,
+                MigrationProgress.Completed(
                     total = rows.size,
+                    migrated = migrated,
+                    alreadyMigrated = alreadyMigrated,
+                    conflicts = conflicts,
+                    failed = failed,
                 ),
             )
-        }
+        }.flowOn(ioDispatcher)
 
-        emit(
-            MigrationProgress.Completed(
-                total = rows.size,
-                migrated = migrated,
-                alreadyMigrated = alreadyMigrated,
-                conflicts = conflicts,
-                failed = failed,
-            ),
-        )
-    }.flowOn(ioDispatcher)
-
-    private fun migrateOne(projectId: ProjectId, alsPath: String): ProjectMigrationOutcome {
-        val projectDir = File(alsPath).parentFile?.absolutePath
-            ?: return ProjectMigrationOutcome.Failed("project file has no parent directory: $alsPath")
+    private fun migrateOne(
+        projectId: ProjectId,
+        alsPath: String,
+    ): ProjectMigrationOutcome {
+        val projectDir =
+            File(alsPath).parentFile?.absolutePath
+                ?: return ProjectMigrationOutcome.Failed("project file has no parent directory: $alsPath")
 
         val sidecarUuid = sidecar.read(projectDir)
-        val dbUuid = catalog.catalogQueries
-            .selectIdentityByProjectId(projectId.value)
-            .executeAsOneOrNull()
-            ?.uuid
-            ?.let(::ProjectUuid)
+        val dbUuid =
+            catalog.catalogQueries
+                .selectIdentityByProjectId(projectId.value)
+                .executeAsOneOrNull()
+                ?.uuid
+                ?.let(::ProjectUuid)
 
         return when {
             sidecarUuid != null && dbUuid != null && sidecarUuid == dbUuid -> {
@@ -127,7 +133,11 @@ class JvmFirstRunMigration(
         }
     }
 
-    private fun writeIdentity(projectId: ProjectId, uuid: ProjectUuid, replace: Boolean) {
+    private fun writeIdentity(
+        projectId: ProjectId,
+        uuid: ProjectUuid,
+        replace: Boolean,
+    ) {
         val createdAt: Instant = clock.now()
         catalog.catalogQueries.transaction {
             if (replace) {

@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.Flow
  * UI reads from here.
  */
 interface SnapshotRepository {
-
     /** Live history for a project, newest revision first. */
     fun observeHistory(uuid: ProjectUuid): Flow<List<Snapshot>>
 
@@ -18,13 +17,20 @@ interface SnapshotRepository {
      * Persist a snapshot row from a manifest (or a locally-just-uploaded one). Idempotent —
      * an existing `(uuid, rev)` is a no-op.
      */
-    suspend fun recordSnapshot(snapshot: Snapshot, manifestPath: String, manifestHash: String): Result<Unit>
+    suspend fun recordSnapshot(
+        snapshot: Snapshot,
+        manifestPath: String,
+        manifestHash: String,
+    ): Result<Unit>
 
     /**
      * Materialize a project's working tree at the given rev. The actual sync work lives in the
      * sync engine (PR-9); this is the entry point repositories expose to the UI.
      */
-    suspend fun materializeAt(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit>
+    suspend fun materializeAt(
+        uuid: ProjectUuid,
+        rev: SnapshotRev,
+    ): Result<Unit>
 
     /**
      * PR-Z Z1: edit the human-readable label on a snapshot row. Side-effect: promotes `kind` to
@@ -33,7 +39,11 @@ interface SnapshotRepository {
      * the SQL column. Implementations append a [JournalEntry] with [ActionRecord.SnapshotRelabeled]
      * so the audit log captures the edit.
      */
-    suspend fun setSnapshotLabel(uuid: ProjectUuid, rev: SnapshotRev, label: String?): Result<JournalEntry>
+    suspend fun setSnapshotLabel(
+        uuid: ProjectUuid,
+        rev: SnapshotRev,
+        label: String?,
+    ): Result<JournalEntry>
 
     /**
      * Streaming variant of [materializeAt] for the rewind/restore UI: emits per-stage progress
@@ -41,35 +51,48 @@ interface SnapshotRepository {
      * [materializeAt] with synthetic Start/Done events; real impls (sync engine in PR-9) emit
      * granular per-blob progress.
      */
-    fun materializeAtWithProgress(uuid: ProjectUuid, rev: SnapshotRev): Flow<MaterializationProgress> = kotlinx.coroutines.flow.flow {
-        emit(MaterializationProgress.Started(uuid, rev))
-        val r = materializeAt(uuid, rev)
-        if (r.isSuccess) {
-            emit(MaterializationProgress.Done(uuid, rev))
-        } else {
-            emit(MaterializationProgress.Failed(uuid, rev, friendlyReason(r.exceptionOrNull())))
+    fun materializeAtWithProgress(
+        uuid: ProjectUuid,
+        rev: SnapshotRev,
+    ): Flow<MaterializationProgress> =
+        kotlinx.coroutines.flow.flow {
+            emit(MaterializationProgress.Started(uuid, rev))
+            val r = materializeAt(uuid, rev)
+            if (r.isSuccess) {
+                emit(MaterializationProgress.Done(uuid, rev))
+            } else {
+                emit(MaterializationProgress.Failed(uuid, rev, friendlyReason(r.exceptionOrNull())))
+            }
         }
-    }
 }
 
 /**
  * Human-friendly failure reason for the rewind UI. The busy case is matched by simple class
  * name so commonMain doesn't have to depend on the JVM-only `WorkingTreeBusyException` type.
  */
-private fun friendlyReason(cause: Throwable?): String = when {
-    cause == null -> "materialize failed"
+private fun friendlyReason(cause: Throwable?): String =
+    when {
+        cause == null -> {
+            "materialize failed"
+        }
 
-    cause::class.simpleName == "WorkingTreeBusyException" ->
-        "Close the project in Ableton, then try again."
+        cause::class.simpleName == "WorkingTreeBusyException" -> {
+            "Close the project in Ableton, then try again."
+        }
 
-    else -> cause.message ?: "materialize failed"
-}
+        else -> {
+            cause.message ?: "materialize failed"
+        }
+    }
 
 sealed interface MaterializationProgress {
     val uuid: ProjectUuid
     val rev: SnapshotRev
 
-    data class Started(override val uuid: ProjectUuid, override val rev: SnapshotRev) : MaterializationProgress
+    data class Started(
+        override val uuid: ProjectUuid,
+        override val rev: SnapshotRev,
+    ) : MaterializationProgress
 
     /** A blob is being downloaded from cloud. */
     data class Downloading(
@@ -88,6 +111,14 @@ sealed interface MaterializationProgress {
         val filesTotal: Int,
     ) : MaterializationProgress
 
-    data class Done(override val uuid: ProjectUuid, override val rev: SnapshotRev) : MaterializationProgress
-    data class Failed(override val uuid: ProjectUuid, override val rev: SnapshotRev, val reason: String) : MaterializationProgress
+    data class Done(
+        override val uuid: ProjectUuid,
+        override val rev: SnapshotRev,
+    ) : MaterializationProgress
+
+    data class Failed(
+        override val uuid: ProjectUuid,
+        override val rev: SnapshotRev,
+        val reason: String,
+    ) : MaterializationProgress
 }

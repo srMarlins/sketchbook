@@ -12,21 +12,25 @@ import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 class SqlProposalsRepositoryTest {
-
     /** Anchored so the cutoff math is reproducible. */
     private val now = Instant.parse("2026-05-05T00:00:00Z")
 
     private fun setup(): Pair<Catalog, SqlProposalsRepository> {
         val handle = CatalogDb.openInMemory()
-        val repo = SqlProposalsRepository(
-            catalog = handle.catalog,
-            ioDispatcher = UnconfinedTestDispatcher(),
-            now = { now },
-        )
+        val repo =
+            SqlProposalsRepository(
+                catalog = handle.catalog,
+                ioDispatcher = UnconfinedTestDispatcher(),
+                now = { now },
+            )
         return handle.catalog to repo
     }
 
-    private fun seed(catalog: Catalog, name: String, lastModifiedSecs: Double) {
+    private fun seed(
+        catalog: Catalog,
+        name: String,
+        lastModifiedSecs: Double,
+    ) {
         catalog.catalogQueries.insertOrReplaceProject(
             path = "/lib/$name.als",
             name = name,
@@ -52,33 +56,35 @@ class SqlProposalsRepositoryTest {
     }
 
     @Test
-    fun derivesArchiveCandidatesFromOldUntouchedProjects() = runTest {
-        val (catalog, repo) = setup()
-        // 24mo old → qualifies; 1mo old → doesn't (cutoff is 18mo).
-        seed(catalog, "old", lastModifiedSecs = (now.epochSeconds - 24L * 30 * 86400).toDouble())
-        seed(catalog, "fresh", lastModifiedSecs = (now.epochSeconds - 30L * 86400).toDouble())
-        repo.observe().test {
-            val first = awaitItem()
-            assertEquals(listOf("archive:1"), first.map { it.proposalId })
-            assertTrue(first.first().rationale!!.contains("18 months"))
-            cancelAndIgnoreRemainingEvents()
+    fun derivesArchiveCandidatesFromOldUntouchedProjects() =
+        runTest {
+            val (catalog, repo) = setup()
+            // 24mo old → qualifies; 1mo old → doesn't (cutoff is 18mo).
+            seed(catalog, "old", lastModifiedSecs = (now.epochSeconds - 24L * 30 * 86400).toDouble())
+            seed(catalog, "fresh", lastModifiedSecs = (now.epochSeconds - 30L * 86400).toDouble())
+            repo.observe().test {
+                val first = awaitItem()
+                assertEquals(listOf("archive:1"), first.map { it.proposalId })
+                assertTrue(first.first().rationale!!.contains("18 months"))
+                cancelAndIgnoreRemainingEvents()
+            }
         }
-    }
 
     @Test
-    fun approvalPersistsAndIsReflectedInLiveFlow() = runTest {
-        val (catalog, repo) = setup()
-        seed(catalog, "old", lastModifiedSecs = (now.epochSeconds - 24L * 30 * 86400).toDouble())
-        repo.observe().test {
-            val first = awaitItem()
-            assertEquals(ProposalStatus.Pending, first.single().status)
+    fun approvalPersistsAndIsReflectedInLiveFlow() =
+        runTest {
+            val (catalog, repo) = setup()
+            seed(catalog, "old", lastModifiedSecs = (now.epochSeconds - 24L * 30 * 86400).toDouble())
+            repo.observe().test {
+                val first = awaitItem()
+                assertEquals(ProposalStatus.Pending, first.single().status)
 
-            val approved = repo.approve("archive:1").getOrThrow()
-            assertEquals(ProposalStatus.Approved, approved.status)
+                val approved = repo.approve("archive:1").getOrThrow()
+                assertEquals(ProposalStatus.Approved, approved.status)
 
-            val next = awaitItem()
-            assertEquals(ProposalStatus.Approved, next.single().status)
-            cancelAndIgnoreRemainingEvents()
+                val next = awaitItem()
+                assertEquals(ProposalStatus.Approved, next.single().status)
+                cancelAndIgnoreRemainingEvents()
+            }
         }
-    }
 }

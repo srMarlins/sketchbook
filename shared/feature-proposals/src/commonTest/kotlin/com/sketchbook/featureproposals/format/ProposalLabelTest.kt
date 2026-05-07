@@ -9,14 +9,14 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ProposalLabelTest {
-
     private fun args(vararg pairs: Pair<String, JsonPrimitive>): JsonObject = JsonObject(pairs.toMap())
 
     @Test fun archiveResolvesProjectName() {
-        val a = ProposalAction(
-            "ArchiveProject",
-            args("project_id" to JsonPrimitive(42L)),
-        )
+        val a =
+            ProposalAction(
+                "ArchiveProject",
+                args("project_id" to JsonPrimitive(42L)),
+            )
         val l = proposalLabel(a, mapOf(42L to "Old Sketch"))
         assertEquals("Archive", l.verb)
         assertEquals("Old Sketch", l.target)
@@ -30,16 +30,17 @@ class ProposalLabelTest {
     }
 
     @Test fun renameSplitsFromAndTo() {
-        val a = ProposalAction(
-            "RenameProject",
-            JsonObject(
-                mapOf(
-                    "project_id" to JsonPrimitive(7L),
-                    "from_" to JsonPrimitive("/lib/foo/foo.als"),
-                    "to" to JsonPrimitive("/lib/foo/bar.als"),
+        val a =
+            ProposalAction(
+                "RenameProject",
+                JsonObject(
+                    mapOf(
+                        "project_id" to JsonPrimitive(7L),
+                        "from_" to JsonPrimitive("/lib/foo/foo.als"),
+                        "to" to JsonPrimitive("/lib/foo/bar.als"),
+                    ),
                 ),
-            ),
-        )
+            )
         val l = proposalLabel(a)
         assertEquals("Rename", l.verb)
         assertEquals("foo.als", l.target)
@@ -47,15 +48,16 @@ class ProposalLabelTest {
     }
 
     @Test fun setTagsWithAfterArrayShowsTagList() {
-        val a = ProposalAction(
-            "SetTags",
-            JsonObject(
-                mapOf(
-                    "project_id" to JsonPrimitive(1L),
-                    "after" to JsonArray(listOf(JsonPrimitive("techno"), JsonPrimitive("wip"))),
+        val a =
+            ProposalAction(
+                "SetTags",
+                JsonObject(
+                    mapOf(
+                        "project_id" to JsonPrimitive(1L),
+                        "after" to JsonArray(listOf(JsonPrimitive("techno"), JsonPrimitive("wip"))),
+                    ),
                 ),
-            ),
-        )
+            )
         val l = proposalLabel(a, mapOf(1L to "Foo"))
         assertEquals("Tag", l.verb)
         assertEquals("Foo", l.target)
@@ -64,15 +66,16 @@ class ProposalLabelTest {
     }
 
     @Test fun setTagsWithEmptyAfterShowsClear() {
-        val a = ProposalAction(
-            "SetTags",
-            JsonObject(
-                mapOf(
-                    "project_id" to JsonPrimitive(1L),
-                    "after" to JsonArray(emptyList()),
+        val a =
+            ProposalAction(
+                "SetTags",
+                JsonObject(
+                    mapOf(
+                        "project_id" to JsonPrimitive(1L),
+                        "after" to JsonArray(emptyList()),
+                    ),
                 ),
-            ),
-        )
+            )
         val l = proposalLabel(a, mapOf(1L to "Foo"))
         assertEquals("Clear tags", l.verb)
         assertEquals(VerbTint.Remove, l.tintHint)

@@ -16,7 +16,6 @@ import kotlinx.coroutines.sync.withLock
  * use `SqlJournalRepository`.
  */
 class InMemoryJournalRepository : JournalRepository {
-
     private val state = MutableStateFlow<List<JournalEntry>>(emptyList())
     private val seqMutex = Mutex()
     private var nextSequence = 1L
@@ -33,9 +32,10 @@ class InMemoryJournalRepository : JournalRepository {
     override suspend fun undoLast(): Result<JournalEntry> {
         // getAndUpdate atomically returns the previous list while replacing it with the tail.
         // The lambda is pure (no side effects), so we read the head off the snapshot it returns.
-        val previous = state.getAndUpdate { current ->
-            if (current.isEmpty()) current else current.drop(1)
-        }
+        val previous =
+            state.getAndUpdate { current ->
+                if (current.isEmpty()) current else current.drop(1)
+            }
         return previous.firstOrNull()?.let { Result.success(it) }
             ?: Result.failure(SketchbookError.NotFound("journal is empty"))
     }

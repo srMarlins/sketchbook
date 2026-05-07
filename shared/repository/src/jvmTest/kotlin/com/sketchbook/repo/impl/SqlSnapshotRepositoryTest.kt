@@ -17,20 +17,21 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SqlSnapshotRepositoryTest {
-
     private val uuid = ProjectUuid("01H-test-snap")
 
     private fun setup(): Triple<Catalog, SqlJournalRepository, SqlSnapshotRepository> {
         val handle = CatalogDb.openInMemory()
-        val journal = SqlJournalRepository(
-            catalog = handle.catalog,
-            ioDispatcher = UnconfinedTestDispatcher(),
-        )
-        val repo = SqlSnapshotRepository(
-            catalog = handle.catalog,
-            ioDispatcher = UnconfinedTestDispatcher(),
-            journal = journal,
-        )
+        val journal =
+            SqlJournalRepository(
+                catalog = handle.catalog,
+                ioDispatcher = UnconfinedTestDispatcher(),
+            )
+        val repo =
+            SqlSnapshotRepository(
+                catalog = handle.catalog,
+                ioDispatcher = UnconfinedTestDispatcher(),
+                journal = journal,
+            )
         return Triple(handle.catalog, journal, repo)
     }
 
@@ -57,7 +58,10 @@ class SqlSnapshotRepositoryTest {
         )
     }
 
-    private fun seedIdentity(catalog: Catalog, projectId: Long) {
+    private fun seedIdentity(
+        catalog: Catalog,
+        projectId: Long,
+    ) {
         // Bare-bones project row so the FK from project_identity has a target.
         catalog.catalogQueries.insertOrReplaceProject(
             path = "/proj/$projectId.als",
@@ -90,88 +94,93 @@ class SqlSnapshotRepositoryTest {
     }
 
     @Test
-    fun setSnapshotLabelPromotesAutoToNamedAndPersistsLabel() = runTest {
-        val (catalog, journal, repo) = setup()
-        seedIdentity(catalog, projectId = 1L)
-        seedSnapshot(catalog, rev = 7L, kind = "auto", label = null)
+    fun setSnapshotLabelPromotesAutoToNamedAndPersistsLabel() =
+        runTest {
+            val (catalog, journal, repo) = setup()
+            seedIdentity(catalog, projectId = 1L)
+            seedSnapshot(catalog, rev = 7L, kind = "auto", label = null)
 
-        val result = repo.setSnapshotLabel(uuid, SnapshotRev(7L), "demo for jay")
-        assertTrue(result.isSuccess, "expected success, got ${result.exceptionOrNull()}")
+            val result = repo.setSnapshotLabel(uuid, SnapshotRev(7L), "demo for jay")
+            assertTrue(result.isSuccess, "expected success, got ${result.exceptionOrNull()}")
 
-        // Observe via the public flow — same path the Timeline uses.
-        repo.observeHistory(uuid).test {
-            val emitted = awaitItem()
-            assertEquals(1, emitted.size)
-            assertEquals("demo for jay", emitted[0].label)
-            assertEquals(SnapshotKind.Named, emitted[0].kind)
-            cancelAndIgnoreRemainingEvents()
+            // Observe via the public flow — same path the Timeline uses.
+            repo.observeHistory(uuid).test {
+                val emitted = awaitItem()
+                assertEquals(1, emitted.size)
+                assertEquals("demo for jay", emitted[0].label)
+                assertEquals(SnapshotKind.Named, emitted[0].kind)
+                cancelAndIgnoreRemainingEvents()
+            }
+
+            // Journal entry recorded with the right delta.
+            journal.observeRecent(limit = 10).test {
+                val entries = awaitItem()
+                assertEquals(1, entries.size)
+                val action = entries[0].action
+                assertTrue(action is ActionRecord.SnapshotRelabeled)
+                assertEquals(7L, action.rev)
+                assertNull(action.labelBefore)
+                assertEquals("demo for jay", action.labelAfter)
+                assertEquals("auto", action.kindBefore)
+                cancelAndIgnoreRemainingEvents()
+            }
         }
 
-        // Journal entry recorded with the right delta.
-        journal.observeRecent(limit = 10).test {
-            val entries = awaitItem()
-            assertEquals(1, entries.size)
-            val action = entries[0].action
-            assertTrue(action is ActionRecord.SnapshotRelabeled)
-            assertEquals(7L, action.rev)
-            assertNull(action.labelBefore)
-            assertEquals("demo for jay", action.labelAfter)
-            assertEquals("auto", action.kindBefore)
-            cancelAndIgnoreRemainingEvents()
+    @Test
+    fun setSnapshotLabelOnNamedRowKeepsItNamedAndUpdatesLabel() =
+        runTest {
+            val (catalog, _, repo) = setup()
+            seedIdentity(catalog, projectId = 1L)
+            seedSnapshot(catalog, rev = 3L, kind = "named", label = "old")
+
+            repo.setSnapshotLabel(uuid, SnapshotRev(3L), "new").getOrThrow()
+
+            val row = catalog.catalogQueries.selectSnapshotByRev(uuid.value, 3L).executeAsOne()
+            assertEquals("new", row.label)
+            assertEquals("named", row.kind)
         }
-    }
 
     @Test
-    fun setSnapshotLabelOnNamedRowKeepsItNamedAndUpdatesLabel() = runTest {
-        val (catalog, _, repo) = setup()
-        seedIdentity(catalog, projectId = 1L)
-        seedSnapshot(catalog, rev = 3L, kind = "named", label = "old")
+    fun setSnapshotLabelAcceptsNullToClearLabelButStillPromotesKind() =
+        runTest {
+            val (catalog, _, repo) = setup()
+            seedIdentity(catalog, projectId = 1L)
+            seedSnapshot(catalog, rev = 5L, kind = "auto", label = "scratch")
 
-        repo.setSnapshotLabel(uuid, SnapshotRev(3L), "new").getOrThrow()
+            repo.setSnapshotLabel(uuid, SnapshotRev(5L), null).getOrThrow()
 
-        val row = catalog.catalogQueries.selectSnapshotByRev(uuid.value, 3L).executeAsOne()
-        assertEquals("new", row.label)
-        assertEquals("named", row.kind)
-    }
-
-    @Test
-    fun setSnapshotLabelAcceptsNullToClearLabelButStillPromotesKind() = runTest {
-        val (catalog, _, repo) = setup()
-        seedIdentity(catalog, projectId = 1L)
-        seedSnapshot(catalog, rev = 5L, kind = "auto", label = "scratch")
-
-        repo.setSnapshotLabel(uuid, SnapshotRev(5L), null).getOrThrow()
-
-        val row = catalog.catalogQueries.selectSnapshotByRev(uuid.value, 5L).executeAsOne()
-        assertNull(row.label)
-        // Kind still flips to Named — the user touched the row, so it stops being a coalesce
-        // candidate even if they cleared the label.
-        assertEquals("named", row.kind)
-    }
+            val row = catalog.catalogQueries.selectSnapshotByRev(uuid.value, 5L).executeAsOne()
+            assertNull(row.label)
+            // Kind still flips to Named — the user touched the row, so it stops being a coalesce
+            // candidate even if they cleared the label.
+            assertEquals("named", row.kind)
+        }
 
     @Test
-    fun setSnapshotLabelAcceptsEmptyString() = runTest {
-        val (catalog, _, repo) = setup()
-        seedIdentity(catalog, projectId = 1L)
-        seedSnapshot(catalog, rev = 5L, kind = "auto", label = "scratch")
+    fun setSnapshotLabelAcceptsEmptyString() =
+        runTest {
+            val (catalog, _, repo) = setup()
+            seedIdentity(catalog, projectId = 1L)
+            seedSnapshot(catalog, rev = 5L, kind = "auto", label = "scratch")
 
-        repo.setSnapshotLabel(uuid, SnapshotRev(5L), "").getOrThrow()
+            repo.setSnapshotLabel(uuid, SnapshotRev(5L), "").getOrThrow()
 
-        val row = catalog.catalogQueries.selectSnapshotByRev(uuid.value, 5L).executeAsOne()
-        assertEquals("", row.label)
-        assertEquals("named", row.kind)
-    }
+            val row = catalog.catalogQueries.selectSnapshotByRev(uuid.value, 5L).executeAsOne()
+            assertEquals("", row.label)
+            assertEquals("named", row.kind)
+        }
 
     @Test
-    fun setSnapshotLabelOnMissingRevReturnsNotFound() = runTest {
-        val (catalog, _, repo) = setup()
-        seedIdentity(catalog, projectId = 1L)
-        // No snapshot rows seeded.
+    fun setSnapshotLabelOnMissingRevReturnsNotFound() =
+        runTest {
+            val (catalog, _, repo) = setup()
+            seedIdentity(catalog, projectId = 1L)
+            // No snapshot rows seeded.
 
-        val result = repo.setSnapshotLabel(uuid, SnapshotRev(99L), "nope")
-        assertTrue(result.isFailure)
-        val err = result.exceptionOrNull()
-        assertNotNull(err)
-        assertTrue(err is SketchbookError.NotFound, "expected NotFound, got ${err::class.simpleName}")
-    }
+            val result = repo.setSnapshotLabel(uuid, SnapshotRev(99L), "nope")
+            assertTrue(result.isFailure)
+            val err = result.exceptionOrNull()
+            assertNotNull(err)
+            assertTrue(err is SketchbookError.NotFound, "expected NotFound, got ${err::class.simpleName}")
+        }
 }

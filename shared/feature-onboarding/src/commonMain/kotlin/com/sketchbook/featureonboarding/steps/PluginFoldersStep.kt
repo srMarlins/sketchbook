@@ -96,13 +96,14 @@ fun PluginFoldersStep(
                 inkColor = colors.inkPrimary,
             )
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
-                    .clickable(onClick = onUseDefaults)
-                    .padding(
-                        horizontal = AppTheme.spacing.sm,
-                        vertical = AppTheme.spacing.xs,
-                    ),
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
+                        .clickable(onClick = onUseDefaults)
+                        .padding(
+                            horizontal = AppTheme.spacing.sm,
+                            vertical = AppTheme.spacing.xs,
+                        ),
             ) {
                 ProvideContentColor(colors.inkMuted) {
                     Text(
@@ -125,13 +126,14 @@ fun PluginFoldersStep(
                 Text("Continue")
             }
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
-                    .clickable(onClick = onSkip)
-                    .padding(
-                        horizontal = AppTheme.spacing.sm,
-                        vertical = AppTheme.spacing.xs,
-                    ),
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
+                        .clickable(onClick = onSkip)
+                        .padding(
+                            horizontal = AppTheme.spacing.sm,
+                            vertical = AppTheme.spacing.xs,
+                        ),
             ) {
                 ProvideContentColor(colors.inkMuted) {
                     Text(

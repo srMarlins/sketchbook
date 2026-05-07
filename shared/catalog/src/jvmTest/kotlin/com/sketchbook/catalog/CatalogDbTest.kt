@@ -7,17 +7,25 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class CatalogDbTest {
-
     private val handle = CatalogDb.openInMemory()
 
     @Test
     fun schemaCreatesAllExpectedTables() {
         val tables = listSqliteObjects("table")
         for (t in listOf(
-            "projects", "project_plugins", "project_samples", "samples",
-            "tags", "project_tags",
-            "project_identity", "snapshots", "blob_cache", "sync_state", "pending_uploads",
-            "repair_acks", "proposal_acks",
+            "projects",
+            "project_plugins",
+            "project_samples",
+            "samples",
+            "tags",
+            "project_tags",
+            "project_identity",
+            "snapshots",
+            "blob_cache",
+            "sync_state",
+            "pending_uploads",
+            "repair_acks",
+            "proposal_acks",
             "journal_entries",
         )) {
             assertTrue(t in tables, "missing table $t — got $tables")

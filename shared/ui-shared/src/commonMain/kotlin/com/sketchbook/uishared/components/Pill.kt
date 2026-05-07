@@ -23,9 +23,10 @@ fun Pill(
 ) {
     val color = if (colorIndex != null) AbletonPalette[colorIndex] else null
     Box(
-        modifier = modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(color ?: androidx.compose.ui.graphics.Color.Transparent),
+        modifier =
+            modifier
+                .size(size)
+                .clip(CircleShape)
+                .background(color ?: androidx.compose.ui.graphics.Color.Transparent),
     )
 }

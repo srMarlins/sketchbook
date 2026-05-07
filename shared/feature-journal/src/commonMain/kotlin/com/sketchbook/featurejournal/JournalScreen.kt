@@ -93,18 +93,20 @@ fun LazyListScope.journalItems(
     if (state.rows.isEmpty()) {
         item(key = "j-empty") {
             EmptyState(
-                title = if (state.loading) {
-                    "Loading…"
-                } else if (state.isNarrowed) {
-                    "No matches"
-                } else {
-                    "No entries"
-                },
-                hint = if (state.isNarrowed) {
-                    "Nothing matches the current filters. Clear them to see everything."
-                } else {
-                    "Move/rename/archive/tag actions land here."
-                },
+                title =
+                    if (state.loading) {
+                        "Loading…"
+                    } else if (state.isNarrowed) {
+                        "No matches"
+                    } else {
+                        "No entries"
+                    },
+                hint =
+                    if (state.isNarrowed) {
+                        "Nothing matches the current filters. Clear them to see everything."
+                    } else {
+                        "Move/rename/archive/tag actions land here."
+                    },
             )
         }
         return
@@ -121,8 +123,9 @@ fun LazyListScope.journalItems(
             expanded = dayExpanded[day.label] ?: true,
             onToggle = { dayExpanded[day.label] = !(dayExpanded[day.label] ?: true) },
             onOpen = { entry ->
-                val name = state.rows.firstOrNull { it.entry == entry }?.projectName
-                    ?: "project #${entry.projectId.value}"
+                val name =
+                    state.rows.firstOrNull { it.entry == entry }?.projectName
+                        ?: "project #${entry.projectId.value}"
                 onOpen(entry, name)
             },
             onUndo = onUndo,
@@ -133,22 +136,24 @@ fun LazyListScope.journalItems(
     }
 }
 
-private val DATE_RANGE_OPTIONS = listOf(
-    FilterChipOption(JournalViewModel.DateRange.Today, "Today"),
-    FilterChipOption(JournalViewModel.DateRange.Last7Days, "7d"),
-    FilterChipOption(JournalViewModel.DateRange.Last30Days, "30d"),
-    FilterChipOption(JournalViewModel.DateRange.AllTime, "All"),
-)
+private val DATE_RANGE_OPTIONS =
+    listOf(
+        FilterChipOption(JournalViewModel.DateRange.Today, "Today"),
+        FilterChipOption(JournalViewModel.DateRange.Last7Days, "7d"),
+        FilterChipOption(JournalViewModel.DateRange.Last30Days, "30d"),
+        FilterChipOption(JournalViewModel.DateRange.AllTime, "All"),
+    )
 
-private val ACTION_TYPE_OPTIONS = listOf(
-    FilterChipOption(JournalViewModel.ActionTypeFilter.All, "All"),
-    FilterChipOption(JournalViewModel.ActionTypeFilter.Move, "Move"),
-    FilterChipOption(JournalViewModel.ActionTypeFilter.Rename, "Rename"),
-    FilterChipOption(JournalViewModel.ActionTypeFilter.Archive, "Archive"),
-    FilterChipOption(JournalViewModel.ActionTypeFilter.Tag, "Tag"),
-    FilterChipOption(JournalViewModel.ActionTypeFilter.Lock, "Lock"),
-    FilterChipOption(JournalViewModel.ActionTypeFilter.Conflict, "Conflict"),
-)
+private val ACTION_TYPE_OPTIONS =
+    listOf(
+        FilterChipOption(JournalViewModel.ActionTypeFilter.All, "All"),
+        FilterChipOption(JournalViewModel.ActionTypeFilter.Move, "Move"),
+        FilterChipOption(JournalViewModel.ActionTypeFilter.Rename, "Rename"),
+        FilterChipOption(JournalViewModel.ActionTypeFilter.Archive, "Archive"),
+        FilterChipOption(JournalViewModel.ActionTypeFilter.Tag, "Tag"),
+        FilterChipOption(JournalViewModel.ActionTypeFilter.Lock, "Lock"),
+        FilterChipOption(JournalViewModel.ActionTypeFilter.Conflict, "Conflict"),
+    )
 
 @Composable
 private fun DayGroupCard(
@@ -207,13 +212,14 @@ private data class JournalRowData(
     val isInvertible: Boolean,
 )
 
-private fun rowDataFor(row: JournalViewModel.JournalRow): JournalRowData = JournalRowData(
-    entry = row.entry,
-    label = journalLabel(row.entry.action),
-    projectName = row.projectName,
-    time = shortTime(row.entry.timestamp),
-    isInvertible = row.isInvertible,
-)
+private fun rowDataFor(row: JournalViewModel.JournalRow): JournalRowData =
+    JournalRowData(
+        entry = row.entry,
+        label = journalLabel(row.entry.action),
+        projectName = row.projectName,
+        time = shortTime(row.entry.timestamp),
+        isInvertible = row.isInvertible,
+    )
 
 @Composable
 private fun JournalRowItem(
@@ -269,11 +275,12 @@ private fun JournalRowItem(
 @Composable
 private fun UndoButton(onClick: () -> Unit) {
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
-            .background(AppTheme.colors.tintCream)
-            .clickable(onClick = onClick)
-            .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
+                .background(AppTheme.colors.tintCream)
+                .clickable(onClick = onClick)
+                .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
     ) {
         ProvideContentColor(AppTheme.colors.accentAction) {
             Text("↶ Undo", style = AppTheme.typography.caption)

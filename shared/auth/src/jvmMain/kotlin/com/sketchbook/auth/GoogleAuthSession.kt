@@ -37,7 +37,6 @@ class GoogleAuthSession(
     @Suppress("UNUSED_PARAMETER") email: String? = null,
     @Suppress("UNUSED_PARAMETER") userId: UserId? = null,
 ) : AuthSession {
-
     private val _state = MutableStateFlow<AuthState>(AuthState.SignedOut)
     override val state: StateFlow<AuthState> = _state.asStateFlow()
 
@@ -52,68 +51,72 @@ class GoogleAuthSession(
         scope?.launch { tryRestore() }
     }
 
-    override suspend fun signIn(): Result<AuthState.SignedIn> = mutex.withLock {
-        val outcome = oauthClient.signIn()
-        outcome.map { tokens ->
-            tokenStore.write(tokens.refreshToken)
-            cachedRefreshToken = tokens.refreshToken
-            cachedAccessToken = tokens.accessToken
-            cachedAccessTokenExpiry = clock.now().plus(tokens.expiresInSeconds.seconds).minus(60.seconds)
-            val signedIn = AuthState.SignedIn(userId = tokens.userId, email = tokens.email)
-            _state.value = signedIn
-            signedIn
+    override suspend fun signIn(): Result<AuthState.SignedIn> =
+        mutex.withLock {
+            val outcome = oauthClient.signIn()
+            outcome.map { tokens ->
+                tokenStore.write(tokens.refreshToken)
+                cachedRefreshToken = tokens.refreshToken
+                cachedAccessToken = tokens.accessToken
+                cachedAccessTokenExpiry = clock.now().plus(tokens.expiresInSeconds.seconds).minus(60.seconds)
+                val signedIn = AuthState.SignedIn(userId = tokens.userId, email = tokens.email)
+                _state.value = signedIn
+                signedIn
+            }
         }
-    }
 
-    override suspend fun signOut() = mutex.withLock {
-        val rt = cachedRefreshToken
-        if (rt != null) {
-            // Best-effort revoke. Never fail the call on revoke errors.
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    httpClient.submitForm(
-                        url = "https://oauth2.googleapis.com/revoke",
-                        formParameters = Parameters.build { append("token", rt) },
-                    )
+    override suspend fun signOut() =
+        mutex.withLock {
+            val rt = cachedRefreshToken
+            if (rt != null) {
+                // Best-effort revoke. Never fail the call on revoke errors.
+                runCatching {
+                    withContext(Dispatchers.IO) {
+                        httpClient.submitForm(
+                            url = "https://oauth2.googleapis.com/revoke",
+                            formParameters = Parameters.build { append("token", rt) },
+                        )
+                    }
+                }
+            }
+            tokenStore.clear()
+            cachedAccessToken = null
+            cachedRefreshToken = null
+            cachedAccessTokenExpiry = Instant.DISTANT_PAST
+            _state.value = AuthState.SignedOut
+        }
+
+    override suspend fun accessToken(): String =
+        mutex.withLock {
+            val now = clock.now()
+            val cached = cachedAccessToken
+            if (cached != null && now < cachedAccessTokenExpiry) {
+                return@withLock cached
+            }
+            val rt =
+                cachedRefreshToken
+                    ?: tokenStore.read()
+                    ?: run {
+                        _state.value = AuthState.SignedOut
+                        throw AuthSessionExpired()
+                    }
+            when (val r = oauthClient.refresh(rt)) {
+                is OAuthClient.RefreshResult.Ok -> {
+                    cachedAccessToken = r.accessToken
+                    cachedAccessTokenExpiry = clock.now().plus(r.expiresInSeconds.seconds).minus(60.seconds)
+                    cachedRefreshToken = rt
+                    r.accessToken
+                }
+
+                is OAuthClient.RefreshResult.Invalid -> {
+                    tokenStore.clear()
+                    cachedRefreshToken = null
+                    cachedAccessToken = null
+                    _state.value = AuthState.SignedOut
+                    throw AuthSessionExpired()
                 }
             }
         }
-        tokenStore.clear()
-        cachedAccessToken = null
-        cachedRefreshToken = null
-        cachedAccessTokenExpiry = Instant.DISTANT_PAST
-        _state.value = AuthState.SignedOut
-    }
-
-    override suspend fun accessToken(): String = mutex.withLock {
-        val now = clock.now()
-        val cached = cachedAccessToken
-        if (cached != null && now < cachedAccessTokenExpiry) {
-            return@withLock cached
-        }
-        val rt = cachedRefreshToken
-            ?: tokenStore.read()
-            ?: run {
-                _state.value = AuthState.SignedOut
-                throw AuthSessionExpired()
-            }
-        when (val r = oauthClient.refresh(rt)) {
-            is OAuthClient.RefreshResult.Ok -> {
-                cachedAccessToken = r.accessToken
-                cachedAccessTokenExpiry = clock.now().plus(r.expiresInSeconds.seconds).minus(60.seconds)
-                cachedRefreshToken = rt
-                r.accessToken
-            }
-
-            is OAuthClient.RefreshResult.Invalid -> {
-                tokenStore.clear()
-                cachedRefreshToken = null
-                cachedAccessToken = null
-                _state.value = AuthState.SignedOut
-                throw AuthSessionExpired()
-            }
-        }
-    }
 
     /** Test helper — drops the cached access token so the next [accessToken] call refreshes. */
     internal fun expireForTest() {

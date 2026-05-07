@@ -32,7 +32,6 @@ import kotlin.test.assertTrue
  *    `openOnDisk`.
  */
 class CatalogDbMigrationWalkTest {
-
     private val tempFiles = mutableListOf<Path>()
 
     @AfterTest
@@ -259,7 +258,11 @@ class CatalogDbMigrationWalkTest {
         return version
     }
 
-    private fun columnExists(driver: SqlDriver, table: String, column: String): Boolean {
+    private fun columnExists(
+        driver: SqlDriver,
+        table: String,
+        column: String,
+    ): Boolean {
         var found = false
         driver.executeQuery(
             identifier = null,
@@ -278,7 +281,10 @@ class CatalogDbMigrationWalkTest {
         return found
     }
 
-    private fun indexExists(driver: SqlDriver, name: String): Boolean {
+    private fun indexExists(
+        driver: SqlDriver,
+        name: String,
+    ): Boolean {
         var found = false
         driver.executeQuery(
             identifier = null,
@@ -292,7 +298,10 @@ class CatalogDbMigrationWalkTest {
         return found
     }
 
-    private fun tableExists(driver: SqlDriver, name: String): Boolean {
+    private fun tableExists(
+        driver: SqlDriver,
+        name: String,
+    ): Boolean {
         var found = false
         driver.executeQuery(
             identifier = null,

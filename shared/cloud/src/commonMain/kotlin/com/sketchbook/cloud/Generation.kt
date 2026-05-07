@@ -12,7 +12,9 @@ import kotlinx.serialization.Serializable
  */
 @JvmInline
 @Serializable
-value class Generation(val raw: String) {
+value class Generation(
+    val raw: String,
+) {
     init {
         require(raw.isNotEmpty()) { "Generation must not be empty (use Generation.ZERO for must-not-exist)" }
     }

@@ -10,7 +10,6 @@ import kotlin.time.Instant
  * `Rejected`); approval triggers the journal write described by [actions].
  */
 interface ProposalsRepository {
-
     /** Live list of all proposals, newest-submitted first. */
     fun observe(): Flow<List<Proposal>>
 

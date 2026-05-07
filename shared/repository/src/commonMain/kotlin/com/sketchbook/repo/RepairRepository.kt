@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.Flow
  * caller-supplied limit and report `total` separately so the UI can show "N more not shown".
  */
 interface RepairRepository {
-
-    fun observeFindings(projectId: ProjectId? = null, limit: Int = 1000): Flow<RepairFindings>
+    fun observeFindings(
+        projectId: ProjectId? = null,
+        limit: Int = 1000,
+    ): Flow<RepairFindings>
 
     /** Mark a Mac-import finding as repaired (drops it from subsequent flow emissions). */
     suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit>
@@ -32,7 +34,10 @@ interface RepairRepository {
     suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit>
 
     /** Drop a missing-sample finding from the queue without changing on-disk state. */
-    suspend fun dismissMissingSample(projectId: ProjectId, missingPath: String): Result<Unit>
+    suspend fun dismissMissingSample(
+        projectId: ProjectId,
+        missingPath: String,
+    ): Result<Unit>
 
     /**
      * Map a missing sample to a candidate the user picked. The .als isn't rewritten here — the

@@ -61,7 +61,6 @@ class RootChromeViewModel(
     private val filterCoordinator: ProjectFilterCoordinator,
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
-
     /**
      * Down-cast captured once. The graph binds [SwappableSyncQueue] to [SyncQueue]; the cast is
      * a no-op in production but stays nullable so unit tests can pass an [InMemorySyncQueue]
@@ -70,21 +69,29 @@ class RootChromeViewModel(
      */
     private val syncImpl: SwappableSyncQueue? = syncQueue as? SwappableSyncQueue
 
-    val syncState: StateFlow<SyncQueueState> = syncQueue.observe()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, SyncQueueState())
+    val syncState: StateFlow<SyncQueueState> =
+        syncQueue
+            .observe()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, SyncQueueState())
 
     val scanProgress: StateFlow<ScanUiState> = scanCoordinator.progress
 
-    val proposalCount: StateFlow<Int> = proposalsRepository.observe()
-        .map { proposals -> proposals.count { it.status == ProposalStatus.Pending } }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val proposalCount: StateFlow<Int> =
+        proposalsRepository
+            .observe()
+            .map { proposals -> proposals.count { it.status == ProposalStatus.Pending } }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    val attentionCount: StateFlow<Int> = repairRepository.observeFindings()
-        .map { it.macImports.size + it.missingSamplesTotal }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val attentionCount: StateFlow<Int> =
+        repairRepository
+            .observeFindings()
+            .map { it.macImports.size + it.missingSamplesTotal }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    val libraryHealth: StateFlow<LibraryHealth> = projectRepository.observeLibraryHealth()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryHealth.EMPTY)
+    val libraryHealth: StateFlow<LibraryHealth> =
+        projectRepository
+            .observeLibraryHealth()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryHealth.EMPTY)
 
     /**
      * Sidebar Health-chip row-click handler. Publishes [filter] into the AppScope-lifetime
@@ -100,25 +107,31 @@ class RootChromeViewModel(
      * PR-T: scalar count for the Home coverage chip. `null` while the SQL is still warming up so
      * the chip has a way to render nothing rather than a flashing "0 missing" placeholder.
      */
-    val missingPluginSummary: StateFlow<MissingPluginSummary?> = projectRepository.observeMissingPluginSummary()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val missingPluginSummary: StateFlow<MissingPluginSummary?> =
+        projectRepository
+            .observeMissingPluginSummary()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /**
      * PR-T: list of missing (name, format) pairs that the chip's popup renders. Empty list while
      * loading; filled once the probe has run + the SQL has propagated.
      */
-    val missingPluginCoverage: StateFlow<List<MissingPluginRow>> = projectRepository.observeMissingPluginCoverage()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val missingPluginCoverage: StateFlow<List<MissingPluginRow>> =
+        projectRepository
+            .observeMissingPluginCoverage()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
      * Soft re-prompt for deferred onboarding steps. `AddSamples` is the only variant today —
      * it surfaces when the user skipped the samples-folders step during onboarding and hasn't
      * dismissed the banner yet. Future cloud onboarding adds a `AddCloud` member.
      */
-    val pendingOnboardingPrompt: StateFlow<OnboardingPrompt?> = settingsRepository.observe()
-        .map { settings -> derivePendingOnboardingPrompt(settings.onboardingSkipped) }
-        .distinctUntilChanged()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val pendingOnboardingPrompt: StateFlow<OnboardingPrompt?> =
+        settingsRepository
+            .observe()
+            .map { settings -> derivePendingOnboardingPrompt(settings.onboardingSkipped) }
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     /**
      * Sticky-dismiss the banner for [prompt]. Maps the UI-level prompt back to the
@@ -127,8 +140,9 @@ class RootChromeViewModel(
     fun dismissPrompt(prompt: OnboardingPrompt) {
         viewModelScope.launch {
             when (prompt) {
-                OnboardingPrompt.AddSamples ->
+                OnboardingPrompt.AddSamples -> {
                     settingsRepository.dismissOnboardingPrompt(OnboardingPromptKind.Samples)
+                }
             }
         }
     }
@@ -147,7 +161,8 @@ class RootChromeViewModel(
     fun conflictMessage(id: ProjectId): String? = syncImpl?.conflictMessage(id)
 
     /** Trigger an immediate push for one project. No-op without cloud. */
-    suspend fun pushNow(id: ProjectId): Result<Unit> = syncImpl?.pushNowById(id) ?: Result.failure(IllegalStateException("Cloud not configured"))
+    suspend fun pushNow(id: ProjectId): Result<Unit> =
+        syncImpl?.pushNowById(id) ?: Result.failure(IllegalStateException("Cloud not configured"))
 
     /** Translate the local id used everywhere in the UI to the cloud-stable [ProjectUuid]. */
     fun timelineUuidFor(id: ProjectId): ProjectUuid = syncStateStore.identityFor(id)
@@ -166,16 +181,18 @@ class RootChromeViewModel(
      * Quick-capture hotkey (Ctrl/Cmd+Shift+S) routes through this use case. Wraps the runtime
      * `syncImpl` so callers don't see the cast or the no-cloud fallback.
      */
-    val forceSnapshotUseCase: ForceSnapshotUseCase = ForceSnapshotUseCase(
-        syncImpl ?: object : ForceSnapshotPipeline {
-            override suspend fun recordForcedNamed(
-                uuid: ProjectUuid,
-                label: String,
-            ): Result<SnapshotRev> = Result.failure(
-                IllegalStateException("Cloud sync isn't configured — set credentials in Settings first."),
-            )
-        },
-    )
+    val forceSnapshotUseCase: ForceSnapshotUseCase =
+        ForceSnapshotUseCase(
+            syncImpl ?: object : ForceSnapshotPipeline {
+                override suspend fun recordForcedNamed(
+                    uuid: ProjectUuid,
+                    label: String,
+                ): Result<SnapshotRev> =
+                    Result.failure(
+                        IllegalStateException("Cloud sync isn't configured — set credentials in Settings first."),
+                    )
+            },
+        )
 }
 
 /**
@@ -195,7 +212,8 @@ sealed interface OnboardingPrompt {
  * the full chrome VM (which needs a Catalog-backed [com.sketchbook.catalog.SyncStateStore] and
  * other heavy collaborators that have nothing to do with this banner).
  */
-internal fun derivePendingOnboardingPrompt(flags: OnboardingSkipFlags): OnboardingPrompt? = when {
-    flags.samplesSkipped && !flags.samplesPromptDismissed -> OnboardingPrompt.AddSamples
-    else -> null
-}
+internal fun derivePendingOnboardingPrompt(flags: OnboardingSkipFlags): OnboardingPrompt? =
+    when {
+        flags.samplesSkipped && !flags.samplesPromptDismissed -> OnboardingPrompt.AddSamples
+        else -> null
+    }

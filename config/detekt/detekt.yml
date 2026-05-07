@@ -15,7 +15,10 @@ complexity:
     allowedComplexity: 20
   LongMethod:
     active: true
-    allowedLines: 80
+    # Bumped from 80 → 100 after spotless line-wrapping was aligned: existing Compose
+    # composables expanded by ~5–15 lines purely from parameter / argument wrapping, not
+    # added logic. 100 keeps the rule active for genuine long-function regressions.
+    allowedLines: 100
   LongParameterList:
     active: true
     allowedFunctionParameters: 8
@@ -45,6 +48,11 @@ style:
     maxLineLength: 140
     excludePackageStatements: true
     excludeImportStatements: true
+  # Compose theming code uses Quintet-style destructuring (e.g. Button.kt's variant→colors
+  # mapping). The 3-component default is too tight for that pattern.
+  DestructuringDeclarationWithTooManyEntries:
+    active: true
+    maxDestructuringEntries: 5
   MagicNumber:
     active: true
     ignoreNumbers: ['-1', '0', '1', '2', '100', '1000']
@@ -74,22 +82,15 @@ exceptions:
   TooGenericExceptionCaught:
     active: false  # too noisy in coroutine code
 
-# detekt 2.x: the formatting ruleset is now `ktlint:` (was `formatting:` in 1.x)
-# and is supplied by the `dev.detekt:detekt-rules-ktlint-wrapper` artifact
-# (renamed from 1.x `detekt-formatting`).
+# detekt's `ktlint:` ruleset is `dev.detekt:detekt-rules-ktlint-wrapper` — literally the
+# ktlint formatter wrapped as detekt rules. Spotless already runs ktlint via `.editorconfig`,
+# so enabling this here means running ktlint twice with subtly different defaults (different
+# code-style preset, different rule thresholds), which produces a cross-tool flap where
+# spotlessApply's output fails detekt and vice versa. Per detekt maintainer guidance
+# (https://github.com/detekt/detekt/discussions/5997), pick one. We pick spotless. Detekt's
+# *standard* MaxLineLength rule (above) still enforces the 140-col cap as a quality gate.
 ktlint:
-  active: true
-  android: false
-  autoCorrect: false
-  # Disable rules already handled by Spotless/ktlint to avoid double-reporting.
-  Indentation:
-    active: false
-  MaximumLineLength:
-    active: false
-  ImportOrdering:
-    active: false
-  NoWildcardImports:
-    active: false
+  active: false
 
 # Compose Lints (compose-rules 0.5.x — ships matching detekt 2.0.0-alpha.3 bindings).
 # Rule list aligned with https://mrmans0n.github.io/compose-rules/detekt/ for 0.5.x.

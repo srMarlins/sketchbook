@@ -13,30 +13,31 @@ import kotlin.time.Instant
  * tested explicitly so a refactor that flips rule order shows up as a red test.
  */
 class StageInferrerTest {
-
     private val now = Instant.parse("2026-05-05T12:00:00Z")
 
     @Test
     fun classifiesAsDoneWhenMasteringChainAndLocalBounceAndEditedOver30DaysAgo() {
-        val stage = StageInferrer.infer(
-            trackCount = 8,
-            pluginNames = listOf("EQ Eight", "Pro-L 2"),
-            hasLocalBounce = true,
-            lastModified = now - 60.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 8,
+                pluginNames = listOf("EQ Eight", "Pro-L 2"),
+                hasLocalBounce = true,
+                lastModified = now - 60.days,
+                now = now,
+            )
         assertEquals(Stage.Done, stage)
     }
 
     @Test
     fun classifiesAsMixingWhenMasteringChainAndEditedWithin30Days() {
-        val stage = StageInferrer.infer(
-            trackCount = 12,
-            pluginNames = listOf("Compressor", "Limiter"),
-            hasLocalBounce = false,
-            lastModified = now - 3.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 12,
+                pluginNames = listOf("Compressor", "Limiter"),
+                hasLocalBounce = false,
+                lastModified = now - 3.days,
+                now = now,
+            )
         assertEquals(Stage.Mixing, stage)
     }
 
@@ -45,13 +46,14 @@ class StageInferrerTest {
         // Reviewer-requested case: a mastered project edited 20 days ago previously fell into
         // the dead zone between Mixing (<=14d) and Done (>30d + bounce). With the cutoff lifted
         // to 30 days it now classifies as Mixing instead of returning null.
-        val stage = StageInferrer.infer(
-            trackCount = 12,
-            pluginNames = listOf("Pro-L 2"),
-            hasLocalBounce = false,
-            lastModified = now - 20.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 12,
+                pluginNames = listOf("Pro-L 2"),
+                hasLocalBounce = false,
+                lastModified = now - 20.days,
+                now = now,
+            )
         assertEquals(Stage.Mixing, stage)
     }
 
@@ -60,49 +62,53 @@ class StageInferrerTest {
         // OTT is a popular track-level multiband compressor (synths, drums) — including it in
         // MASTERING_NEEDLES previously caused false positives. With it removed, an OTT-only
         // sketch falls through the mastering rules and is classified by track count instead.
-        val stage = StageInferrer.infer(
-            trackCount = 3,
-            pluginNames = listOf("OTT"),
-            hasLocalBounce = false,
-            lastModified = now - 7.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 3,
+                pluginNames = listOf("OTT"),
+                hasLocalBounce = false,
+                lastModified = now - 7.days,
+                now = now,
+            )
         assertEquals(Stage.Sketch, stage)
     }
 
     @Test
     fun classifiesAsStuckWhenManyTracksAndNoBounceAndOver90DaysOld() {
-        val stage = StageInferrer.infer(
-            trackCount = 14,
-            pluginNames = listOf("EQ Eight"),
-            hasLocalBounce = false,
-            lastModified = now - 120.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 14,
+                pluginNames = listOf("EQ Eight"),
+                hasLocalBounce = false,
+                lastModified = now - 120.days,
+                now = now,
+            )
         assertEquals(Stage.Stuck, stage)
     }
 
     @Test
     fun classifiesAsInProgressWhenFiveTracksAndRecentAndNoMastering() {
-        val stage = StageInferrer.infer(
-            trackCount = 7,
-            pluginNames = listOf("Operator", "Reverb"),
-            hasLocalBounce = false,
-            lastModified = now - 5.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 7,
+                pluginNames = listOf("Operator", "Reverb"),
+                hasLocalBounce = false,
+                lastModified = now - 5.days,
+                now = now,
+            )
         assertEquals(Stage.InProgress, stage)
     }
 
     @Test
     fun classifiesAsSketchWhenSmallAndRecentAndNothingElse() {
-        val stage = StageInferrer.infer(
-            trackCount = 3,
-            pluginNames = emptyList(),
-            hasLocalBounce = false,
-            lastModified = now - 7.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 3,
+                pluginNames = emptyList(),
+                hasLocalBounce = false,
+                lastModified = now - 7.days,
+                now = now,
+            )
         assertEquals(Stage.Sketch, stage)
     }
 
@@ -110,13 +116,14 @@ class StageInferrerTest {
     fun masteringPriorityBeatsInProgressForLargeRecentProject() {
         // 12 tracks + Limiter edited 3 days ago could match both Mixing (rule 2) and
         // InProgress (rule 4). Rule order says Mixing wins.
-        val stage = StageInferrer.infer(
-            trackCount = 12,
-            pluginNames = listOf("FabFilter Pro-L 2"),
-            hasLocalBounce = false,
-            lastModified = now - 3.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 12,
+                pluginNames = listOf("FabFilter Pro-L 2"),
+                hasLocalBounce = false,
+                lastModified = now - 3.days,
+                now = now,
+            )
         assertEquals(Stage.Mixing, stage)
     }
 
@@ -124,13 +131,14 @@ class StageInferrerTest {
     fun staleSketchFallsThroughToNull() {
         // 3 tracks, no mastering, no bounce, but 60 days old — too stale for Sketch
         // (recent < 30d), too few tracks for Stuck. No rule fires.
-        val stage = StageInferrer.infer(
-            trackCount = 3,
-            pluginNames = emptyList(),
-            hasLocalBounce = false,
-            lastModified = now - 60.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 3,
+                pluginNames = emptyList(),
+                hasLocalBounce = false,
+                lastModified = now - 60.days,
+                now = now,
+            )
         assertNull(stage)
     }
 
@@ -138,13 +146,14 @@ class StageInferrerTest {
     fun pluginNameMatchIsCaseInsensitiveAndSubstring() {
         // "Ozone 11 Maximizer" carries the substring "ozone" and the substring "maximizer";
         // both are mastering needles. Edited 5 days ago → Mixing.
-        val stage = StageInferrer.infer(
-            trackCount = 6,
-            pluginNames = listOf("Ozone 11 Maximizer"),
-            hasLocalBounce = false,
-            lastModified = now - 5.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 6,
+                pluginNames = listOf("Ozone 11 Maximizer"),
+                hasLocalBounce = false,
+                lastModified = now - 5.days,
+                now = now,
+            )
         assertEquals(Stage.Mixing, stage)
     }
 
@@ -152,26 +161,28 @@ class StageInferrerTest {
     fun masteredButNoBounceAndStale_doesNotMatchDoneOrMixing_fallsThrough() {
         // Mastered but no bounce + 60d old. Rule 1 needs bounce, rule 2 needs <=14d.
         // 6 tracks, so Stuck wants >=10 — falls through.
-        val stage = StageInferrer.infer(
-            trackCount = 6,
-            pluginNames = listOf("Pro-L 2"),
-            hasLocalBounce = false,
-            lastModified = now - 60.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 6,
+                pluginNames = listOf("Pro-L 2"),
+                hasLocalBounce = false,
+                lastModified = now - 60.days,
+                now = now,
+            )
         assertNull(stage)
     }
 
     @Test
     fun smallStaleProjectIsNotStuckEvenIfNoBounce() {
         // Only 3 tracks. Stuck requires >=10. With no other signals it just falls through.
-        val stage = StageInferrer.infer(
-            trackCount = 3,
-            pluginNames = listOf("Operator"),
-            hasLocalBounce = false,
-            lastModified = now - 200.days,
-            now = now,
-        )
+        val stage =
+            StageInferrer.infer(
+                trackCount = 3,
+                pluginNames = listOf("Operator"),
+                hasLocalBounce = false,
+                lastModified = now - 200.days,
+                now = now,
+            )
         assertNull(stage)
     }
 

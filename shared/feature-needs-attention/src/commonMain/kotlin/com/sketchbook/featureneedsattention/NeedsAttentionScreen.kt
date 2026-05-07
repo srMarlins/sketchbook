@@ -71,24 +71,27 @@ fun LazyListScope.needsAttentionItems(
     onBulkApply: (List<MissingSampleFinding>) -> Unit,
     onBulkDismiss: (List<MissingSampleFinding>) -> Unit,
 ) {
-    val hasMissing = state.missingByConfidence.autoMatch.isNotEmpty() ||
-        state.missingByConfidence.multiCandidate.isNotEmpty() ||
-        state.missingByConfidence.noCandidate.isNotEmpty()
+    val hasMissing =
+        state.missingByConfidence.autoMatch.isNotEmpty() ||
+            state.missingByConfidence.multiCandidate.isNotEmpty() ||
+            state.missingByConfidence.noCandidate.isNotEmpty()
     if (state.macEntries.isEmpty() && !hasMissing) {
         item(key = "na-empty") {
             EmptyState(
-                title = if (state.loading) {
-                    "Scanning…"
-                } else if (state.search.isNotBlank()) {
-                    "No matches"
-                } else {
-                    "All clear"
-                },
-                hint = if (state.search.isNotBlank()) {
-                    "Nothing matches \"${state.search}\". Clear the search to see everything."
-                } else {
-                    "No Mac-imported projects or missing samples found."
-                },
+                title =
+                    if (state.loading) {
+                        "Scanning…"
+                    } else if (state.search.isNotBlank()) {
+                        "No matches"
+                    } else {
+                        "All clear"
+                    },
+                hint =
+                    if (state.search.isNotBlank()) {
+                        "Nothing matches \"${state.search}\". Clear the search to see everything."
+                    } else {
+                        "No Mac-imported projects or missing samples found."
+                    },
             )
         }
         return
@@ -182,16 +185,20 @@ private fun MissingSamplesCard(
 ) {
     val title = if (truncated) "Missing samples · $shown of $total" else "Missing samples"
     val totalShown = buckets.autoMatch.size + buckets.multiCandidate.size + buckets.noCandidate.size
-    val sections = remember(buckets) {
-        listOfNotNull(
-            buckets.autoMatch.takeIf { it.isNotEmpty() }
-                ?.let { Section(MissingKind.Auto, "Auto-match", it) },
-            buckets.multiCandidate.takeIf { it.isNotEmpty() }
-                ?.let { Section(MissingKind.Multi, "Multiple candidates", it) },
-            buckets.noCandidate.takeIf { it.isNotEmpty() }
-                ?.let { Section(MissingKind.None, "No candidates", it) },
-        )
-    }
+    val sections =
+        remember(buckets) {
+            listOfNotNull(
+                buckets.autoMatch
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { Section(MissingKind.Auto, "Auto-match", it) },
+                buckets.multiCandidate
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { Section(MissingKind.Multi, "Multiple candidates", it) },
+                buckets.noCandidate
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { Section(MissingKind.None, "No candidates", it) },
+            )
+        }
 
     GroupCard(
         title = title,
@@ -209,17 +216,23 @@ private fun MissingSamplesCard(
                         count = section.entries.size,
                         actions = {
                             when (section.kind) {
-                                MissingKind.Auto -> Button(
-                                    onClick = { onBulkApply(findings) },
-                                    variant = ButtonVariant.Primary,
-                                ) { Text("Apply ${section.entries.size}", softWrap = false, maxLines = 1) }
+                                MissingKind.Auto -> {
+                                    Button(
+                                        onClick = { onBulkApply(findings) },
+                                        variant = ButtonVariant.Primary,
+                                    ) { Text("Apply ${section.entries.size}", softWrap = false, maxLines = 1) }
+                                }
 
-                                MissingKind.None -> Button(
-                                    onClick = { onBulkDismiss(findings) },
-                                    variant = ButtonVariant.Ghost,
-                                ) { Text("Dismiss ${section.entries.size}", softWrap = false, maxLines = 1) }
+                                MissingKind.None -> {
+                                    Button(
+                                        onClick = { onBulkDismiss(findings) },
+                                        variant = ButtonVariant.Ghost,
+                                    ) { Text("Dismiss ${section.entries.size}", softWrap = false, maxLines = 1) }
+                                }
 
-                                MissingKind.Multi -> Unit
+                                MissingKind.Multi -> {
+                                    Unit
+                                }
                             }
                         },
                     )
@@ -251,9 +264,10 @@ private fun MissingSamplesCard(
                     Text(
                         "Showing $shown of $total — narrow your library or rescan to see the rest",
                         style = AppTheme.typography.caption,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm),
                     )
                 }
             }
@@ -349,25 +363,31 @@ private fun MissingSampleRow(
             }
         } else {
             when (kind) {
-                MissingKind.Auto -> Badge(color = AppTheme.colors.tintSage) {
-                    ProvideContentColor(AppTheme.colors.inkPrimary) {
-                        Text(
-                            "→ ${autoMatchParent.ifEmpty { "match" }}/",
-                            style = AppTheme.typography.caption,
-                            maxLines = 1,
-                        )
+                MissingKind.Auto -> {
+                    Badge(color = AppTheme.colors.tintSage) {
+                        ProvideContentColor(AppTheme.colors.inkPrimary) {
+                            Text(
+                                "→ ${autoMatchParent.ifEmpty { "match" }}/",
+                                style = AppTheme.typography.caption,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
 
-                MissingKind.Multi -> Badge(color = AppTheme.colors.tintBlue) {
-                    ProvideContentColor(AppTheme.colors.inkPrimary) {
-                        Text("$candidatesCount matches", style = AppTheme.typography.caption)
+                MissingKind.Multi -> {
+                    Badge(color = AppTheme.colors.tintBlue) {
+                        ProvideContentColor(AppTheme.colors.inkPrimary) {
+                            Text("$candidatesCount matches", style = AppTheme.typography.caption)
+                        }
                     }
                 }
 
-                MissingKind.None -> Badge(color = AppTheme.colors.tintRose) {
-                    ProvideContentColor(AppTheme.colors.inkPrimary) {
-                        Text("no match", style = AppTheme.typography.caption)
+                MissingKind.None -> {
+                    Badge(color = AppTheme.colors.tintRose) {
+                        ProvideContentColor(AppTheme.colors.inkPrimary) {
+                            Text("no match", style = AppTheme.typography.caption)
+                        }
                     }
                 }
             }
@@ -376,12 +396,17 @@ private fun MissingSampleRow(
 }
 
 @Composable
-private fun IconAction(glyph: String, color: Color, onClick: () -> Unit) {
+private fun IconAction(
+    glyph: String,
+    color: Color,
+    onClick: () -> Unit,
+) {
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
-            .clickable(onClick = onClick)
-            .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
+                .clickable(onClick = onClick)
+                .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
     ) {
         ProvideContentColor(color) {
             Text(glyph, style = AppTheme.typography.bodyEmphasis)
@@ -389,7 +414,10 @@ private fun IconAction(glyph: String, color: Color, onClick: () -> Unit) {
     }
 }
 
-private fun macPathsLabel(count: Int, projectInfoMissing: Boolean): String {
+private fun macPathsLabel(
+    count: Int,
+    projectInfoMissing: Boolean,
+): String {
     val plural = if (count == 1) "" else "s"
     val infoSuffix = if (projectInfoMissing) " · no info/" else ""
     return "$count mac path$plural$infoSuffix"

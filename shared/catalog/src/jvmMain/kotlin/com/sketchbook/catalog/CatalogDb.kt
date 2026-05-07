@@ -13,7 +13,10 @@ import java.util.Properties
  * operator, raw `PRAGMA`s) need the driver directly because SQLDelight 2.1's static typer
  * can't model them.
  */
-data class CatalogHandle(val catalog: Catalog, val driver: SqlDriver)
+data class CatalogHandle(
+    val catalog: Catalog,
+    val driver: SqlDriver,
+)
 
 /**
  * Factory for the JVM SQLDelight driver. Two flavors:
@@ -34,25 +37,25 @@ data class CatalogHandle(val catalog: Catalog, val driver: SqlDriver)
  * connections; the WAL coordinates writes between them.
  */
 object CatalogDb {
-
     /** PRAGMAs applied to the live JDBC connection on bring-up. */
-    private val PER_CONNECTION_PRAGMAS: List<String> = listOf(
-        "PRAGMA foreign_keys = ON",
-        // synchronous=NORMAL is the recommended pairing with WAL: durable across process
-        // crashes (only loses the last in-flight transaction on a power cut), one fsync per
-        // checkpoint instead of per-commit.
-        "PRAGMA synchronous = NORMAL",
-        // 64 MB page cache (negative = KiB). Default 2 MB chokes on the FTS5 `MATCH` joins
-        // when the catalog passes a few thousand rows.
-        "PRAGMA cache_size = -65536",
-        // 256 MB mmap window. Lets the kernel page DB blocks without copying into the JVM
-        // heap on read-heavy paths (UI list refresh after scan).
-        "PRAGMA mmap_size = 268435456",
-        // Keep temp B-trees and intermediate sort buffers in memory.
-        "PRAGMA temp_store = MEMORY",
-        // Auto-checkpoint every 1,000 pages of WAL (~4 MB).
-        "PRAGMA wal_autocheckpoint = 1000",
-    )
+    private val PER_CONNECTION_PRAGMAS: List<String> =
+        listOf(
+            "PRAGMA foreign_keys = ON",
+            // synchronous=NORMAL is the recommended pairing with WAL: durable across process
+            // crashes (only loses the last in-flight transaction on a power cut), one fsync per
+            // checkpoint instead of per-commit.
+            "PRAGMA synchronous = NORMAL",
+            // 64 MB page cache (negative = KiB). Default 2 MB chokes on the FTS5 `MATCH` joins
+            // when the catalog passes a few thousand rows.
+            "PRAGMA cache_size = -65536",
+            // 256 MB mmap window. Lets the kernel page DB blocks without copying into the JVM
+            // heap on read-heavy paths (UI list refresh after scan).
+            "PRAGMA mmap_size = 268435456",
+            // Keep temp B-trees and intermediate sort buffers in memory.
+            "PRAGMA temp_store = MEMORY",
+            // Auto-checkpoint every 1,000 pages of WAL (~4 MB).
+            "PRAGMA wal_autocheckpoint = 1000",
+        )
 
     fun openOnDisk(path: Path): CatalogHandle {
         // Single-connection JdbcSqliteDriver. The earlier `pooled.asJdbcDriver()` setup didn't
@@ -75,10 +78,11 @@ object CatalogDb {
         // a single-process app. WAL still gives us multi-process concurrency for the desktop ↔
         // MCP setup. If we ever need a pool with listeners, the upstream-recommended path is a
         // custom JdbcDriver subclass that copies JdbcSqliteDriver's listener map.
-        val driver = JdbcSqliteDriver(
-            "jdbc:sqlite:${path.toAbsolutePath()}",
-            Properties(),
-        )
+        val driver =
+            JdbcSqliteDriver(
+                "jdbc:sqlite:${path.toAbsolutePath()}",
+                Properties(),
+            )
         // Apply both the sticky DB-level pragma (journal_mode=WAL) and the per-connection set on
         // the single live connection.
         driver.execute(identifier = null, sql = "PRAGMA journal_mode = WAL", parameters = 0)
@@ -122,41 +126,42 @@ object CatalogDb {
                 // schema version. Each marker is a column added in the corresponding `<n>.sqm`
                 // migration; presence means migrations up to and including <n> have already
                 // been applied. List in *ascending* order so the lowest missing marker wins.
-                val detected = when {
-                    // before 1.sqm
-                    !columnExists(driver, "sync_state", "updated_at") -> 1L
+                val detected =
+                    when {
+                        // before 1.sqm
+                        !columnExists(driver, "sync_state", "updated_at") -> 1L
 
-                    // before 2.sqm
-                    !tableExists(driver, "repair_acks") -> 2L
+                        // before 2.sqm
+                        !tableExists(driver, "repair_acks") -> 2L
 
-                    // before 3.sqm
-                    !tableExists(driver, "journal_entries") -> 3L
+                        // before 3.sqm
+                        !tableExists(driver, "journal_entries") -> 3L
 
-                    // before 4.sqm
-                    !indexExists(driver, "idx_projects_key") -> 4L
+                        // before 4.sqm
+                        !indexExists(driver, "idx_projects_key") -> 4L
 
-                    // before 5.sqm
-                    !columnExists(driver, "project_plugins", "is_installed") -> 5L
+                        // before 5.sqm
+                        !columnExists(driver, "project_plugins", "is_installed") -> 5L
 
-                    // before 7.sqm — project_name column added by 7.sqm
-                    !columnExists(driver, "journal_entries", "project_name") -> 7L
+                        // before 7.sqm — project_name column added by 7.sqm
+                        !columnExists(driver, "journal_entries", "project_name") -> 7L
 
-                    // before 9.sqm — project_path column added by 9.sqm. Sits between the
-                    // project_name tier and the data-backfill else so a DB that already has
-                    // project_name but not project_path detects as v8 (post-7.sqm, pre-9.sqm).
-                    // Returning 8L runs 8.sqm's UPDATE (idempotent via WHERE project_name IS
-                    // NULL) and then 9.sqm's ADD COLUMN + backfill.
-                    !columnExists(driver, "journal_entries", "project_path") -> 8L
+                        // before 9.sqm — project_path column added by 9.sqm. Sits between the
+                        // project_name tier and the data-backfill else so a DB that already has
+                        // project_name but not project_path detects as v8 (post-7.sqm, pre-9.sqm).
+                        // Returning 8L runs 8.sqm's UPDATE (idempotent via WHERE project_name IS
+                        // NULL) and then 9.sqm's ADD COLUMN + backfill.
+                        !columnExists(driver, "journal_entries", "project_path") -> 8L
 
-                    // Pre-tracking DBs that already have both denorm columns present are at v9
-                    // effectively (post-9.sqm structurally; data backfills are idempotent). Return
-                    // target-1 so migrate(9, target) re-runs 9.sqm's UPDATE — same trick the prior
-                    // commit used to backfill 8.sqm via this branch. The 9.sqm ALTER would be the
-                    // re-run risk, but this branch is unreachable in practice: any DB with a
-                    // project_path column was created by *this* PR's migration path, which writes
-                    // user_version, so it'd never land in `current == 0L`.
-                    else -> target - 1
-                }
+                        // Pre-tracking DBs that already have both denorm columns present are at v9
+                        // effectively (post-9.sqm structurally; data backfills are idempotent). Return
+                        // target-1 so migrate(9, target) re-runs 9.sqm's UPDATE — same trick the prior
+                        // commit used to backfill 8.sqm via this branch. The 9.sqm ALTER would be the
+                        // re-run risk, but this branch is unreachable in practice: any DB with a
+                        // project_path column was created by *this* PR's migration path, which writes
+                        // user_version, so it'd never land in `current == 0L`.
+                        else -> target - 1
+                    }
                 if (detected < target) {
                     Catalog.Schema.migrate(driver, detected, target)
                 }
@@ -171,7 +176,11 @@ object CatalogDb {
         }
     }
 
-    private fun columnExists(driver: SqlDriver, table: String, column: String): Boolean {
+    private fun columnExists(
+        driver: SqlDriver,
+        table: String,
+        column: String,
+    ): Boolean {
         var found = false
         driver.executeQuery(
             identifier = null,
@@ -191,7 +200,10 @@ object CatalogDb {
         return found
     }
 
-    private fun indexExists(driver: SqlDriver, name: String): Boolean {
+    private fun indexExists(
+        driver: SqlDriver,
+        name: String,
+    ): Boolean {
         var found = false
         driver.executeQuery(
             identifier = null,
@@ -205,7 +217,10 @@ object CatalogDb {
         return found
     }
 
-    private fun tableExists(driver: SqlDriver, name: String): Boolean {
+    private fun tableExists(
+        driver: SqlDriver,
+        name: String,
+    ): Boolean {
         var found = false
         driver.executeQuery(
             identifier = null,
@@ -233,7 +248,10 @@ object CatalogDb {
         return version
     }
 
-    private fun writeUserVersion(driver: SqlDriver, version: Long) {
+    private fun writeUserVersion(
+        driver: SqlDriver,
+        version: Long,
+    ) {
         driver.execute(null, "PRAGMA user_version = $version;", 0)
     }
 

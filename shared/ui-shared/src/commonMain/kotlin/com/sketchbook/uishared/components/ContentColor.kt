@@ -13,6 +13,9 @@ import androidx.compose.ui.graphics.Color
 val LocalContentColor = compositionLocalOf<Color> { Color.Black }
 
 @Composable
-fun ProvideContentColor(color: Color, content: @Composable () -> Unit) {
+fun ProvideContentColor(
+    color: Color,
+    content: @Composable () -> Unit,
+) {
     CompositionLocalProvider(LocalContentColor provides color, content = content)
 }

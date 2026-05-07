@@ -23,7 +23,6 @@ import kotlin.test.assertNull
  * which doesn't support DROP COLUMN cleanly across all supported versions.
  */
 class CatalogDbProjectPathBackfillTest {
-
     @Test
     fun migrate8To9AddsProjectPathAndBackfillsResolvableEntries() {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY, Properties())
@@ -95,7 +94,12 @@ class CatalogDbProjectPathBackfillTest {
         )
     }
 
-    private fun insertProject(driver: SqlDriver, id: Long, path: String, name: String) {
+    private fun insertProject(
+        driver: SqlDriver,
+        id: Long,
+        path: String,
+        name: String,
+    ) {
         driver.execute(
             null,
             "INSERT INTO projects (id, path, name, parent_dir, last_modified, last_scanned) VALUES (?, ?, ?, '', 0, 0)",
@@ -107,7 +111,12 @@ class CatalogDbProjectPathBackfillTest {
         }
     }
 
-    private fun insertJournalEntry(driver: SqlDriver, id: Long, projectId: Long, projectName: String?) {
+    private fun insertJournalEntry(
+        driver: SqlDriver,
+        id: Long,
+        projectId: Long,
+        projectName: String?,
+    ) {
         driver.execute(
             null,
             "INSERT INTO journal_entries (id, occurred_at, actor, action_type, project_id, payload_json, project_name) " +
@@ -120,7 +129,10 @@ class CatalogDbProjectPathBackfillTest {
         }
     }
 
-    private fun selectPath(driver: SqlDriver, entryId: Long): String? {
+    private fun selectPath(
+        driver: SqlDriver,
+        entryId: Long,
+    ): String? {
         var out: String? = null
         var found = false
         driver.executeQuery(

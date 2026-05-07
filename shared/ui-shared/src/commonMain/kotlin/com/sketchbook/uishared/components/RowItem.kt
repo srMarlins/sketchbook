@@ -47,37 +47,37 @@ fun RowItem(
     val edgeLight = if (colors.isDark) Color(0x14F5ECD8) else Color(0x66FFFAEE)
     val bg = if (isHovered) colors.tintCream else colors.surfaceCard
 
-    val rowMod = modifier
-        .clip(shape)
-        .background(bg)
-        .drawBehind {
-            val r = cornerDp.toPx()
-            drawRoundRect(
-                color = edgeDark,
-                topLeft = Offset(0f, 0f),
-                size = Size(size.width, size.height),
-                cornerRadius = CornerRadius(r, r),
-                style = Stroke(width = 1f),
-            )
-            drawRoundRect(
-                color = edgeLight,
-                topLeft = Offset(0.5f, 0.5f),
-                size = Size(size.width - 1f, size.height - 1f),
-                cornerRadius = CornerRadius(r - 0.5f, r - 0.5f),
-                style = Stroke(width = 0.6f),
-            )
-        }
-        .let {
-            if (onClick != null) {
-                it.clickable(
-                    interactionSource = interaction,
-                    indication = null,
-                    onClick = onClick,
+    val rowMod =
+        modifier
+            .clip(shape)
+            .background(bg)
+            .drawBehind {
+                val r = cornerDp.toPx()
+                drawRoundRect(
+                    color = edgeDark,
+                    topLeft = Offset(0f, 0f),
+                    size = Size(size.width, size.height),
+                    cornerRadius = CornerRadius(r, r),
+                    style = Stroke(width = 1f),
                 )
-            } else {
-                it
+                drawRoundRect(
+                    color = edgeLight,
+                    topLeft = Offset(0.5f, 0.5f),
+                    size = Size(size.width - 1f, size.height - 1f),
+                    cornerRadius = CornerRadius(r - 0.5f, r - 0.5f),
+                    style = Stroke(width = 0.6f),
+                )
+            }.let {
+                if (onClick != null) {
+                    it.clickable(
+                        interactionSource = interaction,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else {
+                    it
+                }
             }
-        }
     Row(
         modifier = rowMod.padding(PaddingValues(horizontal = AppTheme.spacing.md, vertical = 12.dp)),
         verticalAlignment = Alignment.CenterVertically,

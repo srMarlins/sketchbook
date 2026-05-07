@@ -9,6 +9,8 @@ import com.sketchbook.cloud.CloudCredentials
  * backend and the auth subsystem so [com.sketchbook.cloud.DirectGcsBackend] never depends on
  * `shared/auth`.
  */
-class OAuthCloudCredentials(private val authSession: AuthSession) : CloudCredentials {
+class OAuthCloudCredentials(
+    private val authSession: AuthSession,
+) : CloudCredentials {
     override suspend fun token(): String = authSession.accessToken()
 }

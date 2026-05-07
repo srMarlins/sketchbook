@@ -132,12 +132,13 @@ fun LazyListScope.proposalsItems(
     }
 }
 
-private val SOURCE_FILTER_OPTIONS = listOf(
-    FilterChipOption(ProposalsViewModel.SourceFilter.All, "All"),
-    FilterChipOption(ProposalsViewModel.SourceFilter.Mcp, "MCP"),
-    FilterChipOption(ProposalsViewModel.SourceFilter.Code, "Code"),
-    FilterChipOption(ProposalsViewModel.SourceFilter.User, "User"),
-)
+private val SOURCE_FILTER_OPTIONS =
+    listOf(
+        FilterChipOption(ProposalsViewModel.SourceFilter.All, "All"),
+        FilterChipOption(ProposalsViewModel.SourceFilter.Mcp, "MCP"),
+        FilterChipOption(ProposalsViewModel.SourceFilter.Code, "Code"),
+        FilterChipOption(ProposalsViewModel.SourceFilter.User, "User"),
+    )
 
 @Composable
 private fun ProposalGroupCard(
@@ -173,9 +174,10 @@ private fun ProposalGroupCard(
             val lastIndex = group.proposals.lastIndex
             group.proposals.forEachIndexed { idx, p ->
                 key(p.proposalId) {
-                    val rowData = remember(p, projectNamesById) {
-                        rowDataFor(p, projectNamesById)
-                    }
+                    val rowData =
+                        remember(p, projectNamesById) {
+                            rowDataFor(p, projectNamesById)
+                        }
                     ProposalListRow(
                         data = rowData,
                         last = idx == lastIndex,
@@ -204,7 +206,10 @@ private data class ProposalRowData(
     val submittedAt: Instant,
 )
 
-private fun rowDataFor(p: Proposal, names: Map<Long, String>): ProposalRowData {
+private fun rowDataFor(
+    p: Proposal,
+    names: Map<Long, String>,
+): ProposalRowData {
     val first = p.actions.firstOrNull()
     val label = first?.let { proposalLabel(it, names) }
     return ProposalRowData(
@@ -297,11 +302,12 @@ private fun ResolvedRow(
 ) {
     val id = data.proposalId
     GroupRow(onClick = { onOpen(id) }, last = last) {
-        val color = when (status) {
-            ProposalStatus.Approved -> AppTheme.colors.pinGreen
-            ProposalStatus.Rejected -> AppTheme.colors.accentAction
-            else -> AppTheme.colors.accentSecondary
-        }
+        val color =
+            when (status) {
+                ProposalStatus.Approved -> AppTheme.colors.pinGreen
+                ProposalStatus.Rejected -> AppTheme.colors.accentAction
+                else -> AppTheme.colors.accentSecondary
+            }
         Badge(color = color) {
             ProvideContentColor(AppTheme.colors.inkPrimary) {
                 Text(status.name.lowercase(), style = AppTheme.typography.caption)
@@ -321,12 +327,17 @@ private fun ResolvedRow(
 }
 
 @Composable
-private fun IconAction(glyph: String, color: Color, onClick: () -> Unit) {
+private fun IconAction(
+    glyph: String,
+    color: Color,
+    onClick: () -> Unit,
+) {
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
-            .clickable(onClick = onClick)
-            .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(AppTheme.spacing.cornerSmall))
+                .clickable(onClick = onClick)
+                .padding(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs),
     ) {
         ProvideContentColor(color) {
             Text(glyph, style = AppTheme.typography.bodyEmphasis)

@@ -37,14 +37,16 @@ class GcsAuth(
     private val clock: Clock = Clock.System,
     private val scope: String = "https://www.googleapis.com/auth/devstorage.read_write",
 ) : CloudCredentials {
-
     private val mutex = Mutex()
     private var cached: CachedToken? = null
 
     private val privateKey: PrivateKey by lazy { decodePkcs8PrivateKey(key.privateKeyPem) }
 
     /** Sign a fresh JWT for the configured [scope]. Returns the compact `header.claims.sig` form. */
-    fun signJwt(now: Instant = clock.now(), audience: String = key.tokenUri): String {
+    fun signJwt(
+        now: Instant = clock.now(),
+        audience: String = key.tokenUri,
+    ): String {
         val nowSec = now.epochSeconds
         val expSec = nowSec + 3600
         // Build header/claims as JsonObjects so kotlinx.serialization handles every escape
@@ -52,18 +54,20 @@ class GcsAuth(
         // that only covered \" and \\. SA-file inputs are trusted today, but the JWT spec
         // requires strict JSON and the brittle path is one upstream change away from emitting
         // invalid tokens that the OAuth endpoint silently rejects.
-        val header: JsonObject = buildJsonObject {
-            put("alg", "RS256")
-            put("typ", "JWT")
-            put("kid", key.privateKeyId)
-        }
-        val claims: JsonObject = buildJsonObject {
-            put("iss", key.clientEmail)
-            put("scope", scope)
-            put("aud", audience)
-            put("exp", JsonPrimitive(expSec))
-            put("iat", JsonPrimitive(nowSec))
-        }
+        val header: JsonObject =
+            buildJsonObject {
+                put("alg", "RS256")
+                put("typ", "JWT")
+                put("kid", key.privateKeyId)
+            }
+        val claims: JsonObject =
+            buildJsonObject {
+                put("iss", key.clientEmail)
+                put("scope", scope)
+                put("aud", audience)
+                put("exp", JsonPrimitive(expSec))
+                put("iat", JsonPrimitive(nowSec))
+            }
         val headerBytes = compactJson.encodeToString(JsonObject.serializer(), header).toByteArray(Charsets.UTF_8)
         val claimsBytes = compactJson.encodeToString(JsonObject.serializer(), claims).toByteArray(Charsets.UTF_8)
         val signingInput = "${b64url(headerBytes)}.${b64url(claimsBytes)}"
@@ -76,13 +80,15 @@ class GcsAuth(
      * through [token] which caches.
      */
     suspend fun exchangeJwtForAccessToken(jwt: String = signJwt()): AccessToken {
-        val response = httpClient.submitForm(
-            url = key.tokenUri,
-            formParameters = Parameters.build {
-                append("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
-                append("assertion", jwt)
-            },
-        )
+        val response =
+            httpClient.submitForm(
+                url = key.tokenUri,
+                formParameters =
+                    Parameters.build {
+                        append("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
+                        append("assertion", jwt)
+                    },
+            )
         if (!response.status.isSuccess()) {
             throw GcsAuthException("token exchange failed: ${response.status} ${response.bodyAsText()}")
         }
@@ -93,16 +99,17 @@ class GcsAuth(
     }
 
     /** Returns a current bearer token, refreshing if within the 50-minute proactive window. */
-    override suspend fun token(): String = mutex.withLock {
-        val current = cached
-        if (current != null && clock.now() < current.refreshAt) {
-            current.token.value
-        } else {
-            val fresh = exchangeJwtForAccessToken()
-            cached = CachedToken(token = fresh, refreshAt = clock.now().plus(50.minutes))
-            fresh.value
+    override suspend fun token(): String =
+        mutex.withLock {
+            val current = cached
+            if (current != null && clock.now() < current.refreshAt) {
+                current.token.value
+            } else {
+                val fresh = exchangeJwtForAccessToken()
+                cached = CachedToken(token = fresh, refreshAt = clock.now().plus(50.minutes))
+                fresh.value
+            }
         }
-    }
 
     private fun sign(input: ByteArray): ByteArray {
         val sig = Signature.getInstance("SHA256withRSA")
@@ -111,7 +118,10 @@ class GcsAuth(
         return sig.sign()
     }
 
-    private data class CachedToken(val token: AccessToken, val refreshAt: Instant)
+    private data class CachedToken(
+        val token: AccessToken,
+        val refreshAt: Instant,
+    )
 
     @Serializable
     private data class TokenExchangeResponse(
@@ -121,9 +131,14 @@ class GcsAuth(
     )
 }
 
-data class AccessToken(val value: String, val expiresAt: Instant)
+data class AccessToken(
+    val value: String,
+    val expiresAt: Instant,
+)
 
-class GcsAuthException(message: String) : RuntimeException(message)
+class GcsAuthException(
+    message: String,
+) : RuntimeException(message)
 
 private val b64UrlEncoder = Base64.getUrlEncoder().withoutPadding()
 private val b64Decoder = Base64.getDecoder()
@@ -131,18 +146,20 @@ private val b64Decoder = Base64.getDecoder()
 internal fun b64url(bytes: ByteArray): String = b64UrlEncoder.encodeToString(bytes)
 
 internal fun decodePkcs8PrivateKey(pem: String): PrivateKey {
-    val body = pem
-        .replace("-----BEGIN PRIVATE KEY-----", "")
-        .replace("-----END PRIVATE KEY-----", "")
-        .replace("-----BEGIN RSA PRIVATE KEY-----", "")
-        .replace("-----END RSA PRIVATE KEY-----", "")
-        .replace("\\s".toRegex(), "")
+    val body =
+        pem
+            .replace("-----BEGIN PRIVATE KEY-----", "")
+            .replace("-----END PRIVATE KEY-----", "")
+            .replace("-----BEGIN RSA PRIVATE KEY-----", "")
+            .replace("-----END RSA PRIVATE KEY-----", "")
+            .replace("\\s".toRegex(), "")
     val keyBytes = b64Decoder.decode(body)
     val spec = PKCS8EncodedKeySpec(keyBytes)
     return KeyFactory.getInstance("RSA").generatePrivate(spec)
 }
 
-private val compactJson = Json {
-    encodeDefaults = false
-    prettyPrint = false
-}
+private val compactJson =
+    Json {
+        encodeDefaults = false
+        prettyPrint = false
+    }

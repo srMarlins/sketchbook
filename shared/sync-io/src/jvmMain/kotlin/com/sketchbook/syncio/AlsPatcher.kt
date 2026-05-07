@@ -27,12 +27,20 @@ class AlsPatcher(
 ) : AlsPatchService {
     sealed interface Outcome {
         object Patched : Outcome
+
         object NoChange : Outcome
+
         object SkippedBusy : Outcome
-        data class Failed(val cause: Throwable) : Outcome
+
+        data class Failed(
+            val cause: Throwable,
+        ) : Outcome
     }
 
-    fun patch(als: Path, mapping: Map<String, String>): Outcome {
+    fun patch(
+        als: Path,
+        mapping: Map<String, String>,
+    ): Outcome {
         if (mapping.isEmpty()) return Outcome.NoChange
         if (busyDetector(als)) return Outcome.SkippedBusy
         return runCatching {
@@ -61,7 +69,10 @@ class AlsPatcher(
      * primary `<Path>`/`<RelativePath>`; on match the primary FileRef and the OriginalFileRef
      * sibling are updated atomically by [AlsRewriter.rewriteSampleRefs].
      */
-    fun patch(als: Path, edits: List<SampleRefEdit>): Outcome {
+    fun patch(
+        als: Path,
+        edits: List<SampleRefEdit>,
+    ): Outcome {
         if (edits.isEmpty()) return Outcome.NoChange
         if (busyDetector(als)) return Outcome.SkippedBusy
         return runCatching {
@@ -86,7 +97,10 @@ class AlsPatcher(
      * pre-patch bytes; this puts them back. Same atomic temp+rename dance as [patch] so a
      * concurrent reader never sees a half-written file.
      */
-    fun restore(als: Path, bytes: ByteArray): Outcome {
+    fun restore(
+        als: Path,
+        bytes: ByteArray,
+    ): Outcome {
         if (busyDetector(als)) return Outcome.SkippedBusy
         return runCatching {
             val temp = als.resolveSibling("${als.fileName}.patcher-tmp")
@@ -105,26 +119,38 @@ class AlsPatcher(
      * `Path`-based core. Repository code in `commonMain` can't reference `java.nio.file.Path`,
      * so the path round-trips through `String`.
      */
-    override suspend fun patch(alsPath: String, mapping: Map<String, String>): AlsPatchService.Outcome = when (val o = patch(Paths.get(alsPath), mapping)) {
-        Outcome.Patched -> AlsPatchService.Outcome.Patched
-        Outcome.NoChange -> AlsPatchService.Outcome.NoChange
-        Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
-        is Outcome.Failed -> AlsPatchService.Outcome.Failed
-    }
+    override suspend fun patch(
+        alsPath: String,
+        mapping: Map<String, String>,
+    ): AlsPatchService.Outcome =
+        when (val o = patch(Paths.get(alsPath), mapping)) {
+            Outcome.Patched -> AlsPatchService.Outcome.Patched
+            Outcome.NoChange -> AlsPatchService.Outcome.NoChange
+            Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
+            is Outcome.Failed -> AlsPatchService.Outcome.Failed
+        }
 
-    override suspend fun patch(alsPath: String, edits: List<SampleRefEdit>): AlsPatchService.Outcome = when (val o = patch(Paths.get(alsPath), edits)) {
-        Outcome.Patched -> AlsPatchService.Outcome.Patched
-        Outcome.NoChange -> AlsPatchService.Outcome.NoChange
-        Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
-        is Outcome.Failed -> AlsPatchService.Outcome.Failed
-    }
+    override suspend fun patch(
+        alsPath: String,
+        edits: List<SampleRefEdit>,
+    ): AlsPatchService.Outcome =
+        when (val o = patch(Paths.get(alsPath), edits)) {
+            Outcome.Patched -> AlsPatchService.Outcome.Patched
+            Outcome.NoChange -> AlsPatchService.Outcome.NoChange
+            Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
+            is Outcome.Failed -> AlsPatchService.Outcome.Failed
+        }
 
-    override suspend fun restore(alsPath: String, bytes: ByteArray): AlsPatchService.Outcome = when (val o = restore(Paths.get(alsPath), bytes)) {
-        Outcome.Patched -> AlsPatchService.Outcome.Patched
-        Outcome.NoChange -> AlsPatchService.Outcome.NoChange
-        Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
-        is Outcome.Failed -> AlsPatchService.Outcome.Failed
-    }
+    override suspend fun restore(
+        alsPath: String,
+        bytes: ByteArray,
+    ): AlsPatchService.Outcome =
+        when (val o = restore(Paths.get(alsPath), bytes)) {
+            Outcome.Patched -> AlsPatchService.Outcome.Patched
+            Outcome.NoChange -> AlsPatchService.Outcome.NoChange
+            Outcome.SkippedBusy -> AlsPatchService.Outcome.SkippedBusy
+            is Outcome.Failed -> AlsPatchService.Outcome.Failed
+        }
 }
 
 /**
@@ -135,13 +161,14 @@ class AlsPatcher(
  * symlink, permissions on a stale handle, FS quirks) is conservatively treated as *not* busy so we
  * don't block legitimate operations.
  */
-private fun isFileLockedByAnotherProcess(p: Path): Boolean = try {
-    FileChannel.open(p, StandardOpenOption.READ, StandardOpenOption.WRITE).use { ch ->
-        ch.tryLock()?.use { } ?: return true
+private fun isFileLockedByAnotherProcess(p: Path): Boolean =
+    try {
+        FileChannel.open(p, StandardOpenOption.READ, StandardOpenOption.WRITE).use { ch ->
+            ch.tryLock()?.use { } ?: return true
+            false
+        }
+    } catch (e: java.nio.file.AccessDeniedException) {
+        true
+    } catch (_: Throwable) {
         false
     }
-} catch (e: java.nio.file.AccessDeniedException) {
-    true
-} catch (_: Throwable) {
-    false
-}

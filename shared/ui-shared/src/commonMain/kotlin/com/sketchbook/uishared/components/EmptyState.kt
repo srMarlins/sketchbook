@@ -33,11 +33,12 @@ fun EmptyState(
         contentAlignment = Alignment.Center,
     ) {
         Column(
-            modifier = Modifier
-                .widthIn(max = 480.dp)
-                .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
-                .background(colors.tintCream)
-                .padding(PaddingValues(horizontal = AppTheme.spacing.xl, vertical = AppTheme.spacing.lg)),
+            modifier =
+                Modifier
+                    .widthIn(max = 480.dp)
+                    .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+                    .background(colors.tintCream)
+                    .padding(PaddingValues(horizontal = AppTheme.spacing.xl, vertical = AppTheme.spacing.lg)),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
         ) {

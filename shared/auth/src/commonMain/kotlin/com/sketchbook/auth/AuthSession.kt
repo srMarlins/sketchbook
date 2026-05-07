@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
  *    `OAuthCloudCredentials`) decides how to surface the failure to the user.
  */
 interface AuthSession {
-
     val state: StateFlow<AuthState>
 
     /**

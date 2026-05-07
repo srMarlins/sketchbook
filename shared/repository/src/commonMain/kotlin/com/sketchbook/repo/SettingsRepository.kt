@@ -14,15 +14,18 @@ import kotlinx.coroutines.flow.Flow
  * on Windows after the alias map is configured per-host.
  */
 interface SettingsRepository {
-
     fun observe(): Flow<Settings>
 
     suspend fun upsertRoot(root: LibraryRoot): Result<Unit>
+
     suspend fun removeRoot(root: LibraryRoot): Result<Unit>
 
     suspend fun setCloudBucket(bucket: String?): Result<Unit>
 
-    suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit>
+    suspend fun setSelfContained(
+        uuid: ProjectUuid,
+        value: Boolean,
+    ): Result<Unit>
 
     suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit>
 
@@ -79,7 +82,10 @@ data class Settings(
  * user skipped picking a samples root, surface a dismissible nudge until they either configure
  * one or dismiss the prompt.
  */
-data class OnboardingSkipFlags(val samplesSkipped: Boolean = false, val samplesPromptDismissed: Boolean = false)
+data class OnboardingSkipFlags(
+    val samplesSkipped: Boolean = false,
+    val samplesPromptDismissed: Boolean = false,
+)
 
 /**
  * Local blob cache policy. The sync engine consults this on every download to decide whether to
@@ -94,18 +100,24 @@ data class BlobCacheSettings(
 ) {
     companion object {
         /** 20 GiB default; large enough for most libraries, small enough not to surprise. */
-        val Default: BlobCacheSettings = BlobCacheSettings(
-            maxSizeBytes = 20L * 1024 * 1024 * 1024,
-            lruEnabled = true,
-        )
+        val Default: BlobCacheSettings =
+            BlobCacheSettings(
+                maxSizeBytes = 20L * 1024 * 1024 * 1024,
+                lruEnabled = true,
+            )
     }
 }
 
 sealed interface LibraryRoot {
     val path: String
 
-    data class Projects(override val path: String) : LibraryRoot
-    data class UserSamples(override val path: String) : LibraryRoot
+    data class Projects(
+        override val path: String,
+    ) : LibraryRoot
+
+    data class UserSamples(
+        override val path: String,
+    ) : LibraryRoot
 
     /**
      * External root (Splice, factory libs, personal sample drives). [alias] is the same string

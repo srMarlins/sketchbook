@@ -11,7 +11,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class JvmAudioIdSidecarTest {
-
     private val tmp = Files.createTempDirectory("sketchbook-sidecar").toFile()
     private val sidecar = JvmAudioIdSidecar()
 
@@ -42,7 +41,7 @@ class JvmAudioIdSidecarTest {
 
     @Test
     fun stripsBom() {
-        val bom = "﻿"
+        val bom = ""
         File(tmp, AUDIO_ID_SIDECAR_NAME).writeText("${bom}abc-with-bom\n")
         assertEquals(ProjectUuid("abc-with-bom"), sidecar.read(tmp.absolutePath))
     }

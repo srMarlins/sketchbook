@@ -55,62 +55,68 @@ class JvmScanner(
     /** Number of projects per write transaction. */
     private val batchSize: Int = BATCH_SIZE,
 ) {
-
     private val parseConcurrency: Int =
         parseConcurrency.coerceIn(1, MAX_PARALLEL_PARSE)
 
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-    fun scan(root: Path): Flow<ScanProgress> = flow {
-        // No FOLLOW_LINKS: a symlink in the user's library to `/` (or a network share, or another
-        // user's home) would otherwise be silently traversed and persist absolute paths into the
-        // catalog where the MCP server surfaces them to an LLM. Sandbox to the canonical root so
-        // even a non-link "junction" can't escape.
-        val realRoot = runCatching { root.toRealPath() }.getOrDefault(root.toAbsolutePath())
-        val alsFiles = Files.walk(realRoot).use { stream ->
-            stream.asSequence()
-                .filter { it.isRegularFile() && it.name.endsWith(".als", ignoreCase = true) }
-                .filter { p -> p.none { it.fileName?.toString() in SKIP_DIRS } }
-                .filter { !it.name.endsWith(".als.bak", ignoreCase = true) }
-                .filter { !it.name.startsWith(".") }
-                .filter { p ->
-                    val canonical = runCatching { p.toRealPath() }.getOrNull() ?: return@filter false
-                    canonical.startsWith(realRoot)
+    fun scan(root: Path): Flow<ScanProgress> =
+        flow {
+            // No FOLLOW_LINKS: a symlink in the user's library to `/` (or a network share, or another
+            // user's home) would otherwise be silently traversed and persist absolute paths into the
+            // catalog where the MCP server surfaces them to an LLM. Sandbox to the canonical root so
+            // even a non-link "junction" can't escape.
+            val realRoot = runCatching { root.toRealPath() }.getOrDefault(root.toAbsolutePath())
+            val alsFiles =
+                Files.walk(realRoot).use { stream ->
+                    stream
+                        .asSequence()
+                        .filter { it.isRegularFile() && it.name.endsWith(".als", ignoreCase = true) }
+                        .filter { p -> p.none { it.fileName?.toString() in SKIP_DIRS } }
+                        .filter { !it.name.endsWith(".als.bak", ignoreCase = true) }
+                        .filter { !it.name.startsWith(".") }
+                        .filter { p ->
+                            val canonical = runCatching { p.toRealPath() }.getOrNull() ?: return@filter false
+                            canonical.startsWith(realRoot)
+                        }.toList()
                 }
-                .toList()
-        }
-        emit(ScanProgress.Started(total = alsFiles.size))
-        val total = alsFiles.size
+            emit(ScanProgress.Started(total = alsFiles.size))
+            val total = alsFiles.size
 
-        // Incremental skip: read existing (path, last_modified) once and short-circuit when a
-        // file's on-disk mtime is unchanged. Saves the gunzip+StAX cost on unchanged projects
-        // (the dominant case for repeat scans on a 1,628-project library).
-        val knownByPath: Map<String, Double> = runCatching {
-            catalog.catalogQueries.selectAllProjects().executeAsList()
-                .associate { it.path to it.last_modified }
-        }.getOrDefault(emptyMap())
+            // Incremental skip: read existing (path, last_modified) once and short-circuit when a
+            // file's on-disk mtime is unchanged. Saves the gunzip+StAX cost on unchanged projects
+            // (the dominant case for repeat scans on a 1,628-project library).
+            val knownByPath: Map<String, Double> =
+                runCatching {
+                    catalog.catalogQueries
+                        .selectAllProjects()
+                        .executeAsList()
+                        .associate { it.path to it.last_modified }
+                }.getOrDefault(emptyMap())
 
-        var done = 0
-        val pending = ArrayList<ParseOutcome>(batchSize)
-        val durationMillis = measureTimeMillis {
-            val parsed: Flow<ParseOutcome> = alsFiles.asFlow()
-                .flatMapMerge(concurrency = parseConcurrency) { file ->
-                    flow { emit(parseOne(file, knownByPath)) }
-                        .flowOn(parseDispatcher)
+            var done = 0
+            val pending = ArrayList<ParseOutcome>(batchSize)
+            val durationMillis =
+                measureTimeMillis {
+                    val parsed: Flow<ParseOutcome> =
+                        alsFiles
+                            .asFlow()
+                            .flatMapMerge(concurrency = parseConcurrency) { file ->
+                                flow { emit(parseOne(file, knownByPath)) }
+                                    .flowOn(parseDispatcher)
+                            }.buffer(parseConcurrency * 2)
+
+                    parsed.collect { outcome ->
+                        pending += outcome
+                        if (pending.size >= batchSize) {
+                            done = flushBatch(pending, total, done)
+                        }
+                    }
+                    if (pending.isNotEmpty()) {
+                        done = flushBatch(pending, total, done)
+                    }
                 }
-                .buffer(parseConcurrency * 2)
-
-            parsed.collect { outcome ->
-                pending += outcome
-                if (pending.size >= batchSize) {
-                    done = flushBatch(pending, total, done)
-                }
-            }
-            if (pending.isNotEmpty()) {
-                done = flushBatch(pending, total, done)
-            }
-        }
-        emit(ScanProgress.Finished(total = total, done = done, durationMillis = durationMillis))
-    }.flowOn(ioDispatcher)
+            emit(ScanProgress.Finished(total = total, done = done, durationMillis = durationMillis))
+        }.flowOn(ioDispatcher)
 
     /**
      * Drain [batch] in a single SQLite transaction, emit progress events for each project.
@@ -125,50 +131,59 @@ class JvmScanner(
         val snapshot = batch.toList()
         batch.clear()
         val now = System.currentTimeMillis() / 1000.0
-        val (idsByPath, indexedReports, failedReports) = withContext(ioDispatcher) {
-            val ids = HashMap<String, Long>(snapshot.size)
-            val indexed = ArrayList<IndexedReport>()
-            val failed = ArrayList<FailedReport>()
-            catalog.transaction {
-                for (outcome in snapshot) {
-                    when (outcome) {
-                        is ParseOutcome.Skipped -> {
-                            val id = catalog.catalogQueries.selectProjectIdByPath(outcome.abs)
-                                .executeAsOne()
-                            ids[outcome.abs] = id
-                            indexed += IndexedReport(
-                                outcome = outcome,
-                                projectId = id,
-                                missingSampleCount = 0,
-                                effortScore = null,
-                            )
-                        }
+        val (idsByPath, indexedReports, failedReports) =
+            withContext(ioDispatcher) {
+                val ids = HashMap<String, Long>(snapshot.size)
+                val indexed = ArrayList<IndexedReport>()
+                val failed = ArrayList<FailedReport>()
+                catalog.transaction {
+                    for (outcome in snapshot) {
+                        when (outcome) {
+                            is ParseOutcome.Skipped -> {
+                                val id =
+                                    catalog.catalogQueries
+                                        .selectProjectIdByPath(outcome.abs)
+                                        .executeAsOne()
+                                ids[outcome.abs] = id
+                                indexed +=
+                                    IndexedReport(
+                                        outcome = outcome,
+                                        projectId = id,
+                                        missingSampleCount = 0,
+                                        effortScore = null,
+                                    )
+                            }
 
-                        is ParseOutcome.Ok -> {
-                            persistOk(outcome, now)
-                            val id = catalog.catalogQueries.selectProjectIdByPath(outcome.abs)
-                                .executeAsOne()
-                            ids[outcome.abs] = id
-                            indexed += IndexedReport(
-                                outcome = outcome,
-                                projectId = id,
-                                missingSampleCount = outcome.resolution.missingCount,
-                                effortScore = outcome.effort?.score,
-                            )
-                        }
+                            is ParseOutcome.Ok -> {
+                                persistOk(outcome, now)
+                                val id =
+                                    catalog.catalogQueries
+                                        .selectProjectIdByPath(outcome.abs)
+                                        .executeAsOne()
+                                ids[outcome.abs] = id
+                                indexed +=
+                                    IndexedReport(
+                                        outcome = outcome,
+                                        projectId = id,
+                                        missingSampleCount = outcome.resolution.missingCount,
+                                        effortScore = outcome.effort?.score,
+                                    )
+                            }
 
-                        is ParseOutcome.Failed -> {
-                            persistFailed(outcome, now)
-                            val id = catalog.catalogQueries.selectProjectIdByPath(outcome.abs)
-                                .executeAsOne()
-                            ids[outcome.abs] = id
-                            failed += FailedReport(outcome = outcome, projectId = id)
+                            is ParseOutcome.Failed -> {
+                                persistFailed(outcome, now)
+                                val id =
+                                    catalog.catalogQueries
+                                        .selectProjectIdByPath(outcome.abs)
+                                        .executeAsOne()
+                                ids[outcome.abs] = id
+                                failed += FailedReport(outcome = outcome, projectId = id)
+                            }
                         }
                     }
                 }
+                Triple(ids, indexed, failed)
             }
-            Triple(ids, indexed, failed)
-        }
         var done = startingDone
         for (report in indexedReports) {
             done++
@@ -205,12 +220,16 @@ class JvmScanner(
      * Parse a single file. Pure CPU + filesystem read — no catalog access. Safe to run on
      * `Dispatchers.Default` from many coroutines in parallel.
      */
-    private fun parseOne(file: Path, knownByPath: Map<String, Double>): ParseOutcome {
+    private fun parseOne(
+        file: Path,
+        knownByPath: Map<String, Double>,
+    ): ParseOutcome {
         val abs = file.toAbsolutePath().toString()
         val parent = file.parent?.toString() ?: ""
         val name = file.fileName.toString().removeSuffix(".als")
-        val mtimeSec = runCatching { Files.getLastModifiedTime(file).toMillis() / 1000.0 }
-            .getOrDefault(System.currentTimeMillis() / 1000.0)
+        val mtimeSec =
+            runCatching { Files.getLastModifiedTime(file).toMillis() / 1000.0 }
+                .getOrDefault(System.currentTimeMillis() / 1000.0)
         val sizeBytes = runCatching { Files.size(file) }.getOrDefault(0L)
         val previousMtime = knownByPath[abs]
         if (previousMtime != null && previousMtime == mtimeSec) {
@@ -239,11 +258,15 @@ class JvmScanner(
         }
     }
 
-    private fun persistOk(o: ParseOutcome.Ok, now: Double) {
+    private fun persistOk(
+        o: ParseOutcome.Ok,
+        now: Double,
+    ) {
         val effortScore = o.effort?.score?.toLong()
-        val effortBreakdown = o.effort?.breakdown?.entries?.joinToString(",") {
-            "${it.key}:${it.value}"
-        }
+        val effortBreakdown =
+            o.effort?.breakdown?.entries?.joinToString(",") {
+                "${it.key}:${it.value}"
+            }
         // PR-R R1: capture the user's stage override (if any) BEFORE the upsert wipes it. The
         // existing INSERT OR REPLACE flow didn't bind `stage_override`, so without the
         // read-then-restore the user's manual classification would be reset on every rescan.
@@ -254,7 +277,10 @@ class JvmScanner(
             catalog.catalogQueries.selectProjectIdByPath(path = o.abs).executeAsOneOrNull()
         val priorStageOverride: String? =
             priorIdForPath?.let { id ->
-                catalog.catalogQueries.selectStageOverrideById(id).executeAsOneOrNull()?.stage_override
+                catalog.catalogQueries
+                    .selectStageOverrideById(id)
+                    .executeAsOneOrNull()
+                    ?.stage_override
             }
         // Id-preserving upsert. SQLite's `INSERT OR REPLACE` deletes-and-reinserts on UNIQUE
         // conflict, minting a new AUTOINCREMENT id every rescan and orphaning every dependent
@@ -316,16 +342,18 @@ class JvmScanner(
         // Restrict mastering-detection input to plugins on the "Master" track. Common devices
         // like Limiter/Maximizer often appear on individual mix buses; filtering avoids false
         // positives that would mis-classify a still-mixing project as Mixing/Done.
-        val masterPluginNames = o.md.plugins
-            .filter { it.trackName?.equals("Master", ignoreCase = true) == true }
-            .map { it.name }
-        val stageInferred = StageInferrer.infer(
-            trackCount = o.md.totalTrackCount,
-            pluginNames = masterPluginNames,
-            hasLocalBounce = hasLocalBounce,
-            lastModified = kotlin.time.Instant.fromEpochMilliseconds((o.mtimeSec * 1000).toLong()),
-            now = kotlin.time.Instant.fromEpochMilliseconds((now * 1000).toLong()),
-        )
+        val masterPluginNames =
+            o.md.plugins
+                .filter { it.trackName?.equals("Master", ignoreCase = true) == true }
+                .map { it.name }
+        val stageInferred =
+            StageInferrer.infer(
+                trackCount = o.md.totalTrackCount,
+                pluginNames = masterPluginNames,
+                hasLocalBounce = hasLocalBounce,
+                lastModified = kotlin.time.Instant.fromEpochMilliseconds((o.mtimeSec * 1000).toLong()),
+                now = kotlin.time.Instant.fromEpochMilliseconds((now * 1000).toLong()),
+            )
         catalog.catalogQueries.updateStageInferred(
             stage_inferred = stageInferred?.name,
             has_local_bounce = if (hasLocalBounce) 1L else 0L,
@@ -368,7 +396,10 @@ class JvmScanner(
         )
     }
 
-    private fun persistFailed(o: ParseOutcome.Failed, now: Double) {
+    private fun persistFailed(
+        o: ParseOutcome.Failed,
+        now: Double,
+    ) {
         // Id-preserving upsert — see persistOk for rationale.
         val priorIdForPath: Long? =
             catalog.catalogQueries.selectProjectIdByPath(path = o.abs).executeAsOneOrNull()
@@ -444,15 +475,16 @@ class JvmScanner(
      * project assets, not exports — and so is `Backup/` (older project copies). Anything else
      * inside the project root is fair game.
      */
-    private fun probeHasLocalBounce(projectDir: Path): Boolean = runCatching {
-        Files.list(projectDir).use { stream ->
-            stream.asSequence().any { p ->
-                val name = p.fileName?.toString() ?: return@any false
-                val isFile = runCatching { Files.isRegularFile(p) }.getOrDefault(false)
-                isFile && BOUNCE_EXTS.any { ext -> name.endsWith(ext, ignoreCase = true) }
+    private fun probeHasLocalBounce(projectDir: Path): Boolean =
+        runCatching {
+            Files.list(projectDir).use { stream ->
+                stream.asSequence().any { p ->
+                    val name = p.fileName?.toString() ?: return@any false
+                    val isFile = runCatching { Files.isRegularFile(p) }.getOrDefault(false)
+                    isFile && BOUNCE_EXTS.any { ext -> name.endsWith(ext, ignoreCase = true) }
+                }
             }
-        }
-    }.getOrDefault(false)
+        }.getOrDefault(false)
 
     private companion object {
         // Subtrees Live auto-generates that we never want to walk into.

@@ -10,10 +10,12 @@ import com.sketchbook.core.SnapshotRev
  * render `Hashing 3/217 files`, `Uploading 4.2 MB / 12.7 MB`, `Done — rev 47`, etc.
  */
 sealed interface SnapshotProgress {
-
     val uuid: ProjectUuid
 
-    data class LeaseAcquired(override val uuid: ProjectUuid) : SnapshotProgress
+    data class LeaseAcquired(
+        override val uuid: ProjectUuid,
+    ) : SnapshotProgress
+
     data class LeaseHeld(
         override val uuid: ProjectUuid,
         val ownerHostName: String,
@@ -32,7 +34,10 @@ sealed interface SnapshotProgress {
         val bytesTotal: Long,
     ) : SnapshotProgress
 
-    data class WritingManifest(override val uuid: ProjectUuid, val rev: SnapshotRev) : SnapshotProgress
+    data class WritingManifest(
+        override val uuid: ProjectUuid,
+        val rev: SnapshotRev,
+    ) : SnapshotProgress
 
     data class Saved(
         override val uuid: ProjectUuid,
@@ -41,5 +46,8 @@ sealed interface SnapshotProgress {
         val branchLabel: String? = null,
     ) : SnapshotProgress
 
-    data class Failed(override val uuid: ProjectUuid, val reason: String) : SnapshotProgress
+    data class Failed(
+        override val uuid: ProjectUuid,
+        val reason: String,
+    ) : SnapshotProgress
 }

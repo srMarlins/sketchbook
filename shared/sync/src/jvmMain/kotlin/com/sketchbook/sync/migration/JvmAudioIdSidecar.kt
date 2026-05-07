@@ -9,7 +9,6 @@ import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
 
 class JvmAudioIdSidecar : AudioIdSidecar {
-
     override fun read(projectDir: String): ProjectUuid? {
         val path = sidecarPath(projectDir)
         if (!Files.isRegularFile(path)) return null
@@ -17,7 +16,10 @@ class JvmAudioIdSidecar : AudioIdSidecar {
         return parseUuid(raw)
     }
 
-    override fun write(projectDir: String, uuid: ProjectUuid): Boolean {
+    override fun write(
+        projectDir: String,
+        uuid: ProjectUuid,
+    ): Boolean {
         val dir = Paths.get(projectDir)
         if (!Files.isDirectory(dir)) return false
         val path = sidecarPath(projectDir)
@@ -41,12 +43,13 @@ class JvmAudioIdSidecar : AudioIdSidecar {
     private fun sidecarPath(projectDir: String): Path = Paths.get(projectDir).resolve(AUDIO_ID_SIDECAR_NAME)
 
     private fun parseUuid(raw: String): ProjectUuid? {
-        val trimmed = raw
-            .removePrefix("﻿") // strip UTF-8 BOM if present
-            .lineSequence()
-            .map { it.trim() }
-            .firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
-            ?: return null
+        val trimmed =
+            raw
+                .removePrefix("") // strip UTF-8 BOM if present
+                .lineSequence()
+                .map { it.trim() }
+                .firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
+                ?: return null
         return runCatching { ProjectUuid(trimmed) }.getOrNull()
     }
 }

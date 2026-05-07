@@ -81,7 +81,6 @@ import java.util.prefs.Preferences
  */
 @DependencyGraph(scope = AppScope::class)
 interface DesktopAppGraph : ViewModelGraph {
-
     val appScope: CoroutineScope
     val authSession: AuthSession
     val catalogHandle: CatalogHandle
@@ -146,7 +145,10 @@ interface DesktopAppGraph : ViewModelGraph {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideJvmScanner(catalog: Catalog, fts: CatalogFts): JvmScanner = JvmScanner(catalog = catalog, fts = fts)
+    fun provideJvmScanner(
+        catalog: Catalog,
+        fts: CatalogFts,
+    ): JvmScanner = JvmScanner(catalog = catalog, fts = fts)
 
     @Provides
     @SingleIn(AppScope::class)
@@ -160,22 +162,24 @@ interface DesktopAppGraph : ViewModelGraph {
         catalog: Catalog,
         syncQueue: SyncQueue,
         journal: JournalRepository,
-    ): SnapshotRepository = SqlSnapshotRepository(
-        catalog = catalog,
-        ioDispatcher = Dispatchers.IO,
-        journal = journal,
-        materialize = { uuid, rev ->
-            // Delegates to the SwappableSyncQueue's currently-active materializer (built when
-            // cloud creds land). Returns a friendly failure when cloud is unconfigured so the
-            // Timeline rewind UI doesn't crash on first launch.
-            val swap = syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue
-            val mat = swap?.currentMaterializer
-                ?: return@SqlSnapshotRepository Result.failure(
-                    IllegalStateException("Configure cloud credentials in Settings before rewinding."),
-                )
-            mat.materialize(uuid, rev)
-        },
-    )
+    ): SnapshotRepository =
+        SqlSnapshotRepository(
+            catalog = catalog,
+            ioDispatcher = Dispatchers.IO,
+            journal = journal,
+            materialize = { uuid, rev ->
+                // Delegates to the SwappableSyncQueue's currently-active materializer (built when
+                // cloud creds land). Returns a friendly failure when cloud is unconfigured so the
+                // Timeline rewind UI doesn't crash on first launch.
+                val swap = syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue
+                val mat =
+                    swap?.currentMaterializer
+                        ?: return@SqlSnapshotRepository Result.failure(
+                            IllegalStateException("Configure cloud credentials in Settings before rewinding."),
+                        )
+                mat.materialize(uuid, rev)
+            },
+        )
 
     @Provides
     @SingleIn(AppScope::class)
@@ -183,10 +187,11 @@ interface DesktopAppGraph : ViewModelGraph {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideSettingsRepository(): SettingsRepository = PreferencesSettingsRepository(
-        node = Preferences.userNodeForPackage(SettingsRepository::class.java),
-        ioDispatcher = Dispatchers.IO,
-    )
+    fun provideSettingsRepository(): SettingsRepository =
+        PreferencesSettingsRepository(
+            node = Preferences.userNodeForPackage(SettingsRepository::class.java),
+            ioDispatcher = Dispatchers.IO,
+        )
 
     @Provides
     @SingleIn(AppScope::class)
@@ -195,16 +200,17 @@ interface DesktopAppGraph : ViewModelGraph {
         scope: CoroutineScope,
         syncQueue: SyncQueue,
         journal: JournalRepository,
-    ): LockRepository = LeasedLockRepository(
-        cloud = {
-            (syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue)?.currentCloud?.value
-        },
-        syncStateStore = store,
-        hostId = hostIdentity().id,
-        hostName = hostIdentity().name,
-        scope = scope,
-        journal = journal,
-    )
+    ): LockRepository =
+        LeasedLockRepository(
+            cloud = {
+                (syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue)?.currentCloud?.value
+            },
+            syncStateStore = store,
+            hostId = hostIdentity().id,
+            hostName = hostIdentity().name,
+            scope = scope,
+            journal = journal,
+        )
 
     @Provides
     @SingleIn(AppScope::class)
@@ -217,19 +223,20 @@ interface DesktopAppGraph : ViewModelGraph {
         journal: JournalRepository,
         httpClient: HttpClient,
         scope: CoroutineScope,
-    ): SyncQueue = SwappableSyncQueue(
-        authSession = authSession,
-        settings = settings,
-        projects = projects,
-        syncStateStore = store,
-        catalog = catalog,
-        blobCacheRoot = catalogDbPath().parent.resolve("blob-cache"),
-        scope = scope,
-        hostId = hostIdentity().id,
-        hostName = hostIdentity().name,
-        journal = journal,
-        httpClient = httpClient,
-    )
+    ): SyncQueue =
+        SwappableSyncQueue(
+            authSession = authSession,
+            settings = settings,
+            projects = projects,
+            syncStateStore = store,
+            catalog = catalog,
+            blobCacheRoot = catalogDbPath().parent.resolve("blob-cache"),
+            scope = scope,
+            hostId = hostIdentity().id,
+            hostName = hostIdentity().name,
+            journal = journal,
+            httpClient = httpClient,
+        )
 
     /**
      * Application-lifetime [HttpClient]. Shared by every service that needs to make network
@@ -243,28 +250,32 @@ interface DesktopAppGraph : ViewModelGraph {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideTokenStore(): TokenStore = KeyringTokenStore(
-        serviceName = "com.sketchbook.refresh",
-        accountName = "default",
-    )
+    fun provideTokenStore(): TokenStore =
+        KeyringTokenStore(
+            serviceName = "com.sketchbook.refresh",
+            accountName = "default",
+        )
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideIdentityStore(): PrefsIdentityStore = PrefsIdentityStore(
-        node = Preferences.userNodeForPackage(PrefsIdentityStore::class.java),
-    )
+    fun provideIdentityStore(): PrefsIdentityStore =
+        PrefsIdentityStore(
+            node = Preferences.userNodeForPackage(PrefsIdentityStore::class.java),
+        )
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideOAuthClient(httpClient: HttpClient): OAuthClient = OAuthClient(
-        httpClient = httpClient,
-        clientId = OAUTH_CLIENT_ID,
-        scopes = listOf(
-            "openid",
-            "email",
-            "https://www.googleapis.com/auth/devstorage.read_write",
-        ),
-    )
+    fun provideOAuthClient(httpClient: HttpClient): OAuthClient =
+        OAuthClient(
+            httpClient = httpClient,
+            clientId = OAUTH_CLIENT_ID,
+            scopes =
+                listOf(
+                    "openid",
+                    "email",
+                    "https://www.googleapis.com/auth/devstorage.read_write",
+                ),
+        )
 
     @Provides
     @SingleIn(AppScope::class)
@@ -275,12 +286,13 @@ interface DesktopAppGraph : ViewModelGraph {
         httpClient: HttpClient,
         appScope: CoroutineScope,
     ): AuthSession {
-        val inner = GoogleAuthSession(
-            tokenStore = tokenStore,
-            oauthClient = oauthClient,
-            httpClient = httpClient,
-            scope = appScope,
-        )
+        val inner =
+            GoogleAuthSession(
+                tokenStore = tokenStore,
+                oauthClient = oauthClient,
+                httpClient = httpClient,
+                scope = appScope,
+            )
         return DesktopAuthSession(
             inner = inner,
             identityStore = identityStore,
@@ -301,18 +313,35 @@ private const val OAUTH_CLIENT_ID = "REPLACE_ME.apps.googleusercontent.com"
  * `hostName` (display in conflict messages). The id is generated once and cached at
  * `<dataDir>/host-id`; the name defaults to `Sketchbook on <hostname>`.
  */
-private data class HostIdentity(val id: String, val name: String)
+private data class HostIdentity(
+    val id: String,
+    val name: String,
+)
 
 private fun hostIdentity(): HostIdentity {
     val dir = catalogDbPath().parent
     val idFile = dir.resolve("host-id")
-    val id = if (Files.exists(idFile)) {
-        runCatching { Files.readString(idFile).trim() }.getOrNull()?.takeIf { it.isNotBlank() }
-            ?: java.util.UUID.randomUUID().toString().also { Files.writeString(idFile, it) }
-    } else {
-        java.util.UUID.randomUUID().toString().also { Files.writeString(idFile, it) }
-    }
-    val name = "Sketchbook on " + (runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "unknown")
+    val id =
+        if (Files.exists(idFile)) {
+            runCatching { Files.readString(idFile).trim() }.getOrNull()?.takeIf { it.isNotBlank() }
+                ?: java.util.UUID
+                    .randomUUID()
+                    .toString()
+                    .also { Files.writeString(idFile, it) }
+        } else {
+            java.util.UUID
+                .randomUUID()
+                .toString()
+                .also { Files.writeString(idFile, it) }
+        }
+    val name =
+        "Sketchbook on " + (
+            runCatching {
+                java.net.InetAddress
+                    .getLocalHost()
+                    .hostName
+            }.getOrNull() ?: "unknown"
+        )
     return HostIdentity(id = id, name = name)
 }
 
@@ -344,13 +373,14 @@ fun startBackgroundPull(graph: DesktopAppGraph) {
                 kotlinx.coroutines.coroutineScope {
                     for (row in rows) {
                         launch {
-                            poller.subscribe(
-                                uuid = row.uuid,
-                                startAfter = if (row.localRev > 0) SnapshotRev(row.localRev) else null,
-                            ).collect { newSnapshot ->
-                                store.markCloudHead(newSnapshot.projectUuid, newSnapshot.rev.value)
-                                autoMaterializeAfterPull(store, snapshots, newSnapshot.projectUuid)
-                            }
+                            poller
+                                .subscribe(
+                                    uuid = row.uuid,
+                                    startAfter = if (row.localRev > 0) SnapshotRev(row.localRev) else null,
+                                ).collect { newSnapshot ->
+                                    store.markCloudHead(newSnapshot.projectUuid, newSnapshot.rev.value)
+                                    autoMaterializeAfterPull(store, snapshots, newSnapshot.projectUuid)
+                                }
                         }
                     }
                 }
@@ -407,10 +437,11 @@ fun startWatcher(graph: DesktopAppGraph) {
     val catalog = graph.catalog
     graph.appScope.launch {
         graph.settingsRepository.observe().collectLatest { settings ->
-            val projectsRoots = settings.libraryRoots
-                .filterIsInstance<LibraryRoot.Projects>()
-                .map { Paths.get(it.path) }
-                .filter { Files.isDirectory(it) }
+            val projectsRoots =
+                settings.libraryRoots
+                    .filterIsInstance<LibraryRoot.Projects>()
+                    .map { Paths.get(it.path) }
+                    .filter { Files.isDirectory(it) }
             if (projectsRoots.isEmpty()) return@collectLatest
             val watcher = Watcher()
             val bridge = WatcherToSyncState(watcher, catalog, store)
@@ -433,11 +464,12 @@ private fun catalogDbPath(): Path {
     }
     val os = System.getProperty("os.name").orEmpty().lowercase()
     val home = Paths.get(System.getProperty("user.home"))
-    val dir = when {
-        os.contains("win") -> Paths.get(System.getenv("APPDATA") ?: home.toString()).resolve("Sketchbook")
-        os.contains("mac") -> home.resolve("Library/Application Support/Sketchbook")
-        else -> home.resolve(".local/share/sketchbook")
-    }
+    val dir =
+        when {
+            os.contains("win") -> Paths.get(System.getenv("APPDATA") ?: home.toString()).resolve("Sketchbook")
+            os.contains("mac") -> home.resolve("Library/Application Support/Sketchbook")
+            else -> home.resolve(".local/share/sketchbook")
+        }
     Files.createDirectories(dir)
     return dir.resolve("catalog.db")
 }

@@ -13,8 +13,8 @@ import kotlin.test.assertNull
 import kotlin.time.Instant
 
 class ToSongStripDataTest {
-
     private val now = Instant.parse("2026-05-05T12:00:00Z")
+
     private fun row(
         id: Long,
         name: String,
@@ -34,7 +34,10 @@ class ToSongStripDataTest {
         stageOverride = stageOverride,
     )
 
-    private fun group(rep: ProjectRow, variants: List<ProjectRow>) = ProjectGroup(
+    private fun group(
+        rep: ProjectRow,
+        variants: List<ProjectRow>,
+    ) = ProjectGroup(
         id = "Projects/2026/Song",
         representative = rep,
         variants = variants,
@@ -64,12 +67,13 @@ class ToSongStripDataTest {
 
     @Test
     fun chipDisplaysOverrideOverInferredStage() {
-        val rep = row(
-            id = 1,
-            name = "song.als",
-            stageInferred = Stage.Mixing,
-            stageOverride = Stage.Done,
-        )
+        val rep =
+            row(
+                id = 1,
+                name = "song.als",
+                stageInferred = Stage.Mixing,
+                stageOverride = Stage.Done,
+            )
         val data = group(rep, listOf(rep)).toSongStripDataForTest(sync = null)
         val chip = assertNotNull(data.stage)
         assertEquals("done", chip.label)
@@ -78,12 +82,13 @@ class ToSongStripDataTest {
 
     @Test
     fun chipFallsBackToInferredWhenNoOverride() {
-        val rep = row(
-            id = 1,
-            name = "song.als",
-            stageInferred = Stage.InProgress,
-            stageOverride = null,
-        )
+        val rep =
+            row(
+                id = 1,
+                name = "song.als",
+                stageInferred = Stage.InProgress,
+                stageOverride = null,
+            )
         val data = group(rep, listOf(rep)).toSongStripDataForTest(sync = null)
         val chip = assertNotNull(data.stage)
         assertEquals("in progress", chip.label)

@@ -20,7 +20,6 @@ import kotlin.math.roundToInt
  * `null` so the UI shows "—" until the streaming `.als` parser lands.
  */
 object EffortScore {
-
     // v2 weights — keep in sync with scoring.py.
     private const val W_TRACK_COUNT = 18.0
     private const val W_PLUGIN_COUNT = 10.0
@@ -45,7 +44,10 @@ object EffortScore {
      * fattest old projects on the Forgotten-Gems shelf until the streaming parser lands. When
      * both are absent, return null so callers can render "—".
      */
-    fun compute(meta: ProjectMetadata?, fileSizeBytes: Long): Result? {
+    fun compute(
+        meta: ProjectMetadata?,
+        fileSizeBytes: Long,
+    ): Result? {
         if (meta == null) {
             if (fileSizeBytes <= 0L) return null
             val fileSizeKb = max(0.0, fileSizeBytes / 1024.0)
@@ -59,18 +61,24 @@ object EffortScore {
         }
         val trackCount = max(0, meta.totalTrackCount).toDouble()
         val pluginCount = meta.plugins.size.toDouble()
-        val uniquePlugins = meta.plugins.map { it.name }.toSet().size.toDouble()
+        val uniquePlugins =
+            meta.plugins
+                .map { it.name }
+                .toSet()
+                .size
+                .toDouble()
         val sampleCount = meta.sampleRefs.size.toDouble()
         val fileSizeKb = max(0.0, fileSizeBytes / 1024.0)
 
-        val breakdown = linkedMapOf(
-            "track_count" to log10(excess(trackCount, BASE_TRACKS) + 1.0) * W_TRACK_COUNT,
-            "plugin_count" to log10(excess(pluginCount, BASE_PLUGINS) + 1.0) * W_PLUGIN_COUNT,
-            "unique_plugins" to log10(excess(uniquePlugins, BASE_UNIQUE_PLUGINS) + 1.0) * W_UNIQUE_PLUGINS,
-            "sample_count" to log10(excess(sampleCount, BASE_SAMPLES) + 1.0) * W_SAMPLE_COUNT,
-            "file_size_kb" to log10(excess(fileSizeKb, BASE_FILE_SIZE_KB) + 1.0) * W_FILE_SIZE_KB,
-            "has_master_chain" to if (hasMasterChain(meta.plugins)) W_MASTER_CHAIN else 0.0,
-        )
+        val breakdown =
+            linkedMapOf(
+                "track_count" to log10(excess(trackCount, BASE_TRACKS) + 1.0) * W_TRACK_COUNT,
+                "plugin_count" to log10(excess(pluginCount, BASE_PLUGINS) + 1.0) * W_PLUGIN_COUNT,
+                "unique_plugins" to log10(excess(uniquePlugins, BASE_UNIQUE_PLUGINS) + 1.0) * W_UNIQUE_PLUGINS,
+                "sample_count" to log10(excess(sampleCount, BASE_SAMPLES) + 1.0) * W_SAMPLE_COUNT,
+                "file_size_kb" to log10(excess(fileSizeKb, BASE_FILE_SIZE_KB) + 1.0) * W_FILE_SIZE_KB,
+                "has_master_chain" to if (hasMasterChain(meta.plugins)) W_MASTER_CHAIN else 0.0,
+            )
         val raw = breakdown.values.sum()
         val score = max(0.0, min(100.0, raw)).roundToInt()
         // Round breakdown for stable storage / determinism, matching scoring.py.
@@ -79,23 +87,33 @@ object EffortScore {
     }
 
     /** Convenience: score only, or null. */
-    fun scoreOf(meta: ProjectMetadata?, fileSizeBytes: Long): Int? = compute(meta, fileSizeBytes)?.score
+    fun scoreOf(
+        meta: ProjectMetadata?,
+        fileSizeBytes: Long,
+    ): Int? = compute(meta, fileSizeBytes)?.score
 
-    private fun excess(value: Double, baseline: Double): Double = max(0.0, value - baseline)
+    private fun excess(
+        value: Double,
+        baseline: Double,
+    ): Double = max(0.0, value - baseline)
 
     /**
      * Heuristic: any plugin whose track_name is empty/null or matches "Master"
      * (case-insensitive) indicates the master chain. Matches scoring.py exactly.
      */
-    private fun hasMasterChain(plugins: List<PluginRef>): Boolean = plugins.any { p ->
-        val tn = p.trackName?.trim().orEmpty()
-        tn.isEmpty() || tn.equals("Master", ignoreCase = true)
-    }
+    private fun hasMasterChain(plugins: List<PluginRef>): Boolean =
+        plugins.any { p ->
+            val tn = p.trackName?.trim().orEmpty()
+            tn.isEmpty() || tn.equals("Master", ignoreCase = true)
+        }
 
     private fun roundTo4(v: Double): Double {
         val scaled = (v * 10_000.0)
         return scaled.roundToInt() / 10_000.0
     }
 
-    data class Result(val score: Int, val breakdown: Map<String, Double>)
+    data class Result(
+        val score: Int,
+        val breakdown: Map<String, Double>,
+    )
 }

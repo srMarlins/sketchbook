@@ -47,7 +47,6 @@ class LeasedLockRepository(
     private val journal: JournalRepository? = null,
     private val clock: Clock = Clock.System,
 ) : LockRepository {
-
     private data class PerUuid(
         val state: LeaseLockState,
         val flow: MutableStateFlow<LockStatus>,
@@ -56,19 +55,21 @@ class LeasedLockRepository(
 
     private val byUuid = mutableMapOf<ProjectUuid, PerUuid>()
 
-    private fun get(uuid: ProjectUuid): PerUuid = byUuid.getOrPut(uuid) {
-        val backend = cloud() ?: NullCloudBackend
-        PerUuid(
-            state = LeaseLockState(
-                cloud = backend,
-                uuid = uuid,
-                hostId = hostId,
-                hostName = hostName,
-                clock = clock,
-            ),
-            flow = MutableStateFlow<LockStatus>(LockStatus.Free),
-        )
-    }
+    private fun get(uuid: ProjectUuid): PerUuid =
+        byUuid.getOrPut(uuid) {
+            val backend = cloud() ?: NullCloudBackend
+            PerUuid(
+                state =
+                    LeaseLockState(
+                        cloud = backend,
+                        uuid = uuid,
+                        hostId = hostId,
+                        hostName = hostName,
+                        clock = clock,
+                    ),
+                flow = MutableStateFlow<LockStatus>(LockStatus.Free),
+            )
+        }
 
     override fun observe(uuid: ProjectUuid): Flow<LockStatus> = get(uuid).flow.asStateFlow()
 
@@ -76,94 +77,113 @@ class LeasedLockRepository(
         val backend = cloud() ?: return Result.failure(IllegalStateException("cloud not configured"))
         val per = get(uuid)
         // Try to acquire; CAS uses the existing lock's generation if present.
-        val lock = LeaseLock(
-            ownerHostId = hostId,
-            ownerHostName = hostName,
-            acquiredAt = clock.now(),
-            expiresAt = clock.now() + 15.minutes,
-        )
+        val lock =
+            LeaseLock(
+                ownerHostId = hostId,
+                ownerHostName = hostName,
+                acquiredAt = clock.now(),
+                expiresAt = clock.now() + 15.minutes,
+            )
         var priorOwnerHostName: String? = null
         var priorExpiresAtMs: Long? = null
-        val outcome = runCatching {
-            // Best-effort: if a lock already exists, try refresh-overwrite via CAS.
-            val acquireResult = backend.acquireLock(uuid, lock)
-            when (acquireResult) {
-                is LeaseAcquireResult.Acquired -> {
-                    per.flow.value = LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
-                    startHeartbeat(uuid, per)
-                }
+        val outcome =
+            runCatching {
+                // Best-effort: if a lock already exists, try refresh-overwrite via CAS.
+                val acquireResult = backend.acquireLock(uuid, lock)
+                when (acquireResult) {
+                    is LeaseAcquireResult.Acquired -> {
+                        per.flow.value = LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
+                        startHeartbeat(uuid, per)
+                    }
 
-                is LeaseAcquireResult.Held -> {
-                    priorOwnerHostName = acquireResult.held.ownerHostName
-                    priorExpiresAtMs = acquireResult.held.expiresAt.toEpochMilliseconds()
-                    // Force-take: overwrite via refresh CAS targeting the held generation.
-                    val r = backend.refreshLock(uuid, lock, acquireResult.generation)
-                    when (r) {
-                        is LeaseRefreshResult.Refreshed -> {
-                            per.flow.value = LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
-                            startHeartbeat(uuid, per)
-                        }
+                    is LeaseAcquireResult.Held -> {
+                        priorOwnerHostName = acquireResult.held.ownerHostName
+                        priorExpiresAtMs = acquireResult.held.expiresAt.toEpochMilliseconds()
+                        // Force-take: overwrite via refresh CAS targeting the held generation.
+                        val r = backend.refreshLock(uuid, lock, acquireResult.generation)
+                        when (r) {
+                            is LeaseRefreshResult.Refreshed -> {
+                                per.flow.value = LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
+                                startHeartbeat(uuid, per)
+                            }
 
-                        LeaseRefreshResult.Stale -> {
-                            per.flow.value = LockStatus.Stale(
-                                ownerHostName = acquireResult.held.ownerHostName,
-                                expiresAt = acquireResult.held.expiresAt,
-                            )
-                            throw IllegalStateException("force-take race: lock changed under us")
+                            LeaseRefreshResult.Stale -> {
+                                per.flow.value =
+                                    LockStatus.Stale(
+                                        ownerHostName = acquireResult.held.ownerHostName,
+                                        expiresAt = acquireResult.held.expiresAt,
+                                    )
+                                throw IllegalStateException("force-take race: lock changed under us")
+                            }
                         }
                     }
                 }
             }
-        }
         if (outcome.isSuccess) {
             recordForceTake(uuid, priorOwnerHostName, priorExpiresAtMs)
         }
         return outcome
     }
 
-    private suspend fun recordForceTake(uuid: ProjectUuid, priorOwnerHostName: String?, priorExpiresAtMs: Long?) {
+    private suspend fun recordForceTake(
+        uuid: ProjectUuid,
+        priorOwnerHostName: String?,
+        priorExpiresAtMs: Long?,
+    ) {
         val journalRepo = journal ?: return
         val projectId: ProjectId = syncStateStore.projectIdFor(uuid) ?: return
         journalRepo.append(
             JournalEntry(
                 timestamp = clock.now(),
                 projectId = projectId,
-                action = ActionRecord.ForceTakeLock(
-                    priorOwnerHostName = priorOwnerHostName,
-                    priorExpiresAtMs = priorExpiresAtMs,
-                ),
+                action =
+                    ActionRecord.ForceTakeLock(
+                        priorOwnerHostName = priorOwnerHostName,
+                        priorExpiresAtMs = priorExpiresAtMs,
+                    ),
             ),
         )
     }
 
-    private fun startHeartbeat(uuid: ProjectUuid, per: PerUuid) {
+    private fun startHeartbeat(
+        uuid: ProjectUuid,
+        per: PerUuid,
+    ) {
         per.heartbeatJob?.cancel()
-        per.heartbeatJob = scope.launch {
-            // The actual refresh CAS happens inside LeaseLockState — but we delegate to it for
-            // the new design via acquire() which spawns its own heartbeat. To avoid double-
-            // heartbeating, we DON'T launch a parallel heartbeat here when LeaseLockState is
-            // already running one. Today this loop only mirrors LockState → LockStatus so the
-            // UI sees Lost as Stale.
-            per.state.state.collect { st ->
-                per.flow.value = when (st) {
-                    LockState.Idle -> LockStatus.Free
+        per.heartbeatJob =
+            scope.launch {
+                // The actual refresh CAS happens inside LeaseLockState — but we delegate to it for
+                // the new design via acquire() which spawns its own heartbeat. To avoid double-
+                // heartbeating, we DON'T launch a parallel heartbeat here when LeaseLockState is
+                // already running one. Today this loop only mirrors LockState → LockStatus so the
+                // UI sees Lost as Stale.
+                per.state.state.collect { st ->
+                    per.flow.value =
+                        when (st) {
+                            LockState.Idle -> {
+                                LockStatus.Free
+                            }
 
-                    is LockState.Owned -> LockStatus.Ours(st.lock.acquiredAt, st.lock.expiresAt)
+                            is LockState.Owned -> {
+                                LockStatus.Ours(st.lock.acquiredAt, st.lock.expiresAt)
+                            }
 
-                    is LockState.HeldByOther -> {
-                        // If the lease has expired, surface as Stale so the UI offers force-take.
-                        val now = clock.now()
-                        if (st.held.expiresAt <= now) {
-                            LockStatus.Stale(st.held.ownerHostName, st.held.expiresAt)
-                        } else {
-                            LockStatus.HeldByOther(st.held.ownerHostName, st.held.acquiredAt, st.held.expiresAt)
+                            is LockState.HeldByOther -> {
+                                // If the lease has expired, surface as Stale so the UI offers force-take.
+                                val now = clock.now()
+                                if (st.held.expiresAt <= now) {
+                                    LockStatus.Stale(st.held.ownerHostName, st.held.expiresAt)
+                                } else {
+                                    LockStatus.HeldByOther(st.held.ownerHostName, st.held.acquiredAt, st.held.expiresAt)
+                                }
+                            }
+
+                            LockState.Lost -> {
+                                LockStatus.Free
+                            }
                         }
-                    }
-
-                    LockState.Lost -> LockStatus.Free
                 }
             }
-        }
     }
 }
 
@@ -172,13 +192,52 @@ class LeasedLockRepository(
  * [LeasedLockRepository] short-circuits before calling these in normal paths.
  */
 private object NullCloudBackend : CloudBackend {
-    override suspend fun headBlob(hash: com.sketchbook.core.BlobHash, scope: com.sketchbook.cloud.BlobScope) = false
-    override suspend fun putBlob(hash: com.sketchbook.core.BlobHash, source: kotlinx.io.RawSource, size: Long, scope: com.sketchbook.cloud.BlobScope) = error("cloud not configured")
-    override suspend fun getBlob(hash: com.sketchbook.core.BlobHash, scope: com.sketchbook.cloud.BlobScope) = error("cloud not configured")
-    override suspend fun readManifest(uuid: ProjectUuid, rev: com.sketchbook.core.SnapshotRev) = error("cloud not configured")
-    override suspend fun listManifests(uuid: ProjectUuid, sinceRev: com.sketchbook.core.SnapshotRev?) = emptyList<com.sketchbook.cloud.ManifestRef>()
-    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: com.sketchbook.cloud.Generation?, manifest: com.sketchbook.core.Manifest) = Result.failure<com.sketchbook.cloud.Generation>(IllegalStateException("cloud not configured"))
-    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) = LeaseAcquireResult.Acquired(com.sketchbook.cloud.Generation("0"))
-    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: com.sketchbook.cloud.Generation) = LeaseRefreshResult.Stale
-    override suspend fun releaseLock(uuid: ProjectUuid, expected: com.sketchbook.cloud.Generation) {}
+    override suspend fun headBlob(
+        hash: com.sketchbook.core.BlobHash,
+        scope: com.sketchbook.cloud.BlobScope,
+    ) = false
+
+    override suspend fun putBlob(
+        hash: com.sketchbook.core.BlobHash,
+        source: kotlinx.io.RawSource,
+        size: Long,
+        scope: com.sketchbook.cloud.BlobScope,
+    ) = error("cloud not configured")
+
+    override suspend fun getBlob(
+        hash: com.sketchbook.core.BlobHash,
+        scope: com.sketchbook.cloud.BlobScope,
+    ) = error("cloud not configured")
+
+    override suspend fun readManifest(
+        uuid: ProjectUuid,
+        rev: com.sketchbook.core.SnapshotRev,
+    ) = error("cloud not configured")
+
+    override suspend fun listManifests(
+        uuid: ProjectUuid,
+        sinceRev: com.sketchbook.core.SnapshotRev?,
+    ) = emptyList<com.sketchbook.cloud.ManifestRef>()
+
+    override suspend fun appendManifestHead(
+        uuid: ProjectUuid,
+        expectedHead: com.sketchbook.cloud.Generation?,
+        manifest: com.sketchbook.core.Manifest,
+    ) = Result.failure<com.sketchbook.cloud.Generation>(IllegalStateException("cloud not configured"))
+
+    override suspend fun acquireLock(
+        uuid: ProjectUuid,
+        lock: LeaseLock,
+    ) = LeaseAcquireResult.Acquired(com.sketchbook.cloud.Generation("0"))
+
+    override suspend fun refreshLock(
+        uuid: ProjectUuid,
+        lock: LeaseLock,
+        expected: com.sketchbook.cloud.Generation,
+    ) = LeaseRefreshResult.Stale
+
+    override suspend fun releaseLock(
+        uuid: ProjectUuid,
+        expected: com.sketchbook.cloud.Generation,
+    ) {}
 }

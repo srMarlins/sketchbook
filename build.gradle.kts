@@ -23,13 +23,11 @@ spotless {
             ".claude/worktrees/**",
             ".worktrees/**",
         )
-        ktlint(ktlintVersion).editorConfigOverride(
-            mapOf(
-                "ktlint_standard_filename" to "disabled",
-                "ktlint_standard_no-wildcard-imports" to "disabled",
-                "ktlint_function_naming_ignore_when_annotated_with" to "Composable",
-            ),
-        )
+        // ktlint settings live in `.editorconfig` so spotless and detekt-formatting (both
+        // ktlint-backed) read the same `max_line_length` and rule disables. Without
+        // .editorconfig, spotless's ktlint runs unbounded and joins multi-line signatures into
+        // single overlong lines that detekt-formatting (capped at 140 via detekt.yml) rejects.
+        ktlint(ktlintVersion)
     }
     kotlinGradle {
         target("**/*.gradle.kts")

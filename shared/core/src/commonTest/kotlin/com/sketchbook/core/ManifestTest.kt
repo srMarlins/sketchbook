@@ -6,41 +6,45 @@ import kotlin.test.assertEquals
 import kotlin.time.Instant
 
 class ManifestTest {
-
     // Manifests are always serialized with defaults included so consumers never have to know
     // which fields are required vs optional on the wire. See Manifest.kdoc.
-    private val json = Json {
-        prettyPrint = false
-        ignoreUnknownKeys = false
-        encodeDefaults = true
-    }
+    private val json =
+        Json {
+            prettyPrint = false
+            ignoreUnknownKeys = false
+            encodeDefaults = true
+        }
 
-    private fun fixture(): Manifest = Manifest(
-        version = 1,
-        ownerUserId = UserId("default"),
-        projectUuid = ProjectUuid("01HZQX5N3M8F9G2K7B1A6Y4WCE"),
-        rev = SnapshotRev(47),
-        parentRev = SnapshotRev(46),
-        timestamp = Instant.parse("2026-05-05T14:22:31.412Z"),
-        hostId = "macstudio-9d4c",
-        hostName = "MacStudio",
-        kind = SnapshotKind.Auto,
-        label = null,
-        selfContained = false,
-        files = mapOf(
-            "Project.als" to ManifestFile(
-                hash = BlobHash("b3:" + "1f2c".repeat(16)),
-                size = 312488,
-                mtime = Instant.parse("2026-05-05T14:22:30.000Z"),
-            ),
-            "Samples/Imported/k.wav" to ManifestFile(
-                hash = BlobHash("b3:" + "9a07".repeat(16)),
-                size = 4189112,
-                mtime = Instant.parse("2026-05-05T14:00:00.000Z"),
-            ),
-        ),
-        stats = ManifestStats(fileCount = 217, totalBytes = 4831244012L, newBytes = 312488L),
-    )
+    private fun fixture(): Manifest =
+        Manifest(
+            version = 1,
+            ownerUserId = UserId("default"),
+            projectUuid = ProjectUuid("01HZQX5N3M8F9G2K7B1A6Y4WCE"),
+            rev = SnapshotRev(47),
+            parentRev = SnapshotRev(46),
+            timestamp = Instant.parse("2026-05-05T14:22:31.412Z"),
+            hostId = "macstudio-9d4c",
+            hostName = "MacStudio",
+            kind = SnapshotKind.Auto,
+            label = null,
+            selfContained = false,
+            files =
+                mapOf(
+                    "Project.als" to
+                        ManifestFile(
+                            hash = BlobHash("b3:" + "1f2c".repeat(16)),
+                            size = 312488,
+                            mtime = Instant.parse("2026-05-05T14:22:30.000Z"),
+                        ),
+                    "Samples/Imported/k.wav" to
+                        ManifestFile(
+                            hash = BlobHash("b3:" + "9a07".repeat(16)),
+                            size = 4189112,
+                            mtime = Instant.parse("2026-05-05T14:00:00.000Z"),
+                        ),
+                ),
+            stats = ManifestStats(fileCount = 217, totalBytes = 4831244012L, newBytes = 312488L),
+        )
 
     @Test
     fun roundTripsThroughJson() {
@@ -85,7 +89,8 @@ class ManifestTest {
     @Test
     fun acceptsKnownDesignDocSample() {
         // Subset of the example in design doc §3.1, with 64-char hashes.
-        val sample = """
+        val sample =
+            """
             {
               "v": 1,
               "owner_user_id": "default",
@@ -103,7 +108,7 @@ class ManifestTest {
               },
               "stats": {"file_count": 217, "total_bytes": 4831244012, "new_bytes": 312488}
             }
-        """.trimIndent()
+            """.trimIndent()
         val decoded = json.decodeFromString(Manifest.serializer(), sample)
         assertEquals(SnapshotRev(47), decoded.rev)
         assertEquals(SnapshotKind.Auto, decoded.kind)

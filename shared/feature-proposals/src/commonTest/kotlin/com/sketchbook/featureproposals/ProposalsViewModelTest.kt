@@ -23,7 +23,6 @@ import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProposalsViewModelTest {
-
     private val mainDispatcher = StandardTestDispatcher()
 
     @BeforeTest fun setUpMain() {
@@ -35,25 +34,34 @@ class ProposalsViewModelTest {
     }
 
     private val now = Instant.parse("2026-05-05T12:00:00Z")
-    private fun proposal(id: String, status: ProposalStatus = ProposalStatus.Pending) = Proposal(
+
+    private fun proposal(
+        id: String,
+        status: ProposalStatus = ProposalStatus.Pending,
+    ) = Proposal(
         proposalId = id,
         actor = "claude",
         rationale = "tidy",
-        actions = listOf(
-            com.sketchbook.repo.ProposalAction(
-                type = "SetTags",
-                args = buildJsonObject { put("project_id", 7) },
+        actions =
+            listOf(
+                com.sketchbook.repo.ProposalAction(
+                    type = "SetTags",
+                    args = buildJsonObject { put("project_id", 7) },
+                ),
             ),
-        ),
         submittedAt = now,
         status = status,
     )
 
-    private class FakeRepo(val flow: MutableStateFlow<List<Proposal>>) : ProposalsRepository {
+    private class FakeRepo(
+        val flow: MutableStateFlow<List<Proposal>>,
+    ) : ProposalsRepository {
         var approved: String? = null
         var rejected: String? = null
         var failNext: Boolean = false
+
         override fun observe(): Flow<List<Proposal>> = flow
+
         override suspend fun approve(proposalId: String): Result<Proposal> {
             if (failNext) {
                 failNext = false
@@ -64,6 +72,7 @@ class ProposalsViewModelTest {
             flow.value = updated
             return Result.success(updated.first { it.proposalId == proposalId })
         }
+
         override suspend fun reject(proposalId: String): Result<Unit> {
             rejected = proposalId
             val updated = flow.value.map { if (it.proposalId == proposalId) it.copy(status = ProposalStatus.Rejected) else it }
@@ -73,61 +82,66 @@ class ProposalsViewModelTest {
     }
 
     @Test
-    fun statePartitionsPendingFromResolved() = runTest(mainDispatcher) {
-        val flow = MutableStateFlow(
-            listOf(
-                proposal("p1"),
-                proposal("p2", ProposalStatus.Approved),
-                proposal("p3", ProposalStatus.Rejected),
-            ),
-        )
-        val vm = ProposalsViewModel(FakeRepo(flow))
-        vm.state.test {
-            var s = awaitItem()
-            while (s.pending.isEmpty() && s.resolved.isEmpty()) s = awaitItem()
-            assertEquals(listOf("p1"), s.pending.map { it.proposalId })
-            assertEquals(listOf("p2", "p3"), s.resolved.map { it.proposalId })
-            cancelAndIgnoreRemainingEvents()
+    fun statePartitionsPendingFromResolved() =
+        runTest(mainDispatcher) {
+            val flow =
+                MutableStateFlow(
+                    listOf(
+                        proposal("p1"),
+                        proposal("p2", ProposalStatus.Approved),
+                        proposal("p3", ProposalStatus.Rejected),
+                    ),
+                )
+            val vm = ProposalsViewModel(FakeRepo(flow))
+            vm.state.test {
+                var s = awaitItem()
+                while (s.pending.isEmpty() && s.resolved.isEmpty()) s = awaitItem()
+                assertEquals(listOf("p1"), s.pending.map { it.proposalId })
+                assertEquals(listOf("p2", "p3"), s.resolved.map { it.proposalId })
+                cancelAndIgnoreRemainingEvents()
+            }
         }
-    }
 
     @Test
-    fun approveDispatchesToRepoAndEmitsApprovedEffect() = runTest(mainDispatcher) {
-        val flow = MutableStateFlow(listOf(proposal("p1")))
-        val repo = FakeRepo(flow)
-        val vm = ProposalsViewModel(repo)
-        vm.effects.test {
-            vm.dispatch(ProposalsViewModel.Intent.Approve("p1"))
-            val effect = awaitItem()
-            assertTrue(effect is ProposalsViewModel.Effect.Approved)
-            assertEquals("p1", effect.proposalId)
-            assertEquals("p1", repo.approved)
+    fun approveDispatchesToRepoAndEmitsApprovedEffect() =
+        runTest(mainDispatcher) {
+            val flow = MutableStateFlow(listOf(proposal("p1")))
+            val repo = FakeRepo(flow)
+            val vm = ProposalsViewModel(repo)
+            vm.effects.test {
+                vm.dispatch(ProposalsViewModel.Intent.Approve("p1"))
+                val effect = awaitItem()
+                assertTrue(effect is ProposalsViewModel.Effect.Approved)
+                assertEquals("p1", effect.proposalId)
+                assertEquals("p1", repo.approved)
+            }
         }
-    }
 
     @Test
-    fun rejectDispatchesToRepoAndEmitsRejectedEffect() = runTest(mainDispatcher) {
-        val flow = MutableStateFlow(listOf(proposal("p1")))
-        val repo = FakeRepo(flow)
-        val vm = ProposalsViewModel(repo)
-        vm.effects.test {
-            vm.dispatch(ProposalsViewModel.Intent.Reject("p1"))
-            val effect = awaitItem()
-            assertTrue(effect is ProposalsViewModel.Effect.Rejected)
-            assertEquals("p1", repo.rejected)
+    fun rejectDispatchesToRepoAndEmitsRejectedEffect() =
+        runTest(mainDispatcher) {
+            val flow = MutableStateFlow(listOf(proposal("p1")))
+            val repo = FakeRepo(flow)
+            val vm = ProposalsViewModel(repo)
+            vm.effects.test {
+                vm.dispatch(ProposalsViewModel.Intent.Reject("p1"))
+                val effect = awaitItem()
+                assertTrue(effect is ProposalsViewModel.Effect.Rejected)
+                assertEquals("p1", repo.rejected)
+            }
         }
-    }
 
     @Test
-    fun approveFailureEmitsFailedEffect() = runTest(mainDispatcher) {
-        val flow = MutableStateFlow(listOf(proposal("p1")))
-        val repo = FakeRepo(flow).also { it.failNext = true }
-        val vm = ProposalsViewModel(repo)
-        vm.effects.test {
-            vm.dispatch(ProposalsViewModel.Intent.Approve("p1"))
-            val effect = awaitItem()
-            assertTrue(effect is ProposalsViewModel.Effect.Failed)
-            assertEquals("approve boom", effect.reason)
+    fun approveFailureEmitsFailedEffect() =
+        runTest(mainDispatcher) {
+            val flow = MutableStateFlow(listOf(proposal("p1")))
+            val repo = FakeRepo(flow).also { it.failNext = true }
+            val vm = ProposalsViewModel(repo)
+            vm.effects.test {
+                vm.dispatch(ProposalsViewModel.Intent.Approve("p1"))
+                val effect = awaitItem()
+                assertTrue(effect is ProposalsViewModel.Effect.Failed)
+                assertEquals("approve boom", effect.reason)
+            }
         }
-    }
 }

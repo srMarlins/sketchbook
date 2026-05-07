@@ -16,11 +16,13 @@ import java.nio.file.StandardCopyOption
  * manifest-orchestration class in [ManifestMaterializer]; this is the per-blob primitive.
  */
 object BlobInstaller {
-
     /** Outcome of a single [install] call. */
     enum class Outcome { Hardlinked, Copied, AlreadyPresent }
 
-    fun install(blob: Path, target: Path): Outcome {
+    fun install(
+        blob: Path,
+        target: Path,
+    ): Outcome {
         require(Files.isRegularFile(blob)) { "blob $blob is not a regular file" }
 
         if (Files.exists(target)) {
@@ -43,9 +45,13 @@ object BlobInstaller {
     }
 
     /** True iff both paths point at the same physical file (same inode on POSIX, same fileKey on Windows). */
-    fun sameInode(a: Path, b: Path): Boolean = try {
-        Files.isSameFile(a, b)
-    } catch (_: java.io.IOException) {
-        false
-    }
+    fun sameInode(
+        a: Path,
+        b: Path,
+    ): Boolean =
+        try {
+            Files.isSameFile(a, b)
+        } catch (_: java.io.IOException) {
+            false
+        }
 }

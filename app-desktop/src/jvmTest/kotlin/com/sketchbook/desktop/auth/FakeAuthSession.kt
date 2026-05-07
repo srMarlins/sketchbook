@@ -11,7 +11,9 @@ import kotlinx.coroutines.flow.StateFlow
  * "cloud is wired" baseline don't have to set anything up. Mutate [_state] directly to test
  * sign-out transitions.
  */
-class FakeAuthSession(initial: AuthState = AuthState.SignedIn(UserId("test-user"), "test@example.com")) : AuthSession {
+class FakeAuthSession(
+    initial: AuthState = AuthState.SignedIn(UserId("test-user"), "test@example.com"),
+) : AuthSession {
     private val _state = MutableStateFlow(initial)
     override val state: StateFlow<AuthState> = _state
 

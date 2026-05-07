@@ -72,9 +72,10 @@ fun OnboardingScreen(
     val snackbar = rememberPersistenceFailureSnackbar(vm)
     PaperPage(modifier = modifier) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(PaddingValues(horizontal = AppTheme.spacing.xl, vertical = AppTheme.spacing.xl)),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(PaddingValues(horizontal = AppTheme.spacing.xl, vertical = AppTheme.spacing.xl)),
             contentAlignment = Alignment.Center,
         ) {
             Column(
@@ -96,51 +97,61 @@ fun OnboardingScreen(
                         // `targetState > initialState`.
                         val enterFade = fadeIn(tween(280, easing = EmphasizedDecelerate))
                         val exitFade = fadeOut(tween(220))
-                        val enterSlide = slideInHorizontally(
-                            animationSpec = tween(280, easing = EmphasizedDecelerate),
-                        ) { slidePx }
-                        val exitSlide = slideOutHorizontally(
-                            animationSpec = tween(220),
-                        ) { -slidePx }
+                        val enterSlide =
+                            slideInHorizontally(
+                                animationSpec = tween(280, easing = EmphasizedDecelerate),
+                            ) { slidePx }
+                        val exitSlide =
+                            slideOutHorizontally(
+                                animationSpec = tween(220),
+                            ) { -slidePx }
                         (enterFade + enterSlide) togetherWith (exitFade + exitSlide)
                     },
                     label = "onboarding-step",
                 ) { index ->
                     when (state.steps[index]) {
-                        OnboardingStep.Welcome ->
+                        OnboardingStep.Welcome -> {
                             WelcomeStep(onContinue = { vm.dispatch(OnboardingIntent.Continue) })
+                        }
 
-                        OnboardingStep.Done ->
+                        OnboardingStep.Done -> {
                             DoneStep(onFinish = { vm.dispatch(OnboardingIntent.Finish) })
+                        }
 
-                        OnboardingStep.ProjectsRoots -> ProjectsRootsStep(
-                            paths = state.projectsRoots,
-                            osDefaultSuggestion = remember { defaultProjectsRootSuggestion() },
-                            onAddPath = { vm.dispatch(OnboardingIntent.AddProjectsRoot(it)) },
-                            onRemovePath = { vm.dispatch(OnboardingIntent.RemoveProjectsRoot(it)) },
-                            onPickFolder = onPickFolder,
-                            onContinue = { vm.dispatch(OnboardingIntent.Continue) },
-                            canContinue = state.canContinue,
-                        )
+                        OnboardingStep.ProjectsRoots -> {
+                            ProjectsRootsStep(
+                                paths = state.projectsRoots,
+                                osDefaultSuggestion = remember { defaultProjectsRootSuggestion() },
+                                onAddPath = { vm.dispatch(OnboardingIntent.AddProjectsRoot(it)) },
+                                onRemovePath = { vm.dispatch(OnboardingIntent.RemoveProjectsRoot(it)) },
+                                onPickFolder = onPickFolder,
+                                onContinue = { vm.dispatch(OnboardingIntent.Continue) },
+                                canContinue = state.canContinue,
+                            )
+                        }
 
-                        OnboardingStep.SampleRoots -> SampleRootsStep(
-                            paths = state.sampleRoots,
-                            onAddPath = { vm.dispatch(OnboardingIntent.AddSampleRoot(it)) },
-                            onRemovePath = { vm.dispatch(OnboardingIntent.RemoveSampleRoot(it)) },
-                            onPickFolder = onPickFolder,
-                            onContinue = { vm.dispatch(OnboardingIntent.Continue) },
-                            onSkip = { vm.dispatch(OnboardingIntent.Skip) },
-                        )
+                        OnboardingStep.SampleRoots -> {
+                            SampleRootsStep(
+                                paths = state.sampleRoots,
+                                onAddPath = { vm.dispatch(OnboardingIntent.AddSampleRoot(it)) },
+                                onRemovePath = { vm.dispatch(OnboardingIntent.RemoveSampleRoot(it)) },
+                                onPickFolder = onPickFolder,
+                                onContinue = { vm.dispatch(OnboardingIntent.Continue) },
+                                onSkip = { vm.dispatch(OnboardingIntent.Skip) },
+                            )
+                        }
 
-                        OnboardingStep.PluginFolders -> PluginFoldersStep(
-                            paths = state.pluginFolders,
-                            onAddPath = { vm.dispatch(OnboardingIntent.AddPluginFolder(it)) },
-                            onRemovePath = { vm.dispatch(OnboardingIntent.RemovePluginFolder(it)) },
-                            onUseDefaults = { vm.dispatch(OnboardingIntent.UsePluginDefaults) },
-                            onPickFolder = onPickFolder,
-                            onContinue = { vm.dispatch(OnboardingIntent.Continue) },
-                            onSkip = { vm.dispatch(OnboardingIntent.Skip) },
-                        )
+                        OnboardingStep.PluginFolders -> {
+                            PluginFoldersStep(
+                                paths = state.pluginFolders,
+                                onAddPath = { vm.dispatch(OnboardingIntent.AddPluginFolder(it)) },
+                                onRemovePath = { vm.dispatch(OnboardingIntent.RemovePluginFolder(it)) },
+                                onUseDefaults = { vm.dispatch(OnboardingIntent.UsePluginDefaults) },
+                                onPickFolder = onPickFolder,
+                                onContinue = { vm.dispatch(OnboardingIntent.Continue) },
+                                onSkip = { vm.dispatch(OnboardingIntent.Skip) },
+                            )
+                        }
                     }
                 }
 
@@ -156,20 +167,24 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun FooterRow(showSkipAll: Boolean, onSkipAll: () -> Unit) {
+private fun FooterRow(
+    showSkipAll: Boolean,
+    onSkipAll: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showSkipAll) {
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
-                    .clickable(onClick = onSkipAll)
-                    .padding(
-                        horizontal = AppTheme.spacing.sm,
-                        vertical = AppTheme.spacing.xs,
-                    ),
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
+                        .clickable(onClick = onSkipAll)
+                        .padding(
+                            horizontal = AppTheme.spacing.sm,
+                            vertical = AppTheme.spacing.xs,
+                        ),
             ) {
                 Text(
                     "Skip all and use defaults",

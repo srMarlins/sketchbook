@@ -52,81 +52,99 @@ class ProposalsViewModel(
     private val executor: ProposalActionExecutor? = null,
     private val projects: ProjectRepository? = null,
 ) : ViewModel() {
-
-    private val _effects = MutableSharedFlow<Effect>(
-        replay = 0,
-        extraBufferCapacity = 8,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    private val _effects =
+        MutableSharedFlow<Effect>(
+            replay = 0,
+            extraBufferCapacity = 8,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
     private val filters = MutableStateFlow(Filters())
 
-    val state: StateFlow<State> = combine(
-        repository.observe(),
-        projects?.observeProjects("") ?: kotlinx.coroutines.flow.flowOf(emptyList()),
-        filters,
-    ) { proposals, projectRows, f ->
-        val nameById = projectRows.associate { it.id.value to it.name }
-        val pendingAll = proposals.filter { it.status == ProposalStatus.Pending }
-        val resolvedAll = proposals.filter { it.status != ProposalStatus.Pending }
-        val visiblePending = pendingAll
-            .filter { matchesSource(it.actor, f.sourceFilter) }
-            .filter { matchesSearch(it, nameById, f.search) }
-        val groups = visiblePending
-            .groupBy { categoryOf(it) }
-            .toSortedMap(categoryOrder)
-            .map { (category, items) -> ProposalGroup(category, items) }
-        State(
-            pending = visiblePending,
-            resolved = resolvedAll,
-            groups = groups,
-            projectNamesById = nameById,
-            search = f.search,
-            sourceFilter = f.sourceFilter,
-            loading = false,
-        )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
+    val state: StateFlow<State> =
+        combine(
+            repository.observe(),
+            projects?.observeProjects("") ?: kotlinx.coroutines.flow.flowOf(emptyList()),
+            filters,
+        ) { proposals, projectRows, f ->
+            val nameById = projectRows.associate { it.id.value to it.name }
+            val pendingAll = proposals.filter { it.status == ProposalStatus.Pending }
+            val resolvedAll = proposals.filter { it.status != ProposalStatus.Pending }
+            val visiblePending =
+                pendingAll
+                    .filter { matchesSource(it.actor, f.sourceFilter) }
+                    .filter { matchesSearch(it, nameById, f.search) }
+            val groups =
+                visiblePending
+                    .groupBy { categoryOf(it) }
+                    .toSortedMap(categoryOrder)
+                    .map { (category, items) -> ProposalGroup(category, items) }
+            State(
+                pending = visiblePending,
+                resolved = resolvedAll,
+                groups = groups,
+                projectNamesById = nameById,
+                search = f.search,
+                sourceFilter = f.sourceFilter,
+                loading = false,
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
     fun dispatch(intent: Intent) {
         when (intent) {
-            is Intent.SetSourceFilter -> filters.update { it.copy(sourceFilter = intent.filter) }
-
-            is Intent.SetSearch -> filters.update { it.copy(search = intent.query) }
-
-            is Intent.Approve -> viewModelScope.launch {
-                applyAndApprove(intent.proposalId, single = true)
+            is Intent.SetSourceFilter -> {
+                filters.update { it.copy(sourceFilter = intent.filter) }
             }
 
-            is Intent.Reject -> viewModelScope.launch { rejectOne(intent.proposalId, single = true) }
-
-            is Intent.BulkApprove -> viewModelScope.launch {
-                val approvedIds = mutableListOf<String>()
-                val failed = mutableListOf<Pair<String, String>>()
-                for (id in intent.proposalIds) {
-                    when (val r = applyAndApprove(id, single = false)) {
-                        is ApplyResult.Approved -> approvedIds += id
-                        is ApplyResult.Failed -> failed += id to r.reason
-                    }
-                }
-                _effects.tryEmit(Effect.BulkApproved(approvedIds, failed))
+            is Intent.SetSearch -> {
+                filters.update { it.copy(search = intent.query) }
             }
 
-            is Intent.BulkReject -> viewModelScope.launch {
-                val rejected = mutableListOf<String>()
-                val failed = mutableListOf<Pair<String, String>>()
-                for (id in intent.proposalIds) {
-                    when (val r = rejectOne(id, single = false)) {
-                        is RejectResult.Rejected -> rejected += id
-                        is RejectResult.Failed -> failed += id to r.reason
-                    }
+            is Intent.Approve -> {
+                viewModelScope.launch {
+                    applyAndApprove(intent.proposalId, single = true)
                 }
-                _effects.tryEmit(Effect.BulkRejected(rejected, failed))
+            }
+
+            is Intent.Reject -> {
+                viewModelScope.launch { rejectOne(intent.proposalId, single = true) }
+            }
+
+            is Intent.BulkApprove -> {
+                viewModelScope.launch {
+                    val approvedIds = mutableListOf<String>()
+                    val failed = mutableListOf<Pair<String, String>>()
+                    for (id in intent.proposalIds) {
+                        when (val r = applyAndApprove(id, single = false)) {
+                            is ApplyResult.Approved -> approvedIds += id
+                            is ApplyResult.Failed -> failed += id to r.reason
+                        }
+                    }
+                    _effects.tryEmit(Effect.BulkApproved(approvedIds, failed))
+                }
+            }
+
+            is Intent.BulkReject -> {
+                viewModelScope.launch {
+                    val rejected = mutableListOf<String>()
+                    val failed = mutableListOf<Pair<String, String>>()
+                    for (id in intent.proposalIds) {
+                        when (val r = rejectOne(id, single = false)) {
+                            is RejectResult.Rejected -> rejected += id
+                            is RejectResult.Failed -> failed += id to r.reason
+                        }
+                    }
+                    _effects.tryEmit(Effect.BulkRejected(rejected, failed))
+                }
             }
         }
     }
 
-    private suspend fun applyAndApprove(proposalId: String, single: Boolean): ApplyResult {
+    private suspend fun applyAndApprove(
+        proposalId: String,
+        single: Boolean,
+    ): ApplyResult {
         // Look up directly through the repo so we don't depend on `state` having warmed up — under
         // a TestDispatcher the eager combine may not have collected by the time tests dispatch.
         val proposals = repository.observe().first()
@@ -152,7 +170,10 @@ class ProposalsViewModel(
         }
     }
 
-    private suspend fun rejectOne(proposalId: String, single: Boolean): RejectResult {
+    private suspend fun rejectOne(
+        proposalId: String,
+        single: Boolean,
+    ): RejectResult {
         val r = repository.reject(proposalId)
         return if (r.isSuccess) {
             if (single) _effects.tryEmit(Effect.Rejected(proposalId))
@@ -164,25 +185,41 @@ class ProposalsViewModel(
         }
     }
 
-    private fun matchesSource(actor: String, filter: SourceFilter): Boolean = when (filter) {
-        SourceFilter.All -> true
+    private fun matchesSource(
+        actor: String,
+        filter: SourceFilter,
+    ): Boolean =
+        when (filter) {
+            SourceFilter.All -> {
+                true
+            }
 
-        // Best-effort actor → source mapping. The MCP subprocess writes "sketchbook" today;
-        // hand-rolled CLI / future user-driven proposals will use other actor names. Anything
-        // that doesn't match a known prefix lands under "User" so it's never invisible.
-        SourceFilter.Mcp -> actor.equals("sketchbook", ignoreCase = true) ||
-            actor.startsWith("mcp", ignoreCase = true)
+            // Best-effort actor → source mapping. The MCP subprocess writes "sketchbook" today;
+            // hand-rolled CLI / future user-driven proposals will use other actor names. Anything
+            // that doesn't match a known prefix lands under "User" so it's never invisible.
+            SourceFilter.Mcp -> {
+                actor.equals("sketchbook", ignoreCase = true) ||
+                    actor.startsWith("mcp", ignoreCase = true)
+            }
 
-        SourceFilter.Code -> actor.startsWith("code", ignoreCase = true) ||
-            actor.startsWith("agent", ignoreCase = true)
+            SourceFilter.Code -> {
+                actor.startsWith("code", ignoreCase = true) ||
+                    actor.startsWith("agent", ignoreCase = true)
+            }
 
-        SourceFilter.User -> !actor.equals("sketchbook", ignoreCase = true) &&
-            !actor.startsWith("mcp", ignoreCase = true) &&
-            !actor.startsWith("code", ignoreCase = true) &&
-            !actor.startsWith("agent", ignoreCase = true)
-    }
+            SourceFilter.User -> {
+                !actor.equals("sketchbook", ignoreCase = true) &&
+                    !actor.startsWith("mcp", ignoreCase = true) &&
+                    !actor.startsWith("code", ignoreCase = true) &&
+                    !actor.startsWith("agent", ignoreCase = true)
+            }
+        }
 
-    private fun matchesSearch(p: Proposal, nameById: Map<Long, String>, query: String): Boolean {
+    private fun matchesSearch(
+        p: Proposal,
+        nameById: Map<Long, String>,
+        query: String,
+    ): Boolean {
         if (query.isBlank()) return true
         val q = query.lowercase()
         if (p.rationale?.lowercase()?.contains(q) == true) return true
@@ -212,7 +249,9 @@ class ProposalsViewModel(
 
     enum class SourceFilter { All, Mcp, Code, User }
 
-    enum class ProposalCategory(val label: String) {
+    enum class ProposalCategory(
+        val label: String,
+    ) {
         Archive("Archive"),
         Move("Move / Rename"),
         Tag("Tag"),
@@ -248,31 +287,65 @@ class ProposalsViewModel(
 
     private sealed interface ApplyResult {
         object Approved : ApplyResult
-        data class Failed(val reason: String) : ApplyResult
+
+        data class Failed(
+            val reason: String,
+        ) : ApplyResult
     }
 
     private sealed interface RejectResult {
         object Rejected : RejectResult
-        data class Failed(val reason: String) : RejectResult
+
+        data class Failed(
+            val reason: String,
+        ) : RejectResult
     }
 
     sealed interface Intent {
-        data class Approve(val proposalId: String) : Intent
-        data class Reject(val proposalId: String) : Intent
-        data class BulkApprove(val proposalIds: List<String>) : Intent
-        data class BulkReject(val proposalIds: List<String>) : Intent
-        data class SetSourceFilter(val filter: SourceFilter) : Intent
-        data class SetSearch(val query: String) : Intent
+        data class Approve(
+            val proposalId: String,
+        ) : Intent
+
+        data class Reject(
+            val proposalId: String,
+        ) : Intent
+
+        data class BulkApprove(
+            val proposalIds: List<String>,
+        ) : Intent
+
+        data class BulkReject(
+            val proposalIds: List<String>,
+        ) : Intent
+
+        data class SetSourceFilter(
+            val filter: SourceFilter,
+        ) : Intent
+
+        data class SetSearch(
+            val query: String,
+        ) : Intent
     }
 
     sealed interface Effect {
-        data class Approved(val proposalId: String) : Effect
-        data class Rejected(val proposalId: String) : Effect
-        data class Failed(val proposalId: String, val reason: String) : Effect
+        data class Approved(
+            val proposalId: String,
+        ) : Effect
+
+        data class Rejected(
+            val proposalId: String,
+        ) : Effect
+
+        data class Failed(
+            val proposalId: String,
+            val reason: String,
+        ) : Effect
+
         data class BulkApproved(
             val approvedIds: List<String>,
             val failed: List<Pair<String, String>>,
         ) : Effect
+
         data class BulkRejected(
             val rejectedIds: List<String>,
             val failed: List<Pair<String, String>>,

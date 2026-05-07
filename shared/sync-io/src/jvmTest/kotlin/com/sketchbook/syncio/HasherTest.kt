@@ -8,7 +8,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class HasherTest {
-
     @Test
     fun emptyInputProducesKnownHash() {
         // BLAKE3 of empty input is well-known.

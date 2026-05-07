@@ -22,7 +22,11 @@ import com.sketchbook.uishared.theme.AppTheme
  * Canvas form gives us the radial growth without pulling in a shape morph library.
  */
 @Composable
-fun InkDots(count: Int, currentIndex: Int, modifier: Modifier = Modifier) {
+fun InkDots(
+    count: Int,
+    currentIndex: Int,
+    modifier: Modifier = Modifier,
+) {
     val colors = AppTheme.colors
     Row(
         modifier = modifier,
@@ -47,7 +51,9 @@ fun InkDots(count: Int, currentIndex: Int, modifier: Modifier = Modifier) {
                     color = colors.inkFaint,
                     radius = r,
                     center = center,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1f),
+                    style =
+                        androidx.compose.ui.graphics.drawscope
+                            .Stroke(width = 1f),
                 )
                 if (fill > 0f) {
                     drawCircle(

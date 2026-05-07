@@ -75,16 +75,18 @@ fun ProjectsRootsStep(
             // Small clickable pill that drops the OS default into the list with a single tap.
             // Shown only when not already added so it can't duplicate an existing row.
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
-                    .clickable { onAddPath(osDefaultSuggestion) },
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
+                        .clickable { onAddPath(osDefaultSuggestion) },
             ) {
                 Surface(
                     color = colors.tintCream,
-                    padding = PaddingValues(
-                        horizontal = AppTheme.spacing.sm,
-                        vertical = AppTheme.spacing.xs,
-                    ),
+                    padding =
+                        PaddingValues(
+                            horizontal = AppTheme.spacing.sm,
+                            vertical = AppTheme.spacing.xs,
+                        ),
                 ) {
                     Text(
                         text = "+ Use $osDefaultSuggestion",
@@ -146,9 +148,10 @@ internal fun AddFolderButton(
     val source = remember { MutableInteractionSource() }
     val active = rememberInkUnderlineActive(source)
     Box(
-        modifier = Modifier
-            .hoverable(source)
-            .inkUnderline(active = active, color = inkColor),
+        modifier =
+            Modifier
+                .hoverable(source)
+                .inkUnderline(active = active, color = inkColor),
     ) {
         Button(
             onClick = {

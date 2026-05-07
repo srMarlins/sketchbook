@@ -131,40 +131,44 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
     val items = sidebarItems(current, proposalCount, attentionCount)
     // Sidebar caption priority: scan first (most acute, time-bounded), then sync (slower
     // background activity), then offline marker, else nothing.
-    val scanCaption = when (val p = scanProgress) {
-        ScanUiState.Idle -> null
-        is ScanUiState.Scanning -> "Scanning… ${p.done}/${p.total}"
-        is ScanUiState.Done -> "Indexed ${p.indexed} projects" + if (p.failed > 0) " (${p.failed} failed)" else ""
-        is ScanUiState.Failed -> "Scan failed: ${p.message}"
-    }
-    val syncCaption: String? = when {
-        !syncState.online -> "Cloud: offline"
-        syncState.uploading > 0 -> "Cloud: uploading ${syncState.uploading}"
-        syncState.pending > 0 -> "Cloud: ${syncState.pending} pending"
-        else -> null
-    }
+    val scanCaption =
+        when (val p = scanProgress) {
+            ScanUiState.Idle -> null
+            is ScanUiState.Scanning -> "Scanning… ${p.done}/${p.total}"
+            is ScanUiState.Done -> "Indexed ${p.indexed} projects" + if (p.failed > 0) " (${p.failed} failed)" else ""
+            is ScanUiState.Failed -> "Scan failed: ${p.message}"
+        }
+    val syncCaption: String? =
+        when {
+            !syncState.online -> "Cloud: offline"
+            syncState.uploading > 0 -> "Cloud: uploading ${syncState.uploading}"
+            syncState.pending > 0 -> "Cloud: ${syncState.pending} pending"
+            else -> null
+        }
     val statusText = scanCaption ?: syncCaption
     // Drive the animated indicator on both Scanning *and* Done so the ribbon doesn't disappear
     // the instant the walk finishes — Done lingers ~3.5s before the scanner flips to Idle.
-    val scanIndicatorLabel = when (val p = scanProgress) {
-        is ScanUiState.Scanning -> "Parsing your library — ${p.done}/${p.total} projects"
-        is ScanUiState.Done -> "Indexed ${p.indexed} projects" + if (p.failed > 0) " · ${p.failed} failed" else ""
-        else -> null
-    }
+    val scanIndicatorLabel =
+        when (val p = scanProgress) {
+            is ScanUiState.Scanning -> "Parsing your library — ${p.done}/${p.total} projects"
+            is ScanUiState.Done -> "Indexed ${p.indexed} projects" + if (p.failed > 0) " · ${p.failed} failed" else ""
+            else -> null
+        }
     // Show the inline ribbon during both Scanning and Done so the success state has time to
     // register; idle hides it. The persistent ActivityBar at the top of the pane covers the
     // "always-on" affordance.
     val scanIndicatorActive = scanProgress is ScanUiState.Scanning || scanProgress is ScanUiState.Done
-    val activityState = when {
-        // Scan wins precedence — it's the louder, time-bounded activity. Sync activity is shown
-        // only when something is actively uploading; a non-empty pending queue with no upload in
-        // flight reads as "stuck loading" — the sidebar caption already exposes the queue depth.
-        scanProgress is ScanUiState.Scanning -> ActivityState.Scanning
+    val activityState =
+        when {
+            // Scan wins precedence — it's the louder, time-bounded activity. Sync activity is shown
+            // only when something is actively uploading; a non-empty pending queue with no upload in
+            // flight reads as "stuck loading" — the sidebar caption already exposes the queue depth.
+            scanProgress is ScanUiState.Scanning -> ActivityState.Scanning
 
-        syncState.uploading > 0 -> ActivityState.Syncing
+            syncState.uploading > 0 -> ActivityState.Syncing
 
-        else -> ActivityState.Idle
-    }
+            else -> ActivityState.Idle
+        }
 
     val currentProjectId: () -> ProjectId? = {
         // Resolve "what project is the user looking at" in the same priority order as the visible
@@ -176,24 +180,25 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
     }
     PaperPage {
         Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .focusRequester(rootFocusRequester)
-                .focusable()
-                .onPreviewKeyEvent { e ->
-                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    // Cover both platforms cheaply: Ctrl on Win/Linux, Cmd (Meta) on Mac. Compose
-                    // Multiplatform Desktop reports them on separate flags, so checking both keeps
-                    // the binding portable without a hostOs branch.
-                    val modifierActive = e.isCtrlPressed || e.isMetaPressed
-                    if (!modifierActive || !e.isShiftPressed || e.key != Key.S) {
-                        return@onPreviewKeyEvent false
-                    }
-                    val pid = currentProjectId() ?: return@onPreviewKeyEvent false
-                    quickCaptureError = null
-                    quickCaptureProjectId = pid
-                    true
-                },
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .focusRequester(rootFocusRequester)
+                    .focusable()
+                    .onPreviewKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        // Cover both platforms cheaply: Ctrl on Win/Linux, Cmd (Meta) on Mac. Compose
+                        // Multiplatform Desktop reports them on separate flags, so checking both keeps
+                        // the binding portable without a hostOs branch.
+                        val modifierActive = e.isCtrlPressed || e.isMetaPressed
+                        if (!modifierActive || !e.isShiftPressed || e.key != Key.S) {
+                            return@onPreviewKeyEvent false
+                        }
+                        val pid = currentProjectId() ?: return@onPreviewKeyEvent false
+                        quickCaptureError = null
+                        quickCaptureProjectId = pid
+                        true
+                    },
         ) {
             NotebookSidebar(
                 title = "Sketchbook",
@@ -206,7 +211,9 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                 statusText = statusText,
                 footerSlot = {
                     androidx.compose.foundation.layout.Column(
-                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+                        verticalArrangement =
+                            androidx.compose.foundation.layout.Arrangement
+                                .spacedBy(6.dp),
                     ) {
                         // PR-T coverage chip stacks above the health chip when there are missing
                         // plugins; the chip self-hides when the summary is null/empty so this row
@@ -291,10 +298,11 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                                             backStack.add(Screen.Settings)
                                                         },
                                                         onDismiss = { chrome.dismissPrompt(prompt) },
-                                                        modifier = Modifier.padding(
-                                                            horizontal = 16.dp,
-                                                            vertical = 8.dp,
-                                                        ),
+                                                        modifier =
+                                                            Modifier.padding(
+                                                                horizontal = 16.dp,
+                                                                vertical = 8.dp,
+                                                            ),
                                                     )
                                                 }
                                                 ProjectListScreen(
@@ -315,12 +323,15 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                                         LaunchedEffect(detailVm) {
                                                             detailVm.effects.collect { e ->
                                                                 when (e) {
-                                                                    is ProjectDetailViewModel.Effect.LaunchLive ->
+                                                                    is ProjectDetailViewModel.Effect.LaunchLive -> {
                                                                         Os.openInLive(e.projectPath)
+                                                                    }
 
                                                                     ProjectDetailViewModel.Effect.LockTaken,
                                                                     is ProjectDetailViewModel.Effect.LockTakeFailed,
-                                                                    -> Unit
+                                                                    -> {
+                                                                        Unit
+                                                                    }
                                                                 }
                                                             }
                                                         }
@@ -328,11 +339,12 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                                             vm = detailVm,
                                                             onDismiss = dismiss,
                                                             syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
-                                                            onPushNow = if (chrome.syncWired) {
-                                                                { pid -> coroutineScope.launch { chrome.pushNow(pid) } }
-                                                            } else {
-                                                                null
-                                                            },
+                                                            onPushNow =
+                                                                if (chrome.syncWired) {
+                                                                    { pid -> coroutineScope.launch { chrome.pushNow(pid) } }
+                                                                } else {
+                                                                    null
+                                                                },
                                                             conflictMessageFor = if (chrome.syncWired) chrome::conflictMessage else null,
                                                             onOpenTimeline = { pid ->
                                                                 val uuid = chrome.timelineUuidFor(pid)
@@ -368,18 +380,22 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
 
                                         is Screen.Inbox -> {
                                             val proposalsVm: com.sketchbook.featureproposals.ProposalsViewModel = metroViewModel()
-                                            val needsAttentionVm: com.sketchbook.featureneedsattention.NeedsAttentionViewModel = metroViewModel()
+                                            val needsAttentionVm: com.sketchbook.featureneedsattention.NeedsAttentionViewModel =
+                                                metroViewModel()
                                             val journalVm: JournalViewModel = metroViewModel()
                                             LaunchedEffect(journalVm) {
                                                 journalVm.effects.collect { e ->
                                                     when (e) {
-                                                        is JournalViewModel.Effect.NavigateToProject ->
+                                                        is JournalViewModel.Effect.NavigateToProject -> {
                                                             backStack.add(Screen.ProjectDetail(e.projectId))
+                                                        }
 
                                                         is JournalViewModel.Effect.Undone,
                                                         is JournalViewModel.Effect.UndoFailed,
                                                         is JournalViewModel.Effect.BulkUndone,
-                                                        -> Unit
+                                                        -> {
+                                                            Unit
+                                                        }
                                                     }
                                                 }
                                             }
@@ -404,7 +420,9 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                             )
                                         }
 
-                                        else -> Unit
+                                        else -> {
+                                            Unit
+                                        }
                                     }
                                 }
                             },
@@ -454,31 +472,45 @@ private fun QuickCaptureDialog(
     // ConfirmRewindDialog uses (no separate Material Dialog wrapper). The inner Surface
     // swallows clicks so the scrim only fires on the gutter.
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.32f))
-            .clickable(
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                indication = null,
-                onClick = onDismiss,
-            ),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(
+                    androidx.compose.ui.graphics.Color.Black
+                        .copy(alpha = 0.32f),
+                ).clickable(
+                    interactionSource =
+                        remember {
+                            androidx.compose.foundation.interaction
+                                .MutableInteractionSource()
+                        },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
         contentAlignment = androidx.compose.ui.Alignment.Center,
     ) {
         Box(
-            modifier = Modifier
-                .widthIn(min = 360.dp, max = 520.dp)
-                .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null,
-                    onClick = {},
-                ),
+            modifier =
+                Modifier
+                    .widthIn(min = 360.dp, max = 520.dp)
+                    .clickable(
+                        interactionSource =
+                            remember {
+                                androidx.compose.foundation.interaction
+                                    .MutableInteractionSource()
+                            },
+                        indication = null,
+                        onClick = {},
+                    ),
         ) {
             Surface(
                 color = theme.colors.surfacePanel,
                 padding = PaddingValues(theme.spacing.lg),
             ) {
                 androidx.compose.foundation.layout.Column(
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(theme.spacing.md),
+                    verticalArrangement =
+                        androidx.compose.foundation.layout.Arrangement
+                            .spacedBy(theme.spacing.md),
                 ) {
                     ProvideContentColor(theme.colors.inkPrimary) {
                         Text("Name this take", style = theme.typography.title)
@@ -490,12 +522,13 @@ private fun QuickCaptureDialog(
                         )
                     }
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(theme.colors.tintCream)
-                            .border(1.dp, theme.colors.ruleLineStrong, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(theme.colors.tintCream)
+                                .border(1.dp, theme.colors.ruleLineStrong, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
                     ) {
                         BasicTextField(
                             value = draft,
@@ -503,25 +536,28 @@ private fun QuickCaptureDialog(
                             singleLine = true,
                             textStyle = theme.typography.body.copy(color = theme.colors.inkPrimary),
                             cursorBrush = SolidColor(theme.colors.inkPrimary),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequester)
-                                .onPreviewKeyEvent { event ->
-                                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                                    when (event.key) {
-                                        Key.Enter, Key.NumPadEnter -> {
-                                            if (draft.trim().isNotEmpty()) onSave(draft)
-                                            true
-                                        }
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequester)
+                                    .onPreviewKeyEvent { event ->
+                                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                        when (event.key) {
+                                            Key.Enter, Key.NumPadEnter -> {
+                                                if (draft.trim().isNotEmpty()) onSave(draft)
+                                                true
+                                            }
 
-                                        Key.Escape -> {
-                                            onDismiss()
-                                            true
-                                        }
+                                            Key.Escape -> {
+                                                onDismiss()
+                                                true
+                                            }
 
-                                        else -> false
-                                    }
-                                },
+                                            else -> {
+                                                false
+                                            }
+                                        }
+                                    },
                         )
                     }
                     if (error != null) {
@@ -531,10 +567,11 @@ private fun QuickCaptureDialog(
                     }
                     androidx.compose.foundation.layout.Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(
-                            theme.spacing.sm,
-                            alignment = androidx.compose.ui.Alignment.End,
-                        ),
+                        horizontalArrangement =
+                            androidx.compose.foundation.layout.Arrangement.spacedBy(
+                                theme.spacing.sm,
+                                alignment = androidx.compose.ui.Alignment.End,
+                            ),
                     ) {
                         Button(onClick = onDismiss, variant = ButtonVariant.Ghost) { Text("Cancel") }
                         Button(
@@ -552,38 +589,41 @@ private fun sidebarItems(
     current: NavKey,
     proposalCount: Int,
     attentionCount: Int,
-): List<SidebarItem> = listOf(
-    SidebarItem(
-        id = "projects",
-        label = "Projects",
-        active = current is Screen.Projects || current is Screen.ProjectDetail || current is Screen.Timeline,
-    ),
-    SidebarItem(
-        id = "inbox",
-        label = "Inbox",
-        active = current is Screen.Inbox,
-        badge = countBadge(proposalCount + attentionCount),
-    ),
-    SidebarItem(
-        id = "settings",
-        label = "Settings",
-        active = current == Screen.Settings,
-    ),
-)
+): List<SidebarItem> =
+    listOf(
+        SidebarItem(
+            id = "projects",
+            label = "Projects",
+            active = current is Screen.Projects || current is Screen.ProjectDetail || current is Screen.Timeline,
+        ),
+        SidebarItem(
+            id = "inbox",
+            label = "Inbox",
+            active = current is Screen.Inbox,
+            badge = countBadge(proposalCount + attentionCount),
+        ),
+        SidebarItem(
+            id = "settings",
+            label = "Settings",
+            active = current == Screen.Settings,
+        ),
+    )
 
 // Cap at 99 so the binding doesn't get pushed off the row by a big "missing samples" count.
-private fun countBadge(n: Int): String? = when {
-    n <= 0 -> null
-    n > 99 -> "99+"
-    else -> n.toString()
-}
+private fun countBadge(n: Int): String? =
+    when {
+        n <= 0 -> null
+        n > 99 -> "99+"
+        else -> n.toString()
+    }
 
-private fun screenForId(id: String): Screen = when (id) {
-    "projects" -> Screen.Projects
-    "inbox" -> Screen.Inbox()
-    "settings" -> Screen.Settings
-    else -> Screen.Projects
-}
+private fun screenForId(id: String): Screen =
+    when (id) {
+        "projects" -> Screen.Projects
+        "inbox" -> Screen.Inbox()
+        "settings" -> Screen.Settings
+        else -> Screen.Projects
+    }
 
 /**
  * Detail panel: header band + tab strip + scrollable body, mirroring `web/CorkboardPanel`.
@@ -611,7 +651,13 @@ private fun DetailPanelRoutePane(
      * popover on each row showing other projects that load the same plugin. `null` keeps the tab
      * read-only (test/preview callers don't need to thread a repository).
      */
-    pluginUsageFlow: ((String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -> kotlinx.coroutines.flow.Flow<List<com.sketchbook.repo.PluginUsage>>)? = null,
+    pluginUsageFlow: (
+        (
+            String,
+            com.sketchbook.core.PluginFormat?,
+            com.sketchbook.core.ProjectId?,
+        ) -> kotlinx.coroutines.flow.Flow<List<com.sketchbook.repo.PluginUsage>>
+    )? = null,
     /** PR-AA: clicking a popover row swaps the detail panel to that project. */
     onSelectProject: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
 ) {
@@ -625,22 +671,32 @@ private fun DetailPanelRoutePane(
     ) {
         // Header band.
         androidx.compose.foundation.layout.Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 14.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+            horizontalArrangement =
+                androidx.compose.foundation.layout.Arrangement
+                    .spacedBy(12.dp),
         ) {
             androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
                 androidx.compose.foundation.layout.Row(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+                    horizontalArrangement =
+                        androidx.compose.foundation.layout.Arrangement
+                            .spacedBy(10.dp),
                 ) {
                     val row = state.row
                     if (row != null) {
                         EditableTitle(
                             name = row.name,
-                            onCommit = { vm.dispatch(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.Rename(it)) },
+                            onCommit = {
+                                vm.dispatch(
+                                    com.sketchbook.featuredetail.ProjectDetailViewModel.Intent
+                                        .Rename(it),
+                                )
+                            },
                             theme = theme,
                         )
                     } else {
@@ -657,18 +713,24 @@ private fun DetailPanelRoutePane(
                     ProvideContentColor(theme.colors.inkMuted) {
                         Text(
                             text = com.sketchbook.featureprojects.projectRootDir(row.path.value),
-                            style = theme.typography.mono.copy(
-                                fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                            ),
+                            style =
+                                theme.typography.mono.copy(
+                                    fontSize =
+                                        androidx.compose.ui.unit
+                                            .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                ),
                         )
                     }
                     // Sync pill + Sync-now CTA. Pill always present (even if "—") so the
                     // detail panel has a consistent "where does this live in the cloud" slot.
                     val sync = syncStateFor?.invoke(row.id) ?: ProjectSyncState.Unknown
-                    androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+                    androidx.compose.foundation.layout
+                        .Spacer(Modifier.height(8.dp))
                     androidx.compose.foundation.layout.Row(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                        horizontalArrangement =
+                            androidx.compose.foundation.layout.Arrangement
+                                .spacedBy(8.dp),
                     ) {
                         SyncPill(sync, theme)
                         if (onPushNow != null && sync != ProjectSyncState.Synced && sync != ProjectSyncState.Uploading) {
@@ -682,7 +744,8 @@ private fun DetailPanelRoutePane(
                     // feedback_layer_dont_redesign. Only shown when the queue tracks one.
                     val conflictMsg = conflictMessageFor?.invoke(row.id)
                     if (conflictMsg != null && sync == ProjectSyncState.Conflict) {
-                        androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
+                        androidx.compose.foundation.layout
+                            .Spacer(Modifier.height(4.dp))
                         ProvideContentColor(theme.colors.inkMuted) {
                             Text(conflictMsg, style = theme.typography.caption)
                         }
@@ -692,7 +755,9 @@ private fun DetailPanelRoutePane(
             state.row?.let { row ->
                 androidx.compose.foundation.layout.Row(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    horizontalArrangement =
+                        androidx.compose.foundation.layout.Arrangement
+                            .spacedBy(8.dp),
                 ) {
                     com.sketchbook.uishared.components.Button(
                         onClick = { vm.dispatch(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.OpenInLive) },
@@ -718,27 +783,34 @@ private fun DetailPanelRoutePane(
                 }
             }
             androidx.compose.foundation.layout.Box(
-                modifier = Modifier
-                    .clickable(onClick = onDismiss)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                modifier =
+                    Modifier
+                        .clickable(onClick = onDismiss)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 ProvideContentColor(theme.colors.inkMuted) {
                     Text(
                         "✕  CLOSE",
-                        style = theme.typography.mono.copy(
-                            fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                        ),
+                        style =
+                            theme.typography.mono.copy(
+                                fontSize =
+                                    androidx.compose.ui.unit
+                                        .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            ),
                     )
                 }
             }
         }
         // Tabs strip on a sunken band — like notebook page-tabs.
         androidx.compose.foundation.layout.Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(theme.colors.surfaceSunken)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(theme.colors.surfaceSunken)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement =
+                androidx.compose.foundation.layout.Arrangement
+                    .spacedBy(2.dp),
         ) {
             for (t in DetailTab.entries) {
                 DetailTabButton(t, t == tab, onClick = { tab = t }, theme = theme)
@@ -747,9 +819,10 @@ private fun DetailPanelRoutePane(
 
         // Body
         androidx.compose.foundation.layout.Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
         ) {
             val row = state.row
             if (row == null) {
@@ -759,11 +832,12 @@ private fun DetailPanelRoutePane(
                 ) {
                     ProvideContentColor(theme.colors.inkMuted) {
                         Text(
-                            text = if (state.loading) {
-                                "Loading project metadata…"
-                            } else {
-                                "We couldn't find this project. It may have been removed since the last scan."
-                            },
+                            text =
+                                if (state.loading) {
+                                    "Loading project metadata…"
+                                } else {
+                                    "We couldn't find this project. It may have been removed since the last scan."
+                                },
                             style = theme.typography.body,
                         )
                     }
@@ -771,45 +845,66 @@ private fun DetailPanelRoutePane(
             } else {
                 val scroll = rememberScrollState()
                 androidx.compose.foundation.layout.Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(scroll)
-                        .padding(horizontal = 24.dp, vertical = 20.dp),
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(20.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(scroll)
+                            .padding(horizontal = 24.dp, vertical = 20.dp),
+                    verticalArrangement =
+                        androidx.compose.foundation.layout.Arrangement
+                            .spacedBy(20.dp),
                 ) {
                     when (tab) {
                         DetailTab.Overview -> {
                             DetailMetaSection(
                                 row = row,
                                 theme = theme,
-                                onTagsChange = { vm.dispatch(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.SetTags(it)) },
+                                onTagsChange = {
+                                    vm.dispatch(
+                                        com.sketchbook.featuredetail.ProjectDetailViewModel.Intent
+                                            .SetTags(it),
+                                    )
+                                },
                                 onStageOverrideChange = { stage ->
-                                    vm.dispatch(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.SetStageOverride(stage))
+                                    vm.dispatch(
+                                        com.sketchbook.featuredetail.ProjectDetailViewModel.Intent
+                                            .SetStageOverride(stage),
+                                    )
                                 },
                             )
                             DetailQuickVersions(row, state, theme)
                         }
 
-                        DetailTab.Versions -> DetailVersionsTab(
-                            row = row,
-                            state = state,
-                            theme = theme,
-                            onOpenTimeline = onOpenTimeline?.let { open -> { open(row.id) } },
-                        )
+                        DetailTab.Versions -> {
+                            DetailVersionsTab(
+                                row = row,
+                                state = state,
+                                theme = theme,
+                                onOpenTimeline = onOpenTimeline?.let { open -> { open(row.id) } },
+                            )
+                        }
 
-                        DetailTab.Tracks -> DetailTracksTab(row, theme)
+                        DetailTab.Tracks -> {
+                            DetailTracksTab(row, theme)
+                        }
 
-                        DetailTab.Samples -> DetailSamplesTab(state.samples, theme)
+                        DetailTab.Samples -> {
+                            DetailSamplesTab(state.samples, theme)
+                        }
 
-                        DetailTab.Plugins -> DetailPluginsTab(
-                            plugins = state.plugins,
-                            theme = theme,
-                            currentProjectId = row.id,
-                            pluginUsageFlow = pluginUsageFlow,
-                            onSelectProject = onSelectProject,
-                        )
+                        DetailTab.Plugins -> {
+                            DetailPluginsTab(
+                                plugins = state.plugins,
+                                theme = theme,
+                                currentProjectId = row.id,
+                                pluginUsageFlow = pluginUsageFlow,
+                                onSelectProject = onSelectProject,
+                            )
+                        }
 
-                        DetailTab.History -> DetailHistoryTab(state, theme)
+                        DetailTab.History -> {
+                            DetailHistoryTab(state, theme)
+                        }
                     }
                 }
             }
@@ -817,7 +912,9 @@ private fun DetailPanelRoutePane(
     }
 }
 
-private enum class DetailTab(val label: String) {
+private enum class DetailTab(
+    val label: String,
+) {
     Overview("Overview"),
     Versions("Versions"),
     Tracks("Tracks"),
@@ -836,10 +933,14 @@ private fun DetailTabButton(
     val bg = if (active) theme.colors.surfaceCard else androidx.compose.ui.graphics.Color.Transparent
     val fg = if (active) theme.colors.inkPrimary else theme.colors.inkSecondary
     androidx.compose.foundation.layout.Box(
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .background(bg, androidx.compose.foundation.shape.RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+        modifier =
+            Modifier
+                .clickable(onClick = onClick)
+                .background(
+                    bg,
+                    androidx.compose.foundation.shape
+                        .RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp),
+                ).padding(horizontal = 12.dp, vertical = 7.dp),
     ) {
         ProvideContentColor(fg) {
             Text(
@@ -894,17 +995,20 @@ private fun StageOverrideRow(
     var open by remember { mutableStateOf(false) }
     val effective = override_ ?: inferred
     val label = effective?.label ?: "unset"
-    val suffix = if (override_ != null) {
-        "  (override)"
-    } else if (inferred != null) {
-        "  (auto)"
-    } else {
-        ""
-    }
+    val suffix =
+        if (override_ != null) {
+            "  (override)"
+        } else if (inferred != null) {
+            "  (auto)"
+        } else {
+            ""
+        }
 
     androidx.compose.foundation.layout.Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+        horizontalArrangement =
+            androidx.compose.foundation.layout.Arrangement
+                .spacedBy(12.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
         ProvideContentColor(theme.colors.inkMuted) {
@@ -916,28 +1020,42 @@ private fun StageOverrideRow(
         }
         androidx.compose.foundation.layout.Box {
             androidx.compose.foundation.layout.Row(
-                modifier = Modifier
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
-                    .background(if (override_ != null) theme.colors.tintCream else theme.colors.surfaceCard)
-                    .border(1.dp, theme.colors.ruleLineStrong, androidx.compose.foundation.shape.RoundedCornerShape(50))
-                    .clickable { open = !open }
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                modifier =
+                    Modifier
+                        .clip(
+                            androidx.compose.foundation.shape
+                                .RoundedCornerShape(50),
+                        ).background(if (override_ != null) theme.colors.tintCream else theme.colors.surfaceCard)
+                        .border(
+                            1.dp,
+                            theme.colors.ruleLineStrong,
+                            androidx.compose.foundation.shape
+                                .RoundedCornerShape(50),
+                        ).clickable { open = !open }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
                 ProvideContentColor(theme.colors.inkPrimary) {
                     Text(
                         (label + suffix).uppercase(),
-                        style = theme.typography.mono.copy(
-                            fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                            letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
-                        ),
+                        style =
+                            theme.typography.mono.copy(
+                                fontSize =
+                                    androidx.compose.ui.unit
+                                        .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                letterSpacing =
+                                    androidx.compose.ui.unit
+                                        .TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            ),
                     )
                 }
             }
             if (open) {
                 androidx.compose.ui.window.Popup(
                     onDismissRequest = { open = false },
-                    properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+                    properties =
+                        androidx.compose.ui.window
+                            .PopupProperties(focusable = true),
                 ) {
                     StageOverridePopup(
                         currentOverride = override_,
@@ -960,14 +1078,23 @@ private fun StageOverridePopup(
     onPick: (com.sketchbook.core.Stage?) -> Unit,
 ) {
     androidx.compose.foundation.layout.Column(
-        modifier = Modifier
-            .widthIn(min = 200.dp, max = 260.dp)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(theme.spacing.cornerCard))
-            .background(theme.colors.surfaceCard)
-            .border(1.dp, theme.colors.ruleLineStrong, androidx.compose.foundation.shape.RoundedCornerShape(theme.spacing.cornerCard)),
+        modifier =
+            Modifier
+                .widthIn(min = 200.dp, max = 260.dp)
+                .clip(
+                    androidx.compose.foundation.shape
+                        .RoundedCornerShape(theme.spacing.cornerCard),
+                ).background(theme.colors.surfaceCard)
+                .border(
+                    1.dp,
+                    theme.colors.ruleLineStrong,
+                    androidx.compose.foundation.shape
+                        .RoundedCornerShape(theme.spacing.cornerCard),
+                ),
     ) {
         StageOverridePopupRow("Auto", currentOverride == null, theme) { onPick(null) }
-        for (stage in com.sketchbook.core.Stage.values()) {
+        for (stage in com.sketchbook.core.Stage
+            .values()) {
             StageOverridePopupRow(stage.displayName, currentOverride == stage, theme) { onPick(stage) }
         }
     }
@@ -981,11 +1108,12 @@ private fun StageOverridePopupRow(
     onClick: () -> Unit,
 ) {
     androidx.compose.foundation.layout.Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (selected) theme.colors.tintCream else theme.colors.surfaceCard)
-            .clickable(onClick = onClick)
-            .padding(horizontal = theme.spacing.md, vertical = 8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(if (selected) theme.colors.tintCream else theme.colors.surfaceCard)
+                .clickable(onClick = onClick)
+                .padding(horizontal = theme.spacing.md, vertical = 8.dp),
     ) {
         ProvideContentColor(if (selected) theme.colors.inkPrimary else theme.colors.inkSecondary) {
             Text(label, style = theme.typography.body)
@@ -1037,11 +1165,16 @@ private fun DetailVersionsTab(
     Section("Versions (${unified.size})", theme) {
         if (unified.isEmpty()) {
             ProvideContentColor(theme.colors.inkMuted) {
-                Text("Nothing yet — once you save in Live a few times, Sketchbook starts tracking variants here.", style = theme.typography.body)
+                Text(
+                    "Nothing yet — once you save in Live a few times, Sketchbook starts tracking variants here.",
+                    style = theme.typography.body,
+                )
             }
         } else {
             androidx.compose.foundation.layout.Column(
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
+                verticalArrangement =
+                    androidx.compose.foundation.layout.Arrangement
+                        .spacedBy(2.dp),
             ) {
                 for (entry in unified) {
                     VersionRow(entry, isCurrent = entry.absPath == row.path.value, theme = theme)
@@ -1078,14 +1211,17 @@ private fun DetailHistoryTab(
         }
     } else {
         androidx.compose.foundation.layout.Column(
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+            verticalArrangement =
+                androidx.compose.foundation.layout.Arrangement
+                    .spacedBy(4.dp),
         ) {
             for (snap in state.history) {
                 ProvideContentColor(theme.colors.inkSecondary) {
                     Text(
-                        text = (snap.label ?: "rev ${snap.rev.value}") +
-                            " · ${snap.kind.name.lowercase()}" +
-                            " · ${snap.fileCount} files",
+                        text =
+                            (snap.label ?: "rev ${snap.rev.value}") +
+                                " · ${snap.kind.name.lowercase()}" +
+                                " · ${snap.fileCount} files",
                         style = theme.typography.body,
                     )
                 }
@@ -1114,30 +1250,43 @@ private fun VersionRow(
     theme: com.sketchbook.uishared.theme.AppTheme,
 ) {
     androidx.compose.foundation.layout.Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        horizontalArrangement =
+            androidx.compose.foundation.layout.Arrangement
+                .spacedBy(8.dp),
     ) {
         // Origin badge
-        val (badgeBg, badgeFg, badgeLabel) = when (entry.origin) {
-            VersionOrigin.LocalActive -> Triple(theme.colors.accentSoft, theme.colors.inkPrimary, "ACTIVE")
-            VersionOrigin.LocalAlternate -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "LOCAL")
-            VersionOrigin.Remote -> Triple(theme.colors.tintSage, theme.colors.inkPrimary, "REMOTE")
-        }
+        val (badgeBg, badgeFg, badgeLabel) =
+            when (entry.origin) {
+                VersionOrigin.LocalActive -> Triple(theme.colors.accentSoft, theme.colors.inkPrimary, "ACTIVE")
+                VersionOrigin.LocalAlternate -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "LOCAL")
+                VersionOrigin.Remote -> Triple(theme.colors.tintSage, theme.colors.inkPrimary, "REMOTE")
+            }
         androidx.compose.foundation.layout.Box(
-            modifier = Modifier
-                .background(badgeBg, androidx.compose.foundation.shape.RoundedCornerShape(50))
-                .padding(horizontal = 6.dp, vertical = 1.dp),
+            modifier =
+                Modifier
+                    .background(
+                        badgeBg,
+                        androidx.compose.foundation.shape
+                            .RoundedCornerShape(50),
+                    ).padding(horizontal = 6.dp, vertical = 1.dp),
         ) {
             ProvideContentColor(badgeFg) {
                 Text(
                     badgeLabel,
-                    style = theme.typography.mono.copy(
-                        fontSize = androidx.compose.ui.unit.TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
-                        letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    ),
+                    style =
+                        theme.typography.mono.copy(
+                            fontSize =
+                                androidx.compose.ui.unit
+                                    .TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            letterSpacing =
+                                androidx.compose.ui.unit
+                                    .TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        ),
                 )
             }
         }
@@ -1151,9 +1300,12 @@ private fun VersionRow(
         ProvideContentColor(theme.colors.inkMuted) {
             Text(
                 text = entry.subtitle,
-                style = theme.typography.mono.copy(
-                    fontSize = androidx.compose.ui.unit.TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
-                ),
+                style =
+                    theme.typography.mono.copy(
+                        fontSize =
+                            androidx.compose.ui.unit
+                                .TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
             )
         }
     }
@@ -1177,33 +1329,37 @@ private fun unifyVersions(
     // Local variants — siblings under the project root.
     val parent = java.io.File(row.path.value).parentFile
     if (parent != null && parent.isDirectory) {
-        val siblings = parent.listFiles { f ->
-            f.isFile &&
-                f.name.endsWith(".als", ignoreCase = true) &&
-                !f.name.endsWith(".als.bak", ignoreCase = true) &&
-                !f.name.startsWith(".")
-        }?.toList() ?: emptyList()
+        val siblings =
+            parent
+                .listFiles { f ->
+                    f.isFile &&
+                        f.name.endsWith(".als", ignoreCase = true) &&
+                        !f.name.endsWith(".als.bak", ignoreCase = true) &&
+                        !f.name.startsWith(".")
+                }?.toList() ?: emptyList()
         for (sib in siblings) {
             val abs = sib.absolutePath.replace('\\', '/')
             val isActive = abs == row.path.value
-            out += VersionEntry(
-                origin = if (isActive) VersionOrigin.LocalActive else VersionOrigin.LocalAlternate,
-                label = sib.nameWithoutExtension,
-                subtitle = relativeFromMs(sib.lastModified()) + " · " + formatBytes(sib.length()),
-                absPath = abs,
-                timestampMs = sib.lastModified(),
-            )
+            out +=
+                VersionEntry(
+                    origin = if (isActive) VersionOrigin.LocalActive else VersionOrigin.LocalAlternate,
+                    label = sib.nameWithoutExtension,
+                    subtitle = relativeFromMs(sib.lastModified()) + " · " + formatBytes(sib.length()),
+                    absPath = abs,
+                    timestampMs = sib.lastModified(),
+                )
         }
     }
     // Remote snapshots from the SnapshotRepository.
     for (snap in history) {
-        out += VersionEntry(
-            origin = VersionOrigin.Remote,
-            label = snap.label ?: "rev ${snap.rev.value}",
-            subtitle = "${snap.kind.name.lowercase()} · ${snap.fileCount} files · ${snap.hostName}",
-            absPath = null,
-            timestampMs = runCatching { snap.timestamp.toEpochMilliseconds() }.getOrDefault(0L),
-        )
+        out +=
+            VersionEntry(
+                origin = VersionOrigin.Remote,
+                label = snap.label ?: "rev ${snap.rev.value}",
+                subtitle = "${snap.kind.name.lowercase()} · ${snap.fileCount} files · ${snap.hostName}",
+                absPath = null,
+                timestampMs = runCatching { snap.timestamp.toEpochMilliseconds() }.getOrDefault(0L),
+            )
     }
     return out.sortedByDescending { it.timestampMs }
 }
@@ -1226,28 +1382,41 @@ private fun relativeFromMs(ms: Long): String {
 // agree. Imported as `com.sketchbook.featureprojects.projectRootDir`.
 
 @Composable
-private fun SyncPill(state: ProjectSyncState, theme: com.sketchbook.uishared.theme.AppTheme) {
-    val (bg, fg, label) = when (state) {
-        ProjectSyncState.Synced -> Triple(theme.colors.tintSage, theme.colors.inkPrimary, "SYNCED")
-        ProjectSyncState.Pending -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "PENDING")
-        ProjectSyncState.Uploading -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "UPLOADING…")
-        ProjectSyncState.Conflict -> Triple(theme.colors.tintRose, theme.colors.inkPrimary, "CONFLICT")
-        ProjectSyncState.RemoteAhead -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "REMOTE AHEAD")
-        ProjectSyncState.LocalOnly -> Triple(theme.colors.surfaceSunken, theme.colors.inkSecondary, "LOCAL ONLY")
-        ProjectSyncState.Unknown -> Triple(theme.colors.surfaceSunken, theme.colors.inkMuted, "—")
-    }
+private fun SyncPill(
+    state: ProjectSyncState,
+    theme: com.sketchbook.uishared.theme.AppTheme,
+) {
+    val (bg, fg, label) =
+        when (state) {
+            ProjectSyncState.Synced -> Triple(theme.colors.tintSage, theme.colors.inkPrimary, "SYNCED")
+            ProjectSyncState.Pending -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "PENDING")
+            ProjectSyncState.Uploading -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "UPLOADING…")
+            ProjectSyncState.Conflict -> Triple(theme.colors.tintRose, theme.colors.inkPrimary, "CONFLICT")
+            ProjectSyncState.RemoteAhead -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "REMOTE AHEAD")
+            ProjectSyncState.LocalOnly -> Triple(theme.colors.surfaceSunken, theme.colors.inkSecondary, "LOCAL ONLY")
+            ProjectSyncState.Unknown -> Triple(theme.colors.surfaceSunken, theme.colors.inkMuted, "—")
+        }
     androidx.compose.foundation.layout.Box(
-        modifier = Modifier
-            .background(bg, androidx.compose.foundation.shape.RoundedCornerShape(50))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+        modifier =
+            Modifier
+                .background(
+                    bg,
+                    androidx.compose.foundation.shape
+                        .RoundedCornerShape(50),
+                ).padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         ProvideContentColor(fg) {
             Text(
                 label,
-                style = theme.typography.mono.copy(
-                    fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
-                ),
+                style =
+                    theme.typography.mono.copy(
+                        fontSize =
+                            androidx.compose.ui.unit
+                                .TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        letterSpacing =
+                            androidx.compose.ui.unit
+                                .TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
             )
         }
     }
@@ -1261,7 +1430,9 @@ private fun DetailHistorySection(
     if (state.history.isEmpty()) return
     Section("History (${state.history.size})", theme) {
         androidx.compose.foundation.layout.Column(
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+            verticalArrangement =
+                androidx.compose.foundation.layout.Arrangement
+                    .spacedBy(4.dp),
         ) {
             for (snap in state.history) {
                 ProvideContentColor(theme.colors.inkSecondary) {
@@ -1282,15 +1453,22 @@ private fun Section(
     content: @Composable () -> Unit,
 ) {
     androidx.compose.foundation.layout.Column(
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        verticalArrangement =
+            androidx.compose.foundation.layout.Arrangement
+                .spacedBy(8.dp),
     ) {
         ProvideContentColor(theme.colors.inkSecondary) {
             Text(
                 text = title.uppercase(),
-                style = theme.typography.mono.copy(
-                    fontSize = androidx.compose.ui.unit.TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
-                ),
+                style =
+                    theme.typography.mono.copy(
+                        fontSize =
+                            androidx.compose.ui.unit
+                                .TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        letterSpacing =
+                            androidx.compose.ui.unit
+                                .TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
             )
         }
         content()
@@ -1306,7 +1484,9 @@ private fun DetailRow(
 ) {
     androidx.compose.foundation.layout.Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+        horizontalArrangement =
+            androidx.compose.foundation.layout.Arrangement
+                .spacedBy(12.dp),
     ) {
         ProvideContentColor(theme.colors.inkMuted) {
             Text(
@@ -1318,13 +1498,16 @@ private fun DetailRow(
         ProvideContentColor(theme.colors.inkPrimary) {
             Text(
                 value,
-                style = if (mono) {
-                    theme.typography.mono.copy(
-                        fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    )
-                } else {
-                    theme.typography.body
-                },
+                style =
+                    if (mono) {
+                        theme.typography.mono.copy(
+                            fontSize =
+                                androidx.compose.ui.unit
+                                    .TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        )
+                    } else {
+                        theme.typography.body
+                    },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1348,32 +1531,34 @@ private fun EditableTitle(
             singleLine = true,
             textStyle = theme.typography.title.copy(color = theme.colors.inkPrimary),
             cursorBrush = SolidColor(theme.colors.inkPrimary),
-            modifier = Modifier
-                .focusRequester(focusRequester)
-                .onFocusChanged { focus ->
-                    if (!focus.isFocused && editing) {
-                        if (draft.trim().isNotEmpty() && draft != name) onCommit(draft)
-                        editing = false
-                    }
-                }
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        Key.Enter, Key.NumPadEnter -> {
+            modifier =
+                Modifier
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { focus ->
+                        if (!focus.isFocused && editing) {
                             if (draft.trim().isNotEmpty() && draft != name) onCommit(draft)
                             editing = false
-                            true
                         }
+                    }.onPreviewKeyEvent { event ->
+                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        when (event.key) {
+                            Key.Enter, Key.NumPadEnter -> {
+                                if (draft.trim().isNotEmpty() && draft != name) onCommit(draft)
+                                editing = false
+                                true
+                            }
 
-                        Key.Escape -> {
-                            draft = name
-                            editing = false
-                            true
+                            Key.Escape -> {
+                                draft = name
+                                editing = false
+                                true
+                            }
+
+                            else -> {
+                                false
+                            }
                         }
-
-                        else -> false
-                    }
-                },
+                    },
         )
         LaunchedEffect(Unit) { focusRequester.requestFocus() }
     } else {
@@ -1381,14 +1566,19 @@ private fun EditableTitle(
             Text(
                 text = name,
                 style = theme.typography.title,
-                modifier = Modifier.clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null,
-                    onClick = {
-                        draft = name
-                        editing = true
-                    },
-                ),
+                modifier =
+                    Modifier.clickable(
+                        interactionSource =
+                            remember {
+                                androidx.compose.foundation.interaction
+                                    .MutableInteractionSource()
+                            },
+                        indication = null,
+                        onClick = {
+                            draft = name
+                            editing = true
+                        },
+                    ),
             )
         }
     }
@@ -1406,7 +1596,9 @@ private fun TagsEditorRow(
 
     androidx.compose.foundation.layout.Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+        horizontalArrangement =
+            androidx.compose.foundation.layout.Arrangement
+                .spacedBy(12.dp),
         verticalAlignment = androidx.compose.ui.Alignment.Top,
     ) {
         ProvideContentColor(theme.colors.inkMuted) {
@@ -1418,8 +1610,12 @@ private fun TagsEditorRow(
         }
         androidx.compose.foundation.layout.FlowRow(
             modifier = Modifier.weight(1f),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+            horizontalArrangement =
+                androidx.compose.foundation.layout.Arrangement
+                    .spacedBy(6.dp),
+            verticalArrangement =
+                androidx.compose.foundation.layout.Arrangement
+                    .spacedBy(6.dp),
         ) {
             for (tag in tags) {
                 EditableTagChip(
@@ -1430,73 +1626,86 @@ private fun TagsEditorRow(
             }
             if (addingTag) {
                 Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(theme.colors.tintCream)
-                        .border(1.dp, theme.colors.ruleLineStrong, RoundedCornerShape(50))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                        .widthIn(min = 60.dp),
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(theme.colors.tintCream)
+                            .border(1.dp, theme.colors.ruleLineStrong, RoundedCornerShape(50))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                            .widthIn(min = 60.dp),
                 ) {
                     BasicTextField(
                         value = draft,
                         onValueChange = { draft = it },
                         singleLine = true,
-                        textStyle = theme.typography.mono.copy(
-                            fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                            color = theme.colors.inkSecondary,
-                        ),
+                        textStyle =
+                            theme.typography.mono.copy(
+                                fontSize =
+                                    androidx.compose.ui.unit
+                                        .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                color = theme.colors.inkSecondary,
+                            ),
                         cursorBrush = SolidColor(theme.colors.inkPrimary),
-                        modifier = Modifier
-                            .focusRequester(focusRequester)
-                            .onFocusChanged { focus ->
-                                if (!focus.isFocused && addingTag) {
-                                    val t = draft.trim()
-                                    if (t.isNotEmpty() && t !in tags) onChange(tags + t)
-                                    draft = ""
-                                    addingTag = false
-                                }
-                            }
-                            .onPreviewKeyEvent { event ->
-                                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                                when (event.key) {
-                                    Key.Enter, Key.NumPadEnter -> {
+                        modifier =
+                            Modifier
+                                .focusRequester(focusRequester)
+                                .onFocusChanged { focus ->
+                                    if (!focus.isFocused && addingTag) {
                                         val t = draft.trim()
                                         if (t.isNotEmpty() && t !in tags) onChange(tags + t)
                                         draft = ""
                                         addingTag = false
-                                        true
                                     }
+                                }.onPreviewKeyEvent { event ->
+                                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                    when (event.key) {
+                                        Key.Enter, Key.NumPadEnter -> {
+                                            val t = draft.trim()
+                                            if (t.isNotEmpty() && t !in tags) onChange(tags + t)
+                                            draft = ""
+                                            addingTag = false
+                                            true
+                                        }
 
-                                    Key.Escape -> {
-                                        draft = ""
-                                        addingTag = false
-                                        true
+                                        Key.Escape -> {
+                                            draft = ""
+                                            addingTag = false
+                                            true
+                                        }
+
+                                        else -> {
+                                            false
+                                        }
                                     }
-
-                                    else -> false
-                                }
-                            },
+                                },
                     )
                 }
                 LaunchedEffect(Unit) { focusRequester.requestFocus() }
             } else {
                 Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .border(1.dp, theme.colors.ruleLine, RoundedCornerShape(50))
-                        .clickable(
-                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                            indication = null,
-                            onClick = { addingTag = true },
-                        )
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(50))
+                            .border(1.dp, theme.colors.ruleLine, RoundedCornerShape(50))
+                            .clickable(
+                                interactionSource =
+                                    remember {
+                                        androidx.compose.foundation.interaction
+                                            .MutableInteractionSource()
+                                    },
+                                indication = null,
+                                onClick = { addingTag = true },
+                            ).padding(horizontal = 8.dp, vertical = 2.dp),
                 ) {
                     ProvideContentColor(theme.colors.inkMuted) {
                         Text(
                             "+ add",
-                            style = theme.typography.mono.copy(
-                                fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                            ),
+                            style =
+                                theme.typography.mono.copy(
+                                    fontSize =
+                                        androidx.compose.ui.unit
+                                            .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                ),
                         )
                     }
                 }
@@ -1512,38 +1721,51 @@ private fun EditableTagChip(
     theme: com.sketchbook.uishared.theme.AppTheme,
 ) {
     androidx.compose.foundation.layout.Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(theme.colors.tintBlue)
-            .border(1.dp, theme.colors.ruleLine, RoundedCornerShape(50))
-            .padding(start = 8.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(theme.colors.tintBlue)
+                .border(1.dp, theme.colors.ruleLine, RoundedCornerShape(50))
+                .padding(start = 8.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+        horizontalArrangement =
+            androidx.compose.foundation.layout.Arrangement
+                .spacedBy(4.dp),
     ) {
         ProvideContentColor(theme.colors.inkSecondary) {
             Text(
                 label,
-                style = theme.typography.mono.copy(
-                    fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                ),
+                style =
+                    theme.typography.mono.copy(
+                        fontSize =
+                            androidx.compose.ui.unit
+                                .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
             )
         }
         Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50))
-                .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null,
-                    onClick = onRemove,
-                )
-                .padding(horizontal = 4.dp),
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .clickable(
+                        interactionSource =
+                            remember {
+                                androidx.compose.foundation.interaction
+                                    .MutableInteractionSource()
+                            },
+                        indication = null,
+                        onClick = onRemove,
+                    ).padding(horizontal = 4.dp),
         ) {
             ProvideContentColor(theme.colors.inkMuted) {
                 Text(
                     "×",
-                    style = theme.typography.mono.copy(
-                        fontSize = androidx.compose.ui.unit.TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    ),
+                    style =
+                        theme.typography.mono.copy(
+                            fontSize =
+                                androidx.compose.ui.unit
+                                    .TextUnit(12f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        ),
                 )
             }
         }
@@ -1555,13 +1777,17 @@ private fun parentDirOf(absPath: String): String {
     return if (idx <= 0) absPath else absPath.substring(0, idx)
 }
 
-private fun openMoveDialog(currentParentDir: String, onPick: (String) -> Unit) {
-    val chooser = JFileChooser().apply {
-        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-        dialogTitle = "Move project to…"
-        val start = File(currentParentDir)
-        if (start.isDirectory) currentDirectory = start
-    }
+private fun openMoveDialog(
+    currentParentDir: String,
+    onPick: (String) -> Unit,
+) {
+    val chooser =
+        JFileChooser().apply {
+            fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+            dialogTitle = "Move project to…"
+            val start = File(currentParentDir)
+            if (start.isDirectory) currentDirectory = start
+        }
     if (chooser.showDialog(null, "Move here") == JFileChooser.APPROVE_OPTION) {
         val picked = chooser.selectedFile?.absolutePath ?: return
         if (picked.replace('\\', '/') != currentParentDir.replace('\\', '/')) onPick(picked)
@@ -1570,17 +1796,19 @@ private fun openMoveDialog(currentParentDir: String, onPick: (String) -> Unit) {
 
 private fun siblingAlsFiles(row: com.sketchbook.core.ProjectRow): List<java.io.File> {
     val parent = java.io.File(row.path.value).parentFile ?: return emptyList()
-    return parent.listFiles { f -> f.isFile && f.name.endsWith(".als", ignoreCase = true) && !f.name.startsWith(".") }
+    return parent
+        .listFiles { f -> f.isFile && f.name.endsWith(".als", ignoreCase = true) && !f.name.startsWith(".") }
         ?.sortedByDescending { it.lastModified() }
         ?: emptyList()
 }
 
-private fun formatBytes(b: Long): String = when {
-    b < 1024 -> "${b}B"
-    b < 1024 * 1024 -> "${b / 1024}K"
-    b < 1024 * 1024 * 1024 -> "${b / (1024 * 1024)}M"
-    else -> "${b / (1024L * 1024 * 1024)}G"
-}
+private fun formatBytes(b: Long): String =
+    when {
+        b < 1024 -> "${b}B"
+        b < 1024 * 1024 -> "${b / 1024}K"
+        b < 1024 * 1024 * 1024 -> "${b / (1024 * 1024)}M"
+        else -> "${b / (1024L * 1024 * 1024)}G"
+    }
 
 @Composable
 private fun DetailTracksTab(
@@ -1634,31 +1862,45 @@ private fun DetailSamplesTab(
             }
         }
         androidx.compose.foundation.layout.Column(
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp),
+            verticalArrangement =
+                androidx.compose.foundation.layout.Arrangement
+                    .spacedBy(2.dp),
         ) {
             for (s in samples) {
                 androidx.compose.foundation.layout.Row(
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    horizontalArrangement =
+                        androidx.compose.foundation.layout.Arrangement
+                            .spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                 ) {
-                    val (badgeBg, badgeFg, label) = if (s.isMissing) {
-                        Triple(theme.colors.tintRose, theme.colors.inkPrimary, "MISSING")
-                    } else {
-                        Triple(theme.colors.tintSage, theme.colors.inkPrimary, "FOUND")
-                    }
+                    val (badgeBg, badgeFg, label) =
+                        if (s.isMissing) {
+                            Triple(theme.colors.tintRose, theme.colors.inkPrimary, "MISSING")
+                        } else {
+                            Triple(theme.colors.tintSage, theme.colors.inkPrimary, "FOUND")
+                        }
                     androidx.compose.foundation.layout.Box(
-                        modifier = Modifier
-                            .background(badgeBg, androidx.compose.foundation.shape.RoundedCornerShape(50))
-                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                        modifier =
+                            Modifier
+                                .background(
+                                    badgeBg,
+                                    androidx.compose.foundation.shape
+                                        .RoundedCornerShape(50),
+                                ).padding(horizontal = 6.dp, vertical = 1.dp),
                     ) {
                         ProvideContentColor(badgeFg) {
                             Text(
                                 label,
-                                style = theme.typography.mono.copy(
-                                    fontSize = androidx.compose.ui.unit.TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
-                                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
-                                ),
+                                style =
+                                    theme.typography.mono.copy(
+                                        fontSize =
+                                            androidx.compose.ui.unit
+                                                .TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                        letterSpacing =
+                                            androidx.compose.ui.unit
+                                                .TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                    ),
                             )
                         }
                     }
@@ -1672,9 +1914,12 @@ private fun DetailSamplesTab(
                     ProvideContentColor(theme.colors.inkMuted) {
                         Text(
                             s.rawPath,
-                            style = theme.typography.mono.copy(
-                                fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
-                            ),
+                            style =
+                                theme.typography.mono.copy(
+                                    fontSize =
+                                        androidx.compose.ui.unit
+                                            .TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                ),
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                             modifier = Modifier.width(320.dp),
@@ -1691,7 +1936,13 @@ private fun DetailPluginsTab(
     plugins: List<com.sketchbook.core.PluginRef>,
     theme: com.sketchbook.uishared.theme.AppTheme,
     currentProjectId: com.sketchbook.core.ProjectId? = null,
-    pluginUsageFlow: ((String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -> kotlinx.coroutines.flow.Flow<List<com.sketchbook.repo.PluginUsage>>)? = null,
+    pluginUsageFlow: (
+        (
+            String,
+            com.sketchbook.core.PluginFormat?,
+            com.sketchbook.core.ProjectId?,
+        ) -> kotlinx.coroutines.flow.Flow<List<com.sketchbook.repo.PluginUsage>>
+    )? = null,
     onSelectProject: ((com.sketchbook.core.ProjectId) -> Unit)? = null,
 ) {
     // Identify which row owns the open popover by (track, name, format) — plugin entries don't
@@ -1715,10 +1966,15 @@ private fun DetailPluginsTab(
             ProvideContentColor(theme.colors.inkSecondary) {
                 Text(
                     track,
-                    style = theme.typography.mono.copy(
-                        fontSize = androidx.compose.ui.unit.TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
-                        letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    ),
+                    style =
+                        theme.typography.mono.copy(
+                            fontSize =
+                                androidx.compose.ui.unit
+                                    .TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            letterSpacing =
+                                androidx.compose.ui.unit
+                                    .TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        ),
                 )
             }
             for (p in list) {
@@ -1727,31 +1983,62 @@ private fun DetailPluginsTab(
                 androidx.compose.foundation.layout.Box {
                     androidx.compose.foundation.layout.Row(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .let { if (pivotEnabled) it.clickable { openKey = if (openKey == rowKey) null else rowKey } else it }
-                            .padding(vertical = 2.dp, horizontal = 4.dp),
+                        horizontalArrangement =
+                            androidx.compose.foundation.layout.Arrangement
+                                .spacedBy(8.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .let { if (pivotEnabled) it.clickable { openKey = if (openKey == rowKey) null else rowKey } else it }
+                                .padding(vertical = 2.dp, horizontal = 4.dp),
                     ) {
-                        val (badgeBg, badgeFg, label) = when (p.format) {
-                            com.sketchbook.core.PluginFormat.Vst3 -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "VST3")
-                            com.sketchbook.core.PluginFormat.Vst2 -> Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "VST")
-                            com.sketchbook.core.PluginFormat.Au -> Triple(theme.colors.tintRose, theme.colors.inkPrimary, "AU")
-                            com.sketchbook.core.PluginFormat.AbletonNative -> Triple(theme.colors.tintCream, theme.colors.inkPrimary, "LIVE")
-                            com.sketchbook.core.PluginFormat.Unknown -> Triple(theme.colors.surfaceSunken, theme.colors.inkMuted, "?")
-                        }
+                        val (badgeBg, badgeFg, label) =
+                            when (p.format) {
+                                com.sketchbook.core.PluginFormat.Vst3 -> {
+                                    Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "VST3")
+                                }
+
+                                com.sketchbook.core.PluginFormat.Vst2 -> {
+                                    Triple(theme.colors.tintBlue, theme.colors.inkPrimary, "VST")
+                                }
+
+                                com.sketchbook.core.PluginFormat.Au -> {
+                                    Triple(theme.colors.tintRose, theme.colors.inkPrimary, "AU")
+                                }
+
+                                com.sketchbook.core.PluginFormat.AbletonNative -> {
+                                    Triple(
+                                        theme.colors.tintCream,
+                                        theme.colors.inkPrimary,
+                                        "LIVE",
+                                    )
+                                }
+
+                                com.sketchbook.core.PluginFormat.Unknown -> {
+                                    Triple(theme.colors.surfaceSunken, theme.colors.inkMuted, "?")
+                                }
+                            }
                         androidx.compose.foundation.layout.Box(
-                            modifier = Modifier
-                                .background(badgeBg, androidx.compose.foundation.shape.RoundedCornerShape(50))
-                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                            modifier =
+                                Modifier
+                                    .background(
+                                        badgeBg,
+                                        androidx.compose.foundation.shape
+                                            .RoundedCornerShape(50),
+                                    ).padding(horizontal = 6.dp, vertical = 1.dp),
                         ) {
                             ProvideContentColor(badgeFg) {
                                 Text(
                                     label,
-                                    style = theme.typography.mono.copy(
-                                        fontSize = androidx.compose.ui.unit.TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
-                                        letterSpacing = androidx.compose.ui.unit.TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
-                                    ),
+                                    style =
+                                        theme.typography.mono.copy(
+                                            fontSize =
+                                                androidx.compose.ui.unit
+                                                    .TextUnit(9.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                            letterSpacing =
+                                                androidx.compose.ui.unit
+                                                    .TextUnit(0.6f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                        ),
                                 )
                             }
                         }
@@ -1764,9 +2051,12 @@ private fun DetailPluginsTab(
                             ProvideContentColor(theme.colors.inkMuted) {
                                 Text(
                                     "›",
-                                    style = theme.typography.mono.copy(
-                                        fontSize = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp),
-                                    ),
+                                    style =
+                                        theme.typography.mono.copy(
+                                            fontSize =
+                                                androidx.compose.ui.unit
+                                                    .TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                        ),
                                 )
                             }
                         }
@@ -1774,7 +2064,9 @@ private fun DetailPluginsTab(
                     if (pluginUsageFlow != null && openKey == rowKey) {
                         androidx.compose.ui.window.Popup(
                             onDismissRequest = { openKey = null },
-                            properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+                            properties =
+                                androidx.compose.ui.window
+                                    .PopupProperties(focusable = true),
                         ) {
                             PluginPivotPopup(
                                 pluginName = p.name,
@@ -1809,36 +2101,45 @@ private fun PluginPivotPopup(
     pluginName: String,
     pluginFormat: com.sketchbook.core.PluginFormat,
     currentProjectId: com.sketchbook.core.ProjectId?,
-    pluginUsageFlow: (String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -> kotlinx.coroutines.flow.Flow<List<com.sketchbook.repo.PluginUsage>>,
+    pluginUsageFlow: (
+        String,
+        com.sketchbook.core.PluginFormat?,
+        com.sketchbook.core.ProjectId?,
+    ) -> kotlinx.coroutines.flow.Flow<List<com.sketchbook.repo.PluginUsage>>,
     onSelect: (com.sketchbook.core.ProjectId) -> Unit,
     theme: com.sketchbook.uishared.theme.AppTheme,
 ) {
     var formatOnly by remember(pluginName, pluginFormat) { mutableStateOf(false) }
-    val flow = remember(pluginName, pluginFormat, currentProjectId, formatOnly) {
-        pluginUsageFlow(pluginName, if (formatOnly) pluginFormat else null, currentProjectId)
-    }
+    val flow =
+        remember(pluginName, pluginFormat, currentProjectId, formatOnly) {
+            pluginUsageFlow(pluginName, if (formatOnly) pluginFormat else null, currentProjectId)
+        }
     val usages: List<com.sketchbook.repo.PluginUsage> by flow.collectAsStateWithLifecycle(initialValue = emptyList())
 
-    val formatLabel = when (pluginFormat) {
-        com.sketchbook.core.PluginFormat.Vst3 -> "VST3 only"
-        com.sketchbook.core.PluginFormat.Vst2 -> "VST only"
-        com.sketchbook.core.PluginFormat.Au -> "AU only"
-        com.sketchbook.core.PluginFormat.AbletonNative -> "Live only"
-        com.sketchbook.core.PluginFormat.Unknown -> "this format"
-    }
+    val formatLabel =
+        when (pluginFormat) {
+            com.sketchbook.core.PluginFormat.Vst3 -> "VST3 only"
+            com.sketchbook.core.PluginFormat.Vst2 -> "VST only"
+            com.sketchbook.core.PluginFormat.Au -> "AU only"
+            com.sketchbook.core.PluginFormat.AbletonNative -> "Live only"
+            com.sketchbook.core.PluginFormat.Unknown -> "this format"
+        }
 
     androidx.compose.foundation.layout.Column(
-        modifier = Modifier
-            .widthIn(min = 280.dp, max = 360.dp)
-            .heightIn(max = 360.dp)
-            .clip(RoundedCornerShape(theme.spacing.cornerCard))
-            .background(theme.colors.surfaceCard)
-            .border(1.dp, theme.colors.ruleLineStrong, RoundedCornerShape(theme.spacing.cornerCard)),
+        modifier =
+            Modifier
+                .widthIn(min = 280.dp, max = 360.dp)
+                .heightIn(max = 360.dp)
+                .clip(RoundedCornerShape(theme.spacing.cornerCard))
+                .background(theme.colors.surfaceCard)
+                .border(1.dp, theme.colors.ruleLineStrong, RoundedCornerShape(theme.spacing.cornerCard)),
     ) {
         // Two-layer header.
         androidx.compose.foundation.layout.Column(
             modifier = Modifier.padding(horizontal = theme.spacing.md, vertical = theme.spacing.sm),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+            verticalArrangement =
+                androidx.compose.foundation.layout.Arrangement
+                    .spacedBy(6.dp),
         ) {
             ProvideContentColor(theme.colors.inkSecondary) {
                 Text(
@@ -1847,7 +2148,9 @@ private fun PluginPivotPopup(
                 )
             }
             androidx.compose.foundation.layout.Row(
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+                horizontalArrangement =
+                    androidx.compose.foundation.layout.Arrangement
+                        .spacedBy(6.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
                 PivotTogglePill(label = "Any format", active = !formatOnly, onClick = { formatOnly = false }, theme = theme)
@@ -1856,10 +2159,11 @@ private fun PluginPivotPopup(
         }
         // Divider via a thin ruled box — same trick the rest of the panel uses.
         androidx.compose.foundation.layout.Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(theme.colors.ruleLineStrong),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(theme.colors.ruleLineStrong),
         )
         if (usages.isEmpty()) {
             androidx.compose.foundation.layout.Box(
@@ -1881,11 +2185,14 @@ private fun PluginPivotPopup(
                 for (u in capped) {
                     androidx.compose.foundation.layout.Row(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(u.id) }
-                            .padding(horizontal = theme.spacing.md, vertical = 6.dp),
+                        horizontalArrangement =
+                            androidx.compose.foundation.layout.Arrangement
+                                .spacedBy(8.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(u.id) }
+                                .padding(horizontal = theme.spacing.md, vertical = 6.dp),
                     ) {
                         ProvideContentColor(theme.colors.inkPrimary) {
                             Text(
@@ -1899,9 +2206,12 @@ private fun PluginPivotPopup(
                         ProvideContentColor(theme.colors.inkMuted) {
                             Text(
                                 relativeFromSeconds(u.lastModified),
-                                style = theme.typography.mono.copy(
-                                    fontSize = androidx.compose.ui.unit.TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
-                                ),
+                                style =
+                                    theme.typography.mono.copy(
+                                        fontSize =
+                                            androidx.compose.ui.unit
+                                                .TextUnit(10f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                    ),
                             )
                         }
                     }
@@ -1934,20 +2244,26 @@ private fun PivotTogglePill(
     val borderColor = if (active) theme.colors.accentSecondary else theme.colors.ruleLineStrong
     val tint = if (active) theme.colors.tintCream else theme.colors.surfaceCard
     androidx.compose.foundation.layout.Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(tint)
-            .border(1.dp, borderColor, RoundedCornerShape(50))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(tint)
+                .border(1.dp, borderColor, RoundedCornerShape(50))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         ProvideContentColor(if (active) theme.colors.inkPrimary else theme.colors.inkSecondary) {
             Text(
                 label.uppercase(),
-                style = theme.typography.mono.copy(
-                    fontSize = androidx.compose.ui.unit.TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.7f, androidx.compose.ui.unit.TextUnitType.Sp),
-                ),
+                style =
+                    theme.typography.mono.copy(
+                        fontSize =
+                            androidx.compose.ui.unit
+                                .TextUnit(10.5f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        letterSpacing =
+                            androidx.compose.ui.unit
+                                .TextUnit(0.7f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
             )
         }
     }
@@ -1955,7 +2271,10 @@ private fun PivotTogglePill(
 
 /** Relative-time string from epoch *seconds* (matches `projects.last_modified` REAL column). */
 private fun relativeFromSeconds(seconds: Double): String {
-    val nowSec = kotlin.time.Clock.System.now().toEpochMilliseconds() / 1000.0
+    val nowSec =
+        kotlin.time.Clock.System
+            .now()
+            .toEpochMilliseconds() / 1000.0
     val deltaSec = (nowSec - seconds).coerceAtLeast(0.0)
     val days = (deltaSec / (24.0 * 3600.0)).toLong()
     return when {

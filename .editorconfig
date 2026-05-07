@@ -1,0 +1,25 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_size = 4
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{kt,kts}]
+# Source of truth for ktlint, used by both spotless (ktlint 1.8.0) and detekt-formatting
+# (detekt 2.x's bundled ktlint). Aligned with detekt's MaxLineLength rule in
+# config/detekt/detekt.yml.
+max_line_length = 140
+ktlint_standard_filename = disabled
+ktlint_standard_no-wildcard-imports = disabled
+ktlint_function_naming_ignore_when_annotated_with = Composable
+
+# class-signature / function-signature ktlint rules disagree across spotless's ktlint 1.8.0
+# and detekt 2.x's bundled ktlint on whether to multi-line short signatures. Detekt is the
+# one disabled (config/detekt/detekt.yml) so spotless owns the layout decision.
+
+[*.md]
+trim_trailing_whitespace = false

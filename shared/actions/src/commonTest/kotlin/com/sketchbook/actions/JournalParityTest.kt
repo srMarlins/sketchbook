@@ -25,17 +25,20 @@ import kotlin.test.assertTrue
  * parity period needs.
  */
 class JournalParityTest {
-
     private fun parse(raw: String) = JournalJson.pretty.decodeFromString(JournalBatch.serializer(), raw)
 
-    private fun jsonEquals(a: String, b: String): Boolean {
+    private fun jsonEquals(
+        a: String,
+        b: String,
+    ): Boolean {
         val parser = Json { ignoreUnknownKeys = false }
         return parser.parseToJsonElement(a) == parser.parseToJsonElement(b)
     }
 
     @Test
     fun decodesPythonRenameFixture() {
-        val raw = """
+        val raw =
+            """
             {
               "batch_id": "2026-05-04T17-58-24_2a092193",
               "actor": "user",
@@ -49,7 +52,7 @@ class JournalParityTest {
                 }
               ]
             }
-        """.trimIndent()
+            """.trimIndent()
 
         val batch = parse(raw)
         assertEquals("2026-05-04T17-58-24_2a092193", batch.batch_id)
@@ -69,7 +72,8 @@ class JournalParityTest {
 
     @Test
     fun decodesPythonSetTagsFixture() {
-        val raw = """
+        val raw =
+            """
             {
               "batch_id": "2026-05-04T19-50-51_9e4230da",
               "actor": "user",
@@ -82,7 +86,7 @@ class JournalParityTest {
                 }
               ]
             }
-        """.trimIndent()
+            """.trimIndent()
 
         val batch = parse(raw)
         val s = batch.actions[0] as ActionRecord.SetTags
@@ -93,18 +97,20 @@ class JournalParityTest {
 
     @Test
     fun encodesRenameWithFromUnderscore() {
-        val batch = JournalBatch(
-            batch_id = "2026-05-05T15-00-00_test1234",
-            actor = "user",
-            actions = listOf(
-                ActionRecord.RenameProject(
-                    projectId = 11,
-                    fromPath = "Projects/foo Project",
-                    toPath = "Projects/foo Project [v2]",
-                    hashBefore = "abc",
-                ),
-            ),
-        )
+        val batch =
+            JournalBatch(
+                batch_id = "2026-05-05T15-00-00_test1234",
+                actor = "user",
+                actions =
+                    listOf(
+                        ActionRecord.RenameProject(
+                            projectId = 11,
+                            fromPath = "Projects/foo Project",
+                            toPath = "Projects/foo Project [v2]",
+                            hashBefore = "abc",
+                        ),
+                    ),
+            )
         val encoded = JournalJson.compact.encodeToString(JournalBatch.serializer(), batch)
         // Wire-stable field name is `from_` (Python convention), not `fromPath`.
         assertTrue("\"from_\":" in encoded)

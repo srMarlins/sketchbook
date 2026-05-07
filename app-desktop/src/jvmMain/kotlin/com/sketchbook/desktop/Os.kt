@@ -17,8 +17,12 @@ import javax.swing.UIManager
  * native-styled but it actually works; we apply the system L&F so it looks reasonable.
  */
 object Os {
-
-    private val isMac: Boolean = System.getProperty("os.name").orEmpty().lowercase().contains("mac")
+    private val isMac: Boolean =
+        System
+            .getProperty("os.name")
+            .orEmpty()
+            .lowercase()
+            .contains("mac")
 
     init {
         // Apply the system look-and-feel once so JFileChooser pickers match the host OS chrome.
@@ -31,9 +35,15 @@ object Os {
         return runCatching { Desktop.getDesktop().open(file) }.isSuccess
     }
 
-    fun pickDirectory(parent: Frame? = null, title: String = "Choose folder"): String? = if (isMac) pickDirectoryMac(parent, title) else pickDirectorySwing(title)
+    fun pickDirectory(
+        parent: Frame? = null,
+        title: String = "Choose folder",
+    ): String? = if (isMac) pickDirectoryMac(parent, title) else pickDirectorySwing(title)
 
-    fun pickFile(parent: Frame? = null, title: String = "Choose file"): String? {
+    fun pickFile(
+        parent: Frame? = null,
+        title: String = "Choose file",
+    ): String? {
         val dialog = FileDialog(parent, title, FileDialog.LOAD)
         dialog.isVisible = true
         val dir = dialog.directory
@@ -41,7 +51,10 @@ object Os {
         return if (dir == null || file == null) null else File(dir, file).absolutePath
     }
 
-    private fun pickDirectoryMac(parent: Frame?, title: String): String? {
+    private fun pickDirectoryMac(
+        parent: Frame?,
+        title: String,
+    ): String? {
         val previous = System.getProperty("apple.awt.fileDialogForDirectories")
         return try {
             System.setProperty("apple.awt.fileDialogForDirectories", "true")
@@ -60,11 +73,12 @@ object Os {
     }
 
     private fun pickDirectorySwing(title: String): String? {
-        val chooser = JFileChooser().apply {
-            dialogTitle = title
-            fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-            isMultiSelectionEnabled = false
-        }
+        val chooser =
+            JFileChooser().apply {
+                dialogTitle = title
+                fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+                isMultiSelectionEnabled = false
+            }
         val result = chooser.showOpenDialog(null)
         return if (result == JFileChooser.APPROVE_OPTION) chooser.selectedFile?.absolutePath else null
     }

@@ -48,7 +48,6 @@ class ProjectListViewModel(
     private val repository: ProjectRepository,
     private val filterCoordinator: ProjectFilterCoordinator,
 ) : ViewModel() {
-
     private val query = MutableStateFlow("")
     private val gemsShuffleSeed = MutableStateFlow(0)
     private val zoomShelf = MutableStateFlow<ShelfId?>(null)
@@ -69,11 +68,12 @@ class ProjectListViewModel(
     // `LaunchedEffect` orchestration in `RootContent` needed.
     private val healthFilter: StateFlow<HealthFilter?> get() = filterCoordinator.filter
 
-    private val _effects = MutableSharedFlow<Effect>(
-        replay = 0,
-        extraBufferCapacity = 8,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    private val _effects =
+        MutableSharedFlow<Effect>(
+            replay = 0,
+            extraBufferCapacity = 8,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
     private val rowsFlow: Flow<List<ProjectRow>> =
@@ -81,80 +81,82 @@ class ProjectListViewModel(
     private val archivedRowsFlow: Flow<List<ProjectRow>> = repository.observeArchivedProjects()
     private val distinctKeysFlow: Flow<List<String>> = repository.observeDistinctKeys()
 
-    val state: StateFlow<State> = combine(
-        listOf(
-            query,
-            rowsFlow,
-            archivedRowsFlow,
-            gemsShuffleSeed,
-            zoomShelf,
-            openDetailId,
-            searchSelectedIndex,
-            tempoRange,
-            keyFilter,
-            distinctKeysFlow,
-            stageFilter,
-            healthFilter,
-        ),
-    ) { values ->
-        @Suppress("UNCHECKED_CAST")
-        val q = values[0] as String
+    val state: StateFlow<State> =
+        combine(
+            listOf(
+                query,
+                rowsFlow,
+                archivedRowsFlow,
+                gemsShuffleSeed,
+                zoomShelf,
+                openDetailId,
+                searchSelectedIndex,
+                tempoRange,
+                keyFilter,
+                distinctKeysFlow,
+                stageFilter,
+                healthFilter,
+            ),
+        ) { values ->
+            @Suppress("UNCHECKED_CAST")
+            val q = values[0] as String
 
-        @Suppress("UNCHECKED_CAST")
-        val rawRows = values[1] as List<ProjectRow>
+            @Suppress("UNCHECKED_CAST")
+            val rawRows = values[1] as List<ProjectRow>
 
-        @Suppress("UNCHECKED_CAST")
-        val archivedRows = values[2] as List<ProjectRow>
-        val seed = values[3] as Int
-        val zoom = values[4] as ShelfId?
-        val openId = values[5] as ProjectId?
-        val selectedIdx = values[6] as Int
+            @Suppress("UNCHECKED_CAST")
+            val archivedRows = values[2] as List<ProjectRow>
+            val seed = values[3] as Int
+            val zoom = values[4] as ShelfId?
+            val openId = values[5] as ProjectId?
+            val selectedIdx = values[6] as Int
 
-        @Suppress("UNCHECKED_CAST")
-        val tempo = values[7] as ClosedFloatingPointRange<Double>?
-        val key = values[8] as String?
+            @Suppress("UNCHECKED_CAST")
+            val tempo = values[7] as ClosedFloatingPointRange<Double>?
+            val key = values[8] as String?
 
-        @Suppress("UNCHECKED_CAST")
-        val distinctKeys = values[9] as List<String>
+            @Suppress("UNCHECKED_CAST")
+            val distinctKeys = values[9] as List<String>
 
-        @Suppress("UNCHECKED_CAST")
-        val stages = values[10] as Set<Stage>
-        val health = values[11] as HealthFilter?
+            @Suppress("UNCHECKED_CAST")
+            val stages = values[10] as Set<Stage>
+            val health = values[11] as HealthFilter?
 
-        // Filter happens here, before grouping/bucketing — so the chip selection narrows the
-        // visible row set on every shelf. The 1,628-row library does this in microseconds.
-        val rows = applyFilters(rawRows, tempo, key, stages, health)
-        val groups = deriveProjectGroups(rows)
-        val archivedGroups = deriveProjectGroups(archivedRows)
-        val buckets = bucketize(groups, archivedGroups)
-        val gemsView = if (seed == 0) {
-            buckets.forgottenGems
-        } else {
-            buckets.forgottenGems.shuffled(kotlin.random.Random(seed.toLong() * 7919L))
-        }
-        val results = if (q.isBlank()) emptyList() else groups.filter { matchesQuery(it, q) }
-        val clampedIdx = if (results.isEmpty()) 0 else selectedIdx.coerceIn(0, results.size - 1)
+            // Filter happens here, before grouping/bucketing — so the chip selection narrows the
+            // visible row set on every shelf. The 1,628-row library does this in microseconds.
+            val rows = applyFilters(rawRows, tempo, key, stages, health)
+            val groups = deriveProjectGroups(rows)
+            val archivedGroups = deriveProjectGroups(archivedRows)
+            val buckets = bucketize(groups, archivedGroups)
+            val gemsView =
+                if (seed == 0) {
+                    buckets.forgottenGems
+                } else {
+                    buckets.forgottenGems.shuffled(kotlin.random.Random(seed.toLong() * 7919L))
+                }
+            val results = if (q.isBlank()) emptyList() else groups.filter { matchesQuery(it, q) }
+            val clampedIdx = if (results.isEmpty()) 0 else selectedIdx.coerceIn(0, results.size - 1)
 
-        State(
-            query = q,
-            rows = rows,
-            archivedRows = archivedRows,
-            groups = groups,
-            buckets = buckets,
-            gemsView = gemsView,
-            gemsShuffleSeed = seed,
-            searchResults = results,
-            searchSelectedIndex = clampedIdx,
-            zoomShelf = zoom,
-            openDetailId = openId,
-            tempoRange = tempo,
-            keyFilter = key,
-            stageFilter = stages,
-            healthFilter = health,
-            distinctKeys = distinctKeys,
-            loading = false,
-        )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
+            State(
+                query = q,
+                rows = rows,
+                archivedRows = archivedRows,
+                groups = groups,
+                buckets = buckets,
+                gemsView = gemsView,
+                gemsShuffleSeed = seed,
+                searchResults = results,
+                searchSelectedIndex = clampedIdx,
+                zoomShelf = zoom,
+                openDetailId = openId,
+                tempoRange = tempo,
+                keyFilter = key,
+                stageFilter = stages,
+                healthFilter = health,
+                distinctKeys = distinctKeys,
+                loading = false,
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
     private fun applyFilters(
         rows: List<ProjectRow>,
@@ -186,15 +188,25 @@ class ProjectListViewModel(
                 searchSelectedIndex.update { 0 }
             }
 
-            is Intent.Open -> _effects.tryEmit(Effect.Navigate(intent.id))
+            is Intent.Open -> {
+                _effects.tryEmit(Effect.Navigate(intent.id))
+            }
 
-            is Intent.ZoomShelf -> zoomShelf.update { intent.shelf }
+            is Intent.ZoomShelf -> {
+                zoomShelf.update { intent.shelf }
+            }
 
-            is Intent.ShuffleGems -> gemsShuffleSeed.update { (it + 1).coerceAtLeast(1) }
+            is Intent.ShuffleGems -> {
+                gemsShuffleSeed.update { (it + 1).coerceAtLeast(1) }
+            }
 
-            is Intent.OpenDetail -> openDetailId.update { intent.id }
+            is Intent.OpenDetail -> {
+                openDetailId.update { intent.id }
+            }
 
-            is Intent.CloseDetail -> openDetailId.update { null }
+            is Intent.CloseDetail -> {
+                openDetailId.update { null }
+            }
 
             is Intent.NavigateSearchNext -> {
                 val size = state.value.searchResults.size
@@ -217,13 +229,21 @@ class ProjectListViewModel(
                 }
             }
 
-            is Intent.SetTempoRange -> tempoRange.update { intent.range }
+            is Intent.SetTempoRange -> {
+                tempoRange.update { intent.range }
+            }
 
-            is Intent.SetKeyFilter -> keyFilter.update { intent.key }
+            is Intent.SetKeyFilter -> {
+                keyFilter.update { intent.key }
+            }
 
-            is Intent.SetStageFilter -> stageFilter.update { intent.stages }
+            is Intent.SetStageFilter -> {
+                stageFilter.update { intent.stages }
+            }
 
-            is Intent.SetHealthFilter -> filterCoordinator.setFilter(intent.filter)
+            is Intent.SetHealthFilter -> {
+                filterCoordinator.setFilter(intent.filter)
+            }
 
             is Intent.ClearFilters -> {
                 tempoRange.update { null }
@@ -265,37 +285,63 @@ class ProjectListViewModel(
     )
 
     sealed interface Intent {
-        data class Search(val query: String) : Intent
-        data class Open(val id: ProjectId) : Intent
-        data class ZoomShelf(val shelf: ShelfId?) : Intent
+        data class Search(
+            val query: String,
+        ) : Intent
+
+        data class Open(
+            val id: ProjectId,
+        ) : Intent
+
+        data class ZoomShelf(
+            val shelf: ShelfId?,
+        ) : Intent
+
         data object ShuffleGems : Intent
-        data class OpenDetail(val id: ProjectId) : Intent
+
+        data class OpenDetail(
+            val id: ProjectId,
+        ) : Intent
+
         data object CloseDetail : Intent
+
         data object NavigateSearchNext : Intent
+
         data object NavigateSearchPrev : Intent
+
         data object OpenSelectedSearch : Intent
 
         /** Set the tempo range filter (`null` clears it). Applies to the row set before bucketing. */
-        data class SetTempoRange(val range: ClosedFloatingPointRange<Double>?) : Intent
+        data class SetTempoRange(
+            val range: ClosedFloatingPointRange<Double>?,
+        ) : Intent
 
         /** Set the key filter (e.g. "F# Minor"; `null` clears it). */
-        data class SetKeyFilter(val key: String?) : Intent
+        data class SetKeyFilter(
+            val key: String?,
+        ) : Intent
 
         /** Replace the stage filter set; empty clears it. Multi-select toolbar chip dispatches
          *  this as the user toggles each Stage. */
-        data class SetStageFilter(val stages: Set<Stage>) : Intent
+        data class SetStageFilter(
+            val stages: Set<Stage>,
+        ) : Intent
 
         /** PR-CC: set or clear the sidebar Health-chip row filter. `null` clears the filter so
          *  the user can fall back to the unfiltered library without going through ClearFilters
          *  (which would also wipe their active tempo/key/stage selections). */
-        data class SetHealthFilter(val filter: HealthFilter?) : Intent
+        data class SetHealthFilter(
+            val filter: HealthFilter?,
+        ) : Intent
 
         /** Clear all four filters (tempo / key / stage / health) in one shot. */
         data object ClearFilters : Intent
     }
 
     sealed interface Effect {
-        data class Navigate(val id: ProjectId) : Effect
+        data class Navigate(
+            val id: ProjectId,
+        ) : Effect
     }
 }
 

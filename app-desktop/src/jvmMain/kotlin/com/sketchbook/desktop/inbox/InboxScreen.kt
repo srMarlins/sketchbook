@@ -69,79 +69,98 @@ fun InboxScreen(
     val attentionState by needsAttentionVm.state.collectAsStateWithLifecycle()
     val journalState by journalVm.state.collectAsStateWithLifecycle()
 
-    val proposalGroupExpanded = remember {
-        mutableStateMapOf<ProposalsViewModel.ProposalCategory, Boolean>()
-    }
+    val proposalGroupExpanded =
+        remember {
+            mutableStateMapOf<ProposalsViewModel.ProposalCategory, Boolean>()
+        }
     var resolvedExpanded by remember { mutableStateOf(false) }
     val attentionCardExpanded = remember { mutableStateMapOf<String, Boolean>() }
     val journalDayExpanded = remember { mutableStateMapOf<String, Boolean>() }
 
     var detail by remember { mutableStateOf<InboxDetailTarget?>(null) }
 
-    val onApprove: (String) -> Unit = remember(proposalsVm) {
-        { id -> proposalsVm.dispatch(ProposalsViewModel.Intent.Approve(id)) }
-    }
-    val onReject: (String) -> Unit = remember(proposalsVm) {
-        { id -> proposalsVm.dispatch(ProposalsViewModel.Intent.Reject(id)) }
-    }
-    val onProposalsSearch: (String) -> Unit = remember(proposalsVm) {
-        { q -> proposalsVm.dispatch(ProposalsViewModel.Intent.SetSearch(q)) }
-    }
-    val onSourceFilter: (ProposalsViewModel.SourceFilter) -> Unit = remember(proposalsVm) {
-        { f -> proposalsVm.dispatch(ProposalsViewModel.Intent.SetSourceFilter(f)) }
-    }
-    val onOpenProposal: (String) -> Unit = remember {
-        { id -> detail = InboxDetailTarget.Proposal(id) }
-    }
+    val onApprove: (String) -> Unit =
+        remember(proposalsVm) {
+            { id -> proposalsVm.dispatch(ProposalsViewModel.Intent.Approve(id)) }
+        }
+    val onReject: (String) -> Unit =
+        remember(proposalsVm) {
+            { id -> proposalsVm.dispatch(ProposalsViewModel.Intent.Reject(id)) }
+        }
+    val onProposalsSearch: (String) -> Unit =
+        remember(proposalsVm) {
+            { q -> proposalsVm.dispatch(ProposalsViewModel.Intent.SetSearch(q)) }
+        }
+    val onSourceFilter: (ProposalsViewModel.SourceFilter) -> Unit =
+        remember(proposalsVm) {
+            { f -> proposalsVm.dispatch(ProposalsViewModel.Intent.SetSourceFilter(f)) }
+        }
+    val onOpenProposal: (String) -> Unit =
+        remember {
+            { id -> detail = InboxDetailTarget.Proposal(id) }
+        }
 
-    val onAttentionSearch: (String) -> Unit = remember(needsAttentionVm) {
-        { q -> needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.SetSearch(q)) }
-    }
-    val onRepair: (com.sketchbook.core.ProjectId) -> Unit = remember(needsAttentionVm) {
-        { id -> needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.RepairMacPaths(id)) }
-    }
+    val onAttentionSearch: (String) -> Unit =
+        remember(needsAttentionVm) {
+            { q -> needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.SetSearch(q)) }
+        }
+    val onRepair: (com.sketchbook.core.ProjectId) -> Unit =
+        remember(needsAttentionVm) {
+            { id -> needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.RepairMacPaths(id)) }
+        }
     val macIds by remember {
         derivedStateOf { attentionState.macEntries.map { it.finding.projectId } }
     }
-    val onBulkRepair: () -> Unit = remember(needsAttentionVm, macIds) {
-        { needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.BulkRepairMacPaths(macIds)) }
-    }
-    val onBulkApply: (List<MissingSampleFinding>) -> Unit = remember(needsAttentionVm) {
-        { findings -> needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.BulkApplyAutoMatch(findings)) }
-    }
-    val onBulkDismiss: (List<MissingSampleFinding>) -> Unit = remember(needsAttentionVm) {
-        { findings -> needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.BulkDismiss(findings)) }
-    }
-    val onOpenAttention: (NeedsAttentionDetailTarget) -> Unit = remember {
-        { target -> detail = InboxDetailTarget.Attention(target) }
-    }
+    val onBulkRepair: () -> Unit =
+        remember(needsAttentionVm, macIds) {
+            { needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.BulkRepairMacPaths(macIds)) }
+        }
+    val onBulkApply: (List<MissingSampleFinding>) -> Unit =
+        remember(needsAttentionVm) {
+            { findings -> needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.BulkApplyAutoMatch(findings)) }
+        }
+    val onBulkDismiss: (List<MissingSampleFinding>) -> Unit =
+        remember(needsAttentionVm) {
+            { findings -> needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.BulkDismiss(findings)) }
+        }
+    val onOpenAttention: (NeedsAttentionDetailTarget) -> Unit =
+        remember {
+            { target -> detail = InboxDetailTarget.Attention(target) }
+        }
 
-    val onJournalSearch: (String) -> Unit = remember(journalVm) {
-        { q -> journalVm.dispatch(JournalViewModel.Intent.SetSearch(q)) }
-    }
-    val onActionFilter: (JournalViewModel.ActionTypeFilter) -> Unit = remember(journalVm) {
-        { f -> journalVm.dispatch(JournalViewModel.Intent.SetActionTypeFilter(f)) }
-    }
-    val onDateRange: (JournalViewModel.DateRange) -> Unit = remember(journalVm) {
-        { r -> journalVm.dispatch(JournalViewModel.Intent.SetDateRange(r)) }
-    }
-    val onUndoOne: (JournalEntry) -> Unit = remember(journalVm) {
-        { e -> journalVm.dispatch(JournalViewModel.Intent.UndoOne(e)) }
-    }
-    val onBulkUndo: () -> Unit = remember(journalVm, journalState.invertibleEntries) {
-        { journalVm.dispatch(JournalViewModel.Intent.BulkUndo(journalState.invertibleEntries)) }
-    }
-    val onOpenJournal: (JournalEntry, String) -> Unit = remember {
-        { entry, name -> detail = InboxDetailTarget.JournalEntry(entry, name) }
-    }
+    val onJournalSearch: (String) -> Unit =
+        remember(journalVm) {
+            { q -> journalVm.dispatch(JournalViewModel.Intent.SetSearch(q)) }
+        }
+    val onActionFilter: (JournalViewModel.ActionTypeFilter) -> Unit =
+        remember(journalVm) {
+            { f -> journalVm.dispatch(JournalViewModel.Intent.SetActionTypeFilter(f)) }
+        }
+    val onDateRange: (JournalViewModel.DateRange) -> Unit =
+        remember(journalVm) {
+            { r -> journalVm.dispatch(JournalViewModel.Intent.SetDateRange(r)) }
+        }
+    val onUndoOne: (JournalEntry) -> Unit =
+        remember(journalVm) {
+            { e -> journalVm.dispatch(JournalViewModel.Intent.UndoOne(e)) }
+        }
+    val onBulkUndo: () -> Unit =
+        remember(journalVm, journalState.invertibleEntries) {
+            { journalVm.dispatch(JournalViewModel.Intent.BulkUndo(journalState.invertibleEntries)) }
+        }
+    val onOpenJournal: (JournalEntry, String) -> Unit =
+        remember {
+            { entry, name -> detail = InboxDetailTarget.JournalEntry(entry, name) }
+        }
     val onResolvedToggle: () -> Unit = remember { { resolvedExpanded = !resolvedExpanded } }
     val dismissDetail: () -> Unit = remember { { detail = null } }
 
     val pendingProposals = proposalsState.pending.size
-    val pendingAttention = attentionState.macEntries.size +
-        attentionState.missingByConfidence.autoMatch.size +
-        attentionState.missingByConfidence.multiCandidate.size +
-        attentionState.missingByConfidence.noCandidate.size
+    val pendingAttention =
+        attentionState.macEntries.size +
+            attentionState.missingByConfidence.autoMatch.size +
+            attentionState.missingByConfidence.multiCandidate.size +
+            attentionState.missingByConfidence.noCandidate.size
     val journalCount = journalState.rows.size
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -154,11 +173,12 @@ fun InboxScreen(
 
         Row(modifier = Modifier.fillMaxSize()) {
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(AppTheme.colors.surfacePage)
-                    .padding(PaddingValues(AppTheme.spacing.md)),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(AppTheme.colors.surfacePage)
+                        .padding(PaddingValues(AppTheme.spacing.md)),
                 verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
             ) {
                 PageHeader(title = "Inbox")
@@ -221,10 +241,11 @@ fun InboxScreen(
         if (d != null && !canDockDetail) {
             // Scrim catches taps outside the sheet to dismiss — same gesture as the ✕ button.
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.32f))
-                    .clickable(onClick = dismissDetail),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.32f))
+                        .clickable(onClick = dismissDetail),
             )
             Row(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.weight(1f)) // empty space catches the scrim taps
@@ -253,24 +274,30 @@ private fun DetailPaneSwitch(
     onDismiss: () -> Unit,
 ) {
     when (detail) {
-        is InboxDetailTarget.Proposal -> ProposalDetailPane(
-            proposalId = detail.proposalId,
-            vm = proposalsVm,
-            onDismiss = onDismiss,
-        )
+        is InboxDetailTarget.Proposal -> {
+            ProposalDetailPane(
+                proposalId = detail.proposalId,
+                vm = proposalsVm,
+                onDismiss = onDismiss,
+            )
+        }
 
-        is InboxDetailTarget.Attention -> NeedsAttentionDetailPane(
-            target = detail.target,
-            vm = needsAttentionVm,
-            onDismiss = onDismiss,
-        )
+        is InboxDetailTarget.Attention -> {
+            NeedsAttentionDetailPane(
+                target = detail.target,
+                vm = needsAttentionVm,
+                onDismiss = onDismiss,
+            )
+        }
 
-        is InboxDetailTarget.JournalEntry -> JournalDetailPane(
-            entry = detail.entry,
-            projectName = detail.projectName,
-            vm = journalVm,
-            onDismiss = onDismiss,
-        )
+        is InboxDetailTarget.JournalEntry -> {
+            JournalDetailPane(
+                entry = detail.entry,
+                projectName = detail.projectName,
+                vm = journalVm,
+                onDismiss = onDismiss,
+            )
+        }
     }
 }
 
@@ -401,17 +428,21 @@ private fun HistoryColumn(
  * scroll, so collapsing would be one more axis of state to manage for no win.
  */
 @Composable
-private fun ColumnHeader(title: String, count: Int) {
+private fun ColumnHeader(
+    title: String,
+    count: Int,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
         Box(
-            modifier = Modifier
-                .height(18.dp)
-                .background(AppTheme.colors.ruleMargin)
-                .padding(horizontal = 1.dp),
+            modifier =
+                Modifier
+                    .height(18.dp)
+                    .background(AppTheme.colors.ruleMargin)
+                    .padding(horizontal = 1.dp),
         )
         ProvideContentColor(AppTheme.colors.inkPrimary) {
             Text(title, style = AppTheme.typography.title)
@@ -429,8 +460,14 @@ private fun ColumnHeader(title: String, count: Int) {
 enum class InboxTab { Proposals, NeedsAttention, Journal }
 
 sealed interface InboxDetailTarget {
-    data class Proposal(val proposalId: String) : InboxDetailTarget
-    data class Attention(val target: NeedsAttentionDetailTarget) : InboxDetailTarget
+    data class Proposal(
+        val proposalId: String,
+    ) : InboxDetailTarget
+
+    data class Attention(
+        val target: NeedsAttentionDetailTarget,
+    ) : InboxDetailTarget
+
     data class JournalEntry(
         val entry: com.sketchbook.repo.JournalEntry,
         val projectName: String,
