@@ -132,4 +132,7 @@ private class FakeLockCloud : CloudBackend {
         val current = this.lock ?: return
         if (current.second == expected) this.lock = null
     }
+    override suspend fun readDoc(key: com.sketchbook.core.CloudDocKey) = null
+    override suspend fun writeDoc(key: com.sketchbook.core.CloudDocKey, expected: Generation?, bytes: ByteArray) = Result.failure<Generation>(error("not used"))
+    override suspend fun listDocs(prefix: com.sketchbook.core.CloudDocKey.Prefix) = emptyList<com.sketchbook.cloud.CloudDocRef>()
 }

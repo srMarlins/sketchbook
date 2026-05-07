@@ -128,6 +128,35 @@ class TrackedTreeKindTest {
     }
 }
 
+class CloudDocKeyTest {
+    @Test
+    fun acceptsRelativePaths() {
+        assertEquals("registry.json", CloudDocKey("registry.json").path)
+        assertEquals("profile/plugin_manifest_h.json", CloudDocKey("profile/plugin_manifest_h.json").path)
+    }
+
+    @Test
+    fun rejectsBlank() {
+        assertFailsWith<IllegalArgumentException> { CloudDocKey("") }
+        assertFailsWith<IllegalArgumentException> { CloudDocKey("   ") }
+    }
+
+    @Test
+    fun rejectsAbsolutePaths() {
+        assertFailsWith<IllegalArgumentException> { CloudDocKey("/registry.json") }
+    }
+
+    @Test
+    fun rejectsTraversal() {
+        assertFailsWith<IllegalArgumentException> { CloudDocKey("foo/../bar") }
+    }
+
+    @Test
+    fun prefixRejectsAbsolute() {
+        assertFailsWith<IllegalArgumentException> { CloudDocKey.Prefix("/profile/") }
+    }
+}
+
 class CollaboratorTest {
     @Test
     fun rolesAreOrdered() {

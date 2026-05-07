@@ -2,12 +2,15 @@ package com.sketchbook.sync
 
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
+import com.sketchbook.cloud.CloudDocRead
+import com.sketchbook.cloud.CloudDocRef
 import com.sketchbook.cloud.Generation
 import com.sketchbook.cloud.LeaseAcquireResult
 import com.sketchbook.cloud.LeaseLock
 import com.sketchbook.cloud.LeaseRefreshResult
 import com.sketchbook.cloud.ManifestRef
 import com.sketchbook.core.BlobHash
+import com.sketchbook.core.CloudDocKey
 import com.sketchbook.core.Manifest
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SketchbookError
@@ -28,7 +31,10 @@ class FakeCloudBackend : CloudBackend {
     private val blobs = mutableMapOf<BlobKey, ByteArray>()
     private val manifests = mutableMapOf<TreeKey, MutableList<StoredManifest>>()
     private val locks = mutableMapOf<TreeKey, StoredLock>()
+    private val docs = mutableMapOf<CloudDocKey, StoredDoc>()
     private var generationCounter: Long = 1
+
+    private data class StoredDoc(val bytes: ByteArray, val generation: Generation)
 
     private data class StoredManifest(val ref: ManifestRef, val manifest: Manifest)
     private data class StoredLock(val lock: LeaseLock, val generation: Generation)
@@ -121,6 +127,29 @@ class FakeCloudBackend : CloudBackend {
         val existing = locks[key] ?: return
         if (existing.generation == expected) locks.remove(key)
     }
+
+    override suspend fun readDoc(key: CloudDocKey): CloudDocRead? {
+        val doc = docs[key] ?: return null
+        return CloudDocRead(doc.bytes, doc.generation)
+    }
+
+    override suspend fun writeDoc(key: CloudDocKey, expected: Generation?, bytes: ByteArray): Result<Generation> {
+        val existing = docs[key]
+        if (expected != null) {
+            if (expected == Generation.ZERO) {
+                if (existing != null) return Result.failure(SketchbookError.Conflict("doc exists at ${key.path}"))
+            } else if (existing == null || existing.generation != expected) {
+                return Result.failure(SketchbookError.Conflict("doc generation mismatch at ${key.path}"))
+            }
+        }
+        val gen = nextGeneration()
+        docs[key] = StoredDoc(bytes, gen)
+        return Result.success(gen)
+    }
+
+    override suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef> = docs
+        .filter { it.key.path.startsWith(prefix.value) }
+        .map { CloudDocRef(it.key, it.value.generation) }
 
     // Test-only helpers — projects-only, mirroring the v=1 wire layout.
 

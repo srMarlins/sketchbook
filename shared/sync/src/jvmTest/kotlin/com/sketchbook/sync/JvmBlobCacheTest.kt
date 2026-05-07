@@ -122,4 +122,7 @@ private class CountingCloud(private val payload: ByteArray) : CloudBackend {
     override suspend fun acquireLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock) = LeaseAcquireResult.Acquired(Generation("1"))
     override suspend fun refreshLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock, expected: Generation) = LeaseRefreshResult.Refreshed(Generation("1"))
     override suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation) {}
+    override suspend fun readDoc(key: com.sketchbook.core.CloudDocKey) = null
+    override suspend fun writeDoc(key: com.sketchbook.core.CloudDocKey, expected: Generation?, bytes: ByteArray) = Result.failure<Generation>(SketchbookError.Conflict("not used"))
+    override suspend fun listDocs(prefix: com.sketchbook.core.CloudDocKey.Prefix) = emptyList<com.sketchbook.cloud.CloudDocRef>()
 }

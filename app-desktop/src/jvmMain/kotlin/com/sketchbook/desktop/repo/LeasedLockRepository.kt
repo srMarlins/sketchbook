@@ -185,4 +185,7 @@ private object NullCloudBackend : CloudBackend {
     override suspend fun acquireLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock) = LeaseAcquireResult.Acquired(com.sketchbook.cloud.Generation("0"))
     override suspend fun refreshLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock, expected: com.sketchbook.cloud.Generation) = LeaseRefreshResult.Stale
     override suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: com.sketchbook.cloud.Generation) {}
+    override suspend fun readDoc(key: com.sketchbook.core.CloudDocKey): com.sketchbook.cloud.CloudDocRead? = null
+    override suspend fun writeDoc(key: com.sketchbook.core.CloudDocKey, expected: com.sketchbook.cloud.Generation?, bytes: ByteArray) = Result.failure<com.sketchbook.cloud.Generation>(IllegalStateException("cloud not configured"))
+    override suspend fun listDocs(prefix: com.sketchbook.core.CloudDocKey.Prefix) = emptyList<com.sketchbook.cloud.CloudDocRef>()
 }

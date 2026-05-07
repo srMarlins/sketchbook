@@ -1,6 +1,7 @@
 package com.sketchbook.cloud
 
 import com.sketchbook.core.BlobHash
+import com.sketchbook.core.CloudDocKey
 import com.sketchbook.core.Manifest
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.TrackedTreeId
@@ -73,4 +74,31 @@ interface CloudBackend {
 
     /** Release our lease lock. */
     suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation)
+
+    /**
+     * Read a small structured-JSON [CloudDoc] at [key]. Returns `null` when the object does not
+     * exist (callers distinguish "not yet written" from a real error). The returned [Generation]
+     * is the precondition token to feed back into [writeDoc] for read-modify-write CAS.
+     */
+    suspend fun readDoc(key: CloudDocKey): CloudDocRead?
+
+    /**
+     * Write [bytes] at [key] under CAS. Same precondition rules as [appendManifestHead]:
+     * - `null` → no precondition.
+     * - [Generation.ZERO] → must-not-exist.
+     * - any other → must match the current object's generation.
+     *
+     * Returns the new object's [Generation] on success; failure with
+     * [com.sketchbook.core.SketchbookError.Conflict] on CAS mismatch.
+     */
+    suspend fun writeDoc(key: CloudDocKey, expected: Generation?, bytes: ByteArray): Result<Generation>
+
+    /** List all [CloudDoc] objects whose key starts with [prefix]. */
+    suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef>
 }
+
+/** Result of a [CloudBackend.readDoc] call. */
+class CloudDocRead(val bytes: ByteArray, val generation: Generation)
+
+/** Pointer to a [CloudDoc] returned by [CloudBackend.listDocs]. */
+data class CloudDocRef(val key: CloudDocKey, val generation: Generation)

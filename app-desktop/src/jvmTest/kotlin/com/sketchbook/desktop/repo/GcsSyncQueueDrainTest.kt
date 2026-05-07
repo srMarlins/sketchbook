@@ -534,4 +534,7 @@ private class CountingCloudBackend : CloudBackend {
         val existing = locks[treeId] ?: return
         if (existing.second == expected) locks.remove(treeId)
     }
+    override suspend fun readDoc(key: com.sketchbook.core.CloudDocKey) = null
+    override suspend fun writeDoc(key: com.sketchbook.core.CloudDocKey, expected: Generation?, bytes: ByteArray) = Result.failure<Generation>(SketchbookError.Conflict("not used"))
+    override suspend fun listDocs(prefix: com.sketchbook.core.CloudDocKey.Prefix) = emptyList<com.sketchbook.cloud.CloudDocRef>()
 }

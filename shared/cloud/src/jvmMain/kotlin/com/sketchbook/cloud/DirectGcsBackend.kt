@@ -1,6 +1,7 @@
 package com.sketchbook.cloud
 
 import com.sketchbook.core.BlobHash
+import com.sketchbook.core.CloudDocKey
 import com.sketchbook.core.Manifest
 import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotRev
@@ -420,6 +421,63 @@ class DirectGcsBackend(
         }
     }
 
+    override suspend fun readDoc(key: CloudDocKey): CloudDocRead? {
+        val path = docPath(key)
+        val response = http.get(objectUrl(path)) {
+            authHeader()
+            parameter("alt", "media")
+        }
+        return when (response.status) {
+            HttpStatusCode.OK -> {
+                val gen = response.headers["x-goog-generation"]
+                    ?: throw SketchbookError.IntegrityError("missing x-goog-generation on doc read")
+                CloudDocRead(response.bodyAsBytes(), Generation(gen))
+            }
+
+            HttpStatusCode.NotFound -> null
+
+            else -> throw remoteFailure(response, "GET $path")
+        }
+    }
+
+    override suspend fun writeDoc(key: CloudDocKey, expected: Generation?, bytes: ByteArray): Result<Generation> {
+        val path = docPath(key)
+        val resp = http.post(uploadUrl()) {
+            authHeader()
+            parameter("uploadType", "media")
+            parameter("name", path)
+            if (expected != null) {
+                headers { append("x-goog-if-generation-match", expected.raw) }
+            }
+            contentType(ContentType.Application.Json)
+            setBody(bytes)
+        }
+        return when (resp.status) {
+            HttpStatusCode.OK -> {
+                val gen = resp.headers["x-goog-generation"]
+                    ?: return Result.failure(SketchbookError.IntegrityError("missing x-goog-generation on doc write"))
+                Result.success(Generation(gen))
+            }
+
+            HttpStatusCode.PreconditionFailed ->
+                Result.failure(SketchbookError.Conflict("doc generation mismatch on $path"))
+
+            else -> Result.failure(remoteFailure(resp, "PUT $path"))
+        }
+    }
+
+    override suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef> {
+        val fullPrefix = "$tenantPrefix/${prefix.value}"
+        val response = http.get(listUrl()) {
+            authHeader()
+            parameter("prefix", fullPrefix)
+        }
+        if (!response.status.isSuccess) throw remoteFailure(response, "LIST $fullPrefix")
+        val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
+        val items = body["items"]?.jsonArray ?: return emptyList()
+        return items.mapNotNull { it.toCloudDocRef("$tenantPrefix/") }
+    }
+
     // ---- internals ----
 
     private suspend fun HttpRequestBuilder.authHeader() {
@@ -466,6 +524,16 @@ class DirectGcsBackend(
     private fun lockPath(treeId: TrackedTreeId, kind: TrackedTreeKind): String = when (kind) {
         TrackedTreeKind.Project -> "$tenantPrefix/locks/${treeId.value}.lock"
         else -> "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/lock"
+    }
+
+    private fun docPath(key: CloudDocKey): String = "$tenantPrefix/${key.path}"
+
+    private fun JsonElement.toCloudDocRef(tenantStripPrefix: String): CloudDocRef? {
+        val obj = this.jsonObject
+        val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return null
+        val gen = obj["generation"]?.jsonPrimitive?.contentOrNull ?: return null
+        val rel = name.removePrefix(tenantStripPrefix)
+        return CloudDocRef(key = CloudDocKey(rel), generation = Generation(gen))
     }
 
     private fun JsonElement.toManifestRef(prefix: String): ManifestRef? {
