@@ -349,7 +349,7 @@ class JvmPluginPresenceProbeTest {
                 cloudConfigured = false,
                 selfContainedProjects = emptySet(),
                 pluginFolders = pluginFolders,
-            )
+            ),
         )
         override fun observe(): Flow<Settings> = flow
         override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> = Result.success(Unit)

@@ -11,8 +11,13 @@ import kotlin.test.assertTrue
 class OsDefaultsTest {
     private lateinit var savedOsName: String
 
-    @BeforeTest fun saveOs() { savedOsName = System.getProperty("os.name").orEmpty() }
-    @AfterTest fun restoreOs() { System.setProperty("os.name", savedOsName) }
+    @BeforeTest fun saveOs() {
+        savedOsName = System.getProperty("os.name").orEmpty()
+    }
+
+    @AfterTest fun restoreOs() {
+        System.setProperty("os.name", savedOsName)
+    }
 
     @Test fun `Windows plugin folders include VST3 path`() {
         System.setProperty("os.name", "Windows 11")

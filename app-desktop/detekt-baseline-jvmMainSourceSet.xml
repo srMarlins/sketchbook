@@ -73,6 +73,7 @@
     <ID>FunctionNaming:InboxScreen.kt:@Composable private fun IssuesColumn</ID>
     <ID>FunctionNaming:InboxScreen.kt:@Composable private fun SuggestedColumn</ID>
     <ID>FunctionNaming:MissingPluginsChip.kt:@Composable fun MissingPluginsChip</ID>
+    <ID>FunctionNaming:OnboardingPromptBanner.kt:@Composable fun OnboardingPromptBanner</ID>
     <ID>FunctionNaming:MissingPluginsChip.kt:@Composable private fun MissingPluginRowView</ID>
     <ID>FunctionNaming:MissingPluginsChip.kt:@Composable private fun MissingPluginsPopup</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable fun RootContent</ID>

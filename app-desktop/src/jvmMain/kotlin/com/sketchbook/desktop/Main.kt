@@ -126,6 +126,7 @@ private fun runApp() = application {
                             }
                         }
                     }
+
                     LaunchDecision.Onboarding -> {
                         val onboardingVm: OnboardingViewModel = metroViewModel()
                         OnboardingScreen(
@@ -134,6 +135,7 @@ private fun runApp() = application {
                             onPickFile = ::pickFileJvm,
                         )
                     }
+
                     LaunchDecision.MainApp -> RootContent(backStack = backStack)
                 }
             }

@@ -14,12 +14,15 @@ import com.sketchbook.featureprojects.ProjectFilterCoordinator
 import com.sketchbook.repo.LibraryHealth
 import com.sketchbook.repo.MissingPluginRow
 import com.sketchbook.repo.MissingPluginSummary
+import com.sketchbook.repo.OnboardingPromptKind
+import com.sketchbook.repo.OnboardingSkipFlags
 import com.sketchbook.repo.PluginUsage
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProjectSyncState
 import com.sketchbook.repo.ProposalStatus
 import com.sketchbook.repo.ProposalsRepository
 import com.sketchbook.repo.RepairRepository
+import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
 import com.sketchbook.sync.ForceSnapshotPipeline
@@ -30,8 +33,10 @@ import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 /**
  * Aggregates all the cross-cutting state and operations the desktop chrome (sidebar, activity
@@ -54,6 +59,7 @@ class RootChromeViewModel(
     repairRepository: RepairRepository,
     private val projectRepository: ProjectRepository,
     private val filterCoordinator: ProjectFilterCoordinator,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     /**
@@ -105,6 +111,29 @@ class RootChromeViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
+     * Soft re-prompt for deferred onboarding steps. `AddSamples` is the only variant today —
+     * it surfaces when the user skipped the samples-folders step during onboarding and hasn't
+     * dismissed the banner yet. Future cloud onboarding adds a `AddCloud` member.
+     */
+    val pendingOnboardingPrompt: StateFlow<OnboardingPrompt?> = settingsRepository.observe()
+        .map { settings -> derivePendingOnboardingPrompt(settings.onboardingSkipped) }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * Sticky-dismiss the banner for [prompt]. Maps the UI-level prompt back to the
+     * persistence-level [OnboardingPromptKind] so the repository owns the storage shape.
+     */
+    fun dismissPrompt(prompt: OnboardingPrompt) {
+        viewModelScope.launch {
+            when (prompt) {
+                OnboardingPrompt.AddSamples ->
+                    settingsRepository.dismissOnboardingPrompt(OnboardingPromptKind.Samples)
+            }
+        }
+    }
+
+    /**
      * `null` when cloud isn't configured — the cluster of nullable callbacks (`syncStateFor`,
      * `onPushNow`, `conflictMessageFor`) bottoms out here so the UI can disable affordances
      * without a deeper conditional.
@@ -147,4 +176,26 @@ class RootChromeViewModel(
             )
         },
     )
+}
+
+/**
+ * UI-level enumeration of soft re-prompt banners shown on Home. Distinct from the
+ * persistence-level [OnboardingPromptKind] so the chrome can carry richer per-prompt state in
+ * the future (copy variants, A/B-able CTAs) without leaking into the repository contract.
+ */
+sealed interface OnboardingPrompt {
+    /** User skipped the samples-folders step during onboarding. */
+    data object AddSamples : OnboardingPrompt
+    // Future: data object AddCloud — when cloud onboarding lands.
+}
+
+/**
+ * Pure derivation from [OnboardingSkipFlags] to a UI-level [OnboardingPrompt]. Extracted from
+ * [RootChromeViewModel.pendingOnboardingPrompt] so the rule is unit-testable without standing up
+ * the full chrome VM (which needs a Catalog-backed [com.sketchbook.catalog.SyncStateStore] and
+ * other heavy collaborators that have nothing to do with this banner).
+ */
+internal fun derivePendingOnboardingPrompt(flags: OnboardingSkipFlags): OnboardingPrompt? = when {
+    flags.samplesSkipped && !flags.samplesPromptDismissed -> OnboardingPrompt.AddSamples
+    else -> null
 }

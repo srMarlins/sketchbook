@@ -68,8 +68,7 @@ interface ScanTrigger {
 @ContributesIntoMap(AppScope::class)
 @ViewModelKey
 @Inject
-class OnboardingViewModel(private val repository: SettingsRepository, private val scanTrigger: ScanTrigger) :
-    ViewModel() {
+class OnboardingViewModel(private val repository: SettingsRepository, private val scanTrigger: ScanTrigger) : ViewModel() {
 
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<OnboardingState> = _state.asStateFlow()

@@ -34,10 +34,9 @@ class LaunchGate(private val settings: SettingsRepository) {
      * `OnboardingViewModel.Finish` writes `firstRunCompletedAt`, this flow flips from
      * [LaunchDecision.Onboarding] to [LaunchDecision.MainApp].
      */
-    fun observe(): Flow<LaunchDecision> =
-        settings.observe()
-            .map { if (it.firstRunCompletedAt == null) LaunchDecision.Onboarding else LaunchDecision.MainApp }
-            .distinctUntilChanged()
+    fun observe(): Flow<LaunchDecision> = settings.observe()
+        .map { if (it.firstRunCompletedAt == null) LaunchDecision.Onboarding else LaunchDecision.MainApp }
+        .distinctUntilChanged()
 
     /** Convenience one-shot for callers that just need the current decision (e.g. tests). */
     suspend fun resolve(): LaunchDecision = observe().first()
