@@ -45,6 +45,7 @@ include(
     ":shared:feature-timeline",
     ":shared:feature-proposals",
     ":shared:feature-needs-attention",
+    ":shared:feature-onboarding",
     ":shared:feature-settings",
     ":shared:feature-journal",
     ":app-desktop",
