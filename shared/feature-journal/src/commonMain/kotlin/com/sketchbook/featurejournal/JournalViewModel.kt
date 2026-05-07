@@ -215,17 +215,28 @@ class JournalViewModel(
         id = entry.projectId,
         hints = ProjectDisplayHints(
             denormName = entry.projectName,
-            pathHint = pathHintFromAction(entry.action),
+            pathHint = pathHintFor(entry),
         ),
         nameById = nameById,
     )
+
+    /**
+     * Resolve the resolver's `pathHint` input. Prefer the denormalized `entry.projectPath`
+     * (captured at write time, survives orphaned ids the same way `projectName` does), falling
+     * back to whatever the action variant carries on its own. Together with the `projectPath`
+     * denorm landed in 9.sqm, this covers `MacPathRepaired`/`MacPathRestored` rows that have no
+     * path-bearing payload of their own — pre-9.sqm those degraded to the "project #N" sentinel
+     * the moment the project was rescanned out of the catalog.
+     */
+    private fun pathHintFor(entry: JournalEntry): String? = entry.projectPath?.takeUnless { it.isBlank() }
+        ?: pathFromAction(entry.action)
 
     /**
      * Extract a path/name hint from the action variants that carry one. The resolver basenames the
      * result and strips `.als`, so for sample paths we pre-walk to the parent dir so the project
      * folder leaf surfaces (not the sample filename).
      */
-    private fun pathHintFromAction(action: ActionRecord): String? = when (action) {
+    private fun pathFromAction(action: ActionRecord): String? = when (action) {
         is ActionRecord.Move -> action.pathAfter.ifBlank { null } ?: action.pathBefore.ifBlank { null }
         is ActionRecord.Rename -> action.nameAfter.takeUnless { it.isBlank() }
         is ActionRecord.MissingSampleMapped -> parentDirOfSample(action.missingPath)
