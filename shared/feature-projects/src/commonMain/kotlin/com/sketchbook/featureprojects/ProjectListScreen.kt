@@ -96,7 +96,31 @@ fun ProjectListScreen(
     detailPanel: (@Composable (ProjectId, () -> Unit) -> Unit)? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val dispatch = vm::dispatch
+    ProjectListContent(
+        state = state,
+        dispatch = vm::dispatch,
+        modifier = modifier,
+        scanLabel = scanLabel,
+        scanActive = scanActive,
+        syncStateFor = syncStateFor,
+        detailPanel = detailPanel,
+    )
+}
+
+/**
+ * Stateless rendering of the project list. Takes the materialized [state] + a [dispatch] lambda
+ * so screenshot tests and previews can render any UI state without standing up a ViewModel.
+ */
+@Composable
+internal fun ProjectListContent(
+    state: ProjectListViewModel.State,
+    dispatch: (ProjectListViewModel.Intent) -> Unit,
+    modifier: Modifier = Modifier,
+    scanLabel: String? = null,
+    scanActive: Boolean = false,
+    syncStateFor: ((ProjectId) -> ProjectSyncState)? = null,
+    detailPanel: (@Composable (ProjectId, () -> Unit) -> Unit)? = null,
+) {
     val listState = rememberLazyListState()
 
     // When search activates, scroll the page to the top so the search field — and the overlay
@@ -109,11 +133,15 @@ fun ProjectListScreen(
     // Stable callbacks: hoisted so children passed `dispatch(...)` lambdas don't churn each
     // recomposition. With the LazyColumn below, only on-screen items recompose anyway, but
     // stable callbacks let `key`-bounded items skip even when `state` updates.
-    val onOpenDetail: (ProjectId) -> Unit = remember(vm) { { id -> dispatch(ProjectListViewModel.Intent.OpenDetail(id)) } }
-    val onZoomShelf: (ShelfId?) -> Unit = remember(vm) { { shelf -> dispatch(ProjectListViewModel.Intent.ZoomShelf(shelf)) } }
-    val onShuffleGems: () -> Unit = remember(vm) { { dispatch(ProjectListViewModel.Intent.ShuffleGems) } }
-    val onCloseDetail: () -> Unit = remember(vm) { { dispatch(ProjectListViewModel.Intent.CloseDetail) } }
-    val onClearSearch: () -> Unit = remember(vm) { { dispatch(ProjectListViewModel.Intent.Search("")) } }
+    val onOpenDetail: (ProjectId) -> Unit = remember(dispatch) {
+        { id -> dispatch(ProjectListViewModel.Intent.OpenDetail(id)) }
+    }
+    val onZoomShelf: (ShelfId?) -> Unit = remember(dispatch) {
+        { shelf -> dispatch(ProjectListViewModel.Intent.ZoomShelf(shelf)) }
+    }
+    val onShuffleGems: () -> Unit = remember(dispatch) { { dispatch(ProjectListViewModel.Intent.ShuffleGems) } }
+    val onCloseDetail: () -> Unit = remember(dispatch) { { dispatch(ProjectListViewModel.Intent.CloseDetail) } }
+    val onClearSearch: () -> Unit = remember(dispatch) { { dispatch(ProjectListViewModel.Intent.Search("")) } }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isWide = maxWidth.value >= WIDE_THRESHOLD_DP

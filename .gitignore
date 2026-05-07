@@ -79,3 +79,6 @@ dist/
 
 .tmp_screens/
 live-page*.png
+
+# Roborazzi screenshot staging area for PR uploads (transient).
+.pr-artifacts/

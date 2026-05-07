@@ -49,6 +49,24 @@ fun SettingsScreen(
     syncState: SyncQueueState? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    SettingsContent(
+        state = state,
+        dispatch = vm::dispatch,
+        onAddRootClicked = onAddRootClicked,
+        modifier = modifier,
+        syncState = syncState,
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SettingsContent(
+    state: SettingsViewModel.State,
+    dispatch: (SettingsViewModel.Intent) -> Unit,
+    onAddRootClicked: () -> Unit,
+    modifier: Modifier = Modifier,
+    syncState: SyncQueueState? = null,
+) {
     val scroll = rememberScrollState()
     Column(
         modifier = modifier
@@ -93,7 +111,7 @@ fun SettingsScreen(
                     ) {
                         for (root in state.libraryRoots) {
                             LibraryRootCard(root) {
-                                vm.dispatch(SettingsViewModel.Intent.RemoveRoot(root))
+                                dispatch(SettingsViewModel.Intent.RemoveRoot(root))
                             }
                         }
                     }
@@ -125,7 +143,7 @@ fun SettingsScreen(
                                     Text(auth.email, style = AppTheme.typography.body)
                                 }
                                 Button(
-                                    onClick = { vm.dispatch(SettingsViewModel.Intent.SignOut) },
+                                    onClick = { dispatch(SettingsViewModel.Intent.SignOut) },
                                     variant = ButtonVariant.Ghost,
                                 ) { Text("Sign out") }
                             }
@@ -136,7 +154,7 @@ fun SettingsScreen(
                                     style = AppTheme.typography.body,
                                 )
                                 Button(
-                                    onClick = { vm.dispatch(SettingsViewModel.Intent.SignIn) },
+                                    onClick = { dispatch(SettingsViewModel.Intent.SignIn) },
                                     variant = ButtonVariant.Primary,
                                 ) { Text("Sign in with Google") }
                             }
@@ -151,7 +169,7 @@ fun SettingsScreen(
                         LaunchedEffect(bucketDraft) {
                             if (bucketDraft != state.cloudBucket.orEmpty()) {
                                 delay(BUCKET_DEBOUNCE_MS)
-                                vm.dispatch(
+                                dispatch(
                                     SettingsViewModel.Intent.SetCloudBucket(
                                         bucketDraft.takeIf { it.isNotBlank() },
                                     ),
@@ -188,15 +206,15 @@ fun SettingsScreen(
                             verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
                         ) {
                             Button(
-                                onClick = { vm.dispatch(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, +1))) },
+                                onClick = { dispatch(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, +1))) },
                                 variant = ButtonVariant.Secondary,
                             ) { Text("Increase") }
                             Button(
-                                onClick = { vm.dispatch(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, -1))) },
+                                onClick = { dispatch(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, -1))) },
                                 variant = ButtonVariant.Secondary,
                             ) { Text("Decrease") }
                             Button(
-                                onClick = { vm.dispatch(SettingsViewModel.Intent.SetCacheLru(!cache.lruEnabled)) },
+                                onClick = { dispatch(SettingsViewModel.Intent.SetCacheLru(!cache.lruEnabled)) },
                                 variant = ButtonVariant.Ghost,
                             ) { Text(if (cache.lruEnabled) "Disable LRU" else "Enable LRU") }
                         }

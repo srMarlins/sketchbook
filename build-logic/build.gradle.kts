@@ -18,4 +18,9 @@ dependencies {
     // Dependency-analysis must be on the build-logic classpath so convention
     // plugins (kmp-library) can apply it via `id("com.autonomousapps.dependency-analysis")`.
     implementation("com.autonomousapps:dependency-analysis-gradle-plugin:${version("dependency-analysis")}")
+    implementation("io.github.takahirom.roborazzi:roborazzi-gradle-plugin:${version("roborazzi")}")
+    // Compose multiplatform plugin on build-logic classpath so the screenshot-tests
+    // convention plugin can apply it and use `compose.uiTest` / `compose.desktop.currentOs`
+    // accessors. Consumer modules also apply it via the catalog alias — Gradle dedupes.
+    implementation("org.jetbrains.compose:compose-gradle-plugin:${version("compose")}")
 }

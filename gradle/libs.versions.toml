@@ -50,6 +50,7 @@ blake3 = "1.3"
 # Testing
 kotest = "6.1.11"
 turbine = "1.2.1"
+roborazzi = "1.60.0"
 
 # Dev tooling
 # detekt 2.0.0-alpha.x is required for Kotlin 2.3.21 (1.23.8 is built against
@@ -117,6 +118,7 @@ nav3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", versio
 # Test
 kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+roborazzi-compose-desktop = { module = "io.github.takahirom.roborazzi:roborazzi-compose-desktop", version.ref = "roborazzi" }
 
 # Dev tooling — detekt rule packs
 # detekt 2.x renamed the formatting ruleset and moved the group from
@@ -143,3 +145,4 @@ conveyor = { id = "dev.hydraulic.conveyor", version.ref = "conveyor" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 detekt = { id = "dev.detekt", version.ref = "detekt" }
 dependency-analysis = { id = "com.autonomousapps.dependency-analysis", version.ref = "dependency-analysis" }
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }

@@ -1,5 +1,6 @@
 plugins {
     id("kmp-compose")
+    id("screenshot-tests")
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.metro)

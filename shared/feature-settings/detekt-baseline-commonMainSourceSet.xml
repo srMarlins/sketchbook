@@ -14,7 +14,9 @@
     <ID>FunctionNaming:SettingsScreen.kt:@Composable private fun LibraryRootCard</ID>
     <ID>FunctionNaming:SettingsScreen.kt:@Composable private fun Section</ID>
     <ID>FunctionNaming:SettingsScreen.kt:@OptIn(ExperimentalLayoutApi::class) @Composable fun SettingsScreen</ID>
-    <ID>LongMethod:SettingsScreen.kt:@OptIn(ExperimentalLayoutApi::class) @Composable fun SettingsScreen</ID>
+    <ID>FunctionNaming:SettingsScreen.kt:@OptIn(ExperimentalLayoutApi::class) @Composable internal fun SettingsContent</ID>
+    <ID>LambdaParameterInRestartableEffect:SettingsScreen.kt:dispatch: (SettingsViewModel.Intent) -&gt; Unit</ID>
+    <ID>LongMethod:SettingsScreen.kt:@OptIn(ExperimentalLayoutApi::class) @Composable internal fun SettingsContent</ID>
     <ID>MagicNumber:SettingsScreen.kt:1024</ID>
     <ID>MagicNumber:SettingsScreen.kt:3600</ID>
     <ID>MagicNumber:SettingsScreen.kt:60</ID>
