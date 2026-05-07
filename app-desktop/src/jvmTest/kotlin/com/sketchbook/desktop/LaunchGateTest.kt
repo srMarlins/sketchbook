@@ -1,6 +1,9 @@
 package com.sketchbook.desktop
 
+import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.BlobCacheSettings
+import com.sketchbook.repo.LibraryRoot
+import com.sketchbook.repo.OnboardingPromptKind
 import com.sketchbook.repo.OnboardingSkipFlags
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
@@ -54,14 +57,14 @@ class LaunchGateTest {
         )
 
         override fun observe(): Flow<Settings> = flow
-        override suspend fun upsertRoot(root: com.sketchbook.repo.LibraryRoot) = Result.success(Unit)
-        override suspend fun removeRoot(root: com.sketchbook.repo.LibraryRoot) = Result.success(Unit)
+        override suspend fun upsertRoot(root: LibraryRoot) = Result.success(Unit)
+        override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
         override suspend fun setCloudCredential(serviceAccountJson: String?) = Result.success(Unit)
         override suspend fun setCloudBucket(bucket: String?) = Result.success(Unit)
-        override suspend fun setSelfContained(uuid: com.sketchbook.core.ProjectUuid, value: Boolean) = Result.success(Unit)
+        override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean) = Result.success(Unit)
         override suspend fun setCacheSettings(settings: BlobCacheSettings) = Result.success(Unit)
         override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Result.success(Unit)
-        override suspend fun dismissOnboardingPrompt(kind: com.sketchbook.repo.OnboardingPromptKind) = Result.success(Unit)
+        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) = Result.success(Unit)
         override suspend fun setPluginFolders(folders: List<String>) = Result.success(Unit)
         override suspend fun resetFirstRun() = Result.success(Unit)
     }
@@ -87,14 +90,14 @@ class LaunchGateTest {
         }
 
         override fun observe(): Flow<Settings> = flow
-        override suspend fun upsertRoot(root: com.sketchbook.repo.LibraryRoot) = Result.success(Unit)
-        override suspend fun removeRoot(root: com.sketchbook.repo.LibraryRoot) = Result.success(Unit)
+        override suspend fun upsertRoot(root: LibraryRoot) = Result.success(Unit)
+        override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
         override suspend fun setCloudCredential(serviceAccountJson: String?) = Result.success(Unit)
         override suspend fun setCloudBucket(bucket: String?) = Result.success(Unit)
-        override suspend fun setSelfContained(uuid: com.sketchbook.core.ProjectUuid, value: Boolean) = Result.success(Unit)
+        override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean) = Result.success(Unit)
         override suspend fun setCacheSettings(settings: BlobCacheSettings) = Result.success(Unit)
         override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Result.success(Unit)
-        override suspend fun dismissOnboardingPrompt(kind: com.sketchbook.repo.OnboardingPromptKind) = Result.success(Unit)
+        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) = Result.success(Unit)
         override suspend fun setPluginFolders(folders: List<String>) = Result.success(Unit)
         override suspend fun resetFirstRun() = Result.success(Unit)
     }

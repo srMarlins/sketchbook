@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +37,8 @@ import com.sketchbook.featureonboarding.steps.PluginFoldersStep
 import com.sketchbook.featureonboarding.steps.ProjectsRootsStep
 import com.sketchbook.featureonboarding.steps.SampleRootsStep
 import com.sketchbook.featureonboarding.steps.WelcomeStep
+import com.sketchbook.uishared.components.BulkUndoSnackbar
+import com.sketchbook.uishared.components.BulkUndoSnackbarState
 import com.sketchbook.uishared.components.PaperPage
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
@@ -65,6 +69,18 @@ fun OnboardingScreen(
     // public API now so callers (Task 13) can hook the platform-specific pickers once and
     // not need to revisit on each step landing.
     val state by vm.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val snackbar = remember(scope) { BulkUndoSnackbarState(scope) }
+    LaunchedEffect(vm) {
+        // Surface persistence failures from Finish as a non-blocking 5s snackbar (no Undo —
+        // the unwind is one-shot, the user has already moved on). Emissions arrive on a
+        // SharedFlow with DROP_OLDEST so a slow collector can never backpressure the VM.
+        vm.events.collect { event ->
+            when (event) {
+                is OnboardingEvent.PersistenceFailed -> snackbar.show(event.message)
+            }
+        }
+    }
     PaperPage(modifier = modifier) {
         Box(
             modifier = Modifier
@@ -143,6 +159,8 @@ fun OnboardingScreen(
                     showSkipAll = shouldShowSkipAll(state),
                     onSkipAll = { vm.dispatch(OnboardingIntent.SkipAllUseDefaults) },
                 )
+
+                BulkUndoSnackbar(state = snackbar)
             }
         }
     }

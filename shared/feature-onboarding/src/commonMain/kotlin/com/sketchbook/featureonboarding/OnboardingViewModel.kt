@@ -9,8 +9,12 @@ import com.sketchbook.repo.SettingsRepository
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -43,6 +47,15 @@ sealed interface OnboardingStep {
     // Future: data object CloudSignIn — drop in when v1.2 cloud lands.
 }
 
+/**
+ * One-shot side effects emitted by [OnboardingViewModel.events] for the screen to render
+ * transiently (e.g. a snackbar). Distinct from [OnboardingState] which is the persistent
+ * UI model.
+ */
+sealed interface OnboardingEvent {
+    data class PersistenceFailed(val message: String) : OnboardingEvent
+}
+
 sealed interface OnboardingIntent {
     data class AddProjectsRoot(val path: String) : OnboardingIntent
     data class RemoveProjectsRoot(val path: String) : OnboardingIntent
@@ -72,6 +85,20 @@ class OnboardingViewModel(private val repository: SettingsRepository, private va
 
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<OnboardingState> = _state.asStateFlow()
+
+    /**
+     * One-shot side-effect channel for non-blocking failure surfacing during [finish].
+     * The plan calls for a toast on persistence failure — the rest of the unwind still runs,
+     * but the user is told something didn't stick. Replay = 0 (events are observed live);
+     * extraBufferCapacity = 4 (one per persistence call) with [BufferOverflow.DROP_OLDEST]
+     * so a slow collector can't backpressure the unwind.
+     */
+    private val _events = MutableSharedFlow<OnboardingEvent>(
+        replay = 0,
+        extraBufferCapacity = 4,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val events: Flow<OnboardingEvent> = _events.asSharedFlow()
 
     /**
      * Guards [OnboardingIntent.Finish] from running twice. The UI should disable the "Open
@@ -136,22 +163,32 @@ class OnboardingViewModel(private val repository: SettingsRepository, private va
         viewModelScope.launch {
             // Fail-soft: each persistence call is wrapped so a single store failure can't block the
             // rest. The user has already committed mentally by tapping "Open Sketchbook" — the UI
-            // is unwinding, not pausing for retry.
+            // is unwinding, not pausing for retry. Failures are emitted on [events] so the
+            // screen can surface a non-blocking toast instead of swallowing them silently.
             s.projectsRoots.forEach { path ->
                 runCatching { repository.upsertRoot(LibraryRoot.Projects(path)) }
+                    .onFailure { emitFailure("Couldn't save Projects folder: $path") }
             }
             s.sampleRoots.forEach { path ->
                 runCatching { repository.upsertRoot(LibraryRoot.UserSamples(path)) }
+                    .onFailure { emitFailure("Couldn't save Samples folder: $path") }
             }
             runCatching { repository.setPluginFolders(s.pluginFolders) }
+                .onFailure { emitFailure("Couldn't save plugin folders") }
             runCatching {
                 repository.markFirstRunComplete(
                     OnboardingSkipFlags(samplesSkipped = s.sampleRoots.isEmpty()),
                 )
-            }
+            }.onFailure { emitFailure("Couldn't mark setup complete — Sketchbook may show this again on next launch") }
             // Scan kick-off goes last so it observes the just-flushed roots.
             scanTrigger.triggerScan()
         }
+    }
+
+    private fun emitFailure(message: String) {
+        // tryEmit because we configured the SharedFlow with a buffer + DROP_OLDEST; this never
+        // suspends and never throws, even if no one is collecting yet.
+        _events.tryEmit(OnboardingEvent.PersistenceFailed(message))
     }
 
     private fun advance() = _state.update { s ->
