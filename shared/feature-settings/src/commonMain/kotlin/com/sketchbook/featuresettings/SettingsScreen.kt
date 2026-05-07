@@ -49,6 +49,26 @@ fun SettingsScreen(
     syncState: SyncQueueState? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    SettingsContent(
+        state = state,
+        dispatch = vm::dispatch,
+        onAddRootClicked = onAddRootClicked,
+        onUploadCredentialClicked = onUploadCredentialClicked,
+        modifier = modifier,
+        syncState = syncState,
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SettingsContent(
+    state: SettingsViewModel.State,
+    dispatch: (SettingsViewModel.Intent) -> Unit,
+    onAddRootClicked: () -> Unit,
+    onUploadCredentialClicked: () -> Unit,
+    modifier: Modifier = Modifier,
+    syncState: SyncQueueState? = null,
+) {
     var showCloud by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
     Column(
@@ -94,7 +114,7 @@ fun SettingsScreen(
                     ) {
                         for (root in state.libraryRoots) {
                             LibraryRootCard(root) {
-                                vm.dispatch(SettingsViewModel.Intent.RemoveRoot(root))
+                                dispatch(SettingsViewModel.Intent.RemoveRoot(root))
                             }
                         }
                     }
@@ -124,15 +144,15 @@ fun SettingsScreen(
                             verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
                         ) {
                             Button(
-                                onClick = { vm.dispatch(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, +1))) },
+                                onClick = { dispatch(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, +1))) },
                                 variant = ButtonVariant.Secondary,
                             ) { Text("Increase") }
                             Button(
-                                onClick = { vm.dispatch(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, -1))) },
+                                onClick = { dispatch(SettingsViewModel.Intent.SetCacheSize(scaleSize(cache.maxSizeBytes, -1))) },
                                 variant = ButtonVariant.Secondary,
                             ) { Text("Decrease") }
                             Button(
-                                onClick = { vm.dispatch(SettingsViewModel.Intent.SetCacheLru(!cache.lruEnabled)) },
+                                onClick = { dispatch(SettingsViewModel.Intent.SetCacheLru(!cache.lruEnabled)) },
                                 variant = ButtonVariant.Ghost,
                             ) { Text(if (cache.lruEnabled) "Disable LRU" else "Enable LRU") }
                         }
@@ -258,7 +278,7 @@ fun SettingsScreen(
                                 }
                                 if (state.cloudConfigured) {
                                     Button(
-                                        onClick = { vm.dispatch(SettingsViewModel.Intent.SetCloudCredential(null)) },
+                                        onClick = { dispatch(SettingsViewModel.Intent.SetCloudCredential(null)) },
                                         variant = ButtonVariant.Ghost,
                                     ) { Text("Clear") }
                                 }
@@ -273,7 +293,7 @@ fun SettingsScreen(
                                 value = bucketDraft,
                                 onChange = {
                                     bucketDraft = it
-                                    vm.dispatch(SettingsViewModel.Intent.SetCloudBucket(it.takeIf { v -> v.isNotBlank() }))
+                                    dispatch(SettingsViewModel.Intent.SetCloudBucket(it.takeIf { v -> v.isNotBlank() }))
                                 },
                                 placeholder = "Bucket name (e.g. sketchbook-srmarlins)",
                                 modifier = Modifier.fillMaxWidth(),
