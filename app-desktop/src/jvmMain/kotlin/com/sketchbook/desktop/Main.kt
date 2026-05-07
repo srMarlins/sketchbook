@@ -27,13 +27,14 @@ import com.sketchbook.uishared.theme.AppTypography
 import dev.zacsweers.metrox.viewmodel.LocalMetroViewModelFactory
 import dev.zacsweers.metrox.viewmodel.metroViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Compose Desktop entry. Builds the composition root once, the Compose Navigation 3 back stack
  * once, and renders the main window. Menu items reset the stack to the chosen destination
  * rather than spawning new windows.
  */
-fun main() {
+fun main(args: Array<String>) {
     // Diagnostics (rolling log + uncaught-exception → crash file) MUST be the first thing the
     // app does, before Compose initializes — otherwise a Compose-runtime exception during
     // startup leaves the user with no log to attach to a bug report.
@@ -41,12 +42,19 @@ fun main() {
         dataDir = Diagnostics.resolveDataDir(),
         appVersion = System.getProperty("sketchbook.version") ?: "dev",
     )
-    runApp()
+    runApp(resetFirstRun = "--reset-first-run" in args)
 }
 
-private fun runApp() = application {
+private fun runApp(resetFirstRun: Boolean) = application {
     val graph = remember {
         buildDesktopAppGraph().also {
+            // Dev-only: clear the onboarding gate before anything else observes Settings, so
+            // LaunchGate sees `firstRunCompletedAt = null` on its first emission and routes to
+            // the Onboarding surface. Roots / plugin folders / cloud config survive — only the
+            // gate state is reset.
+            if (resetFirstRun) {
+                runBlocking { it.settingsRepository.resetFirstRun() }
+            }
             startBackgroundPull(it)
             startWatcher(it)
             it.libraryScanCoordinator.start()

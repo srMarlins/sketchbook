@@ -99,6 +99,13 @@ class SettingsViewModelTest {
             flow.value = flow.value.copy(pluginFolders = folders)
             return Result.success(Unit)
         }
+        override suspend fun resetFirstRun(): Result<Unit> {
+            flow.value = flow.value.copy(
+                firstRunCompletedAt = null,
+                onboardingSkipped = OnboardingSkipFlags(),
+            )
+            return Result.success(Unit)
+        }
     }
 
     private class FakeAuthSession(initial: AuthState = AuthState.SignedOut) : AuthSession {

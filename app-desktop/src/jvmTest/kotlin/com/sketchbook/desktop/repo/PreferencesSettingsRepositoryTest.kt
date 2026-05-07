@@ -14,7 +14,9 @@ import java.util.prefs.Preferences
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -123,6 +125,23 @@ class PreferencesSettingsRepositoryTest {
         repo.setPluginFolders(raw).getOrThrow()
 
         assertEquals(expected, repo.observe().first().pluginFolders)
+    }
+
+    @Test
+    fun `resetFirstRun clears firstRunCompletedAt and onboarding skip flags but keeps roots`() = runTest {
+        val repo = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
+        repo.upsertRoot(LibraryRoot.Projects("/foo")).getOrThrow()
+        repo.markFirstRunComplete(OnboardingSkipFlags(samplesSkipped = true)).getOrThrow()
+        repo.dismissOnboardingPrompt(OnboardingPromptKind.Samples).getOrThrow()
+
+        repo.resetFirstRun().getOrThrow()
+
+        val s = repo.observe().first()
+        assertNull(s.firstRunCompletedAt)
+        assertFalse(s.onboardingSkipped.samplesSkipped)
+        assertFalse(s.onboardingSkipped.samplesPromptDismissed)
+        // Roots survive — only the onboarding gate is reset.
+        assertEquals(listOf(LibraryRoot.Projects("/foo")), s.libraryRoots)
     }
 
     @Test

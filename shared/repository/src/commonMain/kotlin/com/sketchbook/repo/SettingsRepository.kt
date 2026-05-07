@@ -45,6 +45,14 @@ interface SettingsRepository {
      * probe falls back to `defaultInstalledDirs()`).
      */
     suspend fun setPluginFolders(folders: List<String>): Result<Unit>
+
+    /**
+     * Dev-only escape hatch. Resets `firstRunCompletedAt` and `onboardingSkipped` to defaults so
+     * a returning user re-triggers onboarding on next launch. Triggered by `--reset-first-run`
+     * CLI flag in the desktop app. Does NOT touch library roots, plugin folders, or other
+     * settings — only the onboarding gate state.
+     */
+    suspend fun resetFirstRun(): Result<Unit>
 }
 
 enum class OnboardingPromptKind { Samples }

@@ -115,4 +115,11 @@ private class FakeSettingsRepository(initial: Settings) : SettingsRepository {
         return Result.success(Unit)
     }
     override suspend fun setPluginFolders(folders: List<String>) = Result.success(Unit)
+    override suspend fun resetFirstRun(): Result<Unit> {
+        flow.value = flow.value.copy(
+            firstRunCompletedAt = null,
+            onboardingSkipped = OnboardingSkipFlags(),
+        )
+        return Result.success(Unit)
+    }
 }

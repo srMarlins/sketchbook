@@ -364,6 +364,7 @@ class JvmPluginPresenceProbeTest {
             flow.value = flow.value.copy(pluginFolders = folders)
             return Result.success(Unit)
         }
+        override suspend fun resetFirstRun(): Result<Unit> = Result.success(Unit)
     }
 
     private fun isInstalled(driver: app.cash.sqldelight.db.SqlDriver, name: String, type: String): Boolean {

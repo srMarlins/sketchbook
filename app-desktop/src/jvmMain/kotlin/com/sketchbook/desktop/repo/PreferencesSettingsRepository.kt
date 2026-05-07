@@ -146,6 +146,24 @@ class PreferencesSettingsRepository(
         Result.success(Unit)
     }
 
+    override suspend fun resetFirstRun(): Result<Unit> = withContext(ioDispatcher) {
+        mutex.withLock {
+            // Atomic: clear all three onboarding-gate keys, flush once, then publish a single
+            // Settings emission so observers see the reset state in one shot. Roots / plugin
+            // folders / cloud config are intentionally untouched — this is only for re-triggering
+            // the onboarding flow in dev.
+            node.remove(KEY_FIRST_RUN_COMPLETED_AT)
+            node.remove(KEY_ONBOARDING_SAMPLES_SKIPPED)
+            node.remove(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED)
+            node.flush()
+            state.value = state.value.copy(
+                firstRunCompletedAt = null,
+                onboardingSkipped = OnboardingSkipFlags(),
+            )
+        }
+        Result.success(Unit)
+    }
+
     override suspend fun setPluginFolders(folders: List<String>): Result<Unit> = withContext(ioDispatcher) {
         val normalized = folders
             .asSequence()

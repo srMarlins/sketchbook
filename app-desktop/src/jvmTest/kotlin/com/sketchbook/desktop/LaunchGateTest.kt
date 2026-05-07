@@ -63,6 +63,7 @@ class LaunchGateTest {
         override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Result.success(Unit)
         override suspend fun dismissOnboardingPrompt(kind: com.sketchbook.repo.OnboardingPromptKind) = Result.success(Unit)
         override suspend fun setPluginFolders(folders: List<String>) = Result.success(Unit)
+        override suspend fun resetFirstRun() = Result.success(Unit)
     }
 
     /**
@@ -95,5 +96,6 @@ class LaunchGateTest {
         override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Result.success(Unit)
         override suspend fun dismissOnboardingPrompt(kind: com.sketchbook.repo.OnboardingPromptKind) = Result.success(Unit)
         override suspend fun setPluginFolders(folders: List<String>) = Result.success(Unit)
+        override suspend fun resetFirstRun() = Result.success(Unit)
     }
 }
