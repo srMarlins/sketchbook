@@ -87,3 +87,60 @@ class UserIdTest {
         assertFailsWith<IllegalArgumentException> { UserId("") }
     }
 }
+
+class TrackedTreeIdTest {
+    @Test
+    fun acceptsAlphanumericDashUnderscore() {
+        val id = TrackedTreeId("tt-01HZ3W_abc")
+        assertEquals("tt-01HZ3W_abc", id.value)
+    }
+
+    @Test
+    fun rejectsBlank() {
+        assertFailsWith<IllegalArgumentException> { TrackedTreeId("") }
+        assertFailsWith<IllegalArgumentException> { TrackedTreeId("   ") }
+    }
+
+    @Test
+    fun rejectsTooLong() {
+        assertFailsWith<IllegalArgumentException> { TrackedTreeId("a".repeat(65)) }
+    }
+
+    @Test
+    fun rejectsUnsafeChars() {
+        assertFailsWith<IllegalArgumentException> { TrackedTreeId("project:abc") }
+        assertFailsWith<IllegalArgumentException> { TrackedTreeId("a/b") }
+        assertFailsWith<IllegalArgumentException> { TrackedTreeId("a..b") }
+    }
+}
+
+class TrackedTreeKindTest {
+    @Test
+    fun knownKindsRoundTripByWireName() {
+        assertEquals(TrackedTreeKind.Project, TrackedTreeKind.fromWire("project"))
+        assertEquals(TrackedTreeKind.UserLibrary, TrackedTreeKind.fromWire("user_library"))
+    }
+
+    @Test
+    fun unknownKindIsPreserved() {
+        val unknown = TrackedTreeKind.fromWire("future_kind")
+        assertEquals("future_kind", unknown.wireName)
+    }
+}
+
+class CollaboratorTest {
+    @Test
+    fun rolesAreOrdered() {
+        // Sanity: enum order is stable so persistence doesn't accidentally reorder.
+        assertEquals(0, CollabRole.Read.ordinal)
+        assertEquals(1, CollabRole.Write.ordinal)
+        assertEquals(2, CollabRole.Admin.ordinal)
+    }
+
+    @Test
+    fun collaboratorRoundTrip() {
+        val c = Collaborator(UserId("alice"), CollabRole.Write)
+        assertEquals("alice", c.userId.value)
+        assertEquals(CollabRole.Write, c.role)
+    }
+}
