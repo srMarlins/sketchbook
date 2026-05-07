@@ -85,11 +85,8 @@ class OAuthClient(
         )
     }
 
-    private suspend fun exchangeCodeForTokens(
-        code: String,
-        verifier: String,
-        redirectUri: String,
-    ): OAuthTokens = withContext(Dispatchers.IO) {
+    private suspend fun exchangeCodeForTokens(code: String, verifier: String, redirectUri: String): OAuthTokens =
+        withContext(Dispatchers.IO) {
         val response = httpClient.submitForm(
             url = tokenUri,
             formParameters = Parameters.build {
@@ -116,10 +113,7 @@ class OAuthClient(
         )
     }
 
-    private fun startLoopback(
-        expectedState: String,
-        deferredCode: CompletableDeferred<Result<String>>,
-    ): HttpServer {
+    private fun startLoopback(expectedState: String, deferredCode: CompletableDeferred<Result<String>>): HttpServer {
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/callback") { exchange ->
             val query = exchange.requestURI.rawQuery.orEmpty()
@@ -134,7 +128,7 @@ class OAuthClient(
             }
             val bytes = responseHtml.toByteArray()
             exchange.responseHeaders.add("Content-Type", "text/html; charset=utf-8")
-            exchange.sendResponseHeaders(200, bytes.size.toLong())
+            exchange.sendResponseHeaders(HTTP_OK, bytes.size.toLong())
             exchange.responseBody.use { it.write(bytes) }
             when {
                 error == "access_denied" -> deferredCode.complete(Result.failure(OAuthCancelled()))
@@ -181,6 +175,7 @@ class OAuthClient(
     )
 
     private companion object {
+        const val HTTP_OK = 200
         val JSON = Json { ignoreUnknownKeys = true }
     }
 }
@@ -236,19 +231,21 @@ private fun escapeHtml(s: String): String = s
     .replace(">", "&gt;")
 
 private fun parseSubAndEmail(idToken: String?): Pair<String, String> {
-    if (idToken == null) throw OAuthFailed("no id_token in response")
-    val parts = idToken.split(".")
-    if (parts.size < 2) throw OAuthFailed("malformed id_token")
+    val token = idToken ?: failOAuth("no id_token in response")
+    val parts = token.split(".")
+    if (parts.size < 2) failOAuth("malformed id_token")
     val payloadJson = String(Base64.getUrlDecoder().decode(parts[1].padBase64()))
     val obj = Json.parseToJsonElement(payloadJson).jsonObject
-    val sub = obj["sub"]?.jsonPrimitive?.content
-        ?: throw OAuthFailed("id_token missing sub")
-    val email = obj["email"]?.jsonPrimitive?.content
-        ?: throw OAuthFailed("id_token missing email — request the email scope")
+    val sub = obj["sub"]?.jsonPrimitive?.content ?: failOAuth("id_token missing sub")
+    val email = obj["email"]?.jsonPrimitive?.content ?: failOAuth("id_token missing email — request the email scope")
     return sub to email
 }
 
+private fun failOAuth(message: String): Nothing = throw OAuthFailed(message)
+
+private const val BASE64_BLOCK = 4
+
 private fun String.padBase64(): String {
-    val rem = length % 4
-    return if (rem == 0) this else this + "=".repeat(4 - rem)
+    val rem = length % BASE64_BLOCK
+    return if (rem == 0) this else this + "=".repeat(BASE64_BLOCK - rem)
 }

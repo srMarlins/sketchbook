@@ -14,10 +14,7 @@ import kotlinx.coroutines.withContext
  * `"com.sketchbook.refresh"`. Tests pass a unique name per test so they don't collide on a
  * shared dev workstation.
  */
-class KeyringTokenStore(
-    private val serviceName: String,
-    private val accountName: String,
-) : TokenStore {
+class KeyringTokenStore(private val serviceName: String, private val accountName: String) : TokenStore {
 
     override suspend fun read(): String? = withContext(Dispatchers.IO) {
         runCatching {
