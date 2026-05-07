@@ -27,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sketchbook.featureonboarding.steps.DoneStep
+import com.sketchbook.featureonboarding.steps.WelcomeStep
 import com.sketchbook.uishared.components.PaperPage
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
@@ -80,7 +82,15 @@ fun OnboardingScreen(
                     },
                     label = "onboarding-step",
                 ) { index ->
-                    StepPlaceholder(state.steps[index])
+                    when (state.steps[index]) {
+                        OnboardingStep.Welcome ->
+                            WelcomeStep(onContinue = { vm.dispatch(OnboardingIntent.Continue) })
+                        OnboardingStep.Done ->
+                            DoneStep(onFinish = { vm.dispatch(OnboardingIntent.Finish) })
+                        OnboardingStep.ProjectsRoots,
+                        OnboardingStep.SampleRoots,
+                        OnboardingStep.PluginFolders -> StepPlaceholder(state.steps[index])
+                    }
                 }
 
                 FooterRow(
