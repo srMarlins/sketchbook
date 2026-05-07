@@ -31,6 +31,7 @@ import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.Surface
+import com.sketchbook.uishared.components.Tag
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
 import kotlinx.coroutines.delay
@@ -160,29 +161,30 @@ internal fun SettingsContent(
                                 ) { Text("Sign in with Google") }
                             }
                         }
-                        var bucketDraft by remember(state.cloudBucket) {
-                            mutableStateOf(state.cloudBucket.orEmpty())
-                        }
-                        // Debounce dispatch so we don't trigger a SyncQueue + UserGraph rebuild
-                        // on every keystroke. 500 ms after the user stops typing the new bucket
-                        // is committed to settings; the LaunchedEffect's coroutine is cancelled
-                        // and re-launched on each subsequent keystroke.
-                        LaunchedEffect(bucketDraft) {
-                            if (bucketDraft != state.cloudBucket.orEmpty()) {
-                                delay(BUCKET_DEBOUNCE_MS)
-                                dispatch(
-                                    SettingsViewModel.Intent.SetCloudBucket(
-                                        bucketDraft.takeIf { it.isNotBlank() },
-                                    ),
-                                )
+                        // Bucket configuration only matters once the user is signed in — render
+                        // the input lazily so it doesn't appear inert below the sign-in CTA.
+                        if (state.auth is AuthState.SignedIn) {
+                            var bucketDraft by remember(state.cloudBucket) {
+                                mutableStateOf(state.cloudBucket.orEmpty())
                             }
+                            // Debounce so a SyncQueue + UserGraph rebuild doesn't fire per keystroke.
+                            LaunchedEffect(bucketDraft) {
+                                if (bucketDraft != state.cloudBucket.orEmpty()) {
+                                    delay(BUCKET_DEBOUNCE_MS)
+                                    dispatch(
+                                        SettingsViewModel.Intent.SetCloudBucket(
+                                            bucketDraft.takeIf { it.isNotBlank() },
+                                        ),
+                                    )
+                                }
+                            }
+                            com.sketchbook.uishared.components.TextField(
+                                value = bucketDraft,
+                                onChange = { bucketDraft = it },
+                                placeholder = "Bucket name (e.g. sketchbook-prod)",
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
-                        com.sketchbook.uishared.components.TextField(
-                            value = bucketDraft,
-                            onChange = { bucketDraft = it },
-                            placeholder = "Bucket name (e.g. sketchbook-prod)",
-                            modifier = Modifier.fillMaxWidth(),
-                        )
                     }
                 }
             }
@@ -216,7 +218,7 @@ internal fun SettingsContent(
                             ) { Text("Decrease") }
                             Button(
                                 onClick = { dispatch(SettingsViewModel.Intent.SetCacheLru(!cache.lruEnabled)) },
-                                variant = ButtonVariant.Ghost,
+                                variant = ButtonVariant.Secondary,
                             ) { Text(if (cache.lruEnabled) "Disable LRU" else "Enable LRU") }
                         }
                     }
@@ -352,20 +354,22 @@ private fun LibraryRootCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
         ) {
-            val (kind, color) =
+            val kind =
                 when (root) {
-                    is LibraryRoot.Projects -> "projects" to AppTheme.colors.pinBlue
-                    is LibraryRoot.UserSamples -> "samples" to AppTheme.colors.pinPurple
-                    is LibraryRoot.External -> "external (${root.kind.name.lowercase()})" to AppTheme.colors.pinOrange
+                    is LibraryRoot.Projects -> "projects"
+                    is LibraryRoot.UserSamples -> "samples"
+                    is LibraryRoot.External -> "external (${root.kind.name.lowercase()})"
                 }
-            Badge(color = color) { Text(kind, style = AppTheme.typography.caption) }
+            // One muted chip style for all root types — the label already says what it is, so
+            // a per-type hue would just add noise (`feedback_color_restraint`).
+            Tag(label = kind)
             Column(modifier = Modifier.weight(1f)) {
                 Text(root.path, style = AppTheme.typography.body)
                 if (root is LibraryRoot.External) {
                     Text("alias: ${root.alias}", style = AppTheme.typography.caption)
                 }
             }
-            Button(onClick = onRemove, variant = ButtonVariant.Ghost) { Text("Remove") }
+            Button(onClick = onRemove, variant = ButtonVariant.Secondary) { Text("Remove") }
         }
     }
 }

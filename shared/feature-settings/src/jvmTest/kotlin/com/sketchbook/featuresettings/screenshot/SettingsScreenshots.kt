@@ -17,33 +17,36 @@ import kotlin.test.Test
 @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
 class SettingsScreenshots {
     @Test
-    fun default_state() = runDesktopComposeUiTest(width = 1280, height = 800) {
-        setContent {
-            AppTheme {
-                SettingsContent(
-                    state = sampleConfiguredState(),
-                    dispatch = {},
-                    onAddRootClicked = {},
-                )
+    fun default_state() =
+        runDesktopComposeUiTest(width = 1280, height = 800) {
+            setContent {
+                AppTheme {
+                    SettingsContent(
+                        state = sampleConfiguredState(),
+                        dispatch = {},
+                        onAddRootClicked = {},
+                    )
+                }
             }
+            onRoot().captureRoboImage("build/roborazzi/settings_default.png")
         }
-        onRoot().captureRoboImage("build/roborazzi/settings_default.png")
-    }
 }
 
-private fun sampleConfiguredState(): SettingsViewModel.State = SettingsViewModel.State(
-    libraryRoots = listOf(
-        LibraryRoot.Projects("/Users/srm/Music/Ableton/User Library"),
-        LibraryRoot.UserSamples("/Users/srm/Music/Ableton/Samples"),
-        LibraryRoot.External(
-            path = "/Users/srm/Splice/Sounds",
-            alias = "splice",
-            kind = ExternalKind.Splice,
-        ),
-    ),
-    cloudBucket = null,
-    auth = AuthState.SignedOut,
-    selfContainedProjects = emptySet(),
-    cacheSettings = BlobCacheSettings(maxSizeBytes = 20L * 1024 * 1024 * 1024, lruEnabled = true),
-    loading = false,
-)
+private fun sampleConfiguredState(): SettingsViewModel.State =
+    SettingsViewModel.State(
+        libraryRoots =
+            listOf(
+                LibraryRoot.Projects("/Users/srm/Music/Ableton/User Library"),
+                LibraryRoot.UserSamples("/Users/srm/Music/Ableton/Samples"),
+                LibraryRoot.External(
+                    path = "/Users/srm/Splice/Sounds",
+                    alias = "splice",
+                    kind = ExternalKind.Splice,
+                ),
+            ),
+        cloudBucket = null,
+        auth = AuthState.SignedOut,
+        selfContainedProjects = emptySet(),
+        cacheSettings = BlobCacheSettings(maxSizeBytes = 20L * 1024 * 1024 * 1024, lruEnabled = true),
+        loading = false,
+    )

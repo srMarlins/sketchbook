@@ -2,9 +2,9 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ClassSignature:ProjectDetailViewModel.kt:ProjectDetailViewModel : ViewModel</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable fun ProjectDetailScreen</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable internal fun ProjectDetailContent</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun Fact</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun Header</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun HistoryTab</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun LockSlot</ID>
@@ -13,9 +13,7 @@
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun SamplesTab</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun Tabs</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun TracksTab</ID>
-    <ID>FunctionSignature:ProjectDetailScreen.kt:@Composable fun ProjectDetailScreen</ID>
-    <ID>FunctionSignature:ProjectDetailScreen.kt:@Composable private fun Header</ID>
-    <ID>NoUnusedImports:ProjectDetailViewModel.kt:com.sketchbook.featuredetail.ProjectDetailViewModel.kt</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class) @Composable private fun FactGrid</ID>
     <ID>ReturnCount:ProjectDetailViewModel.kt:ProjectDetailViewModel$fun dispatch</ID>
   </CurrentIssues>
 </SmellBaseline>
