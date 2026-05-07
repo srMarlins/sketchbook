@@ -165,10 +165,16 @@ class SqlRepairRepository(
 
     override suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit> = withContext(ioDispatcher) {
         try {
-            val alsPath = catalog.catalogQueries
+            // Capture name + path together up front. Both feed the journal entry's denorm
+            // columns so the History row stays resolvable even if a concurrent rescan orphans
+            // the project_id between this lookup and the journal append below. Without this,
+            // the journal append's auto-fill would re-query and miss → projectName/Path NULL →
+            // History column degrades to the "project #N" sentinel.
+            val projectRow = catalog.catalogQueries
                 .selectProjectById(projectId.value)
                 .executeAsOne()
-                .path
+            val alsPath = projectRow.path
+            val projectName = projectRow.name
 
             // Scan the .als for `<Path Value="..."/>` entries inside `<SampleRef>` that carry
             // a Mac-style `Volume:` prefix. The catalog's `mac_paths_count` flag also fires on
@@ -236,6 +242,8 @@ class SqlRepairRepository(
                 JournalEntry(
                     timestamp = Clock.System.now(),
                     projectId = projectId,
+                    projectName = projectName,
+                    projectPath = alsPath,
                     action = ActionRecord.MacPathRepaired(
                         mappingCount = mapping.size,
                         alsOutcome = outcome.name,
@@ -433,10 +441,14 @@ class SqlRepairRepository(
 
     override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
-            val alsPath = catalog.catalogQueries
+            // Mirror applyMacPathRepair: capture name + path together so the journal entry
+            // carries both denorm columns even if the project_id is orphaned by a concurrent
+            // rescan between this lookup and the journal append below.
+            val projectRow = catalog.catalogQueries
                 .selectProjectById(projectId.value)
                 .executeAsOne()
-                .path
+            val alsPath = projectRow.path
+            val projectName = projectRow.name
 
             // Mirror restoreMissingSampleMatch: try to restore the .als from the sidecar
             // [applyMacPathRepair] wrote pre-patch. NoUndoBytes when the sidecar is gone
@@ -475,6 +487,8 @@ class SqlRepairRepository(
                 JournalEntry(
                     timestamp = Clock.System.now(),
                     projectId = projectId,
+                    projectName = projectName,
+                    projectPath = alsPath,
                     action = ActionRecord.MacPathRestored(
                         mappingCount = mappingCount,
                         alsOutcome = outcomeName,

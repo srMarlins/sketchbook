@@ -54,14 +54,20 @@ class SqlJournalRepository(
         // moment anyone adds a suspend call inside the body. Pattern matches JvmScanner /
         // McpServer: explicit re-throw of cancellation, Result.failure for everything else.
         try {
-            // Centralized denormalization: capture the project's current name at write time.
-            // Repository callers (project mutators, repair flows, MCP) never need to thread
-            // the name through themselves — the journal just looks it up. If the entry already
-            // carries a name (e.g. an in-memory fake or a forward-from-MCP), respect it.
-            val resolvedName = entry.projectName
-                ?: catalog.catalogQueries.selectProjectById(entry.projectId.value)
+            // Centralized denormalization: capture the project's current name + path at write
+            // time. Repository callers (project mutators, repair flows, MCP) never need to
+            // thread these through themselves — the journal just looks them up. If the entry
+            // already carries one (e.g. a repair flow that already has the path in scope, an
+            // in-memory fake, or a forward-from-MCP), respect it. We avoid the catalog read
+            // entirely when both fields are pre-supplied so a caller that wants to journal an
+            // already-orphaned project_id (no row exists) doesn't get a confusing miss.
+            val (resolvedName, resolvedPath) = if (entry.projectName != null && entry.projectPath != null) {
+                entry.projectName to entry.projectPath
+            } else {
+                val row = catalog.catalogQueries.selectProjectById(entry.projectId.value)
                     .executeAsOneOrNull()
-                    ?.name
+                (entry.projectName ?: row?.name) to (entry.projectPath ?: row?.path)
+            }
             val newId = catalog.transactionWithResult<Long> {
                 catalog.catalogQueries.insertJournalEntry(
                     occurred_at = entry.timestamp.toEpochMilliseconds(),
@@ -73,10 +79,17 @@ class SqlJournalRepository(
                         entry.action,
                     ),
                     project_name = resolvedName,
+                    project_path = resolvedPath,
                 )
                 catalog.catalogQueries.lastJournalEntryId().executeAsOne()
             }
-            Result.success(entry.copy(sequence = newId, projectName = resolvedName))
+            Result.success(
+                entry.copy(
+                    sequence = newId,
+                    projectName = resolvedName,
+                    projectPath = resolvedPath,
+                ),
+            )
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
@@ -119,6 +132,7 @@ class SqlJournalRepository(
         sequence = row.id,
         actor = row.actor,
         projectName = row.project_name,
+        projectPath = row.project_path,
     )
 
     private companion object {

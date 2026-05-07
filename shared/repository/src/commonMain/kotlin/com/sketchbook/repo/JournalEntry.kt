@@ -34,6 +34,14 @@ data class JournalEntry(
      * pass it manually.
      */
     val projectName: String? = null,
+    /**
+     * Denormalized path captured at append time. Survives rescans the same way [projectName]
+     * does, and is the resolver's `pathHint` fallback when the action variant carries no path of
+     * its own. Repair flows (Mac-path apply/restore) pass it explicitly because they already have
+     * the path in scope from their own `selectProjectById` lookup; everything else falls through
+     * to the repository's auto-fill, which copies from the catalog at write time.
+     */
+    val projectPath: String? = null,
 )
 
 /**

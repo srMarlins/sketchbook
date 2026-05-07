@@ -60,6 +60,37 @@ class JournalViewModelTest {
     }
 
     @Test
+    fun denormProjectPathBeatsActionDerivedPathForOrphanedRow() = runTest(mainDispatcher) {
+        // 9.sqm precedence — `entry.projectPath` (the denorm column) is the resolver's
+        // pathHint when present, even if the action variant would also expose a path. This is
+        // what saves orphaned MacPathRepaired rows: the action carries no path of its own, but
+        // the denorm column does, so the basename surfaces in the History UI.
+        val repo = InMemoryJournalRepository()
+        val vm = JournalViewModel(repo, EmptyProjects, EmptyRepair)
+
+        repo.append(
+            JournalEntry(
+                timestamp = Instant.parse("2026-05-06T12:00:00Z"),
+                // Matches one of the orphaned ids from the user's screenshot.
+                projectId = ProjectId(279),
+                // Simulates an entry that *also* lost its denorm name.
+                projectName = null,
+                projectPath = "/lib/Repaired Track.als",
+                action = ActionRecord.MacPathRepaired(mappingCount = 2, alsOutcome = "Patched"),
+            ),
+        )
+
+        vm.state.test {
+            var s = awaitItem()
+            while (s.rows.isEmpty()) s = awaitItem()
+            assertEquals(1, s.rows.size)
+            // Expected: basename of projectPath, `.als` stripped — not "project #279".
+            assertEquals("Repaired Track", s.rows[0].projectName)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun openProjectIntentEmitsNavigateEffect() = runTest(mainDispatcher) {
         val repo = InMemoryJournalRepository()
         val vm = JournalViewModel(repo, EmptyProjects, EmptyRepair)

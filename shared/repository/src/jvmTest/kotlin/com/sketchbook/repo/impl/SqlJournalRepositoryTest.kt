@@ -172,6 +172,75 @@ class SqlJournalRepositoryTest {
     }
 
     @Test
+    fun appendAutoFillsProjectNameAndPathFromCatalog() = runTest {
+        // The auto-fill path: caller provides only the bare entry, the repository looks up
+        // the project's current name + path from the catalog and stamps both onto the row.
+        // Mirrors the project_name precedent from PR #100, extended to project_path in 9.sqm.
+        val (catalog, repo) = setup()
+        catalog.catalogQueries.insertProject(
+            path = "/lib/Hot Track.als",
+            name = "Hot Track",
+            parent_dir = "/lib",
+            tempo = null,
+            time_sig_num = null,
+            time_sig_den = null,
+            key = null,
+            track_count = 0,
+            audio_tracks = 0,
+            midi_tracks = 0,
+            return_tracks = 0,
+            live_version = null,
+            last_modified = 0.0,
+            last_scanned = 0.0,
+            parse_status = null,
+            parse_error = null,
+            mac_paths_count = null,
+            effort_score = null,
+            effort_breakdown = null,
+            file_size_bytes = null,
+        )
+        val projectId = catalog.catalogQueries.selectProjectIdByPath("/lib/Hot Track.als").executeAsOne()
+
+        val appended = repo.append(
+            entry(offsetMs = 0L, projectId = projectId, action = ActionRecord.MacPathRepaired(2, "Patched")),
+        ).getOrThrow()
+
+        assertEquals("Hot Track", appended.projectName)
+        assertEquals("/lib/Hot Track.als", appended.projectPath)
+    }
+
+    @Test
+    fun appendPreservesCallerSuppliedNameAndPathEvenForOrphanedProjectId() = runTest {
+        // The caller-supplied path (used by SqlRepairRepository.applyMacPathRepair to capture
+        // the path *before* a concurrent rescan can orphan the id): both fields land on the row
+        // even when no projects row exists for the project_id. Without this, the journal append
+        // would fall through to selectProjectById, miss, and write NULLs.
+        val (_, repo) = setup()
+        val orphanedId = 99_999L
+        val appended = repo.append(
+            JournalEntry(
+                timestamp = baseInstant,
+                projectId = ProjectId(orphanedId),
+                projectName = "Stale Track",
+                projectPath = "/lib/Stale Track.als",
+                action = ActionRecord.MacPathRepaired(1, "Patched"),
+            ),
+        ).getOrThrow()
+
+        assertEquals("Stale Track", appended.projectName)
+        assertEquals("/lib/Stale Track.als", appended.projectPath)
+
+        // Round-trip via observe to confirm the SqlDelight read path also surfaces both fields.
+        repo.observeRecent(limit = 5).test {
+            val emitted = awaitItem()
+            assertEquals(1, emitted.size)
+            assertEquals("Stale Track", emitted[0].projectName)
+            assertEquals("/lib/Stale Track.als", emitted[0].projectPath)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun actorDefaultsToUserButCustomValueIsPersisted() = runTest {
         val (_, repo) = setup()
         val defaulted = repo.append(entry(offsetMs = 0L, projectId = 1L)).getOrThrow()

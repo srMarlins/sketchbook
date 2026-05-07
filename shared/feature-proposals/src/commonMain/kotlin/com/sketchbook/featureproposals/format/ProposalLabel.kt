@@ -1,6 +1,9 @@
 package com.sketchbook.featureproposals.format
 
+import com.sketchbook.core.ProjectId
+import com.sketchbook.repo.ProjectDisplayHints
 import com.sketchbook.repo.ProposalAction
+import com.sketchbook.repo.resolveProjectDisplay
 import com.sketchbook.uishared.components.VerbTint
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -33,17 +36,27 @@ fun proposalLabel(
 ): ProposalLabel {
     fun s(key: String): String? = (action.args[key] as? JsonPrimitive)?.contentOrNull
     val pidLong = s("project_id")?.toLongOrNull()
-    val resolvedName = pidLong?.let { projectNameById[it] }
-    // Fallback chain: catalog lookup → JSON `name` → JSON `path` basename → "project #ID" →
-    // "project". Proposals from `SqlProposalsRepository` carry `name` and `path` in args, so the
-    // row reads as the project name even before the projects flow has populated the names map.
+    // Fallback chain runs through the shared `resolveProjectDisplay` resolver: denorm name from
+    // args → catalog lookup → path basename → "project #ID" sentinel. Proposals from
+    // `SqlProposalsRepository` carry `name` and `path` in args, so the row reads as the project
+    // name even before the projects flow has populated the names map.
+    //
+    // The catalog lookup is hoisted out of the resolver call (folded into `denormName`) so we
+    // don't re-key `projectNameById` per row — a `Map<Long, String>` keyed by raw id is what
+    // the rest of the proposals module exposes, and the resolver wants `Map<ProjectId, String>`.
+    // Doing the lookup ourselves preserves ordering (args.name → catalog → path → sentinel).
     val nameFromArgs = s("name")?.takeIf { it.isNotBlank() }
-    val basenameFromArgs = s("path")?.let { filenameOf(it) }?.takeIf { it.isNotBlank() }
-    val projectLabel = resolvedName
-        ?: nameFromArgs
-        ?: basenameFromArgs
-        ?: pidLong?.let { "project #$it" }
-        ?: "project"
+    val pathFromArgs = s("path")?.takeIf { it.isNotBlank() }
+    val catalogName = pidLong?.let { projectNameById[it] }
+    val projectLabel = pidLong?.let {
+        resolveProjectDisplay(
+            id = ProjectId(it),
+            hints = ProjectDisplayHints(
+                denormName = nameFromArgs ?: catalogName,
+                pathHint = pathFromArgs,
+            ),
+        )
+    } ?: nameFromArgs ?: pathFromArgs?.let(::filenameOf)?.takeIf { it.isNotBlank() } ?: "project"
     return when (action.type) {
         "MoveProject" -> {
             val to = s("to").orEmpty()
