@@ -25,6 +25,7 @@ kotlin {
         jvmMain.dependencies {
             implementation(project(":shared:core"))
             implementation(project(":shared:actions"))
+            implementation(project(":shared:auth"))
             implementation(project(":shared:catalog"))
             implementation(project(":shared:cloud"))
             implementation(project(":shared:repository"))
@@ -38,6 +39,7 @@ kotlin {
             implementation(project(":shared:feature-needs-attention"))
             implementation(project(":shared:feature-settings"))
             implementation(project(":shared:feature-journal"))
+            implementation(project(":shared:feature-onboarding"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.core)

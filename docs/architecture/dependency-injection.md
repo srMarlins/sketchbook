@@ -1,17 +1,35 @@
 # Dependency Injection — Sketchbook
 
 **Status:** Adopted 2026-05-06 (Metro KMP ViewModel refactor).
-**Stack:** [Metro](https://github.com/ZacSweers/metro) `0.7.x` + [`metrox-viewmodel-compose`](https://github.com/ZacSweers/metro/tree/main/metrox-viewmodel-compose) + JetBrains AndroidX lifecycle KMP fork (`org.jetbrains.androidx.lifecycle:*` 2.10.0).
+**Stack:** [Metro](https://github.com/ZacSweers/metro) `1.0.0` + [`metrox-viewmodel-compose`](https://github.com/ZacSweers/metro/tree/main/metrox-viewmodel-compose) + JetBrains AndroidX lifecycle KMP fork (`org.jetbrains.androidx.lifecycle:*` 2.10.0).
 
 This doc is the canonical rulebook for DI in this repo. If a PR contradicts it, raise the contradiction; do not silently diverge.
 
 ## 1. Scopes
 
-There is exactly one application scope: `com.sketchbook.core.AppScope`.
+There are two scopes:
 
-- Defined in `shared/core/src/commonMain/kotlin/com/sketchbook/core/AppScope.kt` so any module can reference it without a circular dep.
+- **`com.sketchbook.core.AppScope`** — application lifetime, present on every shell.
+- **`com.sketchbook.core.UserScope`** — signed-in-user lifetime. Built by `UserGraphHolder` on `AuthState.SignedIn` (with a configured `cloudBucket`) and torn down on `SignedOut`. See §1.1.
+
+Rules:
+
+- Both scope markers are defined in `shared/core/src/commonMain/kotlin/com/sketchbook/core/` so any module can reference them without a circular dep.
 - One root `@DependencyGraph(AppScope::class)` per app shell. Today: `DesktopAppGraph` in `app-desktop`. Future shells (`app-mobile`, `app-mcp`) get their own root graphs that also bind `AppScope`.
 - Per-screen scopes are not modelled with `@GraphExtension` today. ViewModels are scoped to their `ViewModelStoreOwner` (the NavEntry / window) by Compose lifecycle — not by Metro. If a future feature needs a true per-screen Metro subgraph, add a `@GraphExtension` then; do not pre-add one.
+
+### 1.1 UserScope
+
+`UserScope` represents the lifetime of a signed-in user against a configured cloud bucket. It is owned by `UserGraphHolder` (`@SingleIn(AppScope::class)`), which `combine`s `AuthSession.state` with `Settings.cloudBucket` and:
+
+- On `(SignedIn, non-blank bucket)` → builds a fresh `UserGraph(cloudBackend = DirectGcsBackend(...))` keyed on the signed-in `UserId` + bucket.
+- On `(SignedOut, _)` or `(_, null/blank)` → emits `null`.
+
+The graph is exposed as `StateFlow<UserGraph?>`. UI that needs cloud services reads this flow and shows a "Sign in to enable sync" affordance when `null`.
+
+**Hand-rolled, not `@GraphExtension`.** Metro 1.0.0's `@GraphExtension` annotation does not take a `parent` argument (parent linkage is implicit via a `@GraphExtension.Factory` interface that the parent graph extends). Rather than wire that for a single-binding subgraph, `UserGraph` is a plain class today and `UserGraphHolder` instantiates it directly. The scoping intent — `CloudBackend` ownership bounded to the `(SignedIn, bucket)` lifetime — is the same. Promote to a real `@GraphExtension` if/when this graph grows past one or two bindings, or when the sync queue and lock repository move into it.
+
+`SwappableSyncQueue` keeps its own backend pivot for now and will migrate to read from `UserGraphHolder` in a follow-up PR.
 
 ## 2. Binding services (repos, scanners, coordinators)
 

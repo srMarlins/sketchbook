@@ -32,7 +32,7 @@ class JvmBlobCache(
     private val cacheRoot: Path,
     private val cloud: CloudBackend,
     private val clock: Clock = Clock.System,
-    private val cacheSettings: () -> BlobCacheSettings,
+    private val cacheSettings: BlobCacheSettings,
 ) : BlobCache {
 
     init {
@@ -118,14 +118,13 @@ class JvmBlobCache(
     }
 
     private fun evictIfOverBudget() {
-        val settings = cacheSettings()
-        if (!settings.lruEnabled) return
+        if (!cacheSettings.lruEnabled) return
         val total = catalog.catalogQueries.sumBlobCacheBytes().executeAsOne()
-        if (total <= settings.maxSizeBytes) return
+        if (total <= cacheSettings.maxSizeBytes) return
         var remaining = total
         val candidates = catalog.catalogQueries.selectAllBlobsByLruThenSize().executeAsList()
         for (row in candidates) {
-            if (remaining <= settings.maxSizeBytes) break
+            if (remaining <= cacheSettings.maxSizeBytes) break
             // The DB stores the canonical wire form (`b3:<hex>`); on-disk uses the hex digest
             // alone since `:` isn't a valid Windows path char.
             val hex = row.hash.removePrefix(BlobHash.PREFIX)

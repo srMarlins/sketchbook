@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sketchbook.auth.AuthState
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.SyncQueueState
@@ -31,20 +33,18 @@ import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.Surface
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
+import kotlinx.coroutines.delay
 
 /**
  * Settings screen. The page is centered in a max-width column so it doesn't sprawl on a wide
- * window. Cloud sync is parked behind an "Advanced" disclosure — at v1 the cloud isn't actually
- * wired through, and the bare "Upload service-account JSON" button confused real users in
- * testing (there's no context for what it is). The disclosure both explains it and lets us
- * keep the wiring for power users who already have a GCS account ready.
+ * window. Cloud sign-in + bucket configuration land in Phase 5 as a dedicated "Cloud" section;
+ * the legacy service-account JSON disclosure has been removed.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     vm: SettingsViewModel,
     onAddRootClicked: () -> Unit,
-    onUploadCredentialClicked: () -> Unit,
     modifier: Modifier = Modifier,
     syncState: SyncQueueState? = null,
 ) {
@@ -53,7 +53,6 @@ fun SettingsScreen(
         state = state,
         dispatch = vm::dispatch,
         onAddRootClicked = onAddRootClicked,
-        onUploadCredentialClicked = onUploadCredentialClicked,
         modifier = modifier,
         syncState = syncState,
     )
@@ -65,11 +64,9 @@ internal fun SettingsContent(
     state: SettingsViewModel.State,
     dispatch: (SettingsViewModel.Intent) -> Unit,
     onAddRootClicked: () -> Unit,
-    onUploadCredentialClicked: () -> Unit,
     modifier: Modifier = Modifier,
     syncState: SyncQueueState? = null,
 ) {
-    var showCloud by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
     Column(
         modifier = modifier
@@ -125,6 +122,71 @@ internal fun SettingsContent(
             }
 
             Section(
+                title = "Cloud",
+                hint = "Sign in with Google so Sketchbook can sync your projects.",
+            ) {
+                Surface(
+                    color = AppTheme.colors.tintBlue,
+                    elevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
+                        when (val auth = state.auth) {
+                            is AuthState.SignedIn -> {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+                                ) {
+                                    Badge(color = AppTheme.colors.accentPositive) {
+                                        Text("signed in", style = AppTheme.typography.caption)
+                                    }
+                                    Text(auth.email, style = AppTheme.typography.body)
+                                }
+                                Button(
+                                    onClick = { dispatch(SettingsViewModel.Intent.SignOut) },
+                                    variant = ButtonVariant.Ghost,
+                                ) { Text("Sign out") }
+                            }
+
+                            AuthState.SignedOut -> {
+                                Text(
+                                    "Not signed in. Cloud sync is disabled until you sign in.",
+                                    style = AppTheme.typography.body,
+                                )
+                                Button(
+                                    onClick = { dispatch(SettingsViewModel.Intent.SignIn) },
+                                    variant = ButtonVariant.Primary,
+                                ) { Text("Sign in with Google") }
+                            }
+                        }
+                        var bucketDraft by remember(state.cloudBucket) {
+                            mutableStateOf(state.cloudBucket.orEmpty())
+                        }
+                        // Debounce dispatch so we don't trigger a SyncQueue + UserGraph rebuild
+                        // on every keystroke. 500 ms after the user stops typing the new bucket
+                        // is committed to settings; the LaunchedEffect's coroutine is cancelled
+                        // and re-launched on each subsequent keystroke.
+                        LaunchedEffect(bucketDraft) {
+                            if (bucketDraft != state.cloudBucket.orEmpty()) {
+                                delay(BUCKET_DEBOUNCE_MS)
+                                dispatch(
+                                    SettingsViewModel.Intent.SetCloudBucket(
+                                        bucketDraft.takeIf { it.isNotBlank() },
+                                    ),
+                                )
+                            }
+                        }
+                        com.sketchbook.uishared.components.TextField(
+                            value = bucketDraft,
+                            onChange = { bucketDraft = it },
+                            placeholder = "Bucket name (e.g. sketchbook-prod)",
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            Section(
                 title = "Local blob cache",
                 hint = "How much disk to spend on cached blobs that back rewinds and snapshots.",
             ) {
@@ -171,6 +233,12 @@ internal fun SettingsContent(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
+                            if (state.auth is AuthState.SignedOut) {
+                                Text(
+                                    "Sign in to enable sync.",
+                                    style = AppTheme.typography.caption,
+                                )
+                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
@@ -223,83 +291,6 @@ internal fun SettingsContent(
                         "${state.selfContainedProjects.size} project(s) skip cloud dedup. Toggle from each project's detail pane.",
                         style = AppTheme.typography.caption,
                     )
-                }
-            }
-
-            // Cloud sync is parked: at v1 it isn't actually wired through, and the bare
-            // "service-account JSON" button confuses anyone who isn't already running their
-            // own GCS bucket. Keep it tucked away under an Advanced disclosure.
-            Section(
-                title = "Advanced",
-                hint = "Power-user toggles. Most people can ignore this section.",
-            ) {
-                Button(
-                    onClick = { showCloud = !showCloud },
-                    variant = ButtonVariant.Ghost,
-                ) {
-                    Text(if (showCloud) "Hide cloud sync" else "Show cloud sync")
-                }
-                if (showCloud) {
-                    Surface(
-                        color = AppTheme.colors.tintBlue,
-                        padding = PaddingValues(AppTheme.spacing.md),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
-                            Text("Cloud sync (preview)", style = AppTheme.typography.bodyEmphasis)
-                            Text(
-                                "Sketchbook backs snapshots up to a Google Cloud Storage bucket so projects round-trip across machines. Drop in a service-account JSON with read/write on the bucket, then enter the bucket name below.",
-                                style = AppTheme.typography.body,
-                            )
-                            FlowRow(
-                                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-                                horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-                            ) {
-                                Badge(
-                                    color = if (state.cloudReady) {
-                                        AppTheme.colors.accentPositive
-                                    } else if (state.cloudConfigured) {
-                                        AppTheme.colors.accentWarning
-                                    } else {
-                                        AppTheme.colors.accentSecondary
-                                    },
-                                ) {
-                                    Text(
-                                        when {
-                                            state.cloudReady -> "ready"
-                                            state.cloudConfigured -> "needs bucket"
-                                            else -> "not configured"
-                                        },
-                                        style = AppTheme.typography.caption,
-                                    )
-                                }
-                                Button(onClick = onUploadCredentialClicked, variant = ButtonVariant.Secondary) {
-                                    Text(if (state.cloudConfigured) "Replace credential…" else "Choose JSON…")
-                                }
-                                if (state.cloudConfigured) {
-                                    Button(
-                                        onClick = { dispatch(SettingsViewModel.Intent.SetCloudCredential(null)) },
-                                        variant = ButtonVariant.Ghost,
-                                    ) { Text("Clear") }
-                                }
-                            }
-                            // Bucket name field. Saved on every keystroke (in-memory store; the
-                            // flow rebuilds the SyncQueue on transition to ready/unready, not
-                            // on every typed char — distinctUntilChanged on cloudReady).
-                            var bucketDraft by remember(state.cloudBucket) {
-                                mutableStateOf(state.cloudBucket.orEmpty())
-                            }
-                            com.sketchbook.uishared.components.TextField(
-                                value = bucketDraft,
-                                onChange = {
-                                    bucketDraft = it
-                                    dispatch(SettingsViewModel.Intent.SetCloudBucket(it.takeIf { v -> v.isNotBlank() }))
-                                },
-                                placeholder = "Bucket name (e.g. sketchbook-srmarlins)",
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -363,3 +354,5 @@ private fun LibraryRootCard(root: LibraryRoot, onRemove: () -> Unit) {
         }
     }
 }
+
+private const val BUCKET_DEBOUNCE_MS: Long = 500

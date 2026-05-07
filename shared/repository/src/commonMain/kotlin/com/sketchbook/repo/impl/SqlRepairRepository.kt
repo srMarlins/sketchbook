@@ -18,6 +18,7 @@ import com.sketchbook.repo.SampleCandidate
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -141,7 +142,10 @@ class SqlRepairRepository(
     }
 
     override suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
+        // Don't use `runCatching` at suspend boundaries: it catches `Throwable` including
+        // `CancellationException`, silently breaking structured concurrency. Pattern matches
+        // `SqlJournalRepository.append` / `SqlSnapshotRepository.setSnapshotLabel`.
+        try {
             catalog.transaction {
                 catalog.catalogQueries.insertRepairAck(
                     scope = SCOPE_MAC,
@@ -151,15 +155,26 @@ class SqlRepairRepository(
                 )
             }
             ackTick.value = ackTick.value + 1
+            Result.success(Unit)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 
     override suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
-            val alsPath = catalog.catalogQueries
+        try {
+            // Capture name + path together up front. Both feed the journal entry's denorm
+            // columns so the History row stays resolvable even if a concurrent rescan orphans
+            // the project_id between this lookup and the journal append below. Without this,
+            // the journal append's auto-fill would re-query and miss → projectName/Path NULL →
+            // History column degrades to the "project #N" sentinel.
+            val projectRow = catalog.catalogQueries
                 .selectProjectById(projectId.value)
                 .executeAsOne()
-                .path
+            val alsPath = projectRow.path
+            val projectName = projectRow.name
 
             // Scan the .als for `<Path Value="..."/>` entries inside `<SampleRef>` that carry
             // a Mac-style `Volume:` prefix. The catalog's `mac_paths_count` flag also fires on
@@ -205,7 +220,10 @@ class SqlRepairRepository(
                     val edits = mapping.map { (mac, posix) ->
                         SampleRefEdit(oldPath = mac, newPath = posix, newOriginalCrc = 0L)
                     }
+                    // patch() is suspend; rethrow CancellationException so structured concurrency
+                    // isn't silently swallowed if AlsPatcher ever becomes truly async.
                     runCatching { patcher.patch(alsPath, edits) }
+                        .onFailure { if (it is CancellationException) throw it }
                         .getOrElse { AlsPatchService.Outcome.Failed }
                 }
             }
@@ -224,13 +242,19 @@ class SqlRepairRepository(
                 JournalEntry(
                     timestamp = Clock.System.now(),
                     projectId = projectId,
+                    projectName = projectName,
+                    projectPath = alsPath,
                     action = ActionRecord.MacPathRepaired(
                         mappingCount = mapping.size,
                         alsOutcome = outcome.name,
                     ),
                 ),
             )
-            Unit
+            Result.success(Unit)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 
@@ -238,7 +262,7 @@ class SqlRepairRepository(
         projectId: ProjectId,
         missingPath: String,
     ): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
+        try {
             catalog.transaction {
                 catalog.catalogQueries.insertRepairAck(
                     scope = SCOPE_MISS,
@@ -248,6 +272,11 @@ class SqlRepairRepository(
                 )
             }
             ackTick.value = ackTick.value + 1
+            Result.success(Unit)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 
@@ -256,7 +285,7 @@ class SqlRepairRepository(
         missingPath: String,
         candidatePath: String,
     ): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
+        try {
             // Resolve the on-disk .als path before any catalog mutation so the patcher and the
             // journal entry agree on which file the user actually edited (a concurrent rename
             // would otherwise split the audit trail).
@@ -313,9 +342,11 @@ class SqlRepairRepository(
             val outcome = if (snapshotResult.isFailure) {
                 AlsPatchService.Outcome.Failed
             } else {
-                runCatching {
-                    patcher.patch(alsPath, listOf(edit))
-                }.getOrElse { AlsPatchService.Outcome.Failed }
+                // patch() is suspend; rethrow CancellationException so structured concurrency
+                // isn't silently swallowed if AlsPatcher ever becomes truly async.
+                runCatching { patcher.patch(alsPath, listOf(edit)) }
+                    .onFailure { if (it is CancellationException) throw it }
+                    .getOrElse { AlsPatchService.Outcome.Failed }
             }
 
             catalog.transaction {
@@ -342,7 +373,11 @@ class SqlRepairRepository(
                     ),
                 ),
             )
-            Unit
+            Result.success(Unit)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 
@@ -351,7 +386,7 @@ class SqlRepairRepository(
         missingPath: String,
         candidatePath: String,
     ): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
+        try {
             val alsPath = catalog.catalogQueries
                 .selectProjectById(projectId.value)
                 .executeAsOne()
@@ -366,7 +401,10 @@ class SqlRepairRepository(
                 NO_UNDO_BYTES
             } else {
                 val bytes = Files.readAllBytes(sidecar)
+                // restore() is suspend; rethrow CancellationException so structured concurrency
+                // isn't silently swallowed if AlsPatcher ever becomes truly async.
                 val outcome = runCatching { patcher.restore(alsPath, bytes) }
+                    .onFailure { if (it is CancellationException) throw it }
                     .getOrElse { AlsPatchService.Outcome.Failed }
                 // Best-effort cleanup; a leftover sidecar is benign (next apply overwrites it).
                 runCatching { Files.deleteIfExists(sidecar) }
@@ -393,16 +431,24 @@ class SqlRepairRepository(
                     ),
                 ),
             )
-            Unit
+            Result.success(Unit)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 
     override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
-            val alsPath = catalog.catalogQueries
+            // Mirror applyMacPathRepair: capture name + path together so the journal entry
+            // carries both denorm columns even if the project_id is orphaned by a concurrent
+            // rescan between this lookup and the journal append below.
+            val projectRow = catalog.catalogQueries
                 .selectProjectById(projectId.value)
                 .executeAsOne()
-                .path
+            val alsPath = projectRow.path
+            val projectName = projectRow.name
 
             // Mirror restoreMissingSampleMatch: try to restore the .als from the sidecar
             // [applyMacPathRepair] wrote pre-patch. NoUndoBytes when the sidecar is gone
@@ -441,6 +487,8 @@ class SqlRepairRepository(
                 JournalEntry(
                     timestamp = Clock.System.now(),
                     projectId = projectId,
+                    projectName = projectName,
+                    projectPath = alsPath,
                     action = ActionRecord.MacPathRestored(
                         mappingCount = mappingCount,
                         alsOutcome = outcomeName,

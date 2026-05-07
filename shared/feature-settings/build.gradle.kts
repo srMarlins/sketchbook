@@ -9,6 +9,7 @@ plugins {
 kotlin {
     sourceSets {
         commonMain.dependencies {
+            implementation(project(":shared:auth"))
             implementation(project(":shared:core"))
             implementation(project(":shared:repository"))
             implementation(project(":shared:ui-shared"))

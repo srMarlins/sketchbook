@@ -4,6 +4,8 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.ExternalKind
 import com.sketchbook.repo.LibraryRoot
+import com.sketchbook.repo.OnboardingPromptKind
+import com.sketchbook.repo.OnboardingSkipFlags
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
 import kotlinx.coroutines.CoroutineDispatcher
@@ -17,7 +19,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import java.nio.file.Paths
 import java.util.prefs.Preferences
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * `java.util.prefs.Preferences`-backed settings store. Keys are versioned (`*_v1`) so the v1.1
@@ -43,6 +48,16 @@ class PreferencesSettingsRepository(
     private val mutex = Mutex()
     private val state = MutableStateFlow(read())
 
+    init {
+        // One-time legacy cleanup: pre-OAuth builds stored a service-account JSON blob in the
+        // prefs node. Drop it on first construction so old credentials don't sit at rest
+        // indefinitely once the user upgrades.
+        runCatching {
+            node.remove(KEY_LEGACY_CLOUD_CREDENTIAL)
+            node.flush()
+        }
+    }
+
     override fun observe(): Flow<Settings> = state
 
     override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> = withContext(ioDispatcher) {
@@ -66,20 +81,6 @@ class PreferencesSettingsRepository(
                 state.value = state.value.copy(libraryRoots = current.toList())
             }
         }
-        Result.success(Unit)
-    }
-
-    override suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit> = withContext(ioDispatcher) {
-        if (serviceAccountJson == null) {
-            node.remove(KEY_CLOUD_CREDENTIAL)
-        } else {
-            node.put(KEY_CLOUD_CREDENTIAL, serviceAccountJson)
-        }
-        node.flush()
-        state.value = state.value.copy(
-            cloudCredentialJson = serviceAccountJson,
-            cloudConfigured = serviceAccountJson != null,
-        )
         Result.success(Unit)
     }
 
@@ -115,21 +116,89 @@ class PreferencesSettingsRepository(
         Result.success(Unit)
     }
 
+    override suspend fun markFirstRunComplete(flags: OnboardingSkipFlags): Result<Unit> = withContext(ioDispatcher) {
+        mutex.withLock {
+            val now = Clock.System.now()
+            // Atomic: write all keys, flush once, then publish a single Settings emission so
+            // observers see timestamp + flags together (never one without the other).
+            node.put(KEY_FIRST_RUN_COMPLETED_AT, now.toString())
+            node.putBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, flags.samplesSkipped)
+            node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, flags.samplesPromptDismissed)
+            node.flush()
+            state.value = state.value.copy(
+                firstRunCompletedAt = now,
+                onboardingSkipped = flags,
+            )
+        }
+        Result.success(Unit)
+    }
+
+    override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> = withContext(ioDispatcher) {
+        mutex.withLock {
+            val current = state.value.onboardingSkipped
+            val updated = when (kind) {
+                OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
+            }
+            node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, updated.samplesPromptDismissed)
+            node.flush()
+            state.value = state.value.copy(onboardingSkipped = updated)
+        }
+        Result.success(Unit)
+    }
+
+    override suspend fun resetFirstRun(): Result<Unit> = withContext(ioDispatcher) {
+        mutex.withLock {
+            // Atomic: clear all three onboarding-gate keys, flush once, then publish a single
+            // Settings emission so observers see the reset state in one shot. Roots / plugin
+            // folders / cloud config are intentionally untouched — this is only for re-triggering
+            // the onboarding flow in dev.
+            node.remove(KEY_FIRST_RUN_COMPLETED_AT)
+            node.remove(KEY_ONBOARDING_SAMPLES_SKIPPED)
+            node.remove(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED)
+            node.flush()
+            state.value = state.value.copy(
+                firstRunCompletedAt = null,
+                onboardingSkipped = OnboardingSkipFlags(),
+            )
+        }
+        Result.success(Unit)
+    }
+
+    override suspend fun setPluginFolders(folders: List<String>): Result<Unit> = withContext(ioDispatcher) {
+        val normalized = folders
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .map { Paths.get(it).toAbsolutePath().normalize().toString() }
+            .distinct()
+            .toList()
+        writePluginFolders(normalized)
+        state.value = state.value.copy(pluginFolders = normalized)
+        Result.success(Unit)
+    }
+
     // ---- read helpers --------------------------------------------------------------------------
 
     private fun read(): Settings {
         val roots = readRoots()
-        val cred = node.get(KEY_CLOUD_CREDENTIAL, null)
         val bucket = node.get(KEY_CLOUD_BUCKET, null)?.takeIf { it.isNotBlank() }
         val selfContained = readSelfContained()
         val cache = readCacheSettings()
+        val firstRunCompletedAt = node.get(KEY_FIRST_RUN_COMPLETED_AT, null)
+            ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+        val onboardingSkipped = OnboardingSkipFlags(
+            samplesSkipped = node.getBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, false),
+            samplesPromptDismissed = node.getBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, false),
+        )
+        val pluginFolders = readPluginFolders()
         return Settings(
             libraryRoots = roots,
-            cloudConfigured = cred != null,
             selfContainedProjects = selfContained,
             cacheSettings = cache,
-            cloudCredentialJson = cred,
             cloudBucket = bucket,
+            firstRunCompletedAt = firstRunCompletedAt,
+            onboardingSkipped = onboardingSkipped,
+            pluginFolders = pluginFolders,
         )
     }
 
@@ -165,6 +234,22 @@ class PreferencesSettingsRepository(
             values.map { it.value },
         )
         node.put(KEY_SELF_CONTAINED, payload)
+        node.flush()
+    }
+
+    private fun readPluginFolders(): List<String> {
+        val raw = node.get(KEY_PLUGIN_FOLDERS, null) ?: return emptyList()
+        return runCatching {
+            json.decodeFromString(ListSerializer(String.serializer()), raw)
+        }.getOrDefault(emptyList())
+    }
+
+    private fun writePluginFolders(folders: List<String>) {
+        val payload = json.encodeToString(
+            ListSerializer(String.serializer()),
+            folders,
+        )
+        node.put(KEY_PLUGIN_FOLDERS, payload)
         node.flush()
     }
 
@@ -215,11 +300,21 @@ class PreferencesSettingsRepository(
 
     private companion object {
         const val KEY_ROOTS = "library_roots_v1"
-        const val KEY_CLOUD_CREDENTIAL = "cloud_credential_json"
         const val KEY_CLOUD_BUCKET = "cloud_bucket"
         const val KEY_SELF_CONTAINED = "self_contained_uuids_v1"
         const val KEY_CACHE_MAX_BYTES = "cache_max_bytes"
         const val KEY_CACHE_LRU = "cache_lru_enabled"
+        const val KEY_FIRST_RUN_COMPLETED_AT = "first_run_completed_at_v1"
+        const val KEY_ONBOARDING_SAMPLES_SKIPPED = "onboarding_samples_skipped_v1"
+        const val KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED = "onboarding_samples_prompt_dismissed_v1"
+        const val KEY_PLUGIN_FOLDERS = "plugin_folders_v1"
+
+        /**
+         * Pre-OAuth builds wrote a service-account JSON blob under this key. Cleared at startup so
+         * upgrading users don't leave credentials on disk; safe to drop for good once the migration
+         * window has passed.
+         */
+        const val KEY_LEGACY_CLOUD_CREDENTIAL = "cloud_credential_json"
 
         val json: Json = Json {
             ignoreUnknownKeys = true

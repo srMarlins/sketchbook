@@ -1,6 +1,11 @@
 package com.sketchbook.desktop
 
 import com.sketchbook.actions.ProposalActionExecutor
+import com.sketchbook.auth.AuthSession
+import com.sketchbook.auth.GoogleAuthSession
+import com.sketchbook.auth.KeyringTokenStore
+import com.sketchbook.auth.OAuthClient
+import com.sketchbook.auth.TokenStore
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.CatalogFts
 import com.sketchbook.catalog.CatalogHandle
@@ -11,6 +16,8 @@ import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.desktop.auth.DesktopAuthSession
+import com.sketchbook.desktop.auth.PrefsIdentityStore
 import com.sketchbook.desktop.repo.LeasedLockRepository
 import com.sketchbook.desktop.repo.PreferencesSettingsRepository
 import com.sketchbook.desktop.repo.SwappableSyncQueue
@@ -35,6 +42,8 @@ import dev.zacsweers.metro.Provides
 import dev.zacsweers.metro.SingleIn
 import dev.zacsweers.metro.createGraph
 import dev.zacsweers.metrox.viewmodel.ViewModelGraph
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,6 +83,7 @@ import java.util.prefs.Preferences
 interface DesktopAppGraph : ViewModelGraph {
 
     val appScope: CoroutineScope
+    val authSession: AuthSession
     val catalogHandle: CatalogHandle
     val catalog: Catalog
     val catalogFts: CatalogFts
@@ -90,6 +100,8 @@ interface DesktopAppGraph : ViewModelGraph {
     val lockRepository: LockRepository
     val syncQueue: SyncQueue
     val libraryScanCoordinator: LibraryScanCoordinator
+    val userGraphHolder: UserGraphHolder
+    val launchGate: LaunchGate
 
     // `metroViewModelFactory` is inherited from [ViewModelGraph] — the contributed
     // `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject` ViewModel map is plumbed
@@ -197,13 +209,16 @@ interface DesktopAppGraph : ViewModelGraph {
     @Provides
     @SingleIn(AppScope::class)
     fun provideSyncQueue(
+        authSession: AuthSession,
         settings: SettingsRepository,
         projects: ProjectRepository,
         store: SyncStateStore,
         catalog: Catalog,
         journal: JournalRepository,
+        httpClient: HttpClient,
         scope: CoroutineScope,
     ): SyncQueue = SwappableSyncQueue(
+        authSession = authSession,
         settings = settings,
         projects = projects,
         syncStateStore = store,
@@ -213,8 +228,73 @@ interface DesktopAppGraph : ViewModelGraph {
         hostId = hostIdentity().id,
         hostName = hostIdentity().name,
         journal = journal,
+        httpClient = httpClient,
     )
+
+    /**
+     * Application-lifetime [HttpClient]. Shared by every service that needs to make network
+     * calls (OAuth, GCS, token revoke). One CIO connection pool app-wide is the right default —
+     * each independent client would carry its own selector thread + connection pool, and HTTP/1.1
+     * keep-alive across calls dies on a per-instance boundary.
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideHttpClient(): HttpClient = HttpClient(CIO)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideTokenStore(): TokenStore = KeyringTokenStore(
+        serviceName = "com.sketchbook.refresh",
+        accountName = "default",
+    )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideIdentityStore(): PrefsIdentityStore = PrefsIdentityStore(
+        node = Preferences.userNodeForPackage(PrefsIdentityStore::class.java),
+    )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideOAuthClient(httpClient: HttpClient): OAuthClient = OAuthClient(
+        httpClient = httpClient,
+        clientId = OAUTH_CLIENT_ID,
+        scopes = listOf(
+            "openid",
+            "email",
+            "https://www.googleapis.com/auth/devstorage.read_write",
+        ),
+    )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideAuthSession(
+        tokenStore: TokenStore,
+        identityStore: PrefsIdentityStore,
+        oauthClient: OAuthClient,
+        httpClient: HttpClient,
+        appScope: CoroutineScope,
+    ): AuthSession {
+        val inner = GoogleAuthSession(
+            tokenStore = tokenStore,
+            oauthClient = oauthClient,
+            httpClient = httpClient,
+            scope = appScope,
+        )
+        return DesktopAuthSession(
+            inner = inner,
+            identityStore = identityStore,
+            scope = appScope,
+        )
+    }
 }
+
+/**
+ * OAuth 2.0 desktop client ID for Sketchbook. Public clients have no secret — PKCE proves
+ * the client. Created in the Google Cloud console under "OAuth 2.0 Client IDs" → Application
+ * type "Desktop app". If you fork this repo, replace this with your own client ID.
+ */
+private const val OAUTH_CLIENT_ID = "REPLACE_ME.apps.googleusercontent.com"
 
 /**
  * Stable per-machine identity used by the sync pipeline as `hostId` (lease ownership) and

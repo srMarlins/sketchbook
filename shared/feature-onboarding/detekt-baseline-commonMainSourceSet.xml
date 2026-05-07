@@ -1,0 +1,25 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ClassSignature:OnboardingViewModel.kt:OnboardingViewModel : ViewModel</ID>
+    <ID>FunctionNaming:DoneStep.kt:@Composable fun DoneStep</ID>
+    <ID>FunctionNaming:FolderRow.kt:@Composable internal fun FolderRow</ID>
+    <ID>FunctionNaming:InkDots.kt:@Composable fun InkDots</ID>
+    <ID>FunctionNaming:OnboardingScreen.kt:@Composable private fun FooterRow</ID>
+    <ID>FunctionNaming:OnboardingScreen.kt:@Suppress("UnusedParameter") @Composable fun OnboardingScreen</ID>
+    <ID>FunctionNaming:PluginFoldersStep.kt:@Composable fun PluginFoldersStep</ID>
+    <ID>FunctionNaming:ProjectsRootsStep.kt:@Composable fun ProjectsRootsStep</ID>
+    <ID>FunctionNaming:ProjectsRootsStep.kt:@Composable internal fun AddFolderButton</ID>
+    <ID>FunctionNaming:SampleRootsStep.kt:@Composable fun SampleRootsStep</ID>
+    <ID>FunctionNaming:StampCard.kt:@Composable fun StampCard</ID>
+    <ID>FunctionNaming:TypingHeading.kt:@OptIn(ExperimentalLayoutApi::class) @Composable fun TypingHeading</ID>
+    <ID>FunctionNaming:WelcomeStep.kt:@Composable fun WelcomeStep</ID>
+    <ID>FunctionSignature:DoneStep.kt:@Composable fun DoneStep</ID>
+    <ID>FunctionSignature:StampCard.kt:@Composable fun StampCard</ID>
+    <ID>FunctionSignature:TypingHeading.kt:@OptIn(ExperimentalLayoutApi::class) @Composable fun TypingHeading</ID>
+    <ID>FunctionSignature:WelcomeStep.kt:@Composable fun WelcomeStep</ID>
+    <ID>LongMethod:PluginFoldersStep.kt:@Composable fun PluginFoldersStep</ID>
+    <ID>ParameterListWrapping:OnboardingViewModel.kt:OnboardingViewModel$(private val repository: SettingsRepository, private val scanTrigger: ScanTrigger)</ID>
+  </CurrentIssues>
+</SmellBaseline>

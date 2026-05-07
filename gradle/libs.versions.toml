@@ -38,6 +38,10 @@ kermit = "2.1.0"
 # Filesystem (JVM)
 directory-watcher = "0.19.1"
 
+# OS keychain (JVM) — javakeyring wraps Keychain (macOS), Credential Manager (Windows),
+# libsecret (Linux) so the desktop app can persist OAuth refresh tokens natively.
+javakeyring = "1.0.4"
+
 # Hashing — design's `io.lktk:blake3-jni` is not on Maven Central; rctcwyvrn:blake3 is a
 # pure-Java port (slower than the JNI binding but cross-platform and zero-dep). Re-evaluate
 # with a vendored JNI wrapper if profiling shows the hash phase as a bottleneck.
@@ -102,6 +106,9 @@ kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 # Filesystem (JVM)
 directory-watcher = { module = "io.methvin:directory-watcher", version.ref = "directory-watcher" }
 blake3 = { module = "io.github.rctcwyvrn:blake3", version.ref = "blake3" }
+
+# OS keychain (JVM)
+javakeyring = { module = "com.github.javakeyring:java-keyring", version.ref = "javakeyring" }
 
 # UI
 material3-adaptive = { module = "org.jetbrains.compose.material3.adaptive:adaptive", version.ref = "material3-adaptive" }

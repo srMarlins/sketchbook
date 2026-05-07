@@ -138,10 +138,24 @@ object CatalogDb {
                     // before 5.sqm
                     !columnExists(driver, "project_plugins", "is_installed") -> 5L
 
-                    // before 7.sqm — project_name added by this PR's 7.sqm
+                    // before 7.sqm — project_name column added by 7.sqm
                     !columnExists(driver, "journal_entries", "project_name") -> 7L
 
-                    else -> target
+                    // before 9.sqm — project_path column added by 9.sqm. Sits between the
+                    // project_name tier and the data-backfill else so a DB that already has
+                    // project_name but not project_path detects as v8 (post-7.sqm, pre-9.sqm).
+                    // Returning 8L runs 8.sqm's UPDATE (idempotent via WHERE project_name IS
+                    // NULL) and then 9.sqm's ADD COLUMN + backfill.
+                    !columnExists(driver, "journal_entries", "project_path") -> 8L
+
+                    // Pre-tracking DBs that already have both denorm columns present are at v9
+                    // effectively (post-9.sqm structurally; data backfills are idempotent). Return
+                    // target-1 so migrate(9, target) re-runs 9.sqm's UPDATE — same trick the prior
+                    // commit used to backfill 8.sqm via this branch. The 9.sqm ALTER would be the
+                    // re-run risk, but this branch is unreachable in practice: any DB with a
+                    // project_path column was created by *this* PR's migration path, which writes
+                    // user_version, so it'd never land in `current == 0L`.
+                    else -> target - 1
                 }
                 if (detected < target) {
                     Catalog.Schema.migrate(driver, detected, target)

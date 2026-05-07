@@ -66,5 +66,8 @@ jobs:
       - name: Build :app-desktop (the bundle Conveyor packages)
         run: ./gradlew --no-daemon :app-desktop:build
 
+      - name: Build :app-mcp (paired CLI shipped alongside the desktop app)
+        run: ./gradlew --no-daemon :app-mcp:build :app-mcp:installDist
+
       - name: Print conveyor config (catches printConveyorConfig regressions)
         run: ./gradlew -q :app-desktop:printConveyorConfig

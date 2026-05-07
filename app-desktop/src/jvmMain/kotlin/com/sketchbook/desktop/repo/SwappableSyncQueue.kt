@@ -1,14 +1,15 @@
 package com.sketchbook.desktop.repo
 
+import com.sketchbook.auth.AuthSession
+import com.sketchbook.auth.AuthState
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.DirectGcsBackend
-import com.sketchbook.cloud.GcsAuth
-import com.sketchbook.cloud.ServiceAccountKey
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.UserId
+import com.sketchbook.desktop.auth.OAuthCloudCredentials
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.ProjectRepository
@@ -22,30 +23,31 @@ import com.sketchbook.sync.JvmBlobCache
 import com.sketchbook.sync.SnapshotPipeline
 import com.sketchbook.syncio.ManifestMaterializer
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.UUID
 
 /**
- * Façade over the actual sync queue impl. The cloud backend is only constructible once
- * credentials + bucket land in [SettingsRepository]; until then, calls route through
- * [InMemorySyncQueue] so the UI's per-row pip and sidebar caption have something to bind to.
+ * Façade over the actual sync queue impl. The cloud backend is only constructible once the user
+ * has signed in via OAuth AND a bucket is configured in [SettingsRepository]; until then, calls
+ * route through [InMemorySyncQueue] so the UI's per-row pip and sidebar caption have something to
+ * bind to.
  *
- * Swap logic: a coroutine on the app scope watches `Settings.cloudReady`. When it transitions
- * true, build a real [GcsSyncQueue]; when it transitions false, fall back to in-memory. Active
- * uploads from the previous impl are not migrated — they finish on the previous instance and
- * the new instance picks up state from the catalog (`sync_state` rows).
+ * Swap logic: a coroutine on the app scope `combine`s [AuthSession.state] with
+ * [Settings.cloudBucket]. When both are usable (`SignedIn` + non-blank bucket), build a real
+ * [GcsSyncQueue] wired with [OAuthCloudCredentials] and the real signed-in `userId`; otherwise
+ * fall back to in-memory. Active uploads from the previous impl are not migrated — they finish on
+ * the previous instance and the new instance picks up state from the catalog (`sync_state` rows).
  *
  * **Thread-model.** The delegate is a [MutableStateFlow]; reads `flatMapLatest` over it so a
  * swap mid-observation transparently re-subscribes. UI snapshot accessors call through the
@@ -53,6 +55,7 @@ import java.util.UUID
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SwappableSyncQueue(
+    private val authSession: AuthSession,
     private val settings: SettingsRepository,
     private val projects: ProjectRepository,
     private val syncStateStore: SyncStateStore,
@@ -62,8 +65,7 @@ class SwappableSyncQueue(
     private val hostId: String,
     private val hostName: String,
     private val journal: JournalRepository? = null,
-    private val httpClient: HttpClient = HttpClient(CIO),
-    private val json: Json = Json { ignoreUnknownKeys = false },
+    private val httpClient: HttpClient,
 ) : SyncQueue,
     ForceSnapshotPipeline {
 
@@ -90,14 +92,21 @@ class SwappableSyncQueue(
 
     init {
         scope.launch {
-            settings.observe()
-                .map { it.cloudReady to (it.cloudCredentialJson to it.cloudBucket) }
+            // Re-build the queue when EITHER auth state OR bucket changes.
+            combine(
+                authSession.state,
+                settings.observe().map { it.cloudBucket }.distinctUntilChanged(),
+            ) { auth, bucket -> auth to bucket }
                 .distinctUntilChanged()
-                .collect { (ready, pair) ->
-                    val (credJson, bucket) = pair
+                .collect { (auth, bucket) ->
                     val previous = delegate.value
-                    val next = if (ready && credJson != null && bucket != null) {
-                        buildGcsQueue(credJson, bucket)
+                    val next = if (auth is AuthState.SignedIn && !bucket.isNullOrBlank()) {
+                        buildGcsQueue(
+                            authSession = authSession,
+                            userId = auth.userId,
+                            bucket = bucket,
+                            cacheSettings = settings.observe().first().cacheSettings,
+                        )
                     } else {
                         currentMaterializer = null
                         _currentCloud.value = null
@@ -115,27 +124,32 @@ class SwappableSyncQueue(
         }
     }
 
-    private fun buildGcsQueue(credentialJson: String, bucket: String): SyncQueue = runCatching {
-        val key = json.decodeFromString(ServiceAccountKey.serializer(), credentialJson)
-        val auth = GcsAuth(key = key, httpClient = httpClient)
+    private fun buildGcsQueue(
+        authSession: AuthSession,
+        userId: UserId,
+        bucket: String,
+        cacheSettings: BlobCacheSettings,
+    ): SyncQueue = runCatching {
+        val credentials = OAuthCloudCredentials(authSession)
         val backend = DirectGcsBackend(
             http = httpClient,
-            auth = auth,
+            credentials = credentials,
             bucket = bucket,
-            userId = UserId.DEFAULT,
+            userId = userId,
         )
         val pipeline = SnapshotPipeline(
             cloud = backend,
-            ownerUserId = UserId.DEFAULT,
+            ownerUserId = userId,
             hostId = hostId,
             hostName = hostName,
         )
-        // Build the materializer alongside the queue so Timeline rewind works the moment
-        // creds land. Cache settings come from settings.observe() — we read once here; a
-        // cache-policy change forces the user to re-toggle creds today (rare, acceptable).
-        val cacheSettings: () -> BlobCacheSettings = {
-            kotlinx.coroutines.runBlocking { settings.observe().first() }.cacheSettings
-        }
+        // Materializer is built alongside the queue so Timeline rewind works the moment creds
+        // land. Cache settings are snapshot-on-build (passed in by the caller, which collects
+        // settings.observe() in its suspend collect): a cache-policy change forces the user to
+        // re-toggle creds today, which is rare and acceptable. The previous wiring used a
+        // `() -> BlobCacheSettings` lambda with runBlocking around `settings.observe().first()`
+        // on every cache eviction check; that hot-path call is now eliminated. projectRoot
+        // legitimately needs late binding (different uuid per call) and stays a suspend lambda.
         val blobCache = JvmBlobCache(
             catalog = catalog,
             cacheRoot = blobCacheRoot,
@@ -149,9 +163,8 @@ class SwappableSyncQueue(
             projectRoot = { uuid ->
                 val pid = syncStateStore.projectIdFor(uuid)
                     ?: throw IllegalStateException("no local project for uuid $uuid")
-                val row = kotlinx.coroutines.runBlocking {
-                    projects.observeProject(pid).first()
-                } ?: throw IllegalStateException("project row $pid not found")
+                val row = projects.observeProject(pid).first()
+                    ?: throw IllegalStateException("project row $pid not found")
                 val parent = Paths.get(row.path.value).parent
                     ?: throw IllegalStateException("project path has no parent: ${row.path.value}")
                 parent
@@ -166,8 +179,8 @@ class SwappableSyncQueue(
             journal = journal,
         )
     }.getOrElse {
-        // Bad creds JSON or unsupported scheme — fall back to in-memory so the UI keeps
-        // rendering. The error surfaces via Settings → Test connection.
+        // Bad creds or unsupported config — fall back to in-memory so the UI keeps rendering.
+        // The error surfaces via the next access-token request when a sync attempt actually runs.
         currentMaterializer = null
         _currentCloud.value = null
         fallback
@@ -189,7 +202,7 @@ class SwappableSyncQueue(
         is GcsSyncQueue -> current.recordForcedNamed(uuid, label)
 
         else -> Result.failure(
-            IllegalStateException("Cloud sync isn't configured — set credentials in Settings first."),
+            IllegalStateException("Cloud sync isn't configured — sign in and set a bucket in Settings first."),
         )
     }
 

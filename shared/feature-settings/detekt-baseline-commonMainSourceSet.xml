@@ -15,14 +15,13 @@
     <ID>FunctionNaming:SettingsScreen.kt:@Composable private fun Section</ID>
     <ID>FunctionNaming:SettingsScreen.kt:@OptIn(ExperimentalLayoutApi::class) @Composable fun SettingsScreen</ID>
     <ID>FunctionNaming:SettingsScreen.kt:@OptIn(ExperimentalLayoutApi::class) @Composable internal fun SettingsContent</ID>
+    <ID>LambdaParameterInRestartableEffect:SettingsScreen.kt:dispatch: (SettingsViewModel.Intent) -&gt; Unit</ID>
     <ID>LongMethod:SettingsScreen.kt:@OptIn(ExperimentalLayoutApi::class) @Composable internal fun SettingsContent</ID>
     <ID>MagicNumber:SettingsScreen.kt:1024</ID>
     <ID>MagicNumber:SettingsScreen.kt:3600</ID>
     <ID>MagicNumber:SettingsScreen.kt:60</ID>
     <ID>MagicNumber:SettingsScreen.kt:86_400</ID>
     <ID>MaxLineLength:SettingsScreen.kt:"Pending ${syncState.pending} · Uploading ${syncState.uploading} · Downloading ${syncState.downloading}"</ID>
-    <ID>MaxLineLength:SettingsScreen.kt:"Sketchbook backs snapshots up to a Google Cloud Storage bucket so projects round-trip across machines. Drop in a service-account JSON with read/write on the bucket, then enter the bucket name below."</ID>
     <ID>ParameterNaming:SettingsScreen.kt:onAddRootClicked: () -&gt; Unit</ID>
-    <ID>ParameterNaming:SettingsScreen.kt:onUploadCredentialClicked: () -&gt; Unit</ID>
   </CurrentIssues>
 </SmellBaseline>

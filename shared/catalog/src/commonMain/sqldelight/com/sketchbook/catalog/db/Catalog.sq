@@ -238,6 +238,41 @@ insertOrReplaceProject:
 INSERT OR REPLACE INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, key, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes)
 VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :key, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :parse_error, :mac_paths_count, :effort_score, :effort_breakdown, :file_size_bytes);
 
+-- Plain INSERT — preserves the AUTOINCREMENT id semantics. Used by the rescan upsert path
+-- (read-then-update-or-insert) so a brand-new project gets a freshly-minted id while existing
+-- rows are reached via updateProjectByPath instead. Mirrors the column set of
+-- insertOrReplaceProject; do not switch this to OR REPLACE — that would re-introduce the
+-- delete-and-reinsert id churn this whole change is designed to prevent.
+insertProject:
+INSERT INTO projects (path, name, parent_dir, tempo, time_sig_num, time_sig_den, key, track_count, audio_tracks, midi_tracks, return_tracks, live_version, last_modified, last_scanned, parse_status, parse_error, mac_paths_count, effort_score, effort_breakdown, file_size_bytes)
+VALUES (:path, :name, :parent_dir, :tempo, :time_sig_num, :time_sig_den, :key, :track_count, :audio_tracks, :midi_tracks, :return_tracks, :live_version, :last_modified, :last_scanned, :parse_status, :parse_error, :mac_paths_count, :effort_score, :effort_breakdown, :file_size_bytes);
+
+-- Id-preserving update used by the rescan path. Same column set as insertOrReplaceProject minus
+-- the unique key (path stays put) and the autoincrement id. Targets by `path` because that's the
+-- column with the UNIQUE constraint scans key on.
+updateProjectByPath:
+UPDATE projects
+SET name = :name,
+    parent_dir = :parent_dir,
+    tempo = :tempo,
+    time_sig_num = :time_sig_num,
+    time_sig_den = :time_sig_den,
+    key = :key,
+    track_count = :track_count,
+    audio_tracks = :audio_tracks,
+    midi_tracks = :midi_tracks,
+    return_tracks = :return_tracks,
+    live_version = :live_version,
+    last_modified = :last_modified,
+    last_scanned = :last_scanned,
+    parse_status = :parse_status,
+    parse_error = :parse_error,
+    mac_paths_count = :mac_paths_count,
+    effort_score = :effort_score,
+    effort_breakdown = :effort_breakdown,
+    file_size_bytes = :file_size_bytes
+WHERE path = :path;
+
 insertProjectSampleWithMissing:
 INSERT INTO project_samples (project_id, sample_path, is_missing) VALUES (:project_id, :sample_path, :is_missing);
 
@@ -643,14 +678,18 @@ CREATE TABLE journal_entries (
   -- Denormalized project name captured at append time. Survives catalog rescans that drop or
   -- reassign project ids — without this, the History UI has no way to render a name for an
   -- orphaned entry beyond a "project #N" sentinel. Nullable for legacy rows written before v6.
-  project_name TEXT
+  project_name TEXT,
+  -- Denormalized project path captured at append time. Same survives-orphan reasoning as
+  -- project_name above: when the project_id stops resolving, ProjectDisplay's pathHint fallback
+  -- still has the original on-disk path to derive a name from. Nullable for legacy rows.
+  project_path TEXT
 );
 CREATE INDEX journal_entries_project_idx ON journal_entries(project_id, occurred_at DESC);
 CREATE INDEX journal_entries_recency_idx ON journal_entries(occurred_at DESC);
 
 insertJournalEntry:
-INSERT INTO journal_entries(occurred_at, actor, action_type, project_id, payload_json, project_name)
-VALUES (:occurred_at, :actor, :action_type, :project_id, :payload_json, :project_name);
+INSERT INTO journal_entries(occurred_at, actor, action_type, project_id, payload_json, project_name, project_path)
+VALUES (:occurred_at, :actor, :action_type, :project_id, :payload_json, :project_name, :project_path);
 
 -- ORDER BY (occurred_at, id) DESC — id is the secondary key so events that land in the same
 -- millisecond still come back in insertion order. undoLast() relies on this for determinism.

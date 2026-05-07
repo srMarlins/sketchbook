@@ -4,6 +4,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.runDesktopComposeUiTest
+import com.sketchbook.auth.AuthState
 import com.sketchbook.featuresettings.SettingsContent
 import com.sketchbook.featuresettings.SettingsViewModel
 import com.sketchbook.repo.BlobCacheSettings
@@ -23,7 +24,6 @@ class SettingsScreenshots {
                     state = sampleConfiguredState(),
                     dispatch = {},
                     onAddRootClicked = {},
-                    onUploadCredentialClicked = {},
                 )
             }
         }
@@ -41,9 +41,8 @@ private fun sampleConfiguredState(): SettingsViewModel.State = SettingsViewModel
             kind = ExternalKind.Splice,
         ),
     ),
-    cloudConfigured = false,
     cloudBucket = null,
-    cloudReady = false,
+    auth = AuthState.SignedOut,
     selfContainedProjects = emptySet(),
     cacheSettings = BlobCacheSettings(maxSizeBytes = 20L * 1024 * 1024 * 1024, lruEnabled = true),
     loading = false,

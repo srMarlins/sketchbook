@@ -43,11 +43,16 @@ class LibraryScanCoordinator(
     private val scannedProjects = mutableSetOf<String>()
     private val scannedSamples = mutableSetOf<String>()
 
+    private var started = false
+
     /**
-     * Begin observing settings and kicking scans. Safe to call once per app lifetime; calling
-     * twice would double-subscribe the settings flow.
+     * Begin observing settings and kicking scans. Idempotent — repeat calls are no-ops, so it's
+     * safe to invoke from both Main (app startup) and from the [ScanTrigger] hook fired when
+     * onboarding's Finish writes roots. The settings observer auto-picks-up new roots either way.
      */
     fun start() {
+        if (started) return
+        started = true
         scope.launch {
             settings.observe().collect { settingsState ->
                 kickProjectScanIfNeeded(settingsState.libraryRoots)

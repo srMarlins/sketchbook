@@ -3,14 +3,20 @@ package com.sketchbook.desktop.repo
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.ExternalKind
 import com.sketchbook.repo.LibraryRoot
+import com.sketchbook.repo.OnboardingPromptKind
+import com.sketchbook.repo.OnboardingSkipFlags
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import java.nio.file.Paths
 import java.util.UUID
 import java.util.prefs.Preferences
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -45,16 +51,25 @@ class PreferencesSettingsRepositoryTest {
     }
 
     @Test
-    fun roundtripsCredentialAndBucket() = runTest {
+    fun roundtripsBucket() = runTest {
         val first = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
-        first.setCloudCredential("{\"type\":\"sa\"}").getOrThrow()
         first.setCloudBucket("sketchbook-prod").getOrThrow()
 
         val second = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
         val s = second.observe().first()
-        assertEquals("{\"type\":\"sa\"}", s.cloudCredentialJson)
         assertEquals("sketchbook-prod", s.cloudBucket)
-        assertTrue(s.cloudReady)
+    }
+
+    @Test
+    fun clearsLegacyServiceAccountJsonOnInit() = runTest {
+        // Seed the legacy key directly to mimic an upgrading user.
+        node.put("cloud_credential_json", "{\"type\":\"service_account\"}")
+        node.flush()
+        assertEquals("{\"type\":\"service_account\"}", node.get("cloud_credential_json", null))
+
+        PreferencesSettingsRepository(node, Dispatchers.Unconfined)
+
+        assertEquals(null, node.get("cloud_credential_json", null))
     }
 
     @Test
@@ -69,6 +84,64 @@ class PreferencesSettingsRepositoryTest {
         first.setSelfContained(uuid, value = false).getOrThrow()
         val after = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
         assertEquals(emptySet(), after.observe().first().selfContainedProjects)
+    }
+
+    @Test
+    fun `markFirstRunComplete persists timestamp and skip flags`() = runTest {
+        val repo = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
+        val flags = OnboardingSkipFlags(samplesSkipped = true)
+
+        repo.markFirstRunComplete(flags).getOrThrow()
+
+        val snapshot = repo.observe().first()
+        assertNotNull(snapshot.firstRunCompletedAt)
+        assertEquals(flags, snapshot.onboardingSkipped)
+
+        // Survives restart.
+        val reloaded = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
+        val reloadedSnapshot = reloaded.observe().first()
+        assertNotNull(reloadedSnapshot.firstRunCompletedAt)
+        assertEquals(flags, reloadedSnapshot.onboardingSkipped)
+    }
+
+    @Test
+    fun `dismissOnboardingPrompt flips the matching flag`() = runTest {
+        val repo = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
+        repo.markFirstRunComplete(OnboardingSkipFlags(samplesSkipped = true)).getOrThrow()
+
+        repo.dismissOnboardingPrompt(OnboardingPromptKind.Samples).getOrThrow()
+
+        val snapshot = repo.observe().first()
+        assertTrue(snapshot.onboardingSkipped.samplesPromptDismissed)
+        assertTrue(snapshot.onboardingSkipped.samplesSkipped, "dismiss should not clobber other flags")
+    }
+
+    @Test
+    fun `setPluginFolders persists list and observe re-emits`() = runTest {
+        val repo = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
+        val raw = listOf("/Users/me/Plugins", "/Library/Audio/Plug-Ins/VST3")
+        val expected = raw.map { Paths.get(it).toAbsolutePath().normalize().toString() }
+
+        repo.setPluginFolders(raw).getOrThrow()
+
+        assertEquals(expected, repo.observe().first().pluginFolders)
+    }
+
+    @Test
+    fun `resetFirstRun clears firstRunCompletedAt and onboarding skip flags but keeps roots`() = runTest {
+        val repo = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
+        repo.upsertRoot(LibraryRoot.Projects("/foo")).getOrThrow()
+        repo.markFirstRunComplete(OnboardingSkipFlags(samplesSkipped = true)).getOrThrow()
+        repo.dismissOnboardingPrompt(OnboardingPromptKind.Samples).getOrThrow()
+
+        repo.resetFirstRun().getOrThrow()
+
+        val s = repo.observe().first()
+        assertNull(s.firstRunCompletedAt)
+        assertFalse(s.onboardingSkipped.samplesSkipped)
+        assertFalse(s.onboardingSkipped.samplesPromptDismissed)
+        // Roots survive — only the onboarding gate is reset.
+        assertEquals(listOf(LibraryRoot.Projects("/foo")), s.libraryRoots)
     }
 
     @Test

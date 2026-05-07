@@ -6,9 +6,17 @@ plugins {
     id("com.autonomousapps.dependency-analysis")
 }
 
+private val libsCatalog = the<org.gradle.api.artifacts.VersionCatalogsExtension>().named("libs")
+private val jvmToolchainVersion =
+    libsCatalog
+        .findVersion("jvm-toolchain")
+        .get()
+        .requiredVersion
+        .toInt()
+
 kotlin {
     jvm()
-    jvmToolchain(21)
+    jvmToolchain(jvmToolchainVersion)
 
     applyDefaultHierarchyTemplate()
 

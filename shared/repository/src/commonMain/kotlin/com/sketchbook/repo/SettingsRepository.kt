@@ -20,28 +20,66 @@ interface SettingsRepository {
     suspend fun upsertRoot(root: LibraryRoot): Result<Unit>
     suspend fun removeRoot(root: LibraryRoot): Result<Unit>
 
-    suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit>
-
     suspend fun setCloudBucket(bucket: String?): Result<Unit>
 
     suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit>
 
     suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit>
+
+    /**
+     * Marks onboarding complete with the given [skipFlags]. Atomic: `firstRunCompletedAt` and
+     * `onboardingSkipped` are emitted together so observers never see one without the other.
+     * After this call, `LaunchGate.resolve()` returns `MainApp`.
+     */
+    suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit>
+
+    /**
+     * Sticky-dismisses the soft re-prompt banner for [kind]. After dismissal, the corresponding
+     * banner does not reappear; the user can still re-discover the deferred setting via Settings.
+     */
+    suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit>
+
+    /**
+     * Replaces the user-configured plugin install directories. Paths are normalized (absolute,
+     * distinct, blanks dropped) on write. Empty list = use platform defaults (the JVM presence
+     * probe falls back to `defaultInstalledDirs()`).
+     */
+    suspend fun setPluginFolders(folders: List<String>): Result<Unit>
+
+    /**
+     * Dev-only escape hatch. Resets `firstRunCompletedAt` and `onboardingSkipped` to defaults so
+     * a returning user re-triggers onboarding on next launch. Triggered by `--reset-first-run`
+     * CLI flag in the desktop app. Does NOT touch library roots, plugin folders, or other
+     * settings — only the onboarding gate state.
+     */
+    suspend fun resetFirstRun(): Result<Unit>
 }
+
+enum class OnboardingPromptKind { Samples }
 
 data class Settings(
     val libraryRoots: List<LibraryRoot>,
-    val cloudConfigured: Boolean,
     val selfContainedProjects: Set<ProjectUuid>,
     val cacheSettings: BlobCacheSettings = BlobCacheSettings.Default,
-    /** Parsed-on-write GCS service-account JSON. Null when the user hasn't uploaded one. */
-    val cloudCredentialJson: String? = null,
     /** GCS bucket name for uploads. Null when unconfigured. */
     val cloudBucket: String? = null,
-) {
-    /** True iff both pieces of cloud config are present (creds + bucket). */
-    val cloudReady: Boolean get() = cloudCredentialJson != null && !cloudBucket.isNullOrBlank()
-}
+    /** Wall-clock instant the user finished onboarding (or skipped to defaults). Null until then. */
+    val firstRunCompletedAt: kotlin.time.Instant? = null,
+    /** Sticky flags for soft re-prompt banners on Home after onboarding completes. */
+    val onboardingSkipped: OnboardingSkipFlags = OnboardingSkipFlags(),
+    /**
+     * User-configurable plugin install directories. Empty = use platform defaults
+     * (the JVM probe falls back to `defaultInstalledDirs()` when this list is empty).
+     */
+    val pluginFolders: List<String> = emptyList(),
+)
+
+/**
+ * Sticky flags driving soft re-prompt banners on Home after onboarding completes — e.g. if the
+ * user skipped picking a samples root, surface a dismissible nudge until they either configure
+ * one or dismiss the prompt.
+ */
+data class OnboardingSkipFlags(val samplesSkipped: Boolean = false, val samplesPromptDismissed: Boolean = false)
 
 /**
  * Local blob cache policy. The sync engine consults this on every download to decide whether to
