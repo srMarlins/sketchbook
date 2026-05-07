@@ -84,9 +84,7 @@ private fun runApp(resetFirstRun: Boolean) = application {
     // and this state advances from Onboarding → MainApp, which transparently swaps the surface
     // from OnboardingScreen → RootContent.
     var decision: LaunchDecision? by remember { mutableStateOf(null) }
-    LaunchedEffect(graph) {
-        graph.launchGate.observe().collect { decision = it }
-    }
+    LaunchedEffect(graph) { graph.launchGate.observe().collect { decision = it } }
 
     Window(
         onCloseRequest = ::exitApplication,

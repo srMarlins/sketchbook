@@ -13,9 +13,7 @@ import dev.zacsweers.metro.Inject
  */
 @ContributesBinding(AppScope::class)
 @Inject
-class ScanTriggerImpl(
-    private val coordinator: LibraryScanCoordinator,
-) : ScanTrigger {
+class ScanTriggerImpl(private val coordinator: LibraryScanCoordinator) : ScanTrigger {
     override fun triggerScan() {
         coordinator.start()
     }

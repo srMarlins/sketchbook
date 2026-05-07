@@ -310,17 +310,16 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                                             panelProjectId = id
                                                             onDispose { panelProjectId = null }
                                                         }
-                                                        val detailVm: com.sketchbook.featuredetail.ProjectDetailViewModel =
-                                                            metroViewModel()
+                                                        val detailVm: ProjectDetailViewModel = metroViewModel()
                                                         LaunchedEffect(id) { detailVm.load(id) }
                                                         LaunchedEffect(detailVm) {
                                                             detailVm.effects.collect { e ->
                                                                 when (e) {
-                                                                    is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LaunchLive ->
+                                                                    is ProjectDetailViewModel.Effect.LaunchLive ->
                                                                         Os.openInLive(e.projectPath)
 
-                                                                    com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTaken,
-                                                                    is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTakeFailed,
+                                                                    ProjectDetailViewModel.Effect.LockTaken,
+                                                                    is ProjectDetailViewModel.Effect.LockTakeFailed,
                                                                     -> Unit
                                                                 }
                                                             }
@@ -336,7 +335,8 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                                             },
                                                             conflictMessageFor = if (chrome.syncWired) chrome::conflictMessage else null,
                                                             onOpenTimeline = { pid ->
-                                                                backStack.add(Screen.Timeline(chrome.timelineUuidFor(pid)))
+                                                                val uuid = chrome.timelineUuidFor(pid)
+                                                                backStack.add(Screen.Timeline(uuid))
                                                             },
                                                             // PR-AA: hand the Plugins tab the inverse query + a hook to swap
                                                             // the panel's project on click. Reusing the same `detailVm.load`

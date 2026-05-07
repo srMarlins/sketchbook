@@ -116,18 +116,18 @@ class PreferencesSettingsRepository(
         Result.success(Unit)
     }
 
-    override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit> = withContext(ioDispatcher) {
+    override suspend fun markFirstRunComplete(flags: OnboardingSkipFlags): Result<Unit> = withContext(ioDispatcher) {
         mutex.withLock {
             val now = Clock.System.now()
             // Atomic: write all keys, flush once, then publish a single Settings emission so
             // observers see timestamp + flags together (never one without the other).
             node.put(KEY_FIRST_RUN_COMPLETED_AT, now.toString())
-            node.putBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, skipFlags.samplesSkipped)
-            node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, skipFlags.samplesPromptDismissed)
+            node.putBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, flags.samplesSkipped)
+            node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, flags.samplesPromptDismissed)
             node.flush()
             state.value = state.value.copy(
                 firstRunCompletedAt = now,
-                onboardingSkipped = skipFlags,
+                onboardingSkipped = flags,
             )
         }
         Result.success(Unit)
