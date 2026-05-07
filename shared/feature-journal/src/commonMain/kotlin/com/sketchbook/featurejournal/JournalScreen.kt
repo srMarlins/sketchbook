@@ -255,12 +255,22 @@ private fun JournalRowItem(
             Spacer(modifier = Modifier.weight(1f))
         }
         if (label.detail != null) {
+            // Ellipsise detail so a long path doesn't push the time + undo affordance off
+            // the right edge of the row (caught in PR-C review of the Inbox capture, where
+            // a long Move detail clipped the trailing time to a single character).
             ProvideContentColor(AppTheme.colors.inkMuted) {
-                Text(label.detail, style = AppTheme.typography.caption, maxLines = 1)
+                Text(
+                    label.detail,
+                    style = AppTheme.typography.caption,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = false,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
             }
         }
         ProvideContentColor(AppTheme.colors.inkMuted) {
-            Text(data.time, style = AppTheme.typography.caption, maxLines = 1)
+            Text(data.time, style = AppTheme.typography.caption, maxLines = 1, softWrap = false)
         }
         if (data.isInvertible) {
             UndoButton(onClick = { onUndo(entry) })
