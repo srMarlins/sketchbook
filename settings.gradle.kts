@@ -36,6 +36,7 @@ include(
     ":shared:sync-io",
     ":shared:repository",
     ":shared:actions",
+    ":shared:auth",
     ":shared:sync",
     ":shared:mcp-server",
     ":shared:ui-shared",

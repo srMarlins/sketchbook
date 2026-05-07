@@ -25,6 +25,7 @@ kotlin {
         jvmMain.dependencies {
             implementation(project(":shared:core"))
             implementation(project(":shared:actions"))
+            implementation(project(":shared:auth"))
             implementation(project(":shared:catalog"))
             implementation(project(":shared:cloud"))
             implementation(project(":shared:repository"))

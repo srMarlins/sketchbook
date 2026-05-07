@@ -43,6 +43,16 @@ class PreferencesSettingsRepository(
     private val mutex = Mutex()
     private val state = MutableStateFlow(read())
 
+    init {
+        // One-time legacy cleanup: pre-OAuth builds stored a service-account JSON blob in the
+        // prefs node. Drop it on first construction so old credentials don't sit at rest
+        // indefinitely once the user upgrades.
+        runCatching {
+            node.remove(KEY_LEGACY_CLOUD_CREDENTIAL)
+            node.flush()
+        }
+    }
+
     override fun observe(): Flow<Settings> = state
 
     override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> = withContext(ioDispatcher) {
@@ -66,20 +76,6 @@ class PreferencesSettingsRepository(
                 state.value = state.value.copy(libraryRoots = current.toList())
             }
         }
-        Result.success(Unit)
-    }
-
-    override suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit> = withContext(ioDispatcher) {
-        if (serviceAccountJson == null) {
-            node.remove(KEY_CLOUD_CREDENTIAL)
-        } else {
-            node.put(KEY_CLOUD_CREDENTIAL, serviceAccountJson)
-        }
-        node.flush()
-        state.value = state.value.copy(
-            cloudCredentialJson = serviceAccountJson,
-            cloudConfigured = serviceAccountJson != null,
-        )
         Result.success(Unit)
     }
 
@@ -119,16 +115,13 @@ class PreferencesSettingsRepository(
 
     private fun read(): Settings {
         val roots = readRoots()
-        val cred = node.get(KEY_CLOUD_CREDENTIAL, null)
         val bucket = node.get(KEY_CLOUD_BUCKET, null)?.takeIf { it.isNotBlank() }
         val selfContained = readSelfContained()
         val cache = readCacheSettings()
         return Settings(
             libraryRoots = roots,
-            cloudConfigured = cred != null,
             selfContainedProjects = selfContained,
             cacheSettings = cache,
-            cloudCredentialJson = cred,
             cloudBucket = bucket,
         )
     }
@@ -215,11 +208,17 @@ class PreferencesSettingsRepository(
 
     private companion object {
         const val KEY_ROOTS = "library_roots_v1"
-        const val KEY_CLOUD_CREDENTIAL = "cloud_credential_json"
         const val KEY_CLOUD_BUCKET = "cloud_bucket"
         const val KEY_SELF_CONTAINED = "self_contained_uuids_v1"
         const val KEY_CACHE_MAX_BYTES = "cache_max_bytes"
         const val KEY_CACHE_LRU = "cache_lru_enabled"
+
+        /**
+         * Pre-OAuth builds wrote a service-account JSON blob under this key. Cleared at startup so
+         * upgrading users don't leave credentials on disk; safe to drop for good once the migration
+         * window has passed.
+         */
+        const val KEY_LEGACY_CLOUD_CREDENTIAL = "cloud_credential_json"
 
         val json: Json = Json {
             ignoreUnknownKeys = true

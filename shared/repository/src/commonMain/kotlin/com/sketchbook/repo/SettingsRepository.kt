@@ -20,8 +20,6 @@ interface SettingsRepository {
     suspend fun upsertRoot(root: LibraryRoot): Result<Unit>
     suspend fun removeRoot(root: LibraryRoot): Result<Unit>
 
-    suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit>
-
     suspend fun setCloudBucket(bucket: String?): Result<Unit>
 
     suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit>
@@ -31,17 +29,11 @@ interface SettingsRepository {
 
 data class Settings(
     val libraryRoots: List<LibraryRoot>,
-    val cloudConfigured: Boolean,
     val selfContainedProjects: Set<ProjectUuid>,
     val cacheSettings: BlobCacheSettings = BlobCacheSettings.Default,
-    /** Parsed-on-write GCS service-account JSON. Null when the user hasn't uploaded one. */
-    val cloudCredentialJson: String? = null,
     /** GCS bucket name for uploads. Null when unconfigured. */
     val cloudBucket: String? = null,
-) {
-    /** True iff both pieces of cloud config are present (creds + bucket). */
-    val cloudReady: Boolean get() = cloudCredentialJson != null && !cloudBucket.isNullOrBlank()
-}
+)
 
 /**
  * Local blob cache policy. The sync engine consults this on every download to decide whether to

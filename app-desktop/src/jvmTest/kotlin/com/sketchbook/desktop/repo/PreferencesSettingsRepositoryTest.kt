@@ -11,7 +11,6 @@ import java.util.prefs.Preferences
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * Round-trip tests for [PreferencesSettingsRepository]. Each test pins a unique node under the
@@ -45,16 +44,25 @@ class PreferencesSettingsRepositoryTest {
     }
 
     @Test
-    fun roundtripsCredentialAndBucket() = runTest {
+    fun roundtripsBucket() = runTest {
         val first = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
-        first.setCloudCredential("{\"type\":\"sa\"}").getOrThrow()
         first.setCloudBucket("sketchbook-prod").getOrThrow()
 
         val second = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
         val s = second.observe().first()
-        assertEquals("{\"type\":\"sa\"}", s.cloudCredentialJson)
         assertEquals("sketchbook-prod", s.cloudBucket)
-        assertTrue(s.cloudReady)
+    }
+
+    @Test
+    fun clearsLegacyServiceAccountJsonOnInit() = runTest {
+        // Seed the legacy key directly to mimic an upgrading user.
+        node.put("cloud_credential_json", "{\"type\":\"service_account\"}")
+        node.flush()
+        assertEquals("{\"type\":\"service_account\"}", node.get("cloud_credential_json", null))
+
+        PreferencesSettingsRepository(node, Dispatchers.Unconfined)
+
+        assertEquals(null, node.get("cloud_credential_json", null))
     }
 
     @Test

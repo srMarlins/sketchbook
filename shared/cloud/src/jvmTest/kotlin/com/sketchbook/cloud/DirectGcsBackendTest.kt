@@ -46,14 +46,14 @@ class DirectGcsBackendTest {
                 headersOf(HttpHeaders.ContentType, "application/json"),
             )
         }
-        val auth = GcsAuth(key, HttpClient(tokenEngine))
+        val credentials: CloudCredentials = GcsAuth(key, HttpClient(tokenEngine))
 
         val backendEngine = MockEngine { request -> handle(request) }
         return DirectGcsBackend(
             http = HttpClient(backendEngine),
-            auth = auth,
+            credentials = credentials,
             bucket = "sk-bucket",
-            userId = UserId("default"),
+            userId = UserId("test"),
         )
     }
 
@@ -66,7 +66,8 @@ class DirectGcsBackendTest {
             // Hash hex starts with "aa..." → shard prefix "aa". Full hash + tenant prefix
             // appear in the encoded path; we don't assert the exact encoding (Ktor's
             // encodeURLPath leaves `:` unencoded in some versions).
-            assertTrue("default" in request.url.encodedPath)
+            assertTrue("users" in request.url.encodedPath)
+            assertTrue("test" in request.url.encodedPath)
             assertTrue("blobs" in request.url.encodedPath)
             assertTrue("aa" in request.url.encodedPath)
             assertTrue("a".repeat(64) in request.url.encodedPath)
@@ -95,7 +96,7 @@ class DirectGcsBackendTest {
         assertEquals(HttpMethod.Post, req.method)
         assertTrue(req.url.toString().startsWith("https://storage.googleapis.com/upload/storage/v1/b/sk-bucket/o"))
         assertEquals("media", req.url.parameters["uploadType"])
-        assertEquals("default/blobs/bb/b3:${"b".repeat(64)}", req.url.parameters["name"])
+        assertEquals("users/test/blobs/bb/b3:${"b".repeat(64)}", req.url.parameters["name"])
         assertEquals("0", req.headers["x-goog-if-generation-match"])
         assertEquals("Bearer ya29.fake", req.headers[HttpHeaders.Authorization])
         assertEquals(payload.toList(), req.body.toByteArray().toList())

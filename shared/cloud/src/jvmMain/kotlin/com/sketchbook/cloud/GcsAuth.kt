@@ -36,7 +36,7 @@ class GcsAuth(
     private val httpClient: HttpClient,
     private val clock: Clock = Clock.System,
     private val scope: String = "https://www.googleapis.com/auth/devstorage.read_write",
-) {
+) : CloudCredentials {
 
     private val mutex = Mutex()
     private var cached: CachedToken? = null
@@ -93,7 +93,7 @@ class GcsAuth(
     }
 
     /** Returns a current bearer token, refreshing if within the 50-minute proactive window. */
-    suspend fun token(): String = mutex.withLock {
+    override suspend fun token(): String = mutex.withLock {
         val current = cached
         if (current != null && clock.now() < current.refreshAt) {
             current.token.value
