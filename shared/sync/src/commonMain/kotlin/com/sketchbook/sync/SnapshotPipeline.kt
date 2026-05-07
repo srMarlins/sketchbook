@@ -45,30 +45,35 @@ class SnapshotPipeline(
         val uuid = input.uuid
         val treeId = input.treeId
         val kind = input.kind
+        val policy = KindPolicy.forKind(kind)
         val parentRev = input.lastKnownManifest?.rev
         val parentFiles = input.lastKnownManifest?.files ?: emptyMap()
         val parentExpectedHead = input.expectedHeadGeneration
         val blobScope: BlobScope = if (input.selfContained) BlobScope.Private(uuid) else BlobScope.Shared
 
-        // 1) Lease.
-        val leaseInstant = clock.now()
-        val lock = LeaseLock(
-            ownerUserId = ownerUserId,
-            ownerHostId = hostId,
-            ownerHostName = hostName,
-            acquiredAt = leaseInstant,
-            expiresAt = leaseInstant + leaseTtl,
-        )
-        val leaseGen: Generation = when (val r = cloud.acquireLock(treeId, kind, lock)) {
-            is LeaseAcquireResult.Acquired -> {
-                emit(SnapshotProgress.LeaseAcquired(uuid))
-                r.generation
-            }
+        // 1) Lease — gated by policy. Kinds with `leaseRequired = false` (UserLibrary) rely on
+        // CAS HEAD + merge-on-conflict instead of a coarse-grained lock.
+        var leaseGen: Generation? = null
+        if (policy.leaseRequired) {
+            val leaseInstant = clock.now()
+            val lock = LeaseLock(
+                ownerUserId = ownerUserId,
+                ownerHostId = hostId,
+                ownerHostName = hostName,
+                acquiredAt = leaseInstant,
+                expiresAt = leaseInstant + leaseTtl,
+            )
+            when (val r = cloud.acquireLock(treeId, kind, lock)) {
+                is LeaseAcquireResult.Acquired -> {
+                    emit(SnapshotProgress.LeaseAcquired(uuid))
+                    leaseGen = r.generation
+                }
 
-            is LeaseAcquireResult.Held -> {
-                emit(SnapshotProgress.LeaseHeld(uuid, r.held.ownerHostName))
-                emit(SnapshotProgress.Failed(uuid, "lock held by ${r.held.ownerHostName}"))
-                return@flow
+                is LeaseAcquireResult.Held -> {
+                    emit(SnapshotProgress.LeaseHeld(uuid, r.held.ownerHostName))
+                    emit(SnapshotProgress.Failed(uuid, "lock held by ${r.held.ownerHostName}"))
+                    return@flow
+                }
             }
         }
 
@@ -147,51 +152,58 @@ class SnapshotPipeline(
                 selfContained = input.selfContained,
             )
 
-            // 5) CAS HEAD. On Conflict, re-fetch and write our work as a branch.
+            // 5) CAS HEAD. Conflict resolution dispatches on KindPolicy.conflictMode.
             val casResult = cloud.appendManifestHead(treeId, kind, parentExpectedHead, auto)
             val saved = casResult.fold(
                 onSuccess = {
                     SnapshotProgress.Saved(uuid, newRev, input.snapshotKind, input.label)
                 },
                 onFailure = { err ->
-                    if (err is SketchbookError.Conflict) {
-                        // Re-fetch latest HEAD generation by listing manifests; pick the last one
-                        // and rev one above it. Fake/real backends both return ManifestRefs sorted
-                        // by rev; if the list is empty something is wrong, propagate as failure.
-                        val refs = cloud.listManifests(treeId, kind, sinceRev = parentRev)
-                        val latest = refs.maxByOrNull { it.rev }
-                        if (latest == null) {
-                            emit(SnapshotProgress.Failed(uuid, "conflict but cannot find new HEAD"))
-                            return@fold null
+                    if (err !is SketchbookError.Conflict) {
+                        return@fold SnapshotProgress.Failed(uuid, "head write failed: ${err.message}")
+                    }
+                    when (val mode = policy.conflictMode) {
+                        is ConflictMode.BranchFork -> {
+                            // Re-fetch latest HEAD generation by listing manifests; pick the last
+                            // one and rev one above it. If the list is empty something is wrong,
+                            // propagate as failure.
+                            val refs = cloud.listManifests(treeId, kind, sinceRev = parentRev)
+                            val latest = refs.maxByOrNull { it.rev }
+                            if (latest == null) {
+                                emit(SnapshotProgress.Failed(uuid, "conflict but cannot find new HEAD"))
+                                return@fold null
+                            }
+                            val branchRev = SnapshotRev(latest.rev + 1)
+                            val ts = clock.now()
+                            val label = "auto-fork: $hostName-${ts.toEpochMilliseconds()}"
+                            val branch = auto.copy(
+                                rev = branchRev,
+                                parentRev = parentRev,
+                                kind = SnapshotKind.Branch,
+                                label = label,
+                                timestamp = ts,
+                            )
+                            val branchResult = cloud.appendManifestHead(treeId, kind, latest.generation, branch)
+                            branchResult.fold(
+                                onSuccess = {
+                                    SnapshotProgress.Saved(uuid, branchRev, SnapshotKind.Branch, label)
+                                },
+                                onFailure = { e ->
+                                    SnapshotProgress.Failed(uuid, "branch write failed: ${e.message}")
+                                },
+                            )
                         }
-                        val branchRev = SnapshotRev(latest.rev + 1)
-                        val ts = clock.now()
-                        val label = "auto-fork: $hostName-${ts.toEpochMilliseconds()}"
-                        val branch = auto.copy(
-                            rev = branchRev,
-                            parentRev = parentRev,
-                            kind = SnapshotKind.Branch,
-                            label = label,
-                            timestamp = ts,
-                        )
-                        val branchResult = cloud.appendManifestHead(treeId, kind, latest.generation, branch)
-                        branchResult.fold(
-                            onSuccess = {
-                                SnapshotProgress.Saved(uuid, branchRev, SnapshotKind.Branch, label)
-                            },
-                            onFailure = { e ->
-                                SnapshotProgress.Failed(uuid, "branch write failed: ${e.message}")
-                            },
-                        )
-                    } else {
-                        SnapshotProgress.Failed(uuid, "head write failed: ${err.message}")
+
+                        is ConflictMode.Merge -> error("ConflictMode.Merge not yet implemented (commit 7)")
                     }
                 },
             )
             if (saved != null) emit(saved)
         } finally {
-            // 6) Release lease (best-effort; pipeline outcome already emitted).
-            runCatching { cloud.releaseLock(treeId, kind, leaseGen) }
+            // 6) Release lease (best-effort; pipeline outcome already emitted). Skipped when
+            // policy.leaseRequired = false — `leaseGen` stays null and we never acquired one.
+            val gen = leaseGen
+            if (gen != null) runCatching { cloud.releaseLock(treeId, kind, gen) }
         }
     }
 }
