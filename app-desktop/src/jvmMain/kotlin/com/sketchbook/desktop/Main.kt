@@ -26,8 +26,6 @@ import com.sketchbook.uishared.theme.AppTheme
 import com.sketchbook.uishared.theme.AppTypography
 import dev.zacsweers.metrox.viewmodel.LocalMetroViewModelFactory
 import dev.zacsweers.metrox.viewmodel.metroViewModel
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -73,16 +71,13 @@ private fun runApp() = application {
     val windowState = rememberWindowState(size = DpSize(1360.dp, 900.dp))
     val typography: AppTypography = remember { Fonts.load() }
 
-    // Launch decision: collect SettingsRepository.observe() and flip from `null` → Onboarding
-    // (first run) or MainApp (returning user). When `OnboardingIntent.Finish` writes
-    // `firstRunCompletedAt`, the same flow re-emits and this state advances to MainApp,
-    // which transparently swaps the surface from OnboardingScreen → RootContent.
+    // Launch decision: route through LaunchGate so it remains the canonical source of truth.
+    // When `OnboardingIntent.Finish` writes `firstRunCompletedAt`, the gate's flow re-emits
+    // and this state advances from Onboarding → MainApp, which transparently swaps the surface
+    // from OnboardingScreen → RootContent.
     var decision: LaunchDecision? by remember { mutableStateOf(null) }
     LaunchedEffect(graph) {
-        graph.settingsRepository.observe()
-            .map { if (it.firstRunCompletedAt == null) LaunchDecision.Onboarding else LaunchDecision.MainApp }
-            .distinctUntilChanged()
-            .collect { decision = it }
+        graph.launchGate.observe().collect { decision = it }
     }
 
     Window(
