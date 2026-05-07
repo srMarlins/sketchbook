@@ -2,80 +2,23 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ArgumentListWrapping:DesktopAppGraph.kt:DesktopAppGraph$(query)</ID>
-    <ID>ArgumentListWrapping:Diagnostics.kt:Diagnostics$("INFO", "diagnostics", "java=${System.getProperty("java.version")} os=${System.getProperty("os.name")} arch=${System.getProperty("os.arch")}")</ID>
-    <ID>ArgumentListWrapping:Diagnostics.kt:Diagnostics$("java.version")</ID>
-    <ID>ArgumentListWrapping:Diagnostics.kt:Diagnostics$("os.arch")</ID>
-    <ID>ArgumentListWrapping:Diagnostics.kt:Diagnostics$("os.name")</ID>
-    <ID>ArgumentListWrapping:Fonts.kt:Fonts$(fontFamily = interFamily, fontSize = 12.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.1.sp)</ID>
-    <ID>ArgumentListWrapping:Fonts.kt:Fonts$(fontFamily = interFamily, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)</ID>
-    <ID>ArgumentListWrapping:InMemorySyncQueue.kt:InMemorySyncQueue$(id)</ID>
-    <ID>ArgumentListWrapping:LeasedLockRepository.kt:NullCloudBackend$("0")</ID>
-    <ID>ArgumentListWrapping:LeasedLockRepository.kt:NullCloudBackend$("cloud not configured")</ID>
-    <ID>ArgumentListWrapping:LeasedLockRepository.kt:NullCloudBackend$(IllegalStateException("cloud not configured"))</ID>
-    <ID>ArgumentListWrapping:LeasedLockRepository.kt:NullCloudBackend$(com.sketchbook.cloud.Generation("0"))</ID>
-    <ID>ArgumentListWrapping:Os.kt:Os$(parent, title)</ID>
-    <ID>ArgumentListWrapping:Os.kt:Os$(title)</ID>
-    <ID>ArgumentListWrapping:RootChromeViewModel.kt:RootChromeViewModel$("Cloud not configured")</ID>
-    <ID>ArgumentListWrapping:RootChromeViewModel.kt:RootChromeViewModel$(IllegalStateException("Cloud not configured"))</ID>
-    <ID>ArgumentListWrapping:RootChromeViewModel.kt:RootChromeViewModel$(id)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:("Nothing yet — once you save in Live a few times, Sketchbook starts tracking variants here.", style = theme.typography.body)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(0.6f, androidx.compose.ui.unit.TextUnitType.Sp)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(0.8f, androidx.compose.ui.unit.TextUnitType.Sp)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(1.dp, theme.colors.ruleLineStrong, androidx.compose.foundation.shape.RoundedCornerShape(theme.spacing.cornerCard))</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(10f, androidx.compose.ui.unit.TextUnitType.Sp)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(11f, androidx.compose.ui.unit.TextUnitType.Sp)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(13f, androidx.compose.ui.unit.TextUnitType.Sp)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(9.5f, androidx.compose.ui.unit.TextUnitType.Sp)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(LibraryRoot.Projects(path))</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(SettingsViewModel.Intent.AddRoot(LibraryRoot.Projects(path)))</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.OpenInLive)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.Rename(it))</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.SetStageOverride(stage))</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(com.sketchbook.featuredetail.ProjectDetailViewModel.Intent.SetTags(it))</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(it)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(label = "Any format", active = !formatOnly, onClick = { formatOnly = false }, theme = theme)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(label = formatLabel, active = formatOnly, onClick = { formatOnly = true }, theme = theme)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(path)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(stage)</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(theme.colors.surfaceSunken, theme.colors.inkMuted, "?")</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(theme.colors.tintBlue, theme.colors.inkPrimary, "VST")</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(theme.colors.tintBlue, theme.colors.inkPrimary, "VST3")</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(theme.colors.tintCream, theme.colors.inkPrimary, "LIVE")</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(theme.colors.tintRose, theme.colors.inkPrimary, "AU")</ID>
-    <ID>ArgumentListWrapping:RootContent.kt:(theme.spacing.cornerCard)</ID>
-    <ID>ArgumentListWrapping:SwappableSyncQueue.kt:SwappableSyncQueue$(id)</ID>
-    <ID>BinaryExpressionWrapping:DesktopAppGraph.kt:"Sketchbook on " + (runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrNull() ?: "unknown")</ID>
-    <ID>BinaryExpressionWrapping:RootChromeViewModel.kt:RootChromeViewModel$syncImpl?.pushNowById(id) ?: Result.failure(IllegalStateException("Cloud not configured"))</ID>
-    <ID>BinaryExpressionWrapping:RootContent.kt:(snap.label ?: "rev ${snap.rev.value}") + " · ${snap.kind.name.lowercase()} · ${snap.fileCount} files"</ID>
-    <ID>BinaryExpressionWrapping:RootContent.kt:onPushNow != null &amp;&amp; sync != ProjectSyncState.Synced &amp;&amp; sync != ProjectSyncState.Uploading</ID>
-    <ID>BinaryExpressionWrapping:RootContent.kt:openKey == rowKey</ID>
-    <ID>BlankLineBetweenWhenConditions:InboxScreen.kt:when (detail) { is InboxDetailTarget.Proposal -&gt; ProposalDetailPane( proposalId = detail.proposalId, vm = proposalsVm, onDismiss = onDismiss, ) is InboxDetailTarget.Attention -&gt; NeedsAttentionDetailPane( target = detail.target, vm = needsAttentionVm, onDismiss = onDismiss, ) is InboxDetailTarget.JournalEntry -&gt; JournalDetailPane( entry = detail.entry, projectName = detail.projectName, vm = journalVm, onDismiss = onDismiss, ) }</ID>
-    <ID>BlankLineBetweenWhenConditions:RootContent.kt:when (e) { is JournalViewModel.Effect.NavigateToProject -&gt; backStack.add(Screen.ProjectDetail(e.projectId)) is JournalViewModel.Effect.Undone, is JournalViewModel.Effect.UndoFailed, is JournalViewModel.Effect.BulkUndone -&gt; Unit }</ID>
-    <ID>ClassSignature:InMemorySyncQueue.kt:InMemorySyncQueue : SyncQueue</ID>
-    <ID>ClassSignature:InboxScreen.kt:InboxDetailTarget$JournalEntry : InboxDetailTarget</ID>
-    <ID>ClassSignature:PreferencesSettingsRepository.kt:PreferencesSettingsRepository : SettingsRepository</ID>
     <ID>CyclomaticComplexMethod:RootContent.kt:@Composable fun RootContent</ID>
     <ID>CyclomaticComplexMethod:RootContent.kt:@Composable private fun DetailPanelRoutePane</ID>
     <ID>EmptyFunctionBlock:LeasedLockRepository.kt:NullCloudBackend${}</ID>
-    <ID>FunctionLiteral:DesktopAppGraph.kt:&lt;anonymous&gt;</ID>
-    <ID>FunctionLiteral:DesktopAppGraph.kt:DesktopAppGraph$&lt;anonymous&gt;</ID>
-    <ID>FunctionLiteral:InMemorySyncQueue.kt:InMemorySyncQueue$&lt;anonymous&gt;</ID>
-    <ID>FunctionLiteral:RootContent.kt:&lt;anonymous&gt;</ID>
-    <ID>FunctionLiteral:SwappableSyncQueue.kt:SwappableSyncQueue$&lt;anonymous&gt;</ID>
     <ID>FunctionNaming:HealthChip.kt:@Composable fun HealthChip</ID>
     <ID>FunctionNaming:HealthChip.kt:@Composable private fun BreakdownRow</ID>
     <ID>FunctionNaming:HealthChip.kt:@Composable private fun HealthBreakdownPopup</ID>
     <ID>FunctionNaming:InboxScreen.kt:@Composable fun InboxScreen</ID>
+    <ID>FunctionNaming:InboxScreen.kt:@Composable internal fun InboxContent</ID>
     <ID>FunctionNaming:InboxScreen.kt:@Composable private fun ColumnHeader</ID>
     <ID>FunctionNaming:InboxScreen.kt:@Composable private fun DetailPaneSwitch</ID>
     <ID>FunctionNaming:InboxScreen.kt:@Composable private fun HistoryColumn</ID>
     <ID>FunctionNaming:InboxScreen.kt:@Composable private fun IssuesColumn</ID>
     <ID>FunctionNaming:InboxScreen.kt:@Composable private fun SuggestedColumn</ID>
     <ID>FunctionNaming:MissingPluginsChip.kt:@Composable fun MissingPluginsChip</ID>
-    <ID>FunctionNaming:OnboardingPromptBanner.kt:@Composable fun OnboardingPromptBanner</ID>
     <ID>FunctionNaming:MissingPluginsChip.kt:@Composable private fun MissingPluginRowView</ID>
     <ID>FunctionNaming:MissingPluginsChip.kt:@Composable private fun MissingPluginsPopup</ID>
+    <ID>FunctionNaming:OnboardingPromptBanner.kt:@Composable fun OnboardingPromptBanner</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable fun RootContent</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailHistorySection</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailHistoryTab</ID>
@@ -102,36 +45,8 @@
     <ID>FunctionNaming:RootContent.kt:@Composable private fun TagsEditorRow</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun VersionRow</ID>
     <ID>FunctionParameterNaming:RootContent.kt:override_: com.sketchbook.core.Stage?</ID>
-    <ID>FunctionSignature:DesktopAppGraph.kt:DesktopAppGraph$@Provides @SingleIn(AppScope::class) fun provideProjectFtsSearcher: ProjectFtsSearcher</ID>
-    <ID>FunctionSignature:HealthChip.kt:@Composable fun HealthChip</ID>
-    <ID>FunctionSignature:HealthChip.kt:@Composable private fun BreakdownRow</ID>
-    <ID>FunctionSignature:HealthChip.kt:@Composable private fun HealthBreakdownPopup</ID>
-    <ID>FunctionSignature:InMemorySyncQueue.kt:InMemorySyncQueue$override fun observeProject: Flow&lt;ProjectSyncState&gt;</ID>
-    <ID>FunctionSignature:LeasedLockRepository.kt:NullCloudBackend$override suspend fun acquireLock</ID>
-    <ID>FunctionSignature:LeasedLockRepository.kt:NullCloudBackend$override suspend fun appendManifestHead</ID>
-    <ID>FunctionSignature:LeasedLockRepository.kt:NullCloudBackend$override suspend fun getBlob</ID>
-    <ID>FunctionSignature:LeasedLockRepository.kt:NullCloudBackend$override suspend fun listManifests</ID>
-    <ID>FunctionSignature:LeasedLockRepository.kt:NullCloudBackend$override suspend fun putBlob</ID>
-    <ID>FunctionSignature:LeasedLockRepository.kt:NullCloudBackend$override suspend fun readManifest</ID>
-    <ID>FunctionSignature:LeasedLockRepository.kt:NullCloudBackend$override suspend fun refreshLock</ID>
-    <ID>FunctionSignature:MissingPluginsChip.kt:@Composable private fun MissingPluginRowView</ID>
-    <ID>FunctionSignature:MissingPluginsChip.kt:@Composable private fun MissingPluginsPopup</ID>
-    <ID>FunctionSignature:Os.kt:Os$fun pickDirectory: String?</ID>
-    <ID>FunctionSignature:RootChromeViewModel.kt:RootChromeViewModel$suspend fun pushNow: Result&lt;Unit&gt;</ID>
-    <ID>FunctionSignature:RootChromeViewModel.kt:RootChromeViewModel.&lt;no name provided&gt;$override suspend fun recordForcedNamed: Result&lt;SnapshotRev&gt;</ID>
-    <ID>FunctionSignature:RootContent.kt:@Composable private fun DetailHistoryTab</ID>
-    <ID>FunctionSignature:RootContent.kt:@Composable private fun DetailTracksTab</ID>
-    <ID>FunctionSignature:RootContent.kt:@Composable private fun EditableTagChip</ID>
-    <ID>FunctionSignature:RootContent.kt:@Composable private fun EditableTitle</ID>
-    <ID>FunctionSignature:RootContent.kt:@Composable private fun PlaceholderTab</ID>
-    <ID>FunctionSignature:RootContent.kt:@Composable private fun QuickCaptureDialog</ID>
-    <ID>FunctionSignature:RootContent.kt:@Composable private fun Section</ID>
-    <ID>FunctionSignature:RootContent.kt:@Composable private fun VersionRow</ID>
-    <ID>FunctionSignature:RootContent.kt:private fun sidebarItems: List&lt;SidebarItem&gt;</ID>
-    <ID>FunctionSignature:ScanUi.kt:suspend fun runScan</ID>
-    <ID>FunctionSignature:SwappableSyncQueue.kt:SwappableSyncQueue$override fun observeProject: Flow&lt;ProjectSyncState&gt;</ID>
-    <ID>FunctionSignature:SwappableSyncQueue.kt:SwappableSyncQueue$override suspend fun recordForcedNamed: Result&lt;SnapshotRev&gt;</ID>
     <ID>LongMethod:InboxScreen.kt:@Composable fun InboxScreen</ID>
+    <ID>LongMethod:InboxScreen.kt:@Composable internal fun InboxContent</ID>
     <ID>LongMethod:RootContent.kt:@Composable fun RootContent</ID>
     <ID>LongMethod:RootContent.kt:@Composable private fun DetailPanelRoutePane</ID>
     <ID>LongMethod:RootContent.kt:@Composable private fun DetailPluginsTab</ID>
@@ -154,54 +69,17 @@
     <ID>MagicNumber:RootContent.kt:99</ID>
     <ID>MagicNumber:ScanUi.kt:3500</ID>
     <ID>MatchingDeclarationName:ScanUi.kt:ScanUiState</ID>
-    <ID>MaxLineLength:Diagnostics.kt:Diagnostics$log("INFO", "diagnostics", "java=${System.getProperty("java.version")} os=${System.getProperty("os.name")} arch=${System.getProperty("os.arch")}")</ID>
-    <ID>MaxLineLength:LeasedLockRepository.kt:NullCloudBackend$override suspend fun appendManifestHead</ID>
-    <ID>MaxLineLength:LeasedLockRepository.kt:NullCloudBackend$override suspend fun listManifests</ID>
-    <ID>MaxLineLength:LeasedLockRepository.kt:NullCloudBackend$override suspend fun putBlob</ID>
-    <ID>MaxLineLength:LeasedLockRepository.kt:NullCloudBackend$override suspend fun refreshLock</ID>
-    <ID>MaxLineLength:Os.kt:Os$fun pickDirectory: String?</ID>
-    <ID>MaxLineLength:RootChromeViewModel.kt:RootChromeViewModel$suspend</ID>
     <ID>MaxLineLength:RootContent.kt:"Files in this project's folder, merged with snapshots Sketchbook has uploaded to the cloud. The currently-open variant is highlighted."</ID>
     <ID>MaxLineLength:RootContent.kt:"Move/rename/archive/tag actions from Sketchbook itself land here. The .als file's own modification timestamp lives in Versions."</ID>
     <ID>MaxLineLength:RootContent.kt:"Per-track names + audio/MIDI/return/group breakdown will surface once the parser exposes them through the repository (planned)."</ID>
-    <ID>MaxLineLength:RootContent.kt:Text("Nothing yet — once you save in Live a few times, Sketchbook starts tracking variants here.", style = theme.typography.body)</ID>
-    <ID>MaxLineLength:RootContent.kt:com.sketchbook.core.PluginFormat.AbletonNative -&gt; Triple(theme.colors.tintCream, theme.colors.inkPrimary, "LIVE")</ID>
-    <ID>MaxLineLength:RootContent.kt:is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTakeFailed</ID>
-    <ID>MaxLineLength:RootContent.kt:pluginUsageFlow</ID>
-    <ID>MaxLineLength:RootContent.kt:pluginUsageFlow: ((String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -&gt; kotlinx.coroutines.flow.Flow&lt;List&lt;com.sketchbook.repo.PluginUsage&gt;&gt;)? = null</ID>
-    <ID>MaxLineLength:RootContent.kt:pluginUsageFlow: (String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -&gt; kotlinx.coroutines.flow.Flow&lt;List&lt;com.sketchbook.repo.PluginUsage&gt;&gt;</ID>
-    <ID>MaxLineLength:RootContent.kt:val needsAttentionVm: com.sketchbook.featureneedsattention.NeedsAttentionViewModel = metroViewModel()</ID>
     <ID>ModifierClickableOrder:RootContent.kt:clickable(onClick = onClick)</ID>
     <ID>ModifierMissing:RootContent.kt:@Composable fun RootContent</ID>
     <ID>ModifierWithoutDefault:InboxScreen.kt:modifier: Modifier</ID>
-    <ID>NoUnusedImports:DesktopAppGraph.kt:com.sketchbook.desktop.DesktopAppGraph.kt</ID>
-    <ID>NoUnusedImports:LeasedLockRepository.kt:com.sketchbook.desktop.repo.LeasedLockRepository.kt</ID>
-    <ID>NoUnusedImports:SwappableSyncQueue.kt:com.sketchbook.desktop.repo.SwappableSyncQueue.kt</ID>
-    <ID>ParameterListWrapping:DesktopAppGraph.kt:DesktopAppGraph$(fts: CatalogFts)</ID>
-    <ID>ParameterListWrapping:LeasedLockRepository.kt:NullCloudBackend$(hash: com.sketchbook.core.BlobHash, scope: com.sketchbook.cloud.BlobScope)</ID>
-    <ID>ParameterListWrapping:LeasedLockRepository.kt:NullCloudBackend$(hash: com.sketchbook.core.BlobHash, source: kotlinx.io.RawSource, size: Long, scope: com.sketchbook.cloud.BlobScope)</ID>
-    <ID>ParameterListWrapping:LeasedLockRepository.kt:NullCloudBackend$(uuid: ProjectUuid, expectedHead: com.sketchbook.cloud.Generation?, manifest: com.sketchbook.core.Manifest)</ID>
-    <ID>ParameterListWrapping:LeasedLockRepository.kt:NullCloudBackend$(uuid: ProjectUuid, lock: LeaseLock)</ID>
-    <ID>ParameterListWrapping:LeasedLockRepository.kt:NullCloudBackend$(uuid: ProjectUuid, lock: LeaseLock, expected: com.sketchbook.cloud.Generation)</ID>
-    <ID>ParameterListWrapping:LeasedLockRepository.kt:NullCloudBackend$(uuid: ProjectUuid, rev: com.sketchbook.core.SnapshotRev)</ID>
-    <ID>ParameterListWrapping:LeasedLockRepository.kt:NullCloudBackend$(uuid: ProjectUuid, sinceRev: com.sketchbook.core.SnapshotRev?)</ID>
-    <ID>ParameterListWrapping:RootChromeViewModel.kt:RootChromeViewModel$(id: ProjectId)</ID>
-    <ID>ParameterListWrapping:RootContent.kt:((String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -&gt; kotlinx.coroutines.flow.Flow&lt;List&lt;com.sketchbook.repo.PluginUsage&gt;&gt;)?</ID>
-    <ID>ParameterListWrapping:RootContent.kt:(String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?)</ID>
-    <ID>ParameterListWrapping:SwappableSyncQueue.kt:SwappableSyncQueue$(uuid: ProjectUuid, label: String)</ID>
-    <ID>ParameterWrapping:InjectedViewModelFactory.kt:InjectedViewModelFactory$override val manualAssistedFactoryProviders: Map&lt;KClass&lt;out ManualViewModelAssistedFactory&gt;, () -&gt; ManualViewModelAssistedFactory&gt;</ID>
-    <ID>ParameterWrapping:RootContent.kt:/** * PR-AA: inverse plugin lookup. When wired by the host, the Plugins tab gets a click-to-pivot * popover on each row showing other projects that load the same plugin. `null` keeps the tab * read-only (test/preview callers don't need to thread a repository). */ pluginUsageFlow: ((String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -&gt; kotlinx.coroutines.flow.Flow&lt;List&lt;com.sketchbook.repo.PluginUsage&gt;&gt;)? = null</ID>
-    <ID>ParameterWrapping:RootContent.kt:pluginUsageFlow: ((String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -&gt; kotlinx.coroutines.flow.Flow&lt;List&lt;com.sketchbook.repo.PluginUsage&gt;&gt;)? = null</ID>
-    <ID>ParameterWrapping:RootContent.kt:pluginUsageFlow: (String, com.sketchbook.core.PluginFormat?, com.sketchbook.core.ProjectId?) -&gt; kotlinx.coroutines.flow.Flow&lt;List&lt;com.sketchbook.repo.PluginUsage&gt;&gt;</ID>
-    <ID>PropertyWrapping:RootContent.kt:val needsAttentionVm: com.sketchbook.featureneedsattention.NeedsAttentionViewModel = metroViewModel()</ID>
-    <ID>PropertyWrapping:RootContent.kt:val proposalsVm: com.sketchbook.featureproposals.ProposalsViewModel = metroViewModel()</ID>
-    <ID>TrailingCommaOnDeclarationSite:RootContent.kt:is JournalViewModel.Effect.Undone, is JournalViewModel.Effect.UndoFailed, is JournalViewModel.Effect.BulkUndone -&gt; Unit</ID>
     <ID>UnusedParameter:InboxScreen.kt:initialTab: InboxTab</ID>
     <ID>UnusedParameter:LeasedLockRepository.kt:LeasedLockRepository$uuid: ProjectUuid</ID>
-    <ID>ViewModelForwarding:InboxScreen.kt:DetailPaneSwitch( detail = d, proposalsVm = proposalsVm, needsAttentionVm = needsAttentionVm, journalVm = journalVm, onDismiss = dismissDetail, )</ID>
+    <ID>ViewModelForwarding:InboxScreen.kt:DetailPaneSwitch( detail = detail, proposalsVm = proposalsVm, needsAttentionVm = needsAttentionVm, journalVm = journalVm, onDismiss = onDismiss, )</ID>
     <ID>ViewModelForwarding:InboxScreen.kt:JournalDetailPane( entry = detail.entry, projectName = detail.projectName, vm = journalVm, onDismiss = onDismiss, )</ID>
     <ID>ViewModelForwarding:InboxScreen.kt:NeedsAttentionDetailPane( target = detail.target, vm = needsAttentionVm, onDismiss = onDismiss, )</ID>
     <ID>ViewModelForwarding:InboxScreen.kt:ProposalDetailPane( proposalId = detail.proposalId, vm = proposalsVm, onDismiss = onDismiss, )</ID>
-    <ID>ViewModelForwarding:InboxScreen.kt:SuggestedColumn( modifier = Modifier.fillMaxHeight().weight(1f), state = proposalsState, groupExpanded = proposalGroupExpanded, resolvedExpanded = resolvedExpanded, onResolvedToggle = onResolvedToggle, vm = proposalsVm, onOpen = onOpenProposal, onApprove = onApprove, onReject = onReject, onSourceFilter = onSourceFilter, onSearch = onProposalsSearch, count = pendingProposals, )</ID>
   </CurrentIssues>
 </SmellBaseline>

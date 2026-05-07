@@ -91,10 +91,11 @@ fun LazyListScope.proposalsItems(
     groupExpanded: SnapshotStateMap<ProposalsViewModel.ProposalCategory, Boolean>,
     resolvedExpanded: Boolean,
     onResolvedToggle: () -> Unit,
-    vm: ProposalsViewModel,
     onOpen: (String) -> Unit,
     onApprove: (String) -> Unit,
     onReject: (String) -> Unit,
+    onBulkApprove: (List<String>) -> Unit,
+    onBulkReject: (List<String>) -> Unit,
 ) {
     if (state.groups.isEmpty() && state.resolved.isEmpty()) {
         item(key = "p-empty") {
@@ -113,10 +114,11 @@ fun LazyListScope.proposalsItems(
             onToggle = {
                 groupExpanded[group.category] = !(groupExpanded[group.category] ?: true)
             },
-            vm = vm,
             onOpen = onOpen,
             onApprove = onApprove,
             onReject = onReject,
+            onBulkApprove = onBulkApprove,
+            onBulkReject = onBulkReject,
         )
     }
     if (state.resolved.isNotEmpty()) {
@@ -146,10 +148,11 @@ private fun ProposalGroupCard(
     projectNamesById: Map<Long, String>,
     expanded: Boolean,
     onToggle: () -> Unit,
-    vm: ProposalsViewModel,
     onOpen: (String) -> Unit,
     onApprove: (String) -> Unit,
     onReject: (String) -> Unit,
+    onBulkApprove: (List<String>) -> Unit,
+    onBulkReject: (List<String>) -> Unit,
 ) {
     // Snapshot the id list once per group identity — the lambdas captured by the bulk buttons
     // would otherwise re-allocate on every recomposition.
@@ -161,11 +164,11 @@ private fun ProposalGroupCard(
         onToggle = onToggle,
         actions = {
             Button(
-                onClick = { vm.dispatch(ProposalsViewModel.Intent.BulkApprove(ids)) },
+                onClick = { onBulkApprove(ids) },
                 variant = ButtonVariant.Primary,
             ) { Text("Approve ${group.proposals.size}", softWrap = false, maxLines = 1) }
             Button(
-                onClick = { vm.dispatch(ProposalsViewModel.Intent.BulkReject(ids)) },
+                onClick = { onBulkReject(ids) },
                 variant = ButtonVariant.Ghost,
             ) { Text("Reject", softWrap = false, maxLines = 1) }
         },

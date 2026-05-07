@@ -133,12 +133,14 @@ internal fun ProjectListContent(
     // Stable callbacks: hoisted so children passed `dispatch(...)` lambdas don't churn each
     // recomposition. With the LazyColumn below, only on-screen items recompose anyway, but
     // stable callbacks let `key`-bounded items skip even when `state` updates.
-    val onOpenDetail: (ProjectId) -> Unit = remember(dispatch) {
-        { id -> dispatch(ProjectListViewModel.Intent.OpenDetail(id)) }
-    }
-    val onZoomShelf: (ShelfId?) -> Unit = remember(dispatch) {
-        { shelf -> dispatch(ProjectListViewModel.Intent.ZoomShelf(shelf)) }
-    }
+    val onOpenDetail: (ProjectId) -> Unit =
+        remember(dispatch) {
+            { id -> dispatch(ProjectListViewModel.Intent.OpenDetail(id)) }
+        }
+    val onZoomShelf: (ShelfId?) -> Unit =
+        remember(dispatch) {
+            { shelf -> dispatch(ProjectListViewModel.Intent.ZoomShelf(shelf)) }
+        }
     val onShuffleGems: () -> Unit = remember(dispatch) { { dispatch(ProjectListViewModel.Intent.ShuffleGems) } }
     val onCloseDetail: () -> Unit = remember(dispatch) { { dispatch(ProjectListViewModel.Intent.CloseDetail) } }
     val onClearSearch: () -> Unit = remember(dispatch) { { dispatch(ProjectListViewModel.Intent.Search("")) } }

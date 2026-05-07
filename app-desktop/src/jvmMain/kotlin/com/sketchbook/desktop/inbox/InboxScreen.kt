@@ -69,16 +69,6 @@ fun InboxScreen(
     val attentionState by needsAttentionVm.state.collectAsStateWithLifecycle()
     val journalState by journalVm.state.collectAsStateWithLifecycle()
 
-    val proposalGroupExpanded =
-        remember {
-            mutableStateMapOf<ProposalsViewModel.ProposalCategory, Boolean>()
-        }
-    var resolvedExpanded by remember { mutableStateOf(false) }
-    val attentionCardExpanded = remember { mutableStateMapOf<String, Boolean>() }
-    val journalDayExpanded = remember { mutableStateMapOf<String, Boolean>() }
-
-    var detail by remember { mutableStateOf<InboxDetailTarget?>(null) }
-
     val onApprove: (String) -> Unit =
         remember(proposalsVm) {
             { id -> proposalsVm.dispatch(ProposalsViewModel.Intent.Approve(id)) }
@@ -87,6 +77,14 @@ fun InboxScreen(
         remember(proposalsVm) {
             { id -> proposalsVm.dispatch(ProposalsViewModel.Intent.Reject(id)) }
         }
+    val onBulkApprove: (List<String>) -> Unit =
+        remember(proposalsVm) {
+            { ids -> proposalsVm.dispatch(ProposalsViewModel.Intent.BulkApprove(ids)) }
+        }
+    val onBulkReject: (List<String>) -> Unit =
+        remember(proposalsVm) {
+            { ids -> proposalsVm.dispatch(ProposalsViewModel.Intent.BulkReject(ids)) }
+        }
     val onProposalsSearch: (String) -> Unit =
         remember(proposalsVm) {
             { q -> proposalsVm.dispatch(ProposalsViewModel.Intent.SetSearch(q)) }
@@ -94,10 +92,6 @@ fun InboxScreen(
     val onSourceFilter: (ProposalsViewModel.SourceFilter) -> Unit =
         remember(proposalsVm) {
             { f -> proposalsVm.dispatch(ProposalsViewModel.Intent.SetSourceFilter(f)) }
-        }
-    val onOpenProposal: (String) -> Unit =
-        remember {
-            { id -> detail = InboxDetailTarget.Proposal(id) }
         }
 
     val onAttentionSearch: (String) -> Unit =
@@ -123,10 +117,6 @@ fun InboxScreen(
         remember(needsAttentionVm) {
             { findings -> needsAttentionVm.dispatch(NeedsAttentionViewModel.Intent.BulkDismiss(findings)) }
         }
-    val onOpenAttention: (NeedsAttentionDetailTarget) -> Unit =
-        remember {
-            { target -> detail = InboxDetailTarget.Attention(target) }
-        }
 
     val onJournalSearch: (String) -> Unit =
         remember(journalVm) {
@@ -147,6 +137,92 @@ fun InboxScreen(
     val onBulkUndo: () -> Unit =
         remember(journalVm, journalState.invertibleEntries) {
             { journalVm.dispatch(JournalViewModel.Intent.BulkUndo(journalState.invertibleEntries)) }
+        }
+
+    InboxContent(
+        modifier = modifier,
+        proposalsState = proposalsState,
+        attentionState = attentionState,
+        journalState = journalState,
+        onApprove = onApprove,
+        onReject = onReject,
+        onBulkApprove = onBulkApprove,
+        onBulkReject = onBulkReject,
+        onProposalsSearch = onProposalsSearch,
+        onSourceFilter = onSourceFilter,
+        onAttentionSearch = onAttentionSearch,
+        onRepair = onRepair,
+        onBulkRepair = onBulkRepair,
+        onBulkApply = onBulkApply,
+        onBulkDismiss = onBulkDismiss,
+        onJournalSearch = onJournalSearch,
+        onActionFilter = onActionFilter,
+        onDateRange = onDateRange,
+        onUndoOne = onUndoOne,
+        onBulkUndo = onBulkUndo,
+        detailPane = { detail, onDismiss ->
+            DetailPaneSwitch(
+                detail = detail,
+                proposalsVm = proposalsVm,
+                needsAttentionVm = needsAttentionVm,
+                journalVm = journalVm,
+                onDismiss = onDismiss,
+            )
+        },
+    )
+}
+
+/**
+ * Stateless rendering of the Inbox surface. Takes the materialized states for all three queues +
+ * dispatch lambdas so screenshot tests and previews can render any UI state without standing up
+ * three ViewModels (which have Metro-DI constructors). Mirrors the `ProjectListContent` pattern
+ * established in `feature-projects`.
+ *
+ * The detail-pane slot is optional: when null, opening a row toggles internal detail state but
+ * nothing renders. Production wires a slot that delegates to per-feature detail panes (which
+ * still need their own VMs).
+ */
+@Composable
+internal fun InboxContent(
+    proposalsState: ProposalsViewModel.State,
+    attentionState: NeedsAttentionViewModel.State,
+    journalState: JournalViewModel.State,
+    onApprove: (String) -> Unit,
+    onReject: (String) -> Unit,
+    onBulkApprove: (List<String>) -> Unit,
+    onBulkReject: (List<String>) -> Unit,
+    onProposalsSearch: (String) -> Unit,
+    onSourceFilter: (ProposalsViewModel.SourceFilter) -> Unit,
+    onAttentionSearch: (String) -> Unit,
+    onRepair: (com.sketchbook.core.ProjectId) -> Unit,
+    onBulkRepair: () -> Unit,
+    onBulkApply: (List<MissingSampleFinding>) -> Unit,
+    onBulkDismiss: (List<MissingSampleFinding>) -> Unit,
+    onJournalSearch: (String) -> Unit,
+    onActionFilter: (JournalViewModel.ActionTypeFilter) -> Unit,
+    onDateRange: (JournalViewModel.DateRange) -> Unit,
+    onUndoOne: (JournalEntry) -> Unit,
+    onBulkUndo: () -> Unit,
+    modifier: Modifier = Modifier,
+    detailPane: (@Composable (InboxDetailTarget, () -> Unit) -> Unit)? = null,
+) {
+    val proposalGroupExpanded =
+        remember {
+            mutableStateMapOf<ProposalsViewModel.ProposalCategory, Boolean>()
+        }
+    var resolvedExpanded by remember { mutableStateOf(false) }
+    val attentionCardExpanded = remember { mutableStateMapOf<String, Boolean>() }
+    val journalDayExpanded = remember { mutableStateMapOf<String, Boolean>() }
+
+    var detail by remember { mutableStateOf<InboxDetailTarget?>(null) }
+
+    val onOpenProposal: (String) -> Unit =
+        remember {
+            { id -> detail = InboxDetailTarget.Proposal(id) }
+        }
+    val onOpenAttention: (NeedsAttentionDetailTarget) -> Unit =
+        remember {
+            { target -> detail = InboxDetailTarget.Attention(target) }
         }
     val onOpenJournal: (JournalEntry, String) -> Unit =
         remember {
@@ -192,10 +268,11 @@ fun InboxScreen(
                         groupExpanded = proposalGroupExpanded,
                         resolvedExpanded = resolvedExpanded,
                         onResolvedToggle = onResolvedToggle,
-                        vm = proposalsVm,
                         onOpen = onOpenProposal,
                         onApprove = onApprove,
                         onReject = onReject,
+                        onBulkApprove = onBulkApprove,
+                        onBulkReject = onBulkReject,
                         onSourceFilter = onSourceFilter,
                         onSearch = onProposalsSearch,
                         count = pendingProposals,
@@ -227,18 +304,12 @@ fun InboxScreen(
                 }
             }
             val d = detail
-            if (d != null && canDockDetail) {
-                DetailPaneSwitch(
-                    detail = d,
-                    proposalsVm = proposalsVm,
-                    needsAttentionVm = needsAttentionVm,
-                    journalVm = journalVm,
-                    onDismiss = dismissDetail,
-                )
+            if (d != null && canDockDetail && detailPane != null) {
+                detailPane(d, dismissDetail)
             }
         }
         val d = detail
-        if (d != null && !canDockDetail) {
+        if (d != null && !canDockDetail && detailPane != null) {
             // Scrim catches taps outside the sheet to dismiss — same gesture as the ✕ button.
             Box(
                 modifier =
@@ -249,13 +320,7 @@ fun InboxScreen(
             )
             Row(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.weight(1f)) // empty space catches the scrim taps
-                DetailPaneSwitch(
-                    detail = d,
-                    proposalsVm = proposalsVm,
-                    needsAttentionVm = needsAttentionVm,
-                    journalVm = journalVm,
-                    onDismiss = dismissDetail,
-                )
+                detailPane(d, dismissDetail)
             }
         }
     }
@@ -315,10 +380,11 @@ private fun SuggestedColumn(
     groupExpanded: SnapshotStateMap<ProposalsViewModel.ProposalCategory, Boolean>,
     resolvedExpanded: Boolean,
     onResolvedToggle: () -> Unit,
-    vm: ProposalsViewModel,
     onOpen: (String) -> Unit,
     onApprove: (String) -> Unit,
     onReject: (String) -> Unit,
+    onBulkApprove: (List<String>) -> Unit,
+    onBulkReject: (List<String>) -> Unit,
     onSourceFilter: (ProposalsViewModel.SourceFilter) -> Unit,
     onSearch: (String) -> Unit,
     count: Int,
@@ -338,10 +404,11 @@ private fun SuggestedColumn(
                 groupExpanded = groupExpanded,
                 resolvedExpanded = resolvedExpanded,
                 onResolvedToggle = onResolvedToggle,
-                vm = vm,
                 onOpen = onOpen,
                 onApprove = onApprove,
                 onReject = onReject,
+                onBulkApprove = onBulkApprove,
+                onBulkReject = onBulkReject,
             )
         }
     }
