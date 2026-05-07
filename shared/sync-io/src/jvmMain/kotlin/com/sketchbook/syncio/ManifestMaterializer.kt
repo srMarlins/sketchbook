@@ -68,12 +68,17 @@ class ManifestMaterializer(
         // Pair (temp, final) — temps written first; renames happen only after every file is
         // staged so a mid-fetch failure leaves the working tree intact.
         val staged = mutableListOf<Pair<Path, Path>>()
+        // Tombstones map to deletes-on-disk after the live writes finish so a failed write
+        // doesn't leave the tree with the file already gone.
+        val tombstones = mutableListOf<Path>()
         try {
             for ((relPath, mfile) in manifest.files) {
-                // Tombstones (deleted=true, hash=null) are honored by commit 11's materializer
-                // refresh — for now we just skip them so the v=2 wire shape compiles cleanly.
-                val hash = mfile.hash ?: continue
                 val finalPath = resolveSafely(root, relPath)
+                if (mfile.deleted) {
+                    tombstones.add(finalPath)
+                    continue
+                }
+                val hash = mfile.hash ?: continue // tombstone-shaped without the flag — defensive.
                 val tempPath = finalPath.resolveSibling("${finalPath.fileName}.materialize-${rev.value}")
                 Files.createDirectories(finalPath.parent)
                 // Pull blob into cache (no-op if already cached).
@@ -94,6 +99,12 @@ class ManifestMaterializer(
                     // Fall back to non-atomic — happens on some shares (SMB) and across volumes.
                     Files.move(temp, final, StandardCopyOption.REPLACE_EXISTING)
                 }
+            }
+            // Tombstones: delete the materialized file if present. `deleteIfExists` is idempotent
+            // — re-materializing the same rev twice doesn't fail when the second pass finds the
+            // file already gone.
+            for (final in tombstones) {
+                runCatching { Files.deleteIfExists(final) }
             }
             return Result.success(Unit)
         } catch (e: Throwable) {

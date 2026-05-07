@@ -130,10 +130,33 @@ class SnapshotPipeline(
                 val newRev = parentRev?.next() ?: SnapshotRev(1)
                 emit(SnapshotProgress.WritingManifest(uuid, newRev))
 
-                val files = LinkedHashMap<String, ManifestFile>(unchanged.size + toUpload.size)
+                // Tombstones for relpaths present in [parentFiles] but absent on disk —
+                // produces a Merge-mode-friendly delete signal so a stale add on another host
+                // doesn't resurrect a file the user just removed (design § "Manifest delete
+                // semantics"). For Project trees this is harmless: BranchFork resolution
+                // doesn't merge, so the tombstone is just metadata; the file stays gone in
+                // any subsequent rev. For UserLibrary trees it's load-bearing.
+                val tombstones = LinkedHashMap<String, ManifestFile>()
+                val present = unchanged.keys + toUpload.keys
+                for ((rel, parentEntry) in parentFiles) {
+                    if (rel in present) continue
+                    if (parentEntry.deleted) continue // already a tombstone — don't keep extending its mtime.
+                    tombstones[rel] =
+                        ManifestFile(
+                            hash = null,
+                            size = 0,
+                            mtime = clock.now(),
+                            deleted = true,
+                        )
+                }
+
+                val files = LinkedHashMap<String, ManifestFile>(unchanged.size + toUpload.size + tombstones.size)
                 files.putAll(unchanged)
                 files.putAll(toUpload)
-                val totalBytes = files.values.sumOf { it.size }
+                files.putAll(tombstones)
+                // Live (non-tombstone) entries drive the user-facing stats.
+                val live = files.values.filterNot { it.deleted }
+                val totalBytes = live.sumOf { it.size }
                 val newBytes = actuallyUploadedBytes
                 // Caller can promote this snapshot to a Named entry by setting [PipelineInput.kind]
                 // (with optional [PipelineInput.label]). The Z3 quick-capture hotkey uses that to
@@ -154,7 +177,7 @@ class SnapshotPipeline(
                         files = files,
                         stats =
                             ManifestStats(
-                                fileCount = files.size,
+                                fileCount = live.size,
                                 totalBytes = totalBytes,
                                 newBytes = newBytes,
                             ),

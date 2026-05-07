@@ -427,4 +427,51 @@ class SnapshotPipelineTest {
             assertEquals(0, cloud.blobsCount())
             assertEquals(0, cloud.manifestsFor(uuid).size)
         }
+
+    @Test
+    fun missingFileSinceParentEmitsTombstone() =
+        runTest {
+            val cloud = FakeCloudBackend()
+            val parentHash = FakeWorkingTree.hashOf("v1".encodeToByteArray())
+            val parent =
+                Manifest(
+                    treeId = TrackedTreeId(uuid.value),
+                    kind = TrackedTreeKind.Project,
+                    rev = SnapshotRev(1),
+                    timestamp = now,
+                    hostId = "host-a",
+                    hostName = "DesktopA",
+                    snapshotKind = SnapshotKind.Auto,
+                    files =
+                        mapOf(
+                            "Project.als" to ManifestFile(parentHash, "v1".encodeToByteArray().size.toLong(), now),
+                            "Samples/loop.wav" to
+                                ManifestFile(
+                                    FakeWorkingTree.hashOf("audio".encodeToByteArray()),
+                                    "audio".encodeToByteArray().size.toLong(),
+                                    now,
+                                ),
+                        ),
+                    stats = ManifestStats(2, 7, 7),
+                )
+            val parentGen = cloud.seedManifest(uuid, parent)
+
+            // Disk now has only Project.als (loop.wav was deleted by the user).
+            val tree =
+                FakeWorkingTree(
+                    mapOf("Project.als" to FakeWorkingTree.FileBlob("v1".encodeToByteArray(), now)),
+                )
+
+            pipeline(cloud)
+                .run(
+                    PipelineInput(uuid, tree, parent, parentGen),
+                ).toList()
+
+            val produced = cloud.manifestsFor(uuid).maxByOrNull { it.rev.value }!!
+            val tombstone = produced.files["Samples/loop.wav"]
+            assertNotNull(tombstone)
+            assertTrue(tombstone.deleted, "expected tombstone, got $tombstone")
+            // Stats reflect live entries only.
+            assertEquals(1, produced.stats.fileCount)
+        }
 }

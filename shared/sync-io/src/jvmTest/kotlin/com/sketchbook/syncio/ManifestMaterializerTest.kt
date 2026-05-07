@@ -149,6 +149,52 @@ class ManifestMaterializerTest {
             assertFalse(Files.exists(projectRoot.parent.resolve("escape.als")))
         }
 
+    @Test
+    fun tombstoneEntryDeletesMaterializedFile() =
+        runTest {
+            // Pre-existing file under the project root that the manifest now marks deleted.
+            val pre = projectRoot.resolve("Removed.als")
+            Files.writeString(pre, "old-bytes")
+
+            val live =
+                mapOf(
+                    "Project.als" to "als-bytes".toByteArray(),
+                )
+            val liveManifest = manifestFor(live)
+            val withTombstone =
+                liveManifest.copy(
+                    files =
+                        liveManifest.files +
+                            (
+                                "Removed.als" to
+                                    ManifestFile(
+                                        hash = null,
+                                        size = 0,
+                                        mtime = Instant.parse("2026-05-05T12:30:00Z"),
+                                        deleted = true,
+                                    )
+                            ),
+                )
+            val cloud =
+                FakeMaterializerCloud(
+                    withTombstone,
+                    live.entries.associate { (rel, b) ->
+                        withTombstone.files[rel]!!.hash!! to b
+                    },
+                )
+            val handle = CatalogDb.openInMemory()
+            val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = BlobCacheSettings.Default)
+            val mat = ManifestMaterializer(cloud, cache) { projectRoot }
+
+            val r = mat.materialize(uuid, rev)
+            assertTrue(r.isSuccess, "materialize failed: ${r.exceptionOrNull()}")
+
+            // Live file got laid down.
+            assertEquals("als-bytes", Files.readString(projectRoot.resolve("Project.als")))
+            // Tombstoned file is gone.
+            assertFalse(Files.exists(pre))
+        }
+
     private fun manifestFor(files: Map<String, ByteArray>): Manifest {
         // Synthesize a 64-hex BlobHash from each rel-path so distinct paths get distinct hashes.
         val mfiles =
