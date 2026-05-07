@@ -31,8 +31,9 @@ data class FilterChipOption<T>(
  * enum filter (source, action-type, date-range, etc.) without bespoke per-screen widgets.
  *
  * Selection is owned by the caller — this component just renders [options] and emits
- * [onSelected] when the user taps a chip. Selected fill uses `accentSoft`, unselected uses
- * `surfaceCard`; both are existing palette tokens.
+ * [onSelected] when the user taps a chip. Selected fill uses `tintCream` (matching the
+ * ProjectList toolbar chips), unselected uses `surfaceCard` — keeping the accent-green
+ * reserved for CTAs.
  */
 @Composable
 fun <T> FilterChipRow(
@@ -51,7 +52,7 @@ fun <T> FilterChipRow(
         for (opt in options) {
             val isSelected = opt.value == selected
             val shape = RoundedCornerShape(AppTheme.spacing.cornerSmall)
-            val bg = if (isSelected) AppTheme.colors.accentSoft else AppTheme.colors.surfaceCard
+            val bg = if (isSelected) AppTheme.colors.tintCream else AppTheme.colors.surfaceCard
             val fg = if (isSelected) AppTheme.colors.inkPrimary else AppTheme.colors.inkSecondary
             Row(
                 modifier =

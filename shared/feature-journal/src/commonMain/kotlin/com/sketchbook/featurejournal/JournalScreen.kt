@@ -5,7 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
@@ -237,30 +236,36 @@ private fun JournalRowItem(
                 Text(data.projectName, style = AppTheme.typography.caption, maxLines = 1)
             }
         }
-        if (label.target.isNotEmpty()) {
-            ProvideContentColor(AppTheme.colors.inkPrimary) {
-                Text(
-                    label.target,
-                    style = AppTheme.typography.bodyEmphasis,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    softWrap = false,
-                    modifier = Modifier.weight(1f),
-                )
+        // Target stacks above detail in a single weighted column so they each get the full
+        // horizontal slot to ellipsise into. Earlier inline layout gave both `weight(1f)`
+        // which forced a 50/50 split and ellipsised the detail at the halfway point even
+        // when the target text was short.
+        Column(modifier = Modifier.weight(1f)) {
+            if (label.target.isNotEmpty()) {
+                ProvideContentColor(AppTheme.colors.inkPrimary) {
+                    Text(
+                        label.target,
+                        style = AppTheme.typography.bodyEmphasis,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false,
+                    )
+                }
             }
-        } else {
-            // Archive/Unarchive rows have no separate target — the project chip already says
-            // which project; no need for a "—" placeholder. Spacer keeps the trailing time +
-            // undo aligned to the right edge.
-            Spacer(modifier = Modifier.weight(1f))
-        }
-        if (label.detail != null) {
-            ProvideContentColor(AppTheme.colors.inkMuted) {
-                Text(label.detail, style = AppTheme.typography.caption, maxLines = 1)
+            if (label.detail != null) {
+                ProvideContentColor(AppTheme.colors.inkMuted) {
+                    Text(
+                        label.detail,
+                        style = AppTheme.typography.caption,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false,
+                    )
+                }
             }
         }
         ProvideContentColor(AppTheme.colors.inkMuted) {
-            Text(data.time, style = AppTheme.typography.caption, maxLines = 1)
+            Text(data.time, style = AppTheme.typography.caption, maxLines = 1, softWrap = false)
         }
         if (data.isInvertible) {
             UndoButton(onClick = { onUndo(entry) })
