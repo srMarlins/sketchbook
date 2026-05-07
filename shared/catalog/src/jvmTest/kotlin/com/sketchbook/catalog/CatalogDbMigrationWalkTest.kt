@@ -6,6 +6,7 @@ import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.sketchbook.catalog.db.Catalog
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.Properties
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.deleteIfExists
@@ -32,11 +33,17 @@ import kotlin.test.assertTrue
  */
 class CatalogDbMigrationWalkTest {
 
-    private val tempFiles = mutableListOf<java.nio.file.Path>()
+    private val tempFiles = mutableListOf<Path>()
 
     @AfterTest
     fun cleanup() {
-        tempFiles.forEach { it.deleteIfExists() }
+        // SQLite WAL mode leaves `<db>-wal` and `<db>-shm` siblings on disk; clean them up too
+        // so /tmp doesn't accumulate sidecar files across runs.
+        tempFiles.forEach { path ->
+            path.deleteIfExists()
+            path.resolveSibling("${path.fileName}-wal").deleteIfExists()
+            path.resolveSibling("${path.fileName}-shm").deleteIfExists()
+        }
         tempFiles.clear()
     }
 
@@ -227,7 +234,7 @@ class CatalogDbMigrationWalkTest {
         )
     }
 
-    private fun newTempDbPath(): java.nio.file.Path {
+    private fun newTempDbPath(): Path {
         val path = Files.createTempFile("sketchbook-migration-walk-", ".db")
         // openOnDisk wants the file to either exist (and contain a valid SQLite DB) or not exist.
         // createTempFile leaves a zero-byte file behind, which JDBC happily treats as empty —
