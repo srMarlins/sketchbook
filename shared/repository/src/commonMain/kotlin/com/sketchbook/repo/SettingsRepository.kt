@@ -26,10 +26,24 @@ interface SettingsRepository {
 
     suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit>
 
+    /**
+     * Marks onboarding complete with the given [skipFlags]. Atomic: `firstRunCompletedAt` and
+     * `onboardingSkipped` are emitted together so observers never see one without the other.
+     * After this call, `LaunchGate.resolve()` returns `MainApp`.
+     */
     suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit>
 
+    /**
+     * Sticky-dismisses the soft re-prompt banner for [kind]. After dismissal, the corresponding
+     * banner does not reappear; the user can still re-discover the deferred setting via Settings.
+     */
     suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit>
 
+    /**
+     * Replaces the user-configured plugin install directories. Paths are normalized (absolute,
+     * distinct, blanks dropped) on write. Empty list = use platform defaults (the JVM presence
+     * probe falls back to `defaultInstalledDirs()`).
+     */
     suspend fun setPluginFolders(folders: List<String>): Result<Unit>
 }
 

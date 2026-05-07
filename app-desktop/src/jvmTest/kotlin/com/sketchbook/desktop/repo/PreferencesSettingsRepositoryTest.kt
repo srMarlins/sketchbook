@@ -111,6 +111,7 @@ class PreferencesSettingsRepositoryTest {
 
         val snapshot = repo.observe().first()
         assertTrue(snapshot.onboardingSkipped.samplesPromptDismissed)
+        assertTrue(snapshot.onboardingSkipped.samplesSkipped, "dismiss should not clobber other flags")
     }
 
     @Test
