@@ -18,4 +18,5 @@ dependencies {
     // Dependency-analysis must be on the build-logic classpath so convention
     // plugins (kmp-library) can apply it via `id("com.autonomousapps.dependency-analysis")`.
     implementation("com.autonomousapps:dependency-analysis-gradle-plugin:${version("dependency-analysis")}")
+    implementation("io.github.takahirom.roborazzi:roborazzi-gradle-plugin:${version("roborazzi")}")
 }
