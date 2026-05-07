@@ -37,6 +37,10 @@ private fun runApp() = application {
             startBackgroundPull(it)
             startWatcher(it)
             it.libraryScanCoordinator.start()
+            // Touch the holder so Metro instantiates the AppScope singleton at startup. The
+            // holder's `init { scope.launch { ... } }` block then begins observing auth + bucket
+            // and rebuilds the per-user graph in the background.
+            it.userGraphHolder
         }
     }
     // Dev convenience: if SKETCHBOOK_DEFAULT_ROOT is set and Settings has no roots, seed it

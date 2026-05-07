@@ -100,6 +100,7 @@ interface DesktopAppGraph : ViewModelGraph {
     val lockRepository: LockRepository
     val syncQueue: SyncQueue
     val libraryScanCoordinator: LibraryScanCoordinator
+    val userGraphHolder: UserGraphHolder
 
     // `metroViewModelFactory` is inherited from [ViewModelGraph] — the contributed
     // `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject` ViewModel map is plumbed
