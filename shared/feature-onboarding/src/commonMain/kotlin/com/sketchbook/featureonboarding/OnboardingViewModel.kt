@@ -2,10 +2,13 @@ package com.sketchbook.featureonboarding
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sketchbook.core.AppScope
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.OnboardingSkipFlags
 import com.sketchbook.repo.SettingsRepository
+import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +65,8 @@ interface ScanTrigger {
     fun triggerScan()
 }
 
+@ContributesIntoMap(AppScope::class)
+@ViewModelKey
 @Inject
 class OnboardingViewModel(private val repository: SettingsRepository, private val scanTrigger: ScanTrigger) :
     ViewModel() {
