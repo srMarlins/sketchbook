@@ -167,6 +167,21 @@ class FakeCloudBackend : CloudBackend {
         return gen
     }
 
+    fun seedTreeManifest(treeId: TrackedTreeId, kind: TrackedTreeKind, manifest: Manifest): Generation {
+        val list = manifests.getOrPut(TreeKey(treeId, kind)) { mutableListOf() }
+        val gen = nextGeneration()
+        val ref = ManifestRef(
+            rev = manifest.rev.value,
+            path = "trees/${kind.wireName}/${treeId.value}/manifests/${manifest.rev.value}.json",
+            generation = gen,
+        )
+        list += StoredManifest(ref, manifest)
+        return gen
+    }
+
+    fun manifestsForTree(treeId: TrackedTreeId, kind: TrackedTreeKind): List<Manifest> =
+        manifests[TreeKey(treeId, kind)]?.map { it.manifest } ?: emptyList()
+
     fun blobsCount(): Int = blobs.size
     fun sharedBlobsCount(): Int = blobs.keys.count { it.scope == BlobScope.Shared }
     fun privateBlobsCount(uuid: ProjectUuid): Int = blobs.keys.count { (it.scope as? BlobScope.Private)?.uuid == uuid }

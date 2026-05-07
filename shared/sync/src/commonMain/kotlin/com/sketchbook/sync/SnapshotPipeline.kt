@@ -155,56 +155,139 @@ class SnapshotPipeline(
             // 5) CAS HEAD. Conflict resolution dispatches on KindPolicy.conflictMode.
             val casResult = cloud.appendManifestHead(treeId, kind, parentExpectedHead, auto)
             val saved = casResult.fold(
-                onSuccess = {
-                    SnapshotProgress.Saved(uuid, newRev, input.snapshotKind, input.label)
-                },
-                onFailure = { err ->
-                    if (err !is SketchbookError.Conflict) {
-                        return@fold SnapshotProgress.Failed(uuid, "head write failed: ${err.message}")
-                    }
-                    when (val mode = policy.conflictMode) {
-                        is ConflictMode.BranchFork -> {
-                            // Re-fetch latest HEAD generation by listing manifests; pick the last
-                            // one and rev one above it. If the list is empty something is wrong,
-                            // propagate as failure.
-                            val refs = cloud.listManifests(treeId, kind, sinceRev = parentRev)
-                            val latest = refs.maxByOrNull { it.rev }
-                            if (latest == null) {
-                                emit(SnapshotProgress.Failed(uuid, "conflict but cannot find new HEAD"))
-                                return@fold null
-                            }
-                            val branchRev = SnapshotRev(latest.rev + 1)
-                            val ts = clock.now()
-                            val label = "auto-fork: $hostName-${ts.toEpochMilliseconds()}"
-                            val branch = auto.copy(
-                                rev = branchRev,
-                                parentRev = parentRev,
-                                kind = SnapshotKind.Branch,
-                                label = label,
-                                timestamp = ts,
-                            )
-                            val branchResult = cloud.appendManifestHead(treeId, kind, latest.generation, branch)
-                            branchResult.fold(
-                                onSuccess = {
-                                    SnapshotProgress.Saved(uuid, branchRev, SnapshotKind.Branch, label)
-                                },
-                                onFailure = { e ->
-                                    SnapshotProgress.Failed(uuid, "branch write failed: ${e.message}")
-                                },
-                            )
-                        }
-
-                        is ConflictMode.Merge -> error("ConflictMode.Merge not yet implemented (commit 7)")
-                    }
-                },
+                onSuccess = { SnapshotProgress.Saved(uuid, newRev, input.snapshotKind, input.label) },
+                onFailure = { null },
+            ) ?: resolveCasFailure(
+                uuid = uuid,
+                treeId = treeId,
+                kind = kind,
+                policy = policy,
+                local = auto,
+                parentRev = parentRev,
+                err = casResult.exceptionOrNull(),
             )
-            if (saved != null) emit(saved)
+            emit(saved)
         } finally {
             // 6) Release lease (best-effort; pipeline outcome already emitted). Skipped when
             // policy.leaseRequired = false — `leaseGen` stays null and we never acquired one.
             val gen = leaseGen
             if (gen != null) runCatching { cloud.releaseLock(treeId, kind, gen) }
         }
+    }
+
+    private suspend fun resolveCasFailure(
+        uuid: ProjectUuid,
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        policy: KindPolicy,
+        local: Manifest,
+        parentRev: SnapshotRev?,
+        err: Throwable?,
+    ): SnapshotProgress {
+        if (err !is SketchbookError.Conflict) {
+            return SnapshotProgress.Failed(uuid, "head write failed: ${err?.message}")
+        }
+        return when (policy.conflictMode) {
+            is ConflictMode.BranchFork -> resolveBranchFork(uuid, treeId, kind, local, parentRev)
+            is ConflictMode.Merge -> resolveMerge(uuid, treeId, kind, local)
+        }
+    }
+
+    private suspend fun resolveBranchFork(
+        uuid: ProjectUuid,
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        local: Manifest,
+        parentRev: SnapshotRev?,
+    ): SnapshotProgress {
+        val refs = cloud.listManifests(treeId, kind, sinceRev = parentRev)
+        val latest = refs.maxByOrNull { it.rev }
+            ?: return SnapshotProgress.Failed(uuid, "conflict but cannot find new HEAD")
+        val branchRev = SnapshotRev(latest.rev + 1)
+        val ts = clock.now()
+        val label = "auto-fork: $hostName-${ts.toEpochMilliseconds()}"
+        val branch = local.copy(
+            rev = branchRev,
+            parentRev = parentRev,
+            kind = SnapshotKind.Branch,
+            label = label,
+            timestamp = ts,
+        )
+        return cloud.appendManifestHead(treeId, kind, latest.generation, branch).fold(
+            onSuccess = { SnapshotProgress.Saved(uuid, branchRev, SnapshotKind.Branch, label) },
+            onFailure = { e -> SnapshotProgress.Failed(uuid, "branch write failed: ${e.message}") },
+        )
+    }
+
+    /**
+     * [ConflictMode.Merge] resolution: re-fetch the winning HEAD's manifest, run [mergeManifests],
+     * re-CAS at the next rev. Up to [MERGE_MAX_RETRIES] attempts before bailing — protects against
+     * hot-spinning when both machines save constantly.
+     */
+    private suspend fun resolveMerge(
+        uuid: ProjectUuid,
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        local: Manifest,
+    ): SnapshotProgress {
+        var current: Manifest = local
+        // Always re-list against the original parent — using `current.parentRev` would advance
+        // each iteration to the previous merge's parent and miss the now-latest HEAD when the
+        // re-CAS fails again.
+        val originalParentRev = local.parentRev
+        var failure: SnapshotProgress? = null
+        var attempt = 0
+        while (attempt < MERGE_MAX_RETRIES && failure == null) {
+            attempt += 1
+            val outcome = mergeAttempt(uuid, treeId, kind, current, originalParentRev)
+            when (outcome) {
+                is MergeAttempt.Done -> return outcome.progress
+                is MergeAttempt.Retry -> current = outcome.merged
+                is MergeAttempt.Fail -> failure = outcome.progress
+            }
+        }
+        return failure ?: SnapshotProgress.Failed(
+            uuid,
+            "merge: CAS retries exhausted after $MERGE_MAX_RETRIES",
+        )
+    }
+
+    private suspend fun mergeAttempt(
+        uuid: ProjectUuid,
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        current: Manifest,
+        originalParentRev: SnapshotRev?,
+    ): MergeAttempt {
+        val refs = cloud.listManifests(treeId, kind, sinceRev = originalParentRev)
+        val latest = refs.maxByOrNull { it.rev }
+            ?: return MergeAttempt.Fail(SnapshotProgress.Failed(uuid, "merge: conflict but cannot find new HEAD"))
+        val winning = runCatching {
+            cloud.readManifest(treeId, kind, SnapshotRev(latest.rev))
+        }.getOrElse { e ->
+            return MergeAttempt.Fail(SnapshotProgress.Failed(uuid, "merge: read winning manifest failed: ${e.message}"))
+        }
+        val merged = mergeManifests(local = current, remote = winning, hostId = hostId, clock = clock)
+        val result = cloud.appendManifestHead(treeId, kind, latest.generation, merged)
+        if (result.isSuccess) {
+            return MergeAttempt.Done(SnapshotProgress.Saved(uuid, merged.rev, SnapshotKind.Auto, branchLabel = null))
+        }
+        val err = result.exceptionOrNull()
+        return if (err is SketchbookError.Conflict) {
+            MergeAttempt.Retry(merged)
+        } else {
+            MergeAttempt.Fail(SnapshotProgress.Failed(uuid, "merge write failed: ${err?.message}"))
+        }
+    }
+
+    private sealed interface MergeAttempt {
+        data class Done(val progress: SnapshotProgress) : MergeAttempt
+        data class Retry(val merged: Manifest) : MergeAttempt
+        data class Fail(val progress: SnapshotProgress) : MergeAttempt
+    }
+
+    private companion object {
+        const val MERGE_MAX_RETRIES: Int = 3
     }
 }
 
