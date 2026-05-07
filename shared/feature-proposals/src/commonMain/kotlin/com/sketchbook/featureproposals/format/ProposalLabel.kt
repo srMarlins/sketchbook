@@ -1,6 +1,9 @@
 package com.sketchbook.featureproposals.format
 
+import com.sketchbook.core.ProjectId
+import com.sketchbook.repo.ProjectDisplayHints
 import com.sketchbook.repo.ProposalAction
+import com.sketchbook.repo.resolveProjectDisplay
 import com.sketchbook.uishared.components.VerbTint
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -33,17 +36,21 @@ fun proposalLabel(
 ): ProposalLabel {
     fun s(key: String): String? = (action.args[key] as? JsonPrimitive)?.contentOrNull
     val pidLong = s("project_id")?.toLongOrNull()
-    val resolvedName = pidLong?.let { projectNameById[it] }
-    // Fallback chain: catalog lookup → JSON `name` → JSON `path` basename → "project #ID" →
-    // "project". Proposals from `SqlProposalsRepository` carry `name` and `path` in args, so the
-    // row reads as the project name even before the projects flow has populated the names map.
+    // Fallback chain runs through the shared `resolveProjectDisplay` resolver: denorm name from
+    // args → catalog lookup → path basename → "project #ID" sentinel. Proposals from
+    // `SqlProposalsRepository` carry `name` and `path` in args, so the row reads as the project
+    // name even before the projects flow has populated the names map. The Long-keyed map is
+    // converted to a `ProjectId`-keyed map at the call boundary so the resolver's signature stays
+    // ProjectId-typed.
     val nameFromArgs = s("name")?.takeIf { it.isNotBlank() }
-    val basenameFromArgs = s("path")?.let { filenameOf(it) }?.takeIf { it.isNotBlank() }
-    val projectLabel = resolvedName
-        ?: nameFromArgs
-        ?: basenameFromArgs
-        ?: pidLong?.let { "project #$it" }
-        ?: "project"
+    val pathFromArgs = s("path")?.takeIf { it.isNotBlank() }
+    val projectLabel = pidLong?.let {
+        resolveProjectDisplay(
+            id = ProjectId(it),
+            hints = ProjectDisplayHints(denormName = nameFromArgs, pathHint = pathFromArgs),
+            nameById = projectNameById.mapKeys { (k, _) -> ProjectId(k) },
+        )
+    } ?: nameFromArgs ?: pathFromArgs?.let(::filenameOf)?.takeIf { it.isNotBlank() } ?: "project"
     return when (action.type) {
         "MoveProject" -> {
             val to = s("to").orEmpty()

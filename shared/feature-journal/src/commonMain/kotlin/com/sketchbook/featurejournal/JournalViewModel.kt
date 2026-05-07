@@ -8,8 +8,10 @@ import com.sketchbook.core.ProjectId
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
+import com.sketchbook.repo.ProjectDisplayHints
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.RepairRepository
+import com.sketchbook.repo.resolveProjectDisplay
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
@@ -199,41 +201,43 @@ class JournalViewModel(
     }
 
     /**
-     * Resolve a project name with the same fallback chain the proposals queue uses:
-     *   1. The denormalized name on the journal entry itself (captured at write time).
-     *   2. Live catalog lookup by id.
-     *   3. Basename of any path embedded in the action (Move/Rename/MissingSample carry one).
-     *   4. `"project #N"` as a last-resort sentinel.
+     * Resolve a project name via the shared [resolveProjectDisplay] resolver. The fallback chain
+     * — denormalized [JournalEntry.projectName] → catalog map → action-derived path basename →
+     * `"project #N"` sentinel — lives in `shared/repository/.../ProjectDisplay.kt`; this method
+     * only assembles the hints.
      *
-     * The denormalization on (1) is what saves us when the catalog rescan reassigns ids and the
-     * old `project_id` no longer points at the row that originally produced the entry —
-     * `journal_entries.project_id` deliberately has no FK so stale ids stay readable.
+     * The denormalization on `entry.projectName` is what saves us when the catalog rescan
+     * reassigns ids and the old `project_id` no longer points at the row that originally produced
+     * the entry — `journal_entries.project_id` deliberately has no FK so stale ids stay readable.
      */
-    private fun resolveName(entry: JournalEntry, nameById: Map<ProjectId, String>): String {
-        entry.projectName?.takeUnless { it.isBlank() }?.let { return it }
-        nameById[entry.projectId]?.let { return it }
-        nameFromAction(entry.action)?.let { return it }
-        return "project #${entry.projectId.value}"
-    }
+    @Suppress("FunctionExpressionBody")
+    private fun resolveName(entry: JournalEntry, nameById: Map<ProjectId, String>): String = resolveProjectDisplay(
+        id = entry.projectId,
+        hints = ProjectDisplayHints(
+            denormName = entry.projectName,
+            pathHint = pathHintFromAction(entry.action),
+        ),
+        nameById = nameById,
+    )
 
-    private fun nameFromAction(action: ActionRecord): String? = when (action) {
-        is ActionRecord.Move -> basenameWithoutAls(action.pathAfter) ?: basenameWithoutAls(action.pathBefore)
+    /**
+     * Extract a path/name hint from the action variants that carry one. The resolver basenames the
+     * result and strips `.als`, so for sample paths we pre-walk to the parent dir so the project
+     * folder leaf surfaces (not the sample filename).
+     */
+    private fun pathHintFromAction(action: ActionRecord): String? = when (action) {
+        is ActionRecord.Move -> action.pathAfter.ifBlank { null } ?: action.pathBefore.ifBlank { null }
         is ActionRecord.Rename -> action.nameAfter.takeUnless { it.isBlank() }
-        is ActionRecord.MissingSampleMapped -> basenameOfDir(action.missingPath)
-        is ActionRecord.MissingSampleUnmapped -> basenameOfDir(action.missingPath)
+        is ActionRecord.MissingSampleMapped -> parentDirOfSample(action.missingPath)
+        is ActionRecord.MissingSampleUnmapped -> parentDirOfSample(action.missingPath)
         else -> null
     }
 
-    private fun basenameWithoutAls(path: String): String? {
-        val tail = path.substringAfterLast('/').substringAfterLast('\\').ifEmpty { return null }
-        return tail.removeSuffix(".als").takeUnless { it.isBlank() }
-    }
-
     /** For sample paths, the project name is the *parent* dir's leaf, not the sample filename. */
-    private fun basenameOfDir(samplePath: String): String? {
+    private fun parentDirOfSample(samplePath: String): String? {
         val normalized = samplePath.replace('\\', '/')
         val parent = normalized.substringBeforeLast('/', "")
-        return parent.substringAfterLast('/').takeUnless { it.isBlank() }
+        return parent.takeUnless { it.isBlank() }
     }
 
     /**
