@@ -79,10 +79,7 @@ data class Settings(
  * user skipped picking a samples root, surface a dismissible nudge until they either configure
  * one or dismiss the prompt.
  */
-data class OnboardingSkipFlags(
-    val samplesSkipped: Boolean = false,
-    val samplesPromptDismissed: Boolean = false,
-)
+data class OnboardingSkipFlags(val samplesSkipped: Boolean = false, val samplesPromptDismissed: Boolean = false)
 
 /**
  * Local blob cache policy. The sync engine consults this on every download to decide whether to
