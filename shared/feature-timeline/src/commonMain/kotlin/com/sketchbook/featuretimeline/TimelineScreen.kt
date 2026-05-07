@@ -50,6 +50,22 @@ fun TimelineScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val groups = remember(state.history, state.showAll) { vm.visibleGroups(state) }
+    TimelineContent(
+        state = state,
+        groups = groups,
+        dispatch = vm::dispatch,
+        modifier = modifier,
+    )
+}
+
+@Composable
+internal fun TimelineContent(
+    state: TimelineViewModel.State,
+    groups: List<TimelineViewModel.DayGroup>,
+    dispatch: (TimelineViewModel.Intent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -59,12 +75,8 @@ fun TimelineScreen(
     ) {
         Header(
             state = state,
-            onToggleShowAll = { vm.dispatch(TimelineViewModel.Intent.ToggleShowAll) },
+            onToggleShowAll = { dispatch(TimelineViewModel.Intent.ToggleShowAll) },
         )
-        // visibleGroups does filter+sort+groupBy+sortedMap on every call. The state ticks
-        // frequently while a rewind is in progress; recompute only when the inputs that
-        // actually feed the result change.
-        val groups = remember(state.history, state.showAll) { vm.visibleGroups(state) }
         if (groups.isEmpty()) {
             EmptyState(
                 title = if (state.loading) "Loading…" else "No snapshots yet",
@@ -90,9 +102,9 @@ fun TimelineScreen(
                                 files = snap.fileCount,
                                 bytes = snap.totalBytes,
                                 newBytes = snap.newBytes,
-                                onRewind = { vm.dispatch(TimelineViewModel.Intent.RequestRewind(snap.rev)) },
+                                onRewind = { dispatch(TimelineViewModel.Intent.RequestRewind(snap.rev)) },
                                 onCommitLabel = { newLabel ->
-                                    vm.dispatch(TimelineViewModel.Intent.RelabelSnapshot(snap.rev, newLabel))
+                                    dispatch(TimelineViewModel.Intent.RelabelSnapshot(snap.rev, newLabel))
                                 },
                             )
                         }
@@ -104,8 +116,8 @@ fun TimelineScreen(
             ConfirmRewindDialog(
                 rev = rev,
                 progress = state.rewindProgress,
-                onCancel = { vm.dispatch(TimelineViewModel.Intent.CancelRewind) },
-                onConfirm = { vm.dispatch(TimelineViewModel.Intent.ConfirmRewind(rev)) },
+                onCancel = { dispatch(TimelineViewModel.Intent.CancelRewind) },
+                onConfirm = { dispatch(TimelineViewModel.Intent.ConfirmRewind(rev)) },
             )
         }
     }
