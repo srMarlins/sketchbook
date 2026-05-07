@@ -33,11 +33,21 @@ data class Manifest(
     @SerialName("stats") val stats: ManifestStats,
 )
 
+/**
+ * One file's manifest entry. [deleted] tombstones survive merges so `Merge` conflict mode (v=2,
+ * UserLibrary) preserves intentional deletions. v=1 manifests never set [deleted]; the field is
+ * an additive default so existing producers and decoders continue to round-trip unchanged.
+ *
+ * **Wire shape on tombstones (v=2):** `hash` becomes nullable when `deleted=true`. v=1 manifests
+ * still always carry a hash; [hash] stays non-null in the v=1 era and gets relaxed when the
+ * v=2 wire format lands (see design §"Wire format: Manifest").
+ */
 @Serializable
 data class ManifestFile(
     @SerialName("hash") val hash: BlobHash,
     @SerialName("size") val size: Long,
     @SerialName("mtime") val mtime: Instant,
+    @SerialName("deleted") val deleted: Boolean = false,
 )
 
 @Serializable

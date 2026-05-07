@@ -83,6 +83,24 @@ class ManifestTest {
     }
 
     @Test
+    fun tombstoneFieldRoundTrips() {
+        val original = fixture().copy(
+            files = mapOf(
+                "deleted.adv" to ManifestFile(
+                    hash = BlobHash("b3:" + "1f2c".repeat(16)),
+                    size = 0,
+                    mtime = Instant.parse("2026-05-05T14:22:30.000Z"),
+                    deleted = true,
+                ),
+            ),
+        )
+        val text = json.encodeToString(Manifest.serializer(), original)
+        assertEquals(true, text.contains("\"deleted\":true"))
+        val decoded = json.decodeFromString(Manifest.serializer(), text)
+        assertEquals(true, decoded.files["deleted.adv"]!!.deleted)
+    }
+
+    @Test
     fun acceptsKnownDesignDocSample() {
         // Subset of the example in design doc §3.1, with 64-char hashes.
         val sample = """

@@ -80,6 +80,28 @@ value class SnapshotRev(val value: Long) {
 }
 
 /**
+ * Opaque [TrackedTree] identity — ULID-shaped, registry-minted, never derived from any other id.
+ * Lives in cloud manifests, the registry CloudDoc, and `tree_*` catalog tables. See
+ * `docs/plans/2026-05-07-backend-generalization-design.md` §"Identity: opaque, registered, never
+ * derived" for why this isn't `project:<uuid>`.
+ */
+@JvmInline
+@Serializable
+value class TrackedTreeId(val value: String) {
+    init {
+        require(value.isNotBlank()) { "TrackedTreeId must not be blank" }
+        require(value.length <= MAX_LEN) { "TrackedTreeId too long: ${value.length} > $MAX_LEN" }
+        require(value.all { it.isSafeIdChar() }) {
+            "TrackedTreeId must be alphanumeric, dash, or underscore, got '$value'"
+        }
+    }
+
+    companion object {
+        const val MAX_LEN: Int = 64
+    }
+}
+
+/**
  * Tenant identifier. v1 hardcodes `"default"`; v1.2 multi-user adds real ids.
  */
 @JvmInline
