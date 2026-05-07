@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.core.PluginFormat
 import com.sketchbook.core.PluginRef
@@ -25,8 +27,8 @@ import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.EmptyState
 import com.sketchbook.uishared.components.LockBadge
 import com.sketchbook.uishared.components.Pill
+import com.sketchbook.uishared.components.ProvideContentColor
 import com.sketchbook.uishared.components.RowItem
-import com.sketchbook.uishared.components.Surface
 import com.sketchbook.uishared.components.Tag
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
@@ -151,21 +153,42 @@ private fun Tabs(
     current: ProjectDetailViewModel.Tab,
     onSelect: (ProjectDetailViewModel.Tab) -> Unit,
 ) {
+    val colors = AppTheme.colors
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
     ) {
         ProjectDetailViewModel.Tab.values().forEach { tab ->
             val active = tab == current
-            val color = if (active) AppTheme.colors.accentAction else AppTheme.colors.surfacePanel
-            Surface(
-                color = color,
-                padding = PaddingValues(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm),
-                modifier = Modifier.clickable { onSelect(tab) },
-            ) {
+            // Single CTA-green per page: keep the "Open in Live" button as the only filled
+            // accent. Active tab reads via emphasis weight + a 2dp underline in ruleMargin
+            // (the same notebook-margin red as the page header), staying visually quiet.
+            val underline =
+                if (active) {
+                    Modifier.drawBehind {
+                        drawLine(
+                            color = colors.ruleMargin,
+                            start =
+                                androidx.compose.ui.geometry
+                                    .Offset(0f, size.height - 1f),
+                            end =
+                                androidx.compose.ui.geometry
+                                    .Offset(size.width, size.height - 1f),
+                            strokeWidth = 1.5f,
+                        )
+                    }
+                } else {
+                    Modifier
+                }
+            ProvideContentColor(if (active) colors.inkPrimary else colors.inkSecondary) {
                 Text(
                     text = tab.name,
                     style = if (active) AppTheme.typography.bodyEmphasis else AppTheme.typography.body,
+                    modifier =
+                        Modifier
+                            .clickable { onSelect(tab) }
+                            .padding(vertical = AppTheme.spacing.sm)
+                            .then(underline),
                 )
             }
         }
@@ -175,14 +198,54 @@ private fun Tabs(
 @Composable
 private fun OverviewTab(state: ProjectDetailViewModel.State) {
     val row = state.row ?: return
-    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
-        row.tempo?.let { Text("Tempo: ${it.toInt()} bpm") }
-        Text("Tracks: ${row.trackCount}")
-        row.lastSavedLiveVersion?.let { Text("Last saved with: $it") }
+    val colors = AppTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md)) {
+        FactGrid {
+            row.tempo?.let { Fact(label = "tempo", value = "${it.toInt()} bpm") }
+            row.key?.let { Fact(label = "key", value = it) }
+            row.effectiveStage?.let { Fact(label = "stage", value = it.displayName) }
+            row.effortScore?.let { Fact(label = "effort", value = it.toString()) }
+            Fact(label = "tracks", value = row.trackCount.toString())
+            row.lastSavedLiveVersion?.let { Fact(label = "saved with", value = "Live $it") }
+        }
+        if (row.missingSampleCount > 0) {
+            ProvideContentColor(colors.accentSecondary) {
+                Text(
+                    "${row.missingSampleCount} missing sample${if (row.missingSampleCount == 1) "" else "s"} — see Samples tab.",
+                    style = AppTheme.typography.body,
+                )
+            }
+        }
         if (row.tags.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs)) {
                 row.tags.forEach { Tag(label = it) }
             }
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun FactGrid(content: @Composable androidx.compose.foundation.layout.FlowRowScope.() -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+        content = content,
+    )
+}
+
+@Composable
+private fun Fact(
+    label: String,
+    value: String,
+) {
+    val colors = AppTheme.colors
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        ProvideContentColor(colors.inkMuted) {
+            Text(label, style = AppTheme.typography.caption)
+        }
+        ProvideContentColor(colors.inkPrimary) {
+            Text(value, style = AppTheme.typography.bodyEmphasis)
         }
     }
 }

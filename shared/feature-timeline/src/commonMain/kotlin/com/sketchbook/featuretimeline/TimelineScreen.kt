@@ -88,7 +88,7 @@ internal fun TimelineContent(
                 groups.forEach { group ->
                     item(key = "day-${group.date}") {
                         Text(
-                            text = group.date.toString(),
+                            text = group.displayLabel,
                             style = AppTheme.typography.bodyEmphasis,
                             modifier = Modifier.padding(top = AppTheme.spacing.xs),
                         )
@@ -159,7 +159,7 @@ private fun SnapshotRow(
     val isBranch = kind == SnapshotKind.Branch
     val indent = if (isBranch) AppTheme.spacing.lg else AppTheme.spacing.sm
     val displayLabel = rawLabel ?: "rev ${rev.value}"
-    val subtitle = "$host · $files files · ${humanBytes(newBytes)} new of ${humanBytes(bytes)}"
+    val subtitle = "$host · $files files · +${humanBytes(newBytes)} / ${humanBytes(bytes)}"
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = indent),
@@ -200,7 +200,7 @@ private fun SnapshotRow(
                 if (cleaned != rawLabel) onCommitLabel(cleaned)
             },
         )
-        Button(onClick = onRewind, variant = ButtonVariant.Ghost) { Text("Rewind") }
+        Button(onClick = onRewind, variant = ButtonVariant.Secondary) { Text("Rewind") }
     }
 }
 

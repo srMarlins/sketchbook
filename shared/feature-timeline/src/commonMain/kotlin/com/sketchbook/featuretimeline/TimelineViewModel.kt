@@ -29,8 +29,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.Month
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 
 /**
  * Snapshot history viewer per design §A2. Default view shows `Named` + `Branch` snapshots only,
@@ -47,6 +49,7 @@ import kotlinx.datetime.toLocalDateTime
 class TimelineViewModel(
     private val snapshots: SnapshotRepository,
     private val zone: TimeZone = TimeZone.currentSystemDefault(),
+    private val clock: Clock = Clock.System,
 ) : ViewModel() {
     private val selectedUuid = MutableStateFlow<ProjectUuid?>(null)
     private val showAll = MutableStateFlow(false)
@@ -153,10 +156,14 @@ class TimelineViewModel(
             state.history
                 .filter { state.showAll || it.kind != SnapshotKind.Auto }
                 .sortedByDescending { it.rev.value }
+        // Snapshot today once per call so per-group label formatting doesn't repeat the
+        // Clock/TimeZone lookup. Producers see "Today" / "Yesterday" / "May 5" instead of
+        // raw ISO; formatting lives here (not in the Composable) so the view stays pure.
+        val today = clock.now().toLocalDateTime(zone).date
         return visible
             .groupBy { it.timestamp.toLocalDateTime(zone).date }
             .toSortedMap(compareByDescending { it })
-            .map { (date, snaps) -> DayGroup(date, snaps) }
+            .map { (date, snaps) -> DayGroup(date, friendlyDate(date, today), snaps) }
     }
 
     @Immutable
@@ -171,6 +178,7 @@ class TimelineViewModel(
 
     data class DayGroup(
         val date: LocalDate,
+        val displayLabel: String,
         val snapshots: List<Snapshot>,
     )
 
@@ -214,3 +222,36 @@ class TimelineViewModel(
         ) : Effect
     }
 }
+
+/**
+ * "Today" / "Yesterday" / month-day for the current year / ISO for older dates. Producers
+ * recognise "Today" and "Yesterday" instantly; fully numeric dates make the eye work.
+ */
+internal fun friendlyDate(
+    date: LocalDate,
+    today: LocalDate,
+): String {
+    val deltaDays = today.toEpochDays() - date.toEpochDays()
+    return when {
+        deltaDays == 0L -> "Today"
+        deltaDays == 1L -> "Yesterday"
+        date.year == today.year -> "${monthShort(date.month)} ${date.day}"
+        else -> date.toString()
+    }
+}
+
+private fun monthShort(month: Month): String =
+    when (month) {
+        Month.JANUARY -> "Jan"
+        Month.FEBRUARY -> "Feb"
+        Month.MARCH -> "Mar"
+        Month.APRIL -> "Apr"
+        Month.MAY -> "May"
+        Month.JUNE -> "Jun"
+        Month.JULY -> "Jul"
+        Month.AUGUST -> "Aug"
+        Month.SEPTEMBER -> "Sep"
+        Month.OCTOBER -> "Oct"
+        Month.NOVEMBER -> "Nov"
+        Month.DECEMBER -> "Dec"
+    }

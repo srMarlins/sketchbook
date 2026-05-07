@@ -169,8 +169,7 @@ internal fun ProjectListContent(
                         title = state.zoomShelf?.title() ?: "Projects",
                         subtitle =
                             state.zoomShelf?.subtitle()
-                                ?: "Your Ableton catalog — ${state.groups.size} project${if (state.groups.size == 1) "" else "s"}, " +
-                                "${state.rows.size} `.als` file${if (state.rows.size == 1) "" else "s"}.",
+                                ?: "Your Ableton catalog — ${state.groups.size} project${if (state.groups.size == 1) "" else "s"}.",
                         actions =
                             if (state.zoomShelf != null) {
                                 { BackToOverview(onClick = { onZoomShelf(null) }) }
