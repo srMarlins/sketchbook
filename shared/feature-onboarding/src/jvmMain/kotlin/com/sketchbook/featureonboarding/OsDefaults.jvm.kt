@@ -17,7 +17,14 @@ internal actual fun defaultPluginFolders(): List<String> {
             "$home/Library/Audio/Plug-Ins/VST3",
         )
 
-        else -> emptyList()
+        // Linux: yabridge / Bitwig / Reaper conventions. Used as test ground for CI even
+        // though Linux is not an official Sketchbook target — keeps the empty-list edge
+        // case out of the OS-default-driven onboarding flow.
+        else -> listOf(
+            "/usr/lib/vst3",
+            "/usr/local/lib/vst3",
+            "$home/.vst3",
+        )
     }
 }
 

@@ -3,7 +3,6 @@ package com.sketchbook.featureonboarding
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -31,9 +30,19 @@ class OsDefaultsTest {
         assertTrue(result.any { it.contains("/Library/Audio/Plug-Ins") })
     }
 
-    @Test fun `unknown OS returns empty plugin folders`() {
+    @Test fun `Linux plugin folders include vst3 path`() {
+        System.setProperty("os.name", "Linux")
+        val result = defaultPluginFolders()
+        assertTrue(result.any { it.endsWith("vst3") || it.endsWith("VST3") })
+    }
+
+    @Test fun `unknown OS falls back to Linux plugin folders`() {
         System.setProperty("os.name", "Plan 9 from Bell Labs")
-        assertEquals(emptyList(), defaultPluginFolders())
+        // Non-Windows / non-Mac platforms (Linux, BSD, etc.) share the same defaults so
+        // CI on Ubuntu and dev on a *nix workstation hit the same paths instead of an
+        // empty list that would break the onboarding plugin step.
+        val result = defaultPluginFolders()
+        assertTrue(result.any { it.contains("vst3") })
     }
 
     @Test fun `Windows projects-root suggestion ends with Live Projects`() {

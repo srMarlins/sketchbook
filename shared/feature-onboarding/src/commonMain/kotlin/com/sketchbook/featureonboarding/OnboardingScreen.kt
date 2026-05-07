@@ -69,18 +69,7 @@ fun OnboardingScreen(
     // public API now so callers (Task 13) can hook the platform-specific pickers once and
     // not need to revisit on each step landing.
     val state by vm.state.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
-    val snackbar = remember(scope) { BulkUndoSnackbarState(scope) }
-    LaunchedEffect(vm) {
-        // Surface persistence failures from Finish as a non-blocking 5s snackbar (no Undo —
-        // the unwind is one-shot, the user has already moved on). Emissions arrive on a
-        // SharedFlow with DROP_OLDEST so a slow collector can never backpressure the VM.
-        vm.events.collect { event ->
-            when (event) {
-                is OnboardingEvent.PersistenceFailed -> snackbar.show(event.message)
-            }
-        }
-    }
+    val snackbar = rememberPersistenceFailureSnackbar(vm)
     PaperPage(modifier = modifier) {
         Box(
             modifier = Modifier
@@ -191,6 +180,26 @@ private fun FooterRow(showSkipAll: Boolean, onSkipAll: () -> Unit) {
         Spacer(Modifier.weight(1f))
         // Right slot reserved for the version string (later task).
     }
+}
+
+/**
+ * Wires the VM's [OnboardingViewModel.events] into a 5s info-only snackbar. Surfacing
+ * persistence failures (rather than swallowing them in `runCatching`) is what the design
+ * doc means by "non-blocking toast". `BulkUndoSnackbarState` reused with `onUndo = null`
+ * because the Finish unwind is one-shot — the user has already moved on.
+ */
+@Composable
+private fun rememberPersistenceFailureSnackbar(vm: OnboardingViewModel): BulkUndoSnackbarState {
+    val scope = rememberCoroutineScope()
+    val state = remember(scope) { BulkUndoSnackbarState(scope) }
+    LaunchedEffect(vm) {
+        vm.events.collect { event ->
+            when (event) {
+                is OnboardingEvent.PersistenceFailed -> state.show(event.message)
+            }
+        }
+    }
+    return state
 }
 
 private fun shouldShowSkipAll(state: OnboardingState): Boolean {
