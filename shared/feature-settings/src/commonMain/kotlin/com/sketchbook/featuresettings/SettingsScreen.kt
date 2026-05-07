@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +33,7 @@ import com.sketchbook.uishared.components.PageHeader
 import com.sketchbook.uishared.components.Surface
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
+import kotlinx.coroutines.delay
 
 /**
  * Settings screen. The page is centered in a max-width column so it doesn't sprawl on a wide
@@ -142,16 +144,23 @@ fun SettingsScreen(
                         var bucketDraft by remember(state.cloudBucket) {
                             mutableStateOf(state.cloudBucket.orEmpty())
                         }
-                        com.sketchbook.uishared.components.TextField(
-                            value = bucketDraft,
-                            onChange = {
-                                bucketDraft = it
+                        // Debounce dispatch so we don't trigger a SyncQueue + UserGraph rebuild
+                        // on every keystroke. 500 ms after the user stops typing the new bucket
+                        // is committed to settings; the LaunchedEffect's coroutine is cancelled
+                        // and re-launched on each subsequent keystroke.
+                        LaunchedEffect(bucketDraft) {
+                            if (bucketDraft != state.cloudBucket.orEmpty()) {
+                                delay(BUCKET_DEBOUNCE_MS)
                                 vm.dispatch(
                                     SettingsViewModel.Intent.SetCloudBucket(
-                                        it.takeIf { v -> v.isNotBlank() },
+                                        bucketDraft.takeIf { it.isNotBlank() },
                                     ),
                                 )
-                            },
+                            }
+                        }
+                        com.sketchbook.uishared.components.TextField(
+                            value = bucketDraft,
+                            onChange = { bucketDraft = it },
                             placeholder = "Bucket name (e.g. sketchbook-prod)",
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -327,3 +336,5 @@ private fun LibraryRootCard(root: LibraryRoot, onRemove: () -> Unit) {
         }
     }
 }
+
+private const val BUCKET_DEBOUNCE_MS: Long = 500

@@ -23,7 +23,6 @@ import com.sketchbook.sync.JvmBlobCache
 import com.sketchbook.sync.SnapshotPipeline
 import com.sketchbook.syncio.ManifestMaterializer
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -66,7 +65,7 @@ class SwappableSyncQueue(
     private val hostId: String,
     private val hostName: String,
     private val journal: JournalRepository? = null,
-    private val httpClient: HttpClient = HttpClient(CIO),
+    private val httpClient: HttpClient,
 ) : SyncQueue,
     ForceSnapshotPipeline {
 

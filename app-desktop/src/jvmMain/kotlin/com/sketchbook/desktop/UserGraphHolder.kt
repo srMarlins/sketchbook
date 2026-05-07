@@ -9,7 +9,6 @@ import com.sketchbook.repo.SettingsRepository
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,10 +32,9 @@ import kotlinx.coroutines.launch
  * its own `DirectGcsBackend` for now; this holder is the new canonical owner of cloud-backend
  * lifetime. A follow-up PR migrates the sync queue to read from this holder.
  *
- * **Why an owned [HttpClient].** The holder constructs its own CIO client so the cloud
- * backend's lifetime is bounded by the holder, not by some other module. The client is
- * application-lifetime and reused across rebuilds — only the [DirectGcsBackend] wrapper is
- * rebuilt per `(userId, bucket)` swap.
+ * **Shared [HttpClient].** The holder uses the application-scoped `HttpClient` from the graph
+ * (one CIO connection pool app-wide). The same client backs OAuth, GCS, and any other network
+ * service; only the thin [DirectGcsBackend] wrapper is rebuilt per `(userId, bucket)` swap.
  *
  * See `docs/architecture/dependency-injection.md` §1.1.
  */
@@ -45,10 +43,9 @@ import kotlinx.coroutines.launch
 class UserGraphHolder(
     private val authSession: AuthSession,
     private val settings: SettingsRepository,
+    private val httpClient: HttpClient,
     private val scope: CoroutineScope,
 ) {
-
-    private val httpClient: HttpClient = HttpClient(CIO)
 
     private val _userGraph = MutableStateFlow<UserGraph?>(null)
     val userGraph: StateFlow<UserGraph?> = _userGraph

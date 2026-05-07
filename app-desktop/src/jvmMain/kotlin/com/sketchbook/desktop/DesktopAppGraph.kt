@@ -214,6 +214,7 @@ interface DesktopAppGraph : ViewModelGraph {
         store: SyncStateStore,
         catalog: Catalog,
         journal: JournalRepository,
+        httpClient: HttpClient,
         scope: CoroutineScope,
     ): SyncQueue = SwappableSyncQueue(
         authSession = authSession,
@@ -226,7 +227,18 @@ interface DesktopAppGraph : ViewModelGraph {
         hostId = hostIdentity().id,
         hostName = hostIdentity().name,
         journal = journal,
+        httpClient = httpClient,
     )
+
+    /**
+     * Application-lifetime [HttpClient]. Shared by every service that needs to make network
+     * calls (OAuth, GCS, token revoke). One CIO connection pool app-wide is the right default —
+     * each independent client would carry its own selector thread + connection pool, and HTTP/1.1
+     * keep-alive across calls dies on a per-instance boundary.
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideHttpClient(): HttpClient = HttpClient(CIO)
 
     @Provides
     @SingleIn(AppScope::class)
@@ -243,8 +255,8 @@ interface DesktopAppGraph : ViewModelGraph {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideOAuthClient(): OAuthClient = OAuthClient(
-        httpClient = HttpClient(CIO),
+    fun provideOAuthClient(httpClient: HttpClient): OAuthClient = OAuthClient(
+        httpClient = httpClient,
         clientId = OAUTH_CLIENT_ID,
         scopes = listOf(
             "openid",
@@ -259,11 +271,13 @@ interface DesktopAppGraph : ViewModelGraph {
         tokenStore: TokenStore,
         identityStore: PrefsIdentityStore,
         oauthClient: OAuthClient,
+        httpClient: HttpClient,
         appScope: CoroutineScope,
     ): AuthSession {
         val inner = GoogleAuthSession(
             tokenStore = tokenStore,
             oauthClient = oauthClient,
+            httpClient = httpClient,
             scope = appScope,
         )
         return DesktopAuthSession(
