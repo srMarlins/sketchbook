@@ -29,7 +29,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sketchbook.featureonboarding.steps.DoneStep
+import com.sketchbook.featureonboarding.steps.PluginFoldersStep
 import com.sketchbook.featureonboarding.steps.ProjectsRootsStep
+import com.sketchbook.featureonboarding.steps.SampleRootsStep
 import com.sketchbook.featureonboarding.steps.WelcomeStep
 import com.sketchbook.uishared.components.PaperPage
 import com.sketchbook.uishared.components.Text
@@ -37,16 +39,14 @@ import com.sketchbook.uishared.theme.AppTheme
 
 /**
  * Onboarding flow scaffold. Renders the dot indicator + animated step area + footer skip
- * link. Per-step content is placeholder text for now — Tasks 10-12 swap each branch in
- * AnimatedContent for the real composables. Animations beyond the default cross-fade come
- * in Task 14.
+ * link. Each branch in AnimatedContent now dispatches its own intents to the VM; richer
+ * animations beyond the default cross-fade come in Task 14.
  *
- * The skip link is hidden on Welcome (no work to skip yet) and Done (already at the
- * terminal screen) so it only appears on the actual setup steps.
+ * The footer "Skip all" link is hidden on Welcome (no work to skip yet) and Done (already
+ * at the terminal screen) so it only appears on the actual setup steps.
  *
- * @param onPickFolder Native folder picker hook. Wired through here so per-step composables
- *   added in later tasks can request a folder without each one knowing about Swing/JFileChooser.
- *   Currently unused at this scaffold level.
+ * @param onPickFolder Native folder picker hook. Wired through to the per-step composables
+ *   so each one can request a folder without knowing about Swing/JFileChooser.
  * @param onPickFile Native file picker hook. Reserved for the future cloud sign-in step
  *   (service-account JSON). Currently unused.
  */
@@ -58,10 +58,10 @@ fun OnboardingScreen(
     onPickFile: () -> String?,
     modifier: Modifier = Modifier,
 ) {
-    // onPickFolder is wired through to per-step composables in Task 11; onPickFile is reserved
-    // for the future cloud sign-in step. Both are present in the public API now so callers
-    // (Task 13) can hook the platform-specific pickers once and not need to revisit on each
-    // step landing.
+    // onPickFolder is wired through to the Projects/Samples/Plugins step composables;
+    // onPickFile is reserved for the future cloud sign-in step. Both are present in the
+    // public API now so callers (Task 13) can hook the platform-specific pickers once and
+    // not need to revisit on each step landing.
     val state by vm.state.collectAsStateWithLifecycle()
     PaperPage(modifier = modifier) {
         Box(
@@ -98,8 +98,23 @@ fun OnboardingScreen(
                             onContinue = { vm.dispatch(OnboardingIntent.Continue) },
                             canContinue = state.canContinue,
                         )
-                        OnboardingStep.SampleRoots,
-                        OnboardingStep.PluginFolders -> StepPlaceholder(state.steps[index])
+                        OnboardingStep.SampleRoots -> SampleRootsStep(
+                            paths = state.sampleRoots,
+                            onAddPath = { vm.dispatch(OnboardingIntent.AddSampleRoot(it)) },
+                            onRemovePath = { vm.dispatch(OnboardingIntent.RemoveSampleRoot(it)) },
+                            onPickFolder = onPickFolder,
+                            onContinue = { vm.dispatch(OnboardingIntent.Continue) },
+                            onSkip = { vm.dispatch(OnboardingIntent.Skip) },
+                        )
+                        OnboardingStep.PluginFolders -> PluginFoldersStep(
+                            paths = state.pluginFolders,
+                            onAddPath = { vm.dispatch(OnboardingIntent.AddPluginFolder(it)) },
+                            onRemovePath = { vm.dispatch(OnboardingIntent.RemovePluginFolder(it)) },
+                            onUseDefaults = { vm.dispatch(OnboardingIntent.UsePluginDefaults) },
+                            onPickFolder = onPickFolder,
+                            onContinue = { vm.dispatch(OnboardingIntent.Continue) },
+                            onSkip = { vm.dispatch(OnboardingIntent.Skip) },
+                        )
                     }
                 }
 
@@ -129,18 +144,6 @@ private fun DotIndicator(total: Int, currentIndex: Int) {
             )
         }
     }
-}
-
-@Composable
-private fun StepPlaceholder(step: OnboardingStep) {
-    val label = when (step) {
-        OnboardingStep.Welcome -> "Step: Welcome"
-        OnboardingStep.ProjectsRoots -> "Step: Projects roots"
-        OnboardingStep.SampleRoots -> "Step: Sample roots"
-        OnboardingStep.PluginFolders -> "Step: Plugin folders"
-        OnboardingStep.Done -> "Step: Done"
-    }
-    Text(label, style = AppTheme.typography.title)
 }
 
 @Composable
