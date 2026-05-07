@@ -4,6 +4,7 @@
   <CurrentIssues>
     <ID>ClassSignature:ProjectDetailViewModel.kt:ProjectDetailViewModel : ViewModel</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable fun ProjectDetailScreen</ID>
+    <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable internal fun ProjectDetailContent</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun Header</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun HistoryTab</ID>
     <ID>FunctionNaming:ProjectDetailScreen.kt:@Composable private fun LockSlot</ID>

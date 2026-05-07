@@ -40,6 +40,19 @@ fun ProjectDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    ProjectDetailContent(
+        state = state,
+        dispatch = vm::dispatch,
+        modifier = modifier,
+    )
+}
+
+@Composable
+internal fun ProjectDetailContent(
+    state: ProjectDetailViewModel.State,
+    dispatch: (ProjectDetailViewModel.Intent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -49,10 +62,10 @@ fun ProjectDetailScreen(
     ) {
         Header(
             state = state,
-            onForceTakeLock = { vm.dispatch(ProjectDetailViewModel.Intent.ForceTakeLock) },
-            onOpenInLive = { vm.dispatch(ProjectDetailViewModel.Intent.OpenInLive) },
+            onForceTakeLock = { dispatch(ProjectDetailViewModel.Intent.ForceTakeLock) },
+            onOpenInLive = { dispatch(ProjectDetailViewModel.Intent.OpenInLive) },
         )
-        Tabs(state.tab, onSelect = { vm.dispatch(ProjectDetailViewModel.Intent.SelectTab(it)) })
+        Tabs(state.tab, onSelect = { dispatch(ProjectDetailViewModel.Intent.SelectTab(it)) })
         when (state.tab) {
             ProjectDetailViewModel.Tab.Overview -> OverviewTab(state)
             ProjectDetailViewModel.Tab.Tracks -> TracksTab(state)
