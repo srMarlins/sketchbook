@@ -177,6 +177,34 @@ class PreferencesSettingsRepository(
             Result.success(Unit)
         }
 
+    override suspend fun markCloudMigrationComplete(): Result<Unit> =
+        withContext(ioDispatcher) {
+            node.putBoolean(KEY_CLOUD_MIGRATION_COMPLETE, true)
+            node.flush()
+            state.value = state.value.copy(cloudMigrationComplete = true)
+            Result.success(Unit)
+        }
+
+    override suspend fun setUserLibraryRoot(path: String?): Result<Unit> =
+        withContext(ioDispatcher) {
+            if (path.isNullOrBlank()) {
+                node.remove(KEY_USER_LIBRARY_ROOT)
+            } else {
+                node.put(KEY_USER_LIBRARY_ROOT, path)
+            }
+            node.flush()
+            state.value = state.value.copy(userLibraryRoot = path?.takeIf { it.isNotBlank() })
+            Result.success(Unit)
+        }
+
+    override suspend fun setUserLibrarySyncEnabled(enabled: Boolean): Result<Unit> =
+        withContext(ioDispatcher) {
+            node.putBoolean(KEY_USER_LIBRARY_SYNC_ENABLED, enabled)
+            node.flush()
+            state.value = state.value.copy(userLibrarySyncEnabled = enabled)
+            Result.success(Unit)
+        }
+
     override suspend fun setPluginFolders(folders: List<String>): Result<Unit> =
         withContext(ioDispatcher) {
             val normalized =
@@ -214,6 +242,9 @@ class PreferencesSettingsRepository(
                 samplesPromptDismissed = node.getBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, false),
             )
         val pluginFolders = readPluginFolders()
+        val cloudMigrationComplete = node.getBoolean(KEY_CLOUD_MIGRATION_COMPLETE, false)
+        val userLibraryRoot = node.get(KEY_USER_LIBRARY_ROOT, null)?.takeIf { it.isNotBlank() }
+        val userLibrarySyncEnabled = node.getBoolean(KEY_USER_LIBRARY_SYNC_ENABLED, false)
         return Settings(
             libraryRoots = roots,
             selfContainedProjects = selfContained,
@@ -222,6 +253,9 @@ class PreferencesSettingsRepository(
             firstRunCompletedAt = firstRunCompletedAt,
             onboardingSkipped = onboardingSkipped,
             pluginFolders = pluginFolders,
+            cloudMigrationComplete = cloudMigrationComplete,
+            userLibraryRoot = userLibraryRoot,
+            userLibrarySyncEnabled = userLibrarySyncEnabled,
         )
     }
 
@@ -353,6 +387,9 @@ class PreferencesSettingsRepository(
         const val KEY_ONBOARDING_SAMPLES_SKIPPED = "onboarding_samples_skipped_v1"
         const val KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED = "onboarding_samples_prompt_dismissed_v1"
         const val KEY_PLUGIN_FOLDERS = "plugin_folders_v1"
+        const val KEY_CLOUD_MIGRATION_COMPLETE = "cloud_migration_complete_v1"
+        const val KEY_USER_LIBRARY_ROOT = "user_library_root_v1"
+        const val KEY_USER_LIBRARY_SYNC_ENABLED = "user_library_sync_enabled_v1"
 
         /**
          * Pre-OAuth builds wrote a service-account JSON blob under this key. Cleared at startup so

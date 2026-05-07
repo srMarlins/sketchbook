@@ -492,6 +492,14 @@ SELECT * FROM sync_state WHERE dirty != 0 ORDER BY updated_at ASC, project_uuid 
 selectIdentityByUuid:
 SELECT * FROM project_identity WHERE uuid = :uuid;
 
+-- Used by the cloud migrator (commit 10) to enumerate every project on the local catalog
+-- when seeding `<tenant>/registry.json`. Joins on the project's display name so the
+-- registry's display_name field comes from the catalog rather than a derived fallback.
+selectAllProjectIdentitiesWithName:
+SELECT pi.project_id AS project_id, pi.uuid AS uuid, pi.created_at AS created_at, p.name AS name
+FROM project_identity pi
+JOIN projects p ON p.id = pi.project_id;
+
 -- sync_state — PR-F: PullPoller-driven cloud_head_rev advance.
 markSyncStateCloudHead:
 INSERT INTO sync_state (project_uuid, local_rev, cloud_head_rev, dirty, self_contained, updated_at)

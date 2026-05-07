@@ -50,6 +50,25 @@ interface SettingsRepository {
     suspend fun setPluginFolders(folders: List<String>): Result<Unit>
 
     /**
+     * Marks the cloud-storage migration ([com.sketchbook.repo.Settings.cloudMigrationComplete])
+     * as done so subsequent launches skip the migrator. Called once by the migrator itself
+     * after it has relocated all v=1 manifests to the v=2 layout and built the registry.
+     *
+     * Default impl is a no-op so legacy test fakes keep compiling; real impls
+     * ([com.sketchbook.desktop.repo.PreferencesSettingsRepository]) persist the flag.
+     */
+    suspend fun markCloudMigrationComplete(): Result<Unit> = Result.success(Unit)
+
+    /**
+     * Sets the per-host User Library root path. Null = use OS default
+     * (`~/Music/Ableton/User Library` on Mac, `Documents/Ableton/User Library` on Windows).
+     */
+    suspend fun setUserLibraryRoot(path: String?): Result<Unit> = Result.success(Unit)
+
+    /** Toggles whether the User Library tree is actively synced on this machine. */
+    suspend fun setUserLibrarySyncEnabled(enabled: Boolean): Result<Unit> = Result.success(Unit)
+
+    /**
      * Dev-only escape hatch. Resets `firstRunCompletedAt` and `onboardingSkipped` to defaults so
      * a returning user re-triggers onboarding on next launch. Triggered by `--reset-first-run`
      * CLI flag in the desktop app. Does NOT touch library roots, plugin folders, or other
@@ -75,6 +94,22 @@ data class Settings(
      * (the JVM probe falls back to `defaultInstalledDirs()` when this list is empty).
      */
     val pluginFolders: List<String> = emptyList(),
+    /**
+     * True once the cloud-storage migration (commit 10) has run on this machine. Defaults
+     * to false so a fresh install on a populated bucket detects v=1 paths and prompts the
+     * user. The migrator flips it true on completion; cleared by `--reset-first-run`.
+     */
+    val cloudMigrationComplete: Boolean = false,
+    /**
+     * Per-host User Library root override. Null = use the OS-default path. Set when the
+     * user picks a non-standard location during onboarding.
+     */
+    val userLibraryRoot: String? = null,
+    /**
+     * Master switch for User Library sync on this machine. Off by default; flipped on by
+     * the post-migration setup step once the skip-set spike confirms.
+     */
+    val userLibrarySyncEnabled: Boolean = false,
 )
 
 /**

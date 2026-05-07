@@ -30,6 +30,7 @@ kotlin {
             implementation(project(":shared:catalog"))
             implementation(project(":shared:cloud"))
             implementation(project(":shared:repository"))
+            implementation(project(":shared:migration"))
             implementation(project(":shared:sync"))
             implementation(project(":shared:sync-io"))
             implementation(project(":shared:ui-shared"))
