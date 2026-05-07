@@ -16,12 +16,13 @@ import kotlin.test.Test
 @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
 class SmokeTest {
     @Test
-    fun captures_a_hello_box() = runDesktopComposeUiTest(width = 400, height = 200) {
-        setContent {
-            Box(Modifier.fillMaxSize().size(200.dp)) {
-                BasicText("hello roborazzi")
+    fun captures_a_hello_box() =
+        runDesktopComposeUiTest(width = 400, height = 200) {
+            setContent {
+                Box(Modifier.fillMaxSize().size(200.dp)) {
+                    BasicText("hello roborazzi")
+                }
             }
+            onRoot().captureRoboImage("build/roborazzi/smoke_hello.png")
         }
-        onRoot().captureRoboImage("build/roborazzi/smoke_hello.png")
-    }
 }
