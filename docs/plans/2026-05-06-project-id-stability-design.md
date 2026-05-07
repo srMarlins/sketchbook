@@ -61,7 +61,7 @@ Fallback chain:
 
 Always returns a non-null string.
 
-### Migration `9.sqm`
+### Migration `8.sqm`
 
 Backfill legacy journal rows whose `project_name` is null but whose `project_id` still resolves:
 
@@ -80,7 +80,7 @@ Genuinely-orphaned rows (project gone from catalog) keep showing the sentinel �
 - **A1 SQL**: `shared/catalog/src/commonMain/sqldelight/com/sketchbook/catalog/db/Catalog.sq` — add `updateProjectByPath`.
 - **B resolver**: new `shared/repository/src/commonMain/kotlin/com/sketchbook/repo/ProjectDisplay.kt`.
 - **B callsites**: `shared/feature-journal/.../JournalViewModel.kt` (replace `resolveName`); `shared/feature-proposals/.../format/ProposalLabel.kt` (replace inline chain).
-- **Migration**: new `shared/catalog/src/commonMain/sqldelight/com/sketchbook/catalog/db/9.sqm`; bump probe in `CatalogDb.kt`.
+- **Migration**: new `shared/catalog/src/commonMain/sqldelight/com/sketchbook/catalog/db/8.sqm`; bump probe in `CatalogDb.kt`.
 
 ## Tests
 
@@ -93,6 +93,6 @@ Genuinely-orphaned rows (project gone from catalog) keep showing the sentinel �
 Three commits in one PR:
 1. `feat(catalog): preserve project_id across rescans` — A1 + scanner test.
 2. `refactor(repo): shared ProjectDisplay resolver` — B + callsite swaps + resolver test.
-3. `feat(catalog): backfill journal_entries.project_name (9.sqm)` — migration + probe bump.
+3. `feat(catalog): backfill journal_entries.project_name (8.sqm)` — migration + probe bump.
 
 User reviews + merges manually. Doc deleted post-merge per no-standing-plans rule.

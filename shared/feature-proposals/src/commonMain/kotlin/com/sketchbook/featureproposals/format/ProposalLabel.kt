@@ -39,16 +39,22 @@ fun proposalLabel(
     // Fallback chain runs through the shared `resolveProjectDisplay` resolver: denorm name from
     // args → catalog lookup → path basename → "project #ID" sentinel. Proposals from
     // `SqlProposalsRepository` carry `name` and `path` in args, so the row reads as the project
-    // name even before the projects flow has populated the names map. The Long-keyed map is
-    // converted to a `ProjectId`-keyed map at the call boundary so the resolver's signature stays
-    // ProjectId-typed.
+    // name even before the projects flow has populated the names map.
+    //
+    // The catalog lookup is hoisted out of the resolver call (folded into `denormName`) so we
+    // don't re-key `projectNameById` per row — a `Map<Long, String>` keyed by raw id is what
+    // the rest of the proposals module exposes, and the resolver wants `Map<ProjectId, String>`.
+    // Doing the lookup ourselves preserves ordering (args.name → catalog → path → sentinel).
     val nameFromArgs = s("name")?.takeIf { it.isNotBlank() }
     val pathFromArgs = s("path")?.takeIf { it.isNotBlank() }
+    val catalogName = pidLong?.let { projectNameById[it] }
     val projectLabel = pidLong?.let {
         resolveProjectDisplay(
             id = ProjectId(it),
-            hints = ProjectDisplayHints(denormName = nameFromArgs, pathHint = pathFromArgs),
-            nameById = projectNameById.mapKeys { (k, _) -> ProjectId(k) },
+            hints = ProjectDisplayHints(
+                denormName = nameFromArgs ?: catalogName,
+                pathHint = pathFromArgs,
+            ),
         )
     } ?: nameFromArgs ?: pathFromArgs?.let(::filenameOf)?.takeIf { it.isNotBlank() } ?: "project"
     return when (action.type) {

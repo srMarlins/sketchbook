@@ -142,11 +142,12 @@ object CatalogDb {
                     !columnExists(driver, "journal_entries", "project_name") -> 7L
 
                     // 8.sqm is a pure data backfill (UPDATE journal_entries.project_name) with
-                    // no structural change to probe for. Pre-tracking DBs that have the column
-                    // present fall through to `target`; the migration walker in `current < target`
-                    // re-runs 8.sqm on tracked DBs the next time the schema target advances.
-                    // Idempotent: re-running the UPDATE is a no-op once names are filled.
-                    else -> target
+                    // no structural marker to probe for. Pre-tracking DBs that have project_name
+                    // present are at v7 effectively — return 7L so migrate(7, target) walks
+                    // through 8.sqm and applies the backfill. Idempotent: the UPDATE's WHERE
+                    // clause skips already-named rows, so re-running on a partially-backfilled
+                    // DB is a no-op.
+                    else -> 7L
                 }
                 if (detected < target) {
                     Catalog.Schema.migrate(driver, detected, target)
