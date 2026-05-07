@@ -2,7 +2,16 @@ package com.sketchbook.syncio
 
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.db.Catalog
+import com.sketchbook.core.ProjectUuid
+import com.sketchbook.repo.BlobCacheSettings
+import com.sketchbook.repo.LibraryRoot
+import com.sketchbook.repo.OnboardingPromptKind
+import com.sketchbook.repo.OnboardingSkipFlags
+import com.sketchbook.repo.Settings
+import com.sketchbook.repo.SettingsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
 import java.nio.file.Path
@@ -130,6 +139,76 @@ class JvmPluginPresenceProbeTest {
     }
 
     @Test
+    fun usesConfiguredPluginFoldersFromSettings() = runTest {
+        // T3: the probe must read `pluginFolders` from `SettingsRepository` and use those instead
+        // of the OS defaults. Two plugins are seeded in the catalog: one whose file exists in the
+        // user-configured dir (must flip to installed), and one named after a plugin that the
+        // probe would only find by walking OS-default directories (must stay missing because the
+        // probe must NOT touch OS defaults when the user has a non-empty configured list).
+        val (catalog, driver, configuredDir, cleanup) = setupCatalogWithPlugin(
+            pluginName = "Serum",
+            pluginType = "vst3",
+        )
+        try {
+            // Add a second catalog row that, in the absence of this test, would only be matched if
+            // the probe walked the OS-default dirs. The configured dir does not contain a file for
+            // it; the test asserts the probe stays out of OS defaults.
+            val projectId = catalog.catalogQueries.selectProjectIdByPath("/lib/song.als").executeAsOne()
+            catalog.catalogQueries.insertProjectPlugin(
+                project_id = projectId,
+                plugin_name = "Massive",
+                plugin_type = "vst3",
+                track_name = "Track 2",
+            )
+            // Seed Serum.vst3 in the user-configured dir only.
+            Files.write(configuredDir.resolve("Serum.vst3"), ByteArray(8))
+
+            val fakeSettings = FakePluginSettings(pluginFolders = listOf(configuredDir.toString()))
+            val probe = JvmPluginPresenceProbe.forTest(
+                catalog = catalog,
+                settings = fakeSettings,
+                ioDispatcher = Dispatchers.Unconfined,
+            )
+
+            val result = probe.probe()
+
+            assertEquals(1, result.installedCount)
+            assertEquals(1, result.missingCount)
+            assertTrue(isInstalled(driver, "Serum", "vst3"))
+            assertTrue(!isInstalled(driver, "Massive", "vst3"))
+        } finally {
+            cleanup()
+        }
+    }
+
+    @Test
+    fun fallsBackToOsDefaultsWhenSettingsListIsEmpty() = runTest {
+        // T3: an empty configured list is the explicit signal "use platform defaults". With an
+        // unwritable / nonexistent default set on a sandboxed test machine, the probe should
+        // simply walk an empty installed-set and mark everything missing — the key behavior is
+        // that the probe doesn't crash and respects the empty-list-means-defaults contract.
+        val (catalog, _, _, cleanup) = setupCatalogWithPlugin(
+            pluginName = "Serum",
+            pluginType = "vst3",
+        )
+        try {
+            val fakeSettings = FakePluginSettings(pluginFolders = emptyList())
+            val probe = JvmPluginPresenceProbe.forTest(
+                catalog = catalog,
+                settings = fakeSettings,
+                ioDispatcher = Dispatchers.Unconfined,
+            )
+
+            // Best-effort: this only asserts the probe runs without throwing when falling back to
+            // OS defaults. Whether Serum gets flagged installed depends on the host machine, so we
+            // don't pin it. The behavior under test is "empty list ⇒ try defaults, don't throw".
+            probe.probe()
+        } finally {
+            cleanup()
+        }
+    }
+
+    @Test
     fun matchesByPrefixHeuristic() = runTest {
         // The catalog has "FabFilter Pro-Q 3" — installed file is "FabFilter Pro-Q 3.vst3". After
         // normalization the catalog token is "fabfilterproq" and the file token is "fabfilterproq",
@@ -216,6 +295,33 @@ class JvmPluginPresenceProbeTest {
         val pluginDir: Path,
         val cleanup: () -> Unit,
     )
+
+    /** Minimal `SettingsRepository` stand-in for tests that exercise plugin-folder reads. Only
+     *  `observe()` and `setPluginFolders` are meaningful; the other methods short-circuit because
+     *  the probe never touches them. */
+    private class FakePluginSettings(pluginFolders: List<String>) : SettingsRepository {
+        private val flow = MutableStateFlow(
+            Settings(
+                libraryRoots = emptyList(),
+                cloudConfigured = false,
+                selfContainedProjects = emptySet(),
+                pluginFolders = pluginFolders,
+            )
+        )
+        override fun observe(): Flow<Settings> = flow
+        override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> = Result.success(Unit)
+        override suspend fun removeRoot(root: LibraryRoot): Result<Unit> = Result.success(Unit)
+        override suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit> = Result.success(Unit)
+        override suspend fun setCloudBucket(bucket: String?): Result<Unit> = Result.success(Unit)
+        override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit> = Result.success(Unit)
+        override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> = Result.success(Unit)
+        override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit> = Result.success(Unit)
+        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> = Result.success(Unit)
+        override suspend fun setPluginFolders(folders: List<String>): Result<Unit> {
+            flow.value = flow.value.copy(pluginFolders = folders)
+            return Result.success(Unit)
+        }
+    }
 
     private fun isInstalled(driver: app.cash.sqldelight.db.SqlDriver, name: String, type: String): Boolean {
         // selectAllDistinctPlugins (T1) returns the (name, type) pair but not the flag; the

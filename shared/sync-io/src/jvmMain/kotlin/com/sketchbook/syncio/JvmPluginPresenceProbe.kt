@@ -3,11 +3,13 @@ package com.sketchbook.syncio
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.AppScope
 import com.sketchbook.repo.PluginPresenceProbe
+import com.sketchbook.repo.SettingsRepository
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
@@ -34,24 +36,32 @@ import kotlin.streams.asSequence
  * inside a transaction; we don't want two of them stomping each other on a settings emit. Single
  * instance, called once per scan completion from [com.sketchbook.desktop.LibraryScanCoordinator].
  *
- * **V1: hardcoded paths.** User-configurable plugin directories are deferred — most users keep
- * VST plugins in the platform-default location, so the V1 chip is good enough to surface the
- * "I rebuilt my computer and forgot to install half my plugins" scenario. A settings extension
- * lands once we have actual user reports of missed installs in non-default folders.
+ * **Plugin directories.** Resolved per-`probe()` call from `SettingsRepository.observe().first()`.
+ * If the user has configured custom plugin folders (onboarding step or Settings screen), those are
+ * used verbatim — *no* OS-default fallback when the configured list is non-empty, because a
+ * configured-but-all-malformed list silently falling back would hide a real misconfiguration. An
+ * intentionally empty `pluginFolders` falls back to [defaultInstalledDirs] so first-run users with
+ * standard installs still get accurate presence flags.
  */
 @SingleIn(AppScope::class)
 @ContributesBinding(AppScope::class)
 @Inject
 class JvmPluginPresenceProbe(
     private val catalog: Catalog,
+    private val settings: SettingsRepository,
 ) : PluginPresenceProbe {
 
-    // Production wiring: snapshot platform-default plugin dirs once at app start; the dispatcher
-    // is `Dispatchers.IO`. Tests construct via [forTest] to swap both.
-    private var installedDirs: List<Path> = defaultInstalledDirs()
+    // Tests construct via [forTest] to swap the dispatcher.
     private var ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 
     override suspend fun probe(): PluginPresenceProbe.ProbeResult = withContext(ioDispatcher) {
+        val configuredRaw = settings.observe().first().pluginFolders
+        val configured = configuredRaw.mapNotNull { runCatching { Paths.get(it) }.getOrNull() }
+        // Only an *intentionally* empty configured list falls back to OS defaults. A non-empty
+        // list with every entry malformed produces an empty installedDirs (plugins flagged
+        // missing) — which is the right signal for the user to fix their settings, not a quiet
+        // re-route to defaults that masks the misconfiguration.
+        val installedDirs = if (configuredRaw.isEmpty()) defaultInstalledDirs() else configured
         val installedTokens = collectInstalledTokens(installedDirs)
         val pairs = catalog.catalogQueries.selectAllDistinctPlugins().executeAsList()
         if (pairs.isEmpty()) return@withContext PluginPresenceProbe.ProbeResult.EMPTY
@@ -118,16 +128,31 @@ class JvmPluginPresenceProbe(
         private val TRAILING_DIGITS_REGEX = Regex("\\d+$")
 
         /**
-         * Test seam: build a probe with custom plugin dirs + dispatcher. Doesn't go through DI,
-         * doesn't bypass the contract — production code path runs the same `probe()` logic, only
-         * the `installedDirs` lookup and the dispatcher hop are different.
+         * Test seam: build a probe with custom plugin dirs + dispatcher. Wraps [installedDirs] in
+         * a minimal `SettingsRepository` whose `pluginFolders` reflects the supplied paths, so the
+         * production `probe()` path runs unchanged from production. Use [forTest] with an explicit
+         * `settings` argument when you need to test fallback or settings-driven behavior.
          */
         internal fun forTest(
             catalog: Catalog,
             installedDirs: List<Path>,
             ioDispatcher: CoroutineDispatcher,
-        ): JvmPluginPresenceProbe = JvmPluginPresenceProbe(catalog).also {
-            it.installedDirs = installedDirs
+        ): JvmPluginPresenceProbe = forTest(
+            catalog = catalog,
+            settings = StaticSettingsRepository(installedDirs.map { it.toString() }),
+            ioDispatcher = ioDispatcher,
+        )
+
+        /**
+         * Test seam taking an explicit [SettingsRepository]. Lets tests assert the probe's read of
+         * `pluginFolders` and the empty-list fallback, both behaviors that the path-only overload
+         * can't exercise on its own.
+         */
+        internal fun forTest(
+            catalog: Catalog,
+            settings: SettingsRepository,
+            ioDispatcher: CoroutineDispatcher,
+        ): JvmPluginPresenceProbe = JvmPluginPresenceProbe(catalog, settings).also {
             it.ioDispatcher = ioDispatcher
         }
 
@@ -174,4 +199,31 @@ class JvmPluginPresenceProbe(
             }
         }
     }
+}
+
+/**
+ * Test-only `SettingsRepository` that emits a static [Settings] containing the supplied
+ * `pluginFolders`. Backs the path-only `JvmPluginPresenceProbe.forTest` overload so legacy tests
+ * keep their original signature without re-implementing the full repository surface.
+ */
+private class StaticSettingsRepository(
+    pluginFolders: List<String>,
+) : com.sketchbook.repo.SettingsRepository {
+    private val snapshot = com.sketchbook.repo.Settings(
+        libraryRoots = emptyList(),
+        cloudConfigured = false,
+        selfContainedProjects = emptySet(),
+        pluginFolders = pluginFolders,
+    )
+    private val flow = kotlinx.coroutines.flow.MutableStateFlow(snapshot)
+    override fun observe(): kotlinx.coroutines.flow.Flow<com.sketchbook.repo.Settings> = flow
+    override suspend fun upsertRoot(root: com.sketchbook.repo.LibraryRoot): Result<Unit> = Result.success(Unit)
+    override suspend fun removeRoot(root: com.sketchbook.repo.LibraryRoot): Result<Unit> = Result.success(Unit)
+    override suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit> = Result.success(Unit)
+    override suspend fun setCloudBucket(bucket: String?): Result<Unit> = Result.success(Unit)
+    override suspend fun setSelfContained(uuid: com.sketchbook.core.ProjectUuid, value: Boolean): Result<Unit> = Result.success(Unit)
+    override suspend fun setCacheSettings(settings: com.sketchbook.repo.BlobCacheSettings): Result<Unit> = Result.success(Unit)
+    override suspend fun markFirstRunComplete(skipFlags: com.sketchbook.repo.OnboardingSkipFlags): Result<Unit> = Result.success(Unit)
+    override suspend fun dismissOnboardingPrompt(kind: com.sketchbook.repo.OnboardingPromptKind): Result<Unit> = Result.success(Unit)
+    override suspend fun setPluginFolders(folders: List<String>): Result<Unit> = Result.success(Unit)
 }
