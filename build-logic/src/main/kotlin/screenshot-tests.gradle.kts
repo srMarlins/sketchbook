@@ -40,10 +40,12 @@ kotlin {
 // for Claude's eyes, not regression gating. Tests that capture run on demand via
 // `recordRoborazziJvm` only.
 tasks.matching { it.name == "check" }.configureEach {
+    // Filter against `Named` rather than `Task` so lazy `TaskProvider` references — which
+    // Roborazzi's Gradle plugin uses — are caught alongside eager `Task` instances.
     setDependsOn(
         dependsOn.filterNot {
             (it as? String)?.startsWith("verifyRoborazzi") == true ||
-                (it as? org.gradle.api.Task)?.name?.startsWith("verifyRoborazzi") == true
+                (it as? org.gradle.api.Named)?.name?.startsWith("verifyRoborazzi") == true
         },
     )
 }
