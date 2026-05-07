@@ -1,8 +1,10 @@
 package com.sketchbook.featureonboarding
 
+import com.sketchbook.repo.LibraryRoot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -176,6 +178,162 @@ class OnboardingViewModelTest {
         assertEquals(OnboardingStep.Done, before.steps[before.currentIndex])
         vm.dispatch(OnboardingIntent.Skip)
         assertEquals(before, vm.state.value)
+    }
+
+    // ---------------- Task 7: SkipAllUseDefaults + Finish ----------------
+
+    @Test
+    fun skipAllFromSampleRootsPreservesEnteredDataAndJumpsToDone() = runTest(mainDispatcher) {
+        val vm = newVm()
+        vm.dispatch(OnboardingIntent.Continue) // -> ProjectsRoots
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/foo"))
+        vm.dispatch(OnboardingIntent.Continue) // -> SampleRoots
+        vm.dispatch(OnboardingIntent.AddSampleRoot("/bar"))
+        vm.dispatch(OnboardingIntent.SkipAllUseDefaults)
+        val s = vm.state.value
+        assertEquals(OnboardingStep.Done, s.steps[s.currentIndex])
+        assertEquals(listOf("/foo"), s.projectsRoots)
+        assertEquals(listOf("/bar"), s.sampleRoots)
+        assertTrue(s.pluginFolders.isNotEmpty(), "OS defaults should remain")
+        assertTrue(s.canContinue)
+    }
+
+    @Test
+    fun skipAllUseDefaultsDoesNotPersistAnything() = runTest(mainDispatcher) {
+        val repo = FakeSettingsRepository()
+        val scan = FakeScanTrigger()
+        val vm = newVm(repo, scan)
+        vm.dispatch(OnboardingIntent.Continue)
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/foo"))
+        vm.dispatch(OnboardingIntent.SkipAllUseDefaults)
+        advanceUntilIdle()
+        assertEquals(emptyList(), repo.attemptedUpserts.toList())
+        assertEquals(emptyList(), repo.pluginFolderWrites.toList())
+        assertEquals(emptyList(), repo.markCompleteCalls.toList())
+        assertEquals(0, scan.scanCount)
+    }
+
+    @Test
+    fun skipAllFillsPluginFoldersWhenEmpty() = runTest(mainDispatcher) {
+        val vm = newVm()
+        // Strip out every default plugin folder so we can prove SkipAll re-fills.
+        vm.state.value.pluginFolders.toList().forEach {
+            vm.dispatch(OnboardingIntent.RemovePluginFolder(it))
+        }
+        assertTrue(vm.state.value.pluginFolders.isEmpty())
+        vm.dispatch(OnboardingIntent.Continue)
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/foo"))
+        vm.dispatch(OnboardingIntent.SkipAllUseDefaults)
+        assertEquals(defaultPluginFolders(), vm.state.value.pluginFolders)
+    }
+
+    @Test
+    fun skipAllPreservesCustomPluginFolders() = runTest(mainDispatcher) {
+        val vm = newVm()
+        vm.state.value.pluginFolders.toList().forEach {
+            vm.dispatch(OnboardingIntent.RemovePluginFolder(it))
+        }
+        vm.dispatch(OnboardingIntent.AddPluginFolder("C:/MyVst3"))
+        vm.dispatch(OnboardingIntent.Continue)
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/foo"))
+        vm.dispatch(OnboardingIntent.SkipAllUseDefaults)
+        assertEquals(listOf("C:/MyVst3"), vm.state.value.pluginFolders)
+    }
+
+    @Test
+    fun finishPersistsEachEnteredRootWithCorrectSubtype() = runTest(mainDispatcher) {
+        val repo = FakeSettingsRepository()
+        val scan = FakeScanTrigger()
+        val vm = newVm(repo, scan)
+        vm.dispatch(OnboardingIntent.Continue) // -> ProjectsRoots
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/projects/A"))
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/projects/B"))
+        vm.dispatch(OnboardingIntent.Continue) // -> SampleRoots
+        vm.dispatch(OnboardingIntent.AddSampleRoot("/samples/X"))
+        vm.dispatch(OnboardingIntent.Continue) // -> PluginFolders
+        vm.dispatch(OnboardingIntent.Continue) // -> Done
+        vm.dispatch(OnboardingIntent.Finish)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                LibraryRoot.Projects("/projects/A"),
+                LibraryRoot.Projects("/projects/B"),
+                LibraryRoot.UserSamples("/samples/X"),
+            ),
+            repo.upserts.toList(),
+        )
+        assertEquals(1, repo.pluginFolderWrites.size)
+        assertTrue(repo.pluginFolderWrites.single().isNotEmpty(), "defaults landed")
+        assertEquals(1, repo.markCompleteCalls.size)
+        assertEquals(false, repo.markCompleteCalls.single().samplesSkipped)
+        assertEquals(1, scan.scanCount)
+    }
+
+    @Test
+    fun finishMarksSamplesSkippedTrueWhenNoSampleRootsEntered() = runTest(mainDispatcher) {
+        val repo = FakeSettingsRepository()
+        val vm = newVm(repo)
+        vm.dispatch(OnboardingIntent.Continue)
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/foo"))
+        vm.dispatch(OnboardingIntent.SkipAllUseDefaults)
+        vm.dispatch(OnboardingIntent.Finish)
+        advanceUntilIdle()
+        assertEquals(1, repo.markCompleteCalls.size)
+        assertEquals(true, repo.markCompleteCalls.single().samplesSkipped)
+    }
+
+    @Test
+    fun finishIsFailSoftWhenAnUpsertReturnsFailure() = runTest(mainDispatcher) {
+        val repo = FakeSettingsRepository(failingPaths = setOf("/projects/B"))
+        val scan = FakeScanTrigger()
+        val vm = newVm(repo, scan)
+        vm.dispatch(OnboardingIntent.Continue) // -> ProjectsRoots
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/projects/A"))
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/projects/B"))
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/projects/C"))
+        vm.dispatch(OnboardingIntent.Continue) // -> SampleRoots
+        vm.dispatch(OnboardingIntent.Continue) // -> PluginFolders
+        vm.dispatch(OnboardingIntent.Continue) // -> Done
+        vm.dispatch(OnboardingIntent.Finish)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                LibraryRoot.Projects("/projects/A"),
+                LibraryRoot.Projects("/projects/B"),
+                LibraryRoot.Projects("/projects/C"),
+            ),
+            repo.attemptedUpserts.toList(),
+            "every upsert should have been attempted",
+        )
+        assertEquals(
+            listOf(
+                LibraryRoot.Projects("/projects/A"),
+                LibraryRoot.Projects("/projects/C"),
+            ),
+            repo.upserts.toList(),
+            "B failed and didn't land; A and C still made it through",
+        )
+        assertEquals(1, repo.pluginFolderWrites.size)
+        assertEquals(1, repo.markCompleteCalls.size)
+        assertEquals(1, scan.scanCount)
+    }
+
+    @Test
+    fun finishTriggersScanExactlyOnceEvenWhenCalledTwice() = runTest(mainDispatcher) {
+        val repo = FakeSettingsRepository()
+        val scan = FakeScanTrigger()
+        val vm = newVm(repo, scan)
+        vm.dispatch(OnboardingIntent.Continue)
+        vm.dispatch(OnboardingIntent.AddProjectsRoot("/foo"))
+        vm.dispatch(OnboardingIntent.SkipAllUseDefaults)
+        vm.dispatch(OnboardingIntent.Finish)
+        advanceUntilIdle()
+        vm.dispatch(OnboardingIntent.Finish)
+        advanceUntilIdle()
+        assertEquals(1, scan.scanCount)
+        assertEquals(1, repo.markCompleteCalls.size, "Finish must be idempotent")
     }
 
     @Test

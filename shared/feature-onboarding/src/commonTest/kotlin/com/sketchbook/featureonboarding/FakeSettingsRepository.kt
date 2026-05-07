@@ -17,17 +17,34 @@ internal class FakeSettingsRepository(
         cloudConfigured = false,
         selfContainedProjects = emptySet(),
     ),
+    /**
+     * Paths in this set will cause [upsertRoot] to return [Result.failure] without mutating the
+     * settings flow. The attempt is still recorded in [attemptedUpserts].
+     */
+    val failingPaths: Set<String> = emptySet(),
 ) : SettingsRepository {
     val flow = MutableStateFlow(initial)
 
+    /** Roots whose upsert succeeded. Mirrors the prior `upserts` field — kept for back-compat. */
     var upserts: MutableList<LibraryRoot> = mutableListOf()
+
+    /** Every upsert call recorded, including ones that returned [Result.failure]. */
+    var attemptedUpserts: MutableList<LibraryRoot> = mutableListOf()
     var removals: MutableList<LibraryRoot> = mutableListOf()
     var pluginFolderWrites: MutableList<List<String>> = mutableListOf()
     var markCompleteCalls: MutableList<OnboardingSkipFlags> = mutableListOf()
 
+    /** Alias matching the recording-fake naming used by the Task 7 tests. */
+    val upsertedRoots: List<LibraryRoot> get() = upserts
+    val pluginFoldersWrites: List<List<String>> get() = pluginFolderWrites
+
     override fun observe(): Flow<Settings> = flow
 
     override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> {
+        attemptedUpserts += root
+        if (root.path in failingPaths) {
+            return Result.failure(IllegalStateException("simulated failure for ${root.path}"))
+        }
         upserts += root
         flow.value = flow.value.copy(libraryRoots = (flow.value.libraryRoots + root).distinct())
         return Result.success(Unit)

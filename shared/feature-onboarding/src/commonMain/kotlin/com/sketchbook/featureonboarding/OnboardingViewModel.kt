@@ -1,12 +1,16 @@
 package com.sketchbook.featureonboarding
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.sketchbook.repo.LibraryRoot
+import com.sketchbook.repo.OnboardingSkipFlags
 import com.sketchbook.repo.SettingsRepository
 import dev.zacsweers.metro.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 /**
  * Onboarding flow state model.
@@ -59,51 +63,99 @@ interface ScanTrigger {
 }
 
 @Inject
-class OnboardingViewModel(
-    @Suppress("UnusedPrivateProperty") private val repository: SettingsRepository,
-    @Suppress("UnusedPrivateProperty") private val scanTrigger: ScanTrigger,
-) : ViewModel() {
+class OnboardingViewModel(private val repository: SettingsRepository, private val scanTrigger: ScanTrigger) :
+    ViewModel() {
 
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<OnboardingState> = _state.asStateFlow()
+
+    /**
+     * Guards [OnboardingIntent.Finish] from running twice. The UI should disable the "Open
+     * Sketchbook" button after the first click, but the model is idempotent regardless so a
+     * stray double-dispatch can't double-scan or double-mark-complete.
+     */
+    private var finished = false
 
     fun dispatch(intent: OnboardingIntent) {
         when (intent) {
             is OnboardingIntent.AddProjectsRoot -> _state.update { s ->
                 s.copy(projectsRoots = (s.projectsRoots + intent.path).distinct()).recomputeCanContinue()
             }
+
             is OnboardingIntent.RemoveProjectsRoot -> _state.update { s ->
                 s.copy(projectsRoots = s.projectsRoots - intent.path).recomputeCanContinue()
             }
+
             is OnboardingIntent.AddSampleRoot -> _state.update { s ->
                 s.copy(sampleRoots = (s.sampleRoots + intent.path).distinct())
             }
+
             is OnboardingIntent.RemoveSampleRoot -> _state.update { s ->
                 s.copy(sampleRoots = s.sampleRoots - intent.path)
             }
+
             is OnboardingIntent.AddPluginFolder -> _state.update { s ->
                 s.copy(pluginFolders = (s.pluginFolders + intent.path).distinct())
             }
+
             is OnboardingIntent.RemovePluginFolder -> _state.update { s ->
                 s.copy(pluginFolders = s.pluginFolders - intent.path)
             }
+
             OnboardingIntent.UsePluginDefaults -> _state.update {
                 it.copy(pluginFolders = defaultPluginFolders())
             }
+
             OnboardingIntent.Continue -> advance()
+
             OnboardingIntent.Skip -> skip()
-            OnboardingIntent.SkipAllUseDefaults -> {
-                // Stub for Task 7 (jumps to Done preserving state, persists, triggers scan).
+
+            OnboardingIntent.SkipAllUseDefaults -> _state.update { s ->
+                // SkipAll is a *navigation* shortcut — preserve every entered list and only fill
+                // pluginFolders with OS defaults if the user emptied them. Persistence happens in
+                // Finish, not here. The user can still review on Done before committing.
+                val pluginFolders = if (s.pluginFolders.isEmpty()) defaultPluginFolders() else s.pluginFolders
+                s.copy(
+                    pluginFolders = pluginFolders,
+                    currentIndex = s.steps.indexOf(OnboardingStep.Done),
+                ).recomputeCanContinue()
             }
-            OnboardingIntent.Finish -> {
-                // Stub for Task 7 (persists everything + triggers scan).
+
+            OnboardingIntent.Finish -> finish()
+        }
+    }
+
+    private fun finish() {
+        if (finished) return
+        finished = true
+        val s = _state.value
+        viewModelScope.launch {
+            // Fail-soft: each persistence call is wrapped so a single store failure can't block the
+            // rest. The user has already committed mentally by tapping "Open Sketchbook" — the UI
+            // is unwinding, not pausing for retry.
+            s.projectsRoots.forEach { path ->
+                runCatching { repository.upsertRoot(LibraryRoot.Projects(path)) }
             }
+            s.sampleRoots.forEach { path ->
+                runCatching { repository.upsertRoot(LibraryRoot.UserSamples(path)) }
+            }
+            runCatching { repository.setPluginFolders(s.pluginFolders) }
+            runCatching {
+                repository.markFirstRunComplete(
+                    OnboardingSkipFlags(samplesSkipped = s.sampleRoots.isEmpty()),
+                )
+            }
+            // Scan kick-off goes last so it observes the just-flushed roots.
+            scanTrigger.triggerScan()
         }
     }
 
     private fun advance() = _state.update { s ->
-        if (s.currentIndex >= s.steps.lastIndex) s
-        else s.copy(currentIndex = s.currentIndex + 1).recomputeCanContinue()
+        if (s.currentIndex >= s.steps.lastIndex) {
+            s
+        } else {
+            s.copy(currentIndex = s.currentIndex + 1).recomputeCanContinue()
+        }
     }
 
     private fun skip() = _state.update { s ->
@@ -111,10 +163,12 @@ class OnboardingViewModel(
         when (s.steps[s.currentIndex]) {
             OnboardingStep.Welcome,
             OnboardingStep.ProjectsRoots,
-            OnboardingStep.Done -> s
+            OnboardingStep.Done,
+            -> s
 
             OnboardingStep.SampleRoots,
-            OnboardingStep.PluginFolders -> s.copy(currentIndex = s.currentIndex + 1).recomputeCanContinue()
+            OnboardingStep.PluginFolders,
+            -> s.copy(currentIndex = s.currentIndex + 1).recomputeCanContinue()
         }
     }
 
@@ -136,11 +190,10 @@ class OnboardingViewModel(
         )
     }
 
-    private fun OnboardingState.recomputeCanContinue(): OnboardingState =
-        copy(
-            canContinue = when (steps[currentIndex]) {
-                OnboardingStep.ProjectsRoots -> projectsRoots.isNotEmpty()
-                else -> true
-            },
-        )
+    private fun OnboardingState.recomputeCanContinue(): OnboardingState = copy(
+        canContinue = when (steps[currentIndex]) {
+            OnboardingStep.ProjectsRoots -> projectsRoots.isNotEmpty()
+            else -> true
+        },
+    )
 }
