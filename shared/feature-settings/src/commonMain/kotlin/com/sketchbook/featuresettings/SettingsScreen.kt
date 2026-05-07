@@ -14,10 +14,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sketchbook.auth.AuthState
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.SyncQueueState
@@ -98,6 +102,64 @@ fun SettingsScreen(
             }
 
             Section(
+                title = "Cloud",
+                hint = "Sign in with Google so Sketchbook can sync your projects.",
+            ) {
+                Surface(
+                    color = AppTheme.colors.tintBlue,
+                    elevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
+                        when (val auth = state.auth) {
+                            is AuthState.SignedIn -> {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
+                                ) {
+                                    Badge(color = AppTheme.colors.accentPositive) {
+                                        Text("signed in", style = AppTheme.typography.caption)
+                                    }
+                                    Text(auth.email, style = AppTheme.typography.body)
+                                }
+                                Button(
+                                    onClick = { vm.dispatch(SettingsViewModel.Intent.SignOut) },
+                                    variant = ButtonVariant.Ghost,
+                                ) { Text("Sign out") }
+                            }
+
+                            AuthState.SignedOut -> {
+                                Text(
+                                    "Not signed in. Cloud sync is disabled until you sign in.",
+                                    style = AppTheme.typography.body,
+                                )
+                                Button(
+                                    onClick = { vm.dispatch(SettingsViewModel.Intent.SignIn) },
+                                    variant = ButtonVariant.Primary,
+                                ) { Text("Sign in with Google") }
+                            }
+                        }
+                        var bucketDraft by remember(state.cloudBucket) {
+                            mutableStateOf(state.cloudBucket.orEmpty())
+                        }
+                        com.sketchbook.uishared.components.TextField(
+                            value = bucketDraft,
+                            onChange = {
+                                bucketDraft = it
+                                vm.dispatch(
+                                    SettingsViewModel.Intent.SetCloudBucket(
+                                        it.takeIf { v -> v.isNotBlank() },
+                                    ),
+                                )
+                            },
+                            placeholder = "Bucket name (e.g. sketchbook-prod)",
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            Section(
                 title = "Local blob cache",
                 hint = "How much disk to spend on cached blobs that back rewinds and snapshots.",
             ) {
@@ -144,6 +206,12 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
+                            if (state.auth is AuthState.SignedOut) {
+                                Text(
+                                    "Sign in to enable sync.",
+                                    style = AppTheme.typography.caption,
+                                )
+                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),

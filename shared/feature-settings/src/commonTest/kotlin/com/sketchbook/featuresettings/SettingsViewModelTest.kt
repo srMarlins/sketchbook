@@ -1,7 +1,10 @@
 package com.sketchbook.featuresettings
 
 import app.cash.turbine.test
+import com.sketchbook.auth.AuthSession
+import com.sketchbook.auth.AuthState
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.UserId
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.ExternalKind
 import com.sketchbook.repo.LibraryRoot
@@ -11,7 +14,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -74,9 +79,28 @@ class SettingsViewModelTest {
         }
     }
 
+    private class FakeAuthSession(initial: AuthState = AuthState.SignedOut) : AuthSession {
+        private val _state = MutableStateFlow(initial)
+        override val state: StateFlow<AuthState> = _state
+        var lastSignIn: Result<AuthState.SignedIn>? = null
+        var signOuts = 0
+        override suspend fun signIn(): Result<AuthState.SignedIn> {
+            val r = lastSignIn ?: Result.success(
+                AuthState.SignedIn(UserId("test"), "test@example.com"),
+            )
+            if (r.isSuccess) _state.value = r.getOrThrow()
+            return r
+        }
+        override suspend fun signOut() {
+            signOuts++
+            _state.value = AuthState.SignedOut
+        }
+        override suspend fun accessToken(): String = "fake"
+    }
+
     @Test
     fun stateMirrorsRepo() = runTest(mainDispatcher) {
-        val vm = SettingsViewModel(FakeRepo(initial))
+        val vm = SettingsViewModel(FakeRepo(initial), FakeAuthSession())
         vm.state.test {
             var s = awaitItem()
             while (s.libraryRoots.isEmpty()) s = awaitItem()
@@ -89,7 +113,7 @@ class SettingsViewModelTest {
     @Test
     fun addRootRoutesToRepoAndEmitsSavedEffect() = runTest(mainDispatcher) {
         val repo = FakeRepo(initial)
-        val vm = SettingsViewModel(repo)
+        val vm = SettingsViewModel(repo, FakeAuthSession())
         val newRoot = LibraryRoot.UserSamples("Z:/User/audio/Samples")
         vm.effects.test {
             vm.dispatch(SettingsViewModel.Intent.AddRoot(newRoot))
@@ -102,13 +126,49 @@ class SettingsViewModelTest {
     @Test
     fun toggleSelfContainedUpdatesRepoAndEmits() = runTest(mainDispatcher) {
         val repo = FakeRepo(initial)
-        val vm = SettingsViewModel(repo)
+        val vm = SettingsViewModel(repo, FakeAuthSession())
         val uuid = ProjectUuid("01H-test")
         vm.effects.test {
             vm.dispatch(SettingsViewModel.Intent.ToggleSelfContained(uuid, true))
             val effect = awaitItem()
             assertTrue(effect is SettingsViewModel.Effect.Saved)
             assertEquals(uuid to true, repo.lastSelfContained)
+        }
+    }
+
+    @Test
+    fun signInIntentFlipsStateToSignedIn() = runTest(mainDispatcher) {
+        val auth = FakeAuthSession()
+        val vm = SettingsViewModel(FakeRepo(initial), auth)
+        vm.state.test {
+            var s = awaitItem()
+            while (s.auth !is AuthState.SignedOut) s = awaitItem()
+            vm.dispatch(SettingsViewModel.Intent.SignIn)
+            advanceUntilIdle()
+            var next = awaitItem()
+            while (next.auth !is AuthState.SignedIn) next = awaitItem()
+            val signedIn = next.auth
+            check(signedIn is AuthState.SignedIn)
+            assertEquals("test@example.com", signedIn.email)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun signOutIntentFlipsStateToSignedOut() = runTest(mainDispatcher) {
+        val auth = FakeAuthSession(
+            initial = AuthState.SignedIn(UserId("u1"), "u1@example.com"),
+        )
+        val vm = SettingsViewModel(FakeRepo(initial), auth)
+        vm.state.test {
+            var s = awaitItem()
+            while (s.auth !is AuthState.SignedIn) s = awaitItem()
+            vm.dispatch(SettingsViewModel.Intent.SignOut)
+            advanceUntilIdle()
+            var next = awaitItem()
+            while (next.auth !is AuthState.SignedOut) next = awaitItem()
+            assertEquals(1, auth.signOuts)
+            cancelAndIgnoreRemainingEvents()
         }
     }
 }

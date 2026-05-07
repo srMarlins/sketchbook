@@ -3,6 +3,8 @@ package com.sketchbook.featuresettings
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sketchbook.auth.AuthSession
+import com.sketchbook.auth.AuthState
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.BlobCacheSettings
@@ -17,7 +19,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -29,6 +31,7 @@ import kotlinx.coroutines.launch
 @Inject
 class SettingsViewModel(
     private val repository: SettingsRepository,
+    private val authSession: AuthSession,
 ) : ViewModel() {
 
     private val _effects = MutableSharedFlow<Effect>(
@@ -38,17 +41,19 @@ class SettingsViewModel(
     )
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
-    val state: StateFlow<State> = repository.observe()
-        .map { settings ->
-            State(
-                libraryRoots = settings.libraryRoots,
-                cloudBucket = settings.cloudBucket,
-                selfContainedProjects = settings.selfContainedProjects,
-                cacheSettings = settings.cacheSettings,
-                loading = false,
-            )
-        }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
+    val state: StateFlow<State> = combine(
+        repository.observe(),
+        authSession.state,
+    ) { settings, auth ->
+        State(
+            libraryRoots = settings.libraryRoots,
+            cloudBucket = settings.cloudBucket,
+            auth = auth,
+            selfContainedProjects = settings.selfContainedProjects,
+            cacheSettings = settings.cacheSettings,
+            loading = false,
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
     fun dispatch(intent: Intent) {
         when (intent) {
@@ -76,6 +81,22 @@ class SettingsViewModel(
                 val current = state.value.cacheSettings
                 repository.setCacheSettings(current.copy(lruEnabled = intent.enabled))
             }
+
+            Intent.SignIn -> viewModelScope.launch {
+                val r = authSession.signIn()
+                if (r.isFailure) {
+                    _effects.tryEmit(
+                        Effect.Failed("auth", r.exceptionOrNull()?.message ?: "sign-in failed"),
+                    )
+                } else {
+                    _effects.tryEmit(Effect.Saved("auth"))
+                }
+            }
+
+            Intent.SignOut -> viewModelScope.launch {
+                authSession.signOut()
+                _effects.tryEmit(Effect.Saved("auth"))
+            }
         }
     }
 
@@ -94,6 +115,7 @@ class SettingsViewModel(
     data class State(
         val libraryRoots: List<LibraryRoot> = emptyList(),
         val cloudBucket: String? = null,
+        val auth: AuthState = AuthState.SignedOut,
         val selfContainedProjects: Set<ProjectUuid> = emptySet(),
         val cacheSettings: BlobCacheSettings = BlobCacheSettings.Default,
         val loading: Boolean = false,
@@ -106,6 +128,8 @@ class SettingsViewModel(
         data class ToggleSelfContained(val uuid: ProjectUuid, val value: Boolean) : Intent
         data class SetCacheSize(val settings: BlobCacheSettings) : Intent
         data class SetCacheLru(val enabled: Boolean) : Intent
+        data object SignIn : Intent
+        data object SignOut : Intent
     }
 
     sealed interface Effect {
