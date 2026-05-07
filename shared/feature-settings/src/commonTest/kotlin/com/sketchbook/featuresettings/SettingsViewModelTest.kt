@@ -8,6 +8,8 @@ import com.sketchbook.core.UserId
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.ExternalKind
 import com.sketchbook.repo.LibraryRoot
+import com.sketchbook.repo.OnboardingPromptKind
+import com.sketchbook.repo.OnboardingSkipFlags
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +27,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Clock
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsViewModelTest {
@@ -75,6 +78,32 @@ class SettingsViewModelTest {
         }
         override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> {
             flow.value = flow.value.copy(cacheSettings = settings)
+            return Result.success(Unit)
+        }
+        override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit> {
+            flow.value = flow.value.copy(
+                firstRunCompletedAt = Clock.System.now(),
+                onboardingSkipped = skipFlags,
+            )
+            return Result.success(Unit)
+        }
+        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> {
+            val current = flow.value.onboardingSkipped
+            val updated = when (kind) {
+                OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
+            }
+            flow.value = flow.value.copy(onboardingSkipped = updated)
+            return Result.success(Unit)
+        }
+        override suspend fun setPluginFolders(folders: List<String>): Result<Unit> {
+            flow.value = flow.value.copy(pluginFolders = folders)
+            return Result.success(Unit)
+        }
+        override suspend fun resetFirstRun(): Result<Unit> {
+            flow.value = flow.value.copy(
+                firstRunCompletedAt = null,
+                onboardingSkipped = OnboardingSkipFlags(),
+            )
             return Result.success(Unit)
         }
     }

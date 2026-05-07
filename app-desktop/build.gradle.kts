@@ -39,6 +39,7 @@ kotlin {
             implementation(project(":shared:feature-needs-attention"))
             implementation(project(":shared:feature-settings"))
             implementation(project(":shared:feature-journal"))
+            implementation(project(":shared:feature-onboarding"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.ktor.client.core)

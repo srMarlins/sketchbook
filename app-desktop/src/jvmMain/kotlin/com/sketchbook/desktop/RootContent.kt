@@ -125,6 +125,7 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
     val attentionCount by chrome.attentionCount.collectAsStateWithLifecycle()
     val missingPluginSummary by chrome.missingPluginSummary.collectAsStateWithLifecycle()
     val missingPluginCoverage by chrome.missingPluginCoverage.collectAsStateWithLifecycle()
+    val pendingOnboardingPrompt by chrome.pendingOnboardingPrompt.collectAsStateWithLifecycle()
 
     val current = backStack.lastOrNull() ?: Screen.Projects
     val items = sidebarItems(current, proposalCount, attentionCount)
@@ -276,59 +277,80 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                             // orchestration here — the chip click in the sidebar already
                                             // updated the coordinator, so this VM observes it on first
                                             // collection.
-                                            ProjectListScreen(
-                                                vm = vm,
-                                                scanLabel = scanIndicatorLabel,
-                                                scanActive = scanIndicatorActive,
-                                                syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
-                                                detailPanel = { id, dismiss ->
-                                                    // Track which project the side-panel is showing so the
-                                                    // root quick-capture handler can resolve it without
-                                                    // reaching into the NavEntry-scoped VM.
-                                                    DisposableEffect(id) {
-                                                        panelProjectId = id
-                                                        onDispose { panelProjectId = null }
-                                                    }
-                                                    val detailVm: com.sketchbook.featuredetail.ProjectDetailViewModel =
-                                                        metroViewModel()
-                                                    LaunchedEffect(id) { detailVm.load(id) }
-                                                    LaunchedEffect(detailVm) {
-                                                        detailVm.effects.collect { e ->
-                                                            when (e) {
-                                                                is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LaunchLive ->
-                                                                    Os.openInLive(e.projectPath)
+                                            androidx.compose.foundation.layout.Column(
+                                                modifier = Modifier.fillMaxSize(),
+                                            ) {
+                                                // Soft re-prompt for skipped onboarding steps. Sticky-dismissible
+                                                // (× routes through `chrome.dismissPrompt`); body click jumps to
+                                                // Settings via the same back-stack reset the sidebar uses.
+                                                pendingOnboardingPrompt?.let { prompt ->
+                                                    OnboardingPromptBanner(
+                                                        prompt = prompt,
+                                                        onClick = {
+                                                            backStack.clear()
+                                                            backStack.add(Screen.Settings)
+                                                        },
+                                                        onDismiss = { chrome.dismissPrompt(prompt) },
+                                                        modifier = Modifier.padding(
+                                                            horizontal = 16.dp,
+                                                            vertical = 8.dp,
+                                                        ),
+                                                    )
+                                                }
+                                                ProjectListScreen(
+                                                    vm = vm,
+                                                    scanLabel = scanIndicatorLabel,
+                                                    scanActive = scanIndicatorActive,
+                                                    syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
+                                                    detailPanel = { id, dismiss ->
+                                                        // Track which project the side-panel is showing so the
+                                                        // root quick-capture handler can resolve it without
+                                                        // reaching into the NavEntry-scoped VM.
+                                                        DisposableEffect(id) {
+                                                            panelProjectId = id
+                                                            onDispose { panelProjectId = null }
+                                                        }
+                                                        val detailVm: ProjectDetailViewModel = metroViewModel()
+                                                        LaunchedEffect(id) { detailVm.load(id) }
+                                                        LaunchedEffect(detailVm) {
+                                                            detailVm.effects.collect { e ->
+                                                                when (e) {
+                                                                    is ProjectDetailViewModel.Effect.LaunchLive ->
+                                                                        Os.openInLive(e.projectPath)
 
-                                                                com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTaken,
-                                                                is com.sketchbook.featuredetail.ProjectDetailViewModel.Effect.LockTakeFailed,
-                                                                -> Unit
+                                                                    ProjectDetailViewModel.Effect.LockTaken,
+                                                                    is ProjectDetailViewModel.Effect.LockTakeFailed,
+                                                                    -> Unit
+                                                                }
                                                             }
                                                         }
-                                                    }
-                                                    DetailPanelRoutePane(
-                                                        vm = detailVm,
-                                                        onDismiss = dismiss,
-                                                        syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
-                                                        onPushNow = if (chrome.syncWired) {
-                                                            { pid -> coroutineScope.launch { chrome.pushNow(pid) } }
-                                                        } else {
-                                                            null
-                                                        },
-                                                        conflictMessageFor = if (chrome.syncWired) chrome::conflictMessage else null,
-                                                        onOpenTimeline = { pid ->
-                                                            backStack.add(Screen.Timeline(chrome.timelineUuidFor(pid)))
-                                                        },
-                                                        // PR-AA: hand the Plugins tab the inverse query + a hook to swap
-                                                        // the panel's project on click. Reusing the same `detailVm.load`
-                                                        // path keeps the side-panel-vs-back-stack semantics consistent —
-                                                        // the user stays in the side-panel context, just on a different
-                                                        // project.
-                                                        pluginUsageFlow = chrome::observeProjectsUsing,
-                                                        onSelectProject = { pid ->
-                                                            vm.dispatch(ProjectListViewModel.Intent.OpenDetail(pid))
-                                                        },
-                                                    )
-                                                },
-                                            )
+                                                        DetailPanelRoutePane(
+                                                            vm = detailVm,
+                                                            onDismiss = dismiss,
+                                                            syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
+                                                            onPushNow = if (chrome.syncWired) {
+                                                                { pid -> coroutineScope.launch { chrome.pushNow(pid) } }
+                                                            } else {
+                                                                null
+                                                            },
+                                                            conflictMessageFor = if (chrome.syncWired) chrome::conflictMessage else null,
+                                                            onOpenTimeline = { pid ->
+                                                                val uuid = chrome.timelineUuidFor(pid)
+                                                                backStack.add(Screen.Timeline(uuid))
+                                                            },
+                                                            // PR-AA: hand the Plugins tab the inverse query + a hook to swap
+                                                            // the panel's project on click. Reusing the same `detailVm.load`
+                                                            // path keeps the side-panel-vs-back-stack semantics consistent —
+                                                            // the user stays in the side-panel context, just on a different
+                                                            // project.
+                                                            pluginUsageFlow = chrome::observeProjectsUsing,
+                                                            onSelectProject = { pid ->
+                                                                vm.dispatch(ProjectListViewModel.Intent.OpenDetail(pid))
+                                                            },
+                                                        )
+                                                    },
+                                                )
+                                            }
                                         }
 
                                         is Screen.ProjectDetail -> {
