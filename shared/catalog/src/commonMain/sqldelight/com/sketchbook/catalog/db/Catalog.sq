@@ -711,3 +711,110 @@ SELECT last_insert_rowid();
 
 deleteJournalEntryById:
 DELETE FROM journal_entries WHERE id = :id;
+
+-- ============================================================================
+-- Tree tables (10.sqm) — backend generalization (TrackedTree + CloudDoc).
+-- Project rows still live in `sync_state` / `snapshots`; non-project trees
+-- (UserLibrary, future kinds) get parallel tables here.
+-- ============================================================================
+
+CREATE TABLE tree_sync_state (
+    tree_id        TEXT NOT NULL,
+    tree_kind      TEXT NOT NULL,
+    local_rev      INTEGER NOT NULL DEFAULT 0,
+    cloud_head_rev INTEGER,
+    dirty          INTEGER NOT NULL DEFAULT 0,
+    updated_at     INTEGER NOT NULL,
+    PRIMARY KEY (tree_id)
+);
+
+CREATE TABLE tree_registry_cache (
+    tree_id          TEXT PRIMARY KEY,
+    tree_kind        TEXT NOT NULL,
+    scope_key        TEXT,
+    display_name     TEXT,
+    owner_user_id    TEXT NOT NULL,
+    updated_at       INTEGER NOT NULL
+);
+CREATE INDEX tree_registry_by_kind ON tree_registry_cache(tree_kind, scope_key);
+
+CREATE TABLE tree_snapshots (
+    tree_id          TEXT NOT NULL,
+    rev              INTEGER NOT NULL,
+    parent_rev       INTEGER,
+    timestamp        INTEGER NOT NULL,
+    host_id          TEXT NOT NULL,
+    snapshot_kind    TEXT NOT NULL,
+    label            TEXT,
+    file_count       INTEGER NOT NULL,
+    total_bytes      INTEGER NOT NULL,
+    new_bytes        INTEGER NOT NULL,
+    manifest_path    TEXT NOT NULL,
+    PRIMARY KEY (tree_id, rev)
+);
+CREATE INDEX tree_snapshots_by_kind ON tree_snapshots(tree_id, snapshot_kind, rev DESC);
+
+CREATE TABLE tree_journal (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    tree_id         TEXT NOT NULL,
+    tree_kind       TEXT NOT NULL,
+    timestamp       INTEGER NOT NULL,
+    host_id         TEXT NOT NULL,
+    event_kind      TEXT NOT NULL,
+    payload_json    TEXT NOT NULL,
+    rev             INTEGER
+);
+CREATE INDEX tree_journal_by_tree ON tree_journal(tree_id, timestamp DESC);
+
+-- Tree registry cache CRUD.
+upsertTreeRegistryEntry:
+INSERT INTO tree_registry_cache(tree_id, tree_kind, scope_key, display_name, owner_user_id, updated_at)
+VALUES (:tree_id, :tree_kind, :scope_key, :display_name, :owner_user_id, :updated_at)
+ON CONFLICT(tree_id) DO UPDATE SET
+    tree_kind = excluded.tree_kind,
+    scope_key = excluded.scope_key,
+    display_name = excluded.display_name,
+    owner_user_id = excluded.owner_user_id,
+    updated_at = excluded.updated_at;
+
+selectTreeRegistryAll:
+SELECT * FROM tree_registry_cache;
+
+selectTreeRegistryByKind:
+SELECT * FROM tree_registry_cache WHERE tree_kind = :tree_kind;
+
+selectTreeRegistryByKindScope:
+SELECT * FROM tree_registry_cache WHERE tree_kind = :tree_kind AND scope_key = :scope_key;
+
+deleteTreeRegistryEntry:
+DELETE FROM tree_registry_cache WHERE tree_id = :tree_id;
+
+-- Tree sync state CRUD.
+upsertTreeSyncState:
+INSERT INTO tree_sync_state(tree_id, tree_kind, local_rev, cloud_head_rev, dirty, updated_at)
+VALUES (:tree_id, :tree_kind, :local_rev, :cloud_head_rev, :dirty, :updated_at)
+ON CONFLICT(tree_id) DO UPDATE SET
+    tree_kind = excluded.tree_kind,
+    local_rev = excluded.local_rev,
+    cloud_head_rev = excluded.cloud_head_rev,
+    dirty = excluded.dirty,
+    updated_at = excluded.updated_at;
+
+selectTreeSyncState:
+SELECT * FROM tree_sync_state WHERE tree_id = :tree_id;
+
+-- Tree snapshots.
+insertTreeSnapshot:
+INSERT OR IGNORE INTO tree_snapshots(tree_id, rev, parent_rev, timestamp, host_id, snapshot_kind, label, file_count, total_bytes, new_bytes, manifest_path)
+VALUES (:tree_id, :rev, :parent_rev, :timestamp, :host_id, :snapshot_kind, :label, :file_count, :total_bytes, :new_bytes, :manifest_path);
+
+selectTreeSnapshots:
+SELECT * FROM tree_snapshots WHERE tree_id = :tree_id ORDER BY rev DESC;
+
+-- Tree journal.
+insertTreeJournalEntry:
+INSERT INTO tree_journal(tree_id, tree_kind, timestamp, host_id, event_kind, payload_json, rev)
+VALUES (:tree_id, :tree_kind, :timestamp, :host_id, :event_kind, :payload_json, :rev);
+
+selectTreeJournal:
+SELECT * FROM tree_journal WHERE tree_id = :tree_id ORDER BY timestamp DESC LIMIT :limit_;
