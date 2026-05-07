@@ -138,9 +138,14 @@ object CatalogDb {
                     // before 5.sqm
                     !columnExists(driver, "project_plugins", "is_installed") -> 5L
 
-                    // before 7.sqm — project_name added by this PR's 7.sqm
+                    // before 7.sqm — project_name column added by 7.sqm
                     !columnExists(driver, "journal_entries", "project_name") -> 7L
 
+                    // 8.sqm is a pure data backfill (UPDATE journal_entries.project_name) with
+                    // no structural change to probe for. Pre-tracking DBs that have the column
+                    // present fall through to `target`; the migration walker in `current < target`
+                    // re-runs 8.sqm on tracked DBs the next time the schema target advances.
+                    // Idempotent: re-running the UPDATE is a no-op once names are filled.
                     else -> target
                 }
                 if (detected < target) {

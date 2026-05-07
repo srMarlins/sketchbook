@@ -1,0 +1,11 @@
+-- v8 → v9: backfill journal_entries.project_name for legacy rows whose project_id still
+-- resolves in the catalog. 7.sqm added the column nullable; rows written before that PR have
+-- NULL there. The id-preserving-upsert change in this same PR fixes the *future* orphaning,
+-- but pre-existing entries still need the name copied across once.
+--
+-- Rows whose project_id is genuinely orphaned (project gone from catalog) are left NULL —
+-- the resolver falls back to pathHint or the "project #N" sentinel for those.
+UPDATE journal_entries
+SET project_name = (SELECT p.name FROM projects p WHERE p.id = journal_entries.project_id)
+WHERE project_name IS NULL
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = journal_entries.project_id);
