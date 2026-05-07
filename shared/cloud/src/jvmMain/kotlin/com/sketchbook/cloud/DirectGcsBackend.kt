@@ -56,16 +56,19 @@ import java.nio.file.StandardOpenOption
  * `x-goog-if-generation-match`; reads use `?alt=media`. v1 single-PUT only — resumable upload
  * lands in PR-9 alongside the snapshot pipeline that needs it.
  *
- * **Tenant prefix:** every key is prefixed with `<userId.value>/` per design §3.2 so v1.2
- * multi-user can share a bucket.
+ * **Tenant prefix:** every key is prefixed with `users/<userId.value>/` per design §3.2 so
+ * v1.2 multi-user can share a bucket and per-user IAM `resource.name.startsWith(...)`
+ * conditions resolve cleanly.
  */
 class DirectGcsBackend(
     private val http: HttpClient,
-    private val auth: GcsAuth,
+    private val credentials: CloudCredentials,
     private val bucket: String,
-    private val userId: UserId = UserId.DEFAULT,
+    private val userId: UserId,
     private val json: Json = ManifestJson,
 ) : CloudBackend {
+
+    private val tenantPrefix = "users/${userId.value}"
 
     override suspend fun headBlob(hash: BlobHash, scope: BlobScope): Boolean {
         val path = blobPath(hash, scope)
@@ -264,7 +267,7 @@ class DirectGcsBackend(
     }
 
     override suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?): List<ManifestRef> {
-        val prefix = "${userId.value}/manifests/${uuid.value}/"
+        val prefix = "$tenantPrefix/manifests/${uuid.value}/"
         val response = http.get(listUrl()) {
             authHeader()
             parameter("prefix", prefix)
@@ -405,7 +408,7 @@ class DirectGcsBackend(
     // ---- internals ----
 
     private suspend fun HttpRequestBuilder.authHeader() {
-        bearerAuth(auth.token())
+        bearerAuth(credentials.token())
     }
 
     private fun objectUrl(path: String): String = "https://storage.googleapis.com/storage/v1/b/$bucket/o/${path.encodeURLPath()}"
@@ -417,16 +420,16 @@ class DirectGcsBackend(
     private fun blobPath(hash: BlobHash, scope: BlobScope): String {
         val shard = hash.hex.substring(0, 2)
         return when (scope) {
-            BlobScope.Shared -> "${userId.value}/blobs/$shard/${hash.value}"
-            is BlobScope.Private -> "${userId.value}/blobs-private/${scope.uuid.value}/$shard/${hash.value}"
+            BlobScope.Shared -> "$tenantPrefix/blobs/$shard/${hash.value}"
+            is BlobScope.Private -> "$tenantPrefix/blobs-private/${scope.uuid.value}/$shard/${hash.value}"
         }
     }
 
-    private fun manifestPath(uuid: ProjectUuid, rev: Long, timestamp: String, host: String): String = "${userId.value}/manifests/${uuid.value}/${rev.toString().padStart(8, '0')}-${timestamp.replace(':', '-')}-$host.json"
+    private fun manifestPath(uuid: ProjectUuid, rev: Long, timestamp: String, host: String): String = "$tenantPrefix/manifests/${uuid.value}/${rev.toString().padStart(8, '0')}-${timestamp.replace(':', '-')}-$host.json"
 
-    private fun headPath(uuid: ProjectUuid): String = "${userId.value}/manifests/${uuid.value}/HEAD"
+    private fun headPath(uuid: ProjectUuid): String = "$tenantPrefix/manifests/${uuid.value}/HEAD"
 
-    private fun lockPath(uuid: ProjectUuid): String = "${userId.value}/locks/${uuid.value}.lock"
+    private fun lockPath(uuid: ProjectUuid): String = "$tenantPrefix/locks/${uuid.value}.lock"
 
     private fun JsonElement.toManifestRef(prefix: String): ManifestRef? {
         val obj = this.jsonObject

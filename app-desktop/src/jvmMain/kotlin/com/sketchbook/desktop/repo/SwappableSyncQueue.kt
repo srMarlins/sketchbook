@@ -120,7 +120,7 @@ class SwappableSyncQueue(
         val auth = GcsAuth(key = key, httpClient = httpClient)
         val backend = DirectGcsBackend(
             http = httpClient,
-            auth = auth,
+            credentials = auth,
             bucket = bucket,
             userId = UserId.DEFAULT,
         )
