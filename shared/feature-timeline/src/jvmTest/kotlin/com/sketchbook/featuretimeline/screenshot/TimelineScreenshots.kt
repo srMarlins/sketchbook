@@ -10,6 +10,7 @@ import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.featuretimeline.TimelineContent
 import com.sketchbook.featuretimeline.TimelineViewModel
+import com.sketchbook.featuretimeline.friendlyDate
 import com.sketchbook.uishared.theme.AppTheme
 import io.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.datetime.LocalDate
@@ -49,12 +50,15 @@ private fun sampleLoadedState(): TimelineViewModel.State =
 
 private fun sampleGroups(history: List<Snapshot>): List<TimelineViewModel.DayGroup> {
     val zone = TimeZone.UTC
+    // Pin "today" to 2026-05-07 so the friendly-date labels render deterministically
+    // regardless of when the screenshot capture is run.
+    val today = LocalDate(2026, 5, 7)
     return history
         .filter { it.kind != SnapshotKind.Auto }
         .sortedByDescending { it.rev.value }
         .groupBy { it.timestamp.toLocalDateTime(zone).date }
         .toSortedMap(compareByDescending<LocalDate> { it })
-        .map { (date, snaps) -> TimelineViewModel.DayGroup(date, snaps) }
+        .map { (date, snaps) -> TimelineViewModel.DayGroup(date, friendlyDate(date, today), snaps) }
 }
 
 private fun snap(

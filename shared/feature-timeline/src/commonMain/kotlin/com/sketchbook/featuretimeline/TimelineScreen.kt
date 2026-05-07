@@ -43,7 +43,6 @@ import com.sketchbook.uishared.components.EmptyState
 import com.sketchbook.uishared.components.Surface
 import com.sketchbook.uishared.components.Text
 import com.sketchbook.uishared.theme.AppTheme
-import kotlinx.datetime.toLocalDateTime
 
 @Composable
 fun TimelineScreen(
@@ -89,7 +88,7 @@ internal fun TimelineContent(
                 groups.forEach { group ->
                     item(key = "day-${group.date}") {
                         Text(
-                            text = friendlyDate(group.date),
+                            text = group.displayLabel,
                             style = AppTheme.typography.bodyEmphasis,
                             modifier = Modifier.padding(top = AppTheme.spacing.xs),
                         )
@@ -336,41 +335,6 @@ private fun ProgressLine(progress: MaterializationProgress) {
         }
     Text(text, style = AppTheme.typography.caption)
 }
-
-/**
- * "Today" / "Yesterday" / month-day for the current year / ISO for older dates. Producers
- * recognise "Today" and "Yesterday" instantly; fully numeric dates make the eye work.
- */
-internal fun friendlyDate(date: kotlinx.datetime.LocalDate): String {
-    val today =
-        kotlin.time.Clock.System
-            .now()
-            .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
-            .date
-    val deltaDays = today.toEpochDays() - date.toEpochDays()
-    return when {
-        deltaDays == 0L -> "Today"
-        deltaDays == 1L -> "Yesterday"
-        date.year == today.year -> "${monthShort(date.month)} ${date.day}"
-        else -> date.toString()
-    }
-}
-
-private fun monthShort(month: kotlinx.datetime.Month): String =
-    when (month) {
-        kotlinx.datetime.Month.JANUARY -> "Jan"
-        kotlinx.datetime.Month.FEBRUARY -> "Feb"
-        kotlinx.datetime.Month.MARCH -> "Mar"
-        kotlinx.datetime.Month.APRIL -> "Apr"
-        kotlinx.datetime.Month.MAY -> "May"
-        kotlinx.datetime.Month.JUNE -> "Jun"
-        kotlinx.datetime.Month.JULY -> "Jul"
-        kotlinx.datetime.Month.AUGUST -> "Aug"
-        kotlinx.datetime.Month.SEPTEMBER -> "Sep"
-        kotlinx.datetime.Month.OCTOBER -> "Oct"
-        kotlinx.datetime.Month.NOVEMBER -> "Nov"
-        kotlinx.datetime.Month.DECEMBER -> "Dec"
-    }
 
 private fun humanBytes(b: Long): String =
     when {
