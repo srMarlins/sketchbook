@@ -32,7 +32,7 @@ class JvmBlobCache(
     private val cacheRoot: Path,
     private val cloud: CloudBackend,
     private val clock: Clock = Clock.System,
-    private val cacheSettings: () -> BlobCacheSettings,
+    private val cacheSettings: suspend () -> BlobCacheSettings,
 ) : BlobCache {
 
     init {
@@ -117,7 +117,7 @@ class JvmBlobCache(
         }
     }
 
-    private fun evictIfOverBudget() {
+    private suspend fun evictIfOverBudget() {
         val settings = cacheSettings()
         if (!settings.lruEnabled) return
         val total = catalog.catalogQueries.sumBlobCacheBytes().executeAsOne()

@@ -133,11 +133,13 @@ class SwappableSyncQueue(
             hostId = hostId,
             hostName = hostName,
         )
-        // Build the materializer alongside the queue so Timeline rewind works the moment
-        // creds land. Cache settings come from settings.observe() — we read once here; a
-        // cache-policy change forces the user to re-toggle creds today (rare, acceptable).
-        val cacheSettings: () -> BlobCacheSettings = {
-            kotlinx.coroutines.runBlocking { settings.observe().first() }.cacheSettings
+        // Build the materializer alongside the queue so Timeline rewind works the moment creds
+        // land. Both lambdas suspend: eviction runs from JvmBlobCache.getOrFetch and path
+        // resolution runs from ManifestMaterializer.materialize, both already suspend, so
+        // suspension propagates naturally. Previous wiring used runBlocking inside the lambdas,
+        // which blocked the calling dispatcher thread on every cache eviction check / rewind.
+        val cacheSettings: suspend () -> BlobCacheSettings = {
+            settings.observe().first().cacheSettings
         }
         val blobCache = JvmBlobCache(
             catalog = catalog,
@@ -152,9 +154,8 @@ class SwappableSyncQueue(
             projectRoot = { uuid ->
                 val pid = syncStateStore.projectIdFor(uuid)
                     ?: throw IllegalStateException("no local project for uuid $uuid")
-                val row = kotlinx.coroutines.runBlocking {
-                    projects.observeProject(pid).first()
-                } ?: throw IllegalStateException("project row $pid not found")
+                val row = projects.observeProject(pid).first()
+                    ?: throw IllegalStateException("project row $pid not found")
                 val parent = Paths.get(row.path.value).parent
                     ?: throw IllegalStateException("project path has no parent: ${row.path.value}")
                 parent
