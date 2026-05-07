@@ -148,14 +148,15 @@ object CatalogDb {
                     // NULL) and then 9.sqm's ADD COLUMN + backfill.
                     !columnExists(driver, "journal_entries", "project_path") -> 8L
 
-                    // Pre-tracking DBs that already have both denorm columns present are at v9
-                    // effectively (post-9.sqm structurally; data backfills are idempotent). Return
-                    // target-1 so migrate(9, target) re-runs 9.sqm's UPDATE — same trick the prior
-                    // commit used to backfill 8.sqm via this branch. The 9.sqm ALTER would be the
-                    // re-run risk, but this branch is unreachable in practice: any DB with a
-                    // project_path column was created by *this* PR's migration path, which writes
-                    // user_version, so it'd never land in `current == 0L`.
-                    else -> target - 1
+                    // before 10.sqm — tree_* tables added by 10.sqm. A DB at v9 has project_path
+                    // but no tree_sync_state; this returns 9L so migrate(9, target) creates the
+                    // tree_* tables.
+                    !tableExists(driver, "tree_sync_state") -> 9L
+
+                    // Pre-tracking DBs that already have all denorm columns + tree tables present
+                    // are at the latest structural version. Return target so we don't re-run any
+                    // migrations (their ALTER/CREATE statements would fail on existing objects).
+                    else -> target
                 }
                 if (detected < target) {
                     Catalog.Schema.migrate(driver, detected, target)
