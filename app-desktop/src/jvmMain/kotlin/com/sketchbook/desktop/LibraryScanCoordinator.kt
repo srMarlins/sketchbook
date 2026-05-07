@@ -36,7 +36,6 @@ class LibraryScanCoordinator(
     private val scope: CoroutineScope,
     private val pluginPresenceProbe: PluginPresenceProbe,
 ) {
-
     private val _progress = MutableStateFlow<ScanUiState>(ScanUiState.Idle)
     val progress: StateFlow<ScanUiState> = _progress.asStateFlow()
 

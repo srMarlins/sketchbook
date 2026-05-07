@@ -61,80 +61,91 @@ fun Button(
     val isPressed by interaction.collectIsPressedAsState()
     val isHovered by interaction.collectIsHoveredAsState()
 
-    val (baseBg, fg, edgeDark, edgeLight, baseElevation) = when (variant) {
-        ButtonVariant.Primary -> Quintet(
-            colors.accentAction,
-            colors.inkOnFill,
-            Color(0x33000000),
-            Color(0x33FFFFFF),
-            3.dp,
-        )
+    val (baseBg, fg, edgeDark, edgeLight, baseElevation) =
+        when (variant) {
+            ButtonVariant.Primary -> {
+                Quintet(
+                    colors.accentAction,
+                    colors.inkOnFill,
+                    Color(0x33000000),
+                    Color(0x33FFFFFF),
+                    3.dp,
+                )
+            }
 
-        ButtonVariant.Secondary -> Quintet(
-            colors.surfaceCard,
-            colors.inkPrimary,
-            colors.ruleLineStrong,
-            if (colors.isDark) Color(0x14F5ECD8) else Color(0x55FFFAEE),
-            1.dp,
-        )
+            ButtonVariant.Secondary -> {
+                Quintet(
+                    colors.surfaceCard,
+                    colors.inkPrimary,
+                    colors.ruleLineStrong,
+                    if (colors.isDark) Color(0x14F5ECD8) else Color(0x55FFFAEE),
+                    1.dp,
+                )
+            }
 
-        ButtonVariant.Ghost -> Quintet(
-            Color.Transparent,
-            colors.inkPrimary,
-            Color.Transparent,
-            Color.Transparent,
-            0.dp,
-        )
-    }
-
-    val bg = when {
-        !enabled -> baseBg.copy(alpha = baseBg.alpha * 0.4f)
-        isPressed && variant == ButtonVariant.Primary -> blend(baseBg, Color.Black, 0.10f)
-        isPressed && variant == ButtonVariant.Secondary -> blend(baseBg, colors.ruleLine, 0.30f)
-        isHovered && variant == ButtonVariant.Secondary -> blend(baseBg, colors.accentSoft, 0.18f)
-        isHovered && variant == ButtonVariant.Ghost -> colors.tintCream.copy(alpha = 0.6f)
-        else -> baseBg
-    }
-    val effectiveFg = if (enabled) fg else fg.copy(alpha = 0.4f)
-    val elevation = when {
-        !enabled || variant == ButtonVariant.Ghost -> 0.dp
-        isPressed -> (baseElevation - 1.dp).coerceAtLeast(0.dp)
-        else -> baseElevation
-    }
-
-    val drawEdges: Modifier = if (variant == ButtonVariant.Ghost) {
-        Modifier
-    } else {
-        Modifier.drawBehind {
-            val r = cornerDp.toPx()
-            drawRoundRect(
-                color = edgeDark,
-                topLeft = Offset(0f, 0f),
-                size = Size(size.width, size.height),
-                cornerRadius = CornerRadius(r, r),
-                style = Stroke(width = 1f),
-            )
-            drawRoundRect(
-                color = edgeLight,
-                topLeft = Offset(0.5f, 0.5f),
-                size = Size(size.width - 1f, size.height - 1f),
-                cornerRadius = CornerRadius(r - 0.5f, r - 0.5f),
-                style = Stroke(width = 0.6f),
-            )
+            ButtonVariant.Ghost -> {
+                Quintet(
+                    Color.Transparent,
+                    colors.inkPrimary,
+                    Color.Transparent,
+                    Color.Transparent,
+                    0.dp,
+                )
+            }
         }
-    }
 
-    val finalMod = modifier
-        .let { if (elevation > 0.dp) it.shadow(elevation, shape, clip = false) else it }
-        .clip(shape)
-        .background(bg)
-        .then(drawEdges)
-        .clickable(
-            enabled = enabled,
-            interactionSource = interaction,
-            indication = null,
-        ) { onClick() }
-        .padding(PaddingValues(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm))
+    val bg =
+        when {
+            !enabled -> baseBg.copy(alpha = baseBg.alpha * 0.4f)
+            isPressed && variant == ButtonVariant.Primary -> blend(baseBg, Color.Black, 0.10f)
+            isPressed && variant == ButtonVariant.Secondary -> blend(baseBg, colors.ruleLine, 0.30f)
+            isHovered && variant == ButtonVariant.Secondary -> blend(baseBg, colors.accentSoft, 0.18f)
+            isHovered && variant == ButtonVariant.Ghost -> colors.tintCream.copy(alpha = 0.6f)
+            else -> baseBg
+        }
+    val effectiveFg = if (enabled) fg else fg.copy(alpha = 0.4f)
+    val elevation =
+        when {
+            !enabled || variant == ButtonVariant.Ghost -> 0.dp
+            isPressed -> (baseElevation - 1.dp).coerceAtLeast(0.dp)
+            else -> baseElevation
+        }
+
+    val drawEdges: Modifier =
+        if (variant == ButtonVariant.Ghost) {
+            Modifier
+        } else {
+            Modifier.drawBehind {
+                val r = cornerDp.toPx()
+                drawRoundRect(
+                    color = edgeDark,
+                    topLeft = Offset(0f, 0f),
+                    size = Size(size.width, size.height),
+                    cornerRadius = CornerRadius(r, r),
+                    style = Stroke(width = 1f),
+                )
+                drawRoundRect(
+                    color = edgeLight,
+                    topLeft = Offset(0.5f, 0.5f),
+                    size = Size(size.width - 1f, size.height - 1f),
+                    cornerRadius = CornerRadius(r - 0.5f, r - 0.5f),
+                    style = Stroke(width = 0.6f),
+                )
+            }
+        }
+
+    val finalMod =
+        modifier
+            .let { if (elevation > 0.dp) it.shadow(elevation, shape, clip = false) else it }
+            .clip(shape)
+            .background(bg)
+            .then(drawEdges)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = null,
+            ) { onClick() }
+            .padding(PaddingValues(horizontal = AppTheme.spacing.md, vertical = AppTheme.spacing.sm))
 
     Row(
         modifier = finalMod,
@@ -149,11 +160,22 @@ fun Button(
     }
 }
 
-private data class Quintet(val a: Color, val b: Color, val c: Color, val d: Color, val e: Dp)
-
-private fun blend(a: Color, b: Color, t: Float): Color = Color(
-    red = a.red * (1 - t) + b.red * t,
-    green = a.green * (1 - t) + b.green * t,
-    blue = a.blue * (1 - t) + b.blue * t,
-    alpha = a.alpha,
+private data class Quintet(
+    val a: Color,
+    val b: Color,
+    val c: Color,
+    val d: Color,
+    val e: Dp,
 )
+
+private fun blend(
+    a: Color,
+    b: Color,
+    t: Float,
+): Color =
+    Color(
+        red = a.red * (1 - t) + b.red * t,
+        green = a.green * (1 - t) + b.green * t,
+        blue = a.blue * (1 - t) + b.blue * t,
+        alpha = a.alpha,
+    )

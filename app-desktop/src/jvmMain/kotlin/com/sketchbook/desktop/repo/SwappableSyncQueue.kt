@@ -68,7 +68,6 @@ class SwappableSyncQueue(
     private val httpClient: HttpClient,
 ) : SyncQueue,
     ForceSnapshotPipeline {
-
     private val fallback = InMemorySyncQueue(projects = projects, scope = scope)
     private val delegate = MutableStateFlow<SyncQueue>(fallback)
 
@@ -100,18 +99,19 @@ class SwappableSyncQueue(
                 .distinctUntilChanged()
                 .collect { (auth, bucket) ->
                     val previous = delegate.value
-                    val next = if (auth is AuthState.SignedIn && !bucket.isNullOrBlank()) {
-                        buildGcsQueue(
-                            authSession = authSession,
-                            userId = auth.userId,
-                            bucket = bucket,
-                            cacheSettings = settings.observe().first().cacheSettings,
-                        )
-                    } else {
-                        currentMaterializer = null
-                        _currentCloud.value = null
-                        fallback
-                    }
+                    val next =
+                        if (auth is AuthState.SignedIn && !bucket.isNullOrBlank()) {
+                            buildGcsQueue(
+                                authSession = authSession,
+                                userId = auth.userId,
+                                bucket = bucket,
+                                cacheSettings = settings.observe().first().cacheSettings,
+                            )
+                        } else {
+                            currentMaterializer = null
+                            _currentCloud.value = null
+                            fallback
+                        }
                     // Stop the outgoing drain *before* publishing the new delegate so we don't
                     // race two GcsSyncQueue drain loops against the same DB. InMemorySyncQueue
                     // has no drain, so the cast guard handles that path.
@@ -129,62 +129,70 @@ class SwappableSyncQueue(
         userId: UserId,
         bucket: String,
         cacheSettings: BlobCacheSettings,
-    ): SyncQueue = runCatching {
-        val credentials = OAuthCloudCredentials(authSession)
-        val backend = DirectGcsBackend(
-            http = httpClient,
-            credentials = credentials,
-            bucket = bucket,
-            userId = userId,
-        )
-        val pipeline = SnapshotPipeline(
-            cloud = backend,
-            ownerUserId = userId,
-            hostId = hostId,
-            hostName = hostName,
-        )
-        // Materializer is built alongside the queue so Timeline rewind works the moment creds
-        // land. Cache settings are snapshot-on-build (passed in by the caller, which collects
-        // settings.observe() in its suspend collect): a cache-policy change forces the user to
-        // re-toggle creds today, which is rare and acceptable. The previous wiring used a
-        // `() -> BlobCacheSettings` lambda with runBlocking around `settings.observe().first()`
-        // on every cache eviction check; that hot-path call is now eliminated. projectRoot
-        // legitimately needs late binding (different uuid per call) and stays a suspend lambda.
-        val blobCache = JvmBlobCache(
-            catalog = catalog,
-            cacheRoot = blobCacheRoot,
-            cloud = backend,
-            cacheSettings = cacheSettings,
-        )
-        _currentCloud.value = backend
-        currentMaterializer = ManifestMaterializer(
-            cloud = backend,
-            blobCache = blobCache,
-            projectRoot = { uuid ->
-                val pid = syncStateStore.projectIdFor(uuid)
-                    ?: throw IllegalStateException("no local project for uuid $uuid")
-                val row = projects.observeProject(pid).first()
-                    ?: throw IllegalStateException("project row $pid not found")
-                val parent = Paths.get(row.path.value).parent
-                    ?: throw IllegalStateException("project path has no parent: ${row.path.value}")
-                parent
-            },
-        )
-        GcsSyncQueue(
-            cloud = backend,
-            pipeline = pipeline,
-            syncState = syncStateStore,
-            projects = projects,
-            scope = scope,
-            journal = journal,
-        )
-    }.getOrElse {
-        // Bad creds or unsupported config — fall back to in-memory so the UI keeps rendering.
-        // The error surfaces via the next access-token request when a sync attempt actually runs.
-        currentMaterializer = null
-        _currentCloud.value = null
-        fallback
-    }
+    ): SyncQueue =
+        runCatching {
+            val credentials = OAuthCloudCredentials(authSession)
+            val backend =
+                DirectGcsBackend(
+                    http = httpClient,
+                    credentials = credentials,
+                    bucket = bucket,
+                    userId = userId,
+                )
+            val pipeline =
+                SnapshotPipeline(
+                    cloud = backend,
+                    ownerUserId = userId,
+                    hostId = hostId,
+                    hostName = hostName,
+                )
+            // Materializer is built alongside the queue so Timeline rewind works the moment creds
+            // land. Cache settings are snapshot-on-build (passed in by the caller, which collects
+            // settings.observe() in its suspend collect): a cache-policy change forces the user to
+            // re-toggle creds today, which is rare and acceptable. The previous wiring used a
+            // `() -> BlobCacheSettings` lambda with runBlocking around `settings.observe().first()`
+            // on every cache eviction check; that hot-path call is now eliminated. projectRoot
+            // legitimately needs late binding (different uuid per call) and stays a suspend lambda.
+            val blobCache =
+                JvmBlobCache(
+                    catalog = catalog,
+                    cacheRoot = blobCacheRoot,
+                    cloud = backend,
+                    cacheSettings = cacheSettings,
+                )
+            _currentCloud.value = backend
+            currentMaterializer =
+                ManifestMaterializer(
+                    cloud = backend,
+                    blobCache = blobCache,
+                    projectRoot = { uuid ->
+                        val pid =
+                            syncStateStore.projectIdFor(uuid)
+                                ?: throw IllegalStateException("no local project for uuid $uuid")
+                        val row =
+                            projects.observeProject(pid).first()
+                                ?: throw IllegalStateException("project row $pid not found")
+                        val parent =
+                            Paths.get(row.path.value).parent
+                                ?: throw IllegalStateException("project path has no parent: ${row.path.value}")
+                        parent
+                    },
+                )
+            GcsSyncQueue(
+                cloud = backend,
+                pipeline = pipeline,
+                syncState = syncStateStore,
+                projects = projects,
+                scope = scope,
+                journal = journal,
+            )
+        }.getOrElse {
+            // Bad creds or unsupported config — fall back to in-memory so the UI keeps rendering.
+            // The error surfaces via the next access-token request when a sync attempt actually runs.
+            currentMaterializer = null
+            _currentCloud.value = null
+            fallback
+        }
 
     override fun observe(): Flow<SyncQueueState> = delegate.flatMapLatest { it.observe() }
 
@@ -198,32 +206,46 @@ class SwappableSyncQueue(
      * a clear failure rather than silently dropping the snapshot — the desktop dialog can show
      * the user a "configure cloud first" message.
      */
-    override suspend fun recordForcedNamed(uuid: ProjectUuid, label: String): Result<SnapshotRev> = when (val current = delegate.value) {
-        is GcsSyncQueue -> current.recordForcedNamed(uuid, label)
+    override suspend fun recordForcedNamed(
+        uuid: ProjectUuid,
+        label: String,
+    ): Result<SnapshotRev> =
+        when (val current = delegate.value) {
+            is GcsSyncQueue -> {
+                current.recordForcedNamed(uuid, label)
+            }
 
-        else -> Result.failure(
-            IllegalStateException("Cloud sync isn't configured — sign in and set a bucket in Settings first."),
-        )
-    }
-
-    /** Per-row Sync-now invocation from the desktop detail panel. */
-    suspend fun pushNowById(id: ProjectId): Result<Unit> = when (val current = delegate.value) {
-        is GcsSyncQueue -> current.pushNowById(id)
-
-        is InMemorySyncQueue -> {
-            current.pushNowById(id)
-            Result.success(Unit)
+            else -> {
+                Result.failure(
+                    IllegalStateException("Cloud sync isn't configured — sign in and set a bucket in Settings first."),
+                )
+            }
         }
 
-        else -> Result.failure(IllegalStateException("unsupported sync queue impl"))
-    }
+    /** Per-row Sync-now invocation from the desktop detail panel. */
+    suspend fun pushNowById(id: ProjectId): Result<Unit> =
+        when (val current = delegate.value) {
+            is GcsSyncQueue -> {
+                current.pushNowById(id)
+            }
+
+            is InMemorySyncQueue -> {
+                current.pushNowById(id)
+                Result.success(Unit)
+            }
+
+            else -> {
+                Result.failure(IllegalStateException("unsupported sync queue impl"))
+            }
+        }
 
     /** Snapshot lookup for non-suspending UI (SongStrip pip). */
-    fun snapshotFor(id: ProjectId): ProjectSyncState = when (val current = delegate.value) {
-        is GcsSyncQueue -> current.snapshotFor(id)
-        is InMemorySyncQueue -> current.snapshotFor(id)
-        else -> ProjectSyncState.Unknown
-    }
+    fun snapshotFor(id: ProjectId): ProjectSyncState =
+        when (val current = delegate.value) {
+            is GcsSyncQueue -> current.snapshotFor(id)
+            is InMemorySyncQueue -> current.snapshotFor(id)
+            else -> ProjectSyncState.Unknown
+        }
 
     /** Inline conflict message for the detail-panel hint. Null when none. */
     fun conflictMessage(id: ProjectId): String? {

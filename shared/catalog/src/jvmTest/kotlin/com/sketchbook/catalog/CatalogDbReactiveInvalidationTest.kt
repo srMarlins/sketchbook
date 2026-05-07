@@ -24,7 +24,6 @@ import kotlin.time.Duration.Companion.seconds
  * Without the fix, this hangs until the Turbine timeout.
  */
 class CatalogDbReactiveInvalidationTest {
-
     private val tmp = createTempDirectory("catalog-reactive-")
 
     @AfterTest fun cleanup() {
@@ -32,49 +31,79 @@ class CatalogDbReactiveInvalidationTest {
     }
 
     @Test
-    fun queryAsFlowReEmitsAfterTransactionCommit() = runBlocking {
-        val handle = CatalogDb.openOnDisk(tmp.resolve("catalog.db"))
-        try {
-            handle.catalog.catalogQueries.selectAllProjects()
-                .asFlow()
-                .mapToList(Dispatchers.IO)
-                .test(timeout = 5.seconds) {
-                    assertEquals(0, awaitItem().size, "expected empty initial emission")
+    fun queryAsFlowReEmitsAfterTransactionCommit() =
+        runBlocking {
+            val handle = CatalogDb.openOnDisk(tmp.resolve("catalog.db"))
+            try {
+                handle.catalog.catalogQueries
+                    .selectAllProjects()
+                    .asFlow()
+                    .mapToList(Dispatchers.IO)
+                    .test(timeout = 5.seconds) {
+                        assertEquals(0, awaitItem().size, "expected empty initial emission")
 
-                    handle.catalog.transaction {
-                        handle.catalog.catalogQueries.insertOrReplaceProject(
-                            path = "$tmp/A.als", name = "A", parent_dir = "$tmp",
-                            tempo = null, time_sig_num = null, time_sig_den = null, key = null,
-                            track_count = 0L, audio_tracks = 0L, midi_tracks = 0L, return_tracks = 0L,
-                            live_version = null, last_modified = 1.0, last_scanned = 1.0,
-                            parse_status = "ok", parse_error = null, mac_paths_count = 0L,
-                            effort_score = null, effort_breakdown = null, file_size_bytes = 0L,
-                        )
+                        handle.catalog.transaction {
+                            handle.catalog.catalogQueries.insertOrReplaceProject(
+                                path = "$tmp/A.als",
+                                name = "A",
+                                parent_dir = "$tmp",
+                                tempo = null,
+                                time_sig_num = null,
+                                time_sig_den = null,
+                                key = null,
+                                track_count = 0L,
+                                audio_tracks = 0L,
+                                midi_tracks = 0L,
+                                return_tracks = 0L,
+                                live_version = null,
+                                last_modified = 1.0,
+                                last_scanned = 1.0,
+                                parse_status = "ok",
+                                parse_error = null,
+                                mac_paths_count = 0L,
+                                effort_score = null,
+                                effort_breakdown = null,
+                                file_size_bytes = 0L,
+                            )
+                        }
+                        assertEquals(1, awaitItem().size, "expected 1 row after first commit")
+
+                        handle.catalog.transaction {
+                            handle.catalog.catalogQueries.insertOrReplaceProject(
+                                path = "$tmp/B.als",
+                                name = "B",
+                                parent_dir = "$tmp",
+                                tempo = null,
+                                time_sig_num = null,
+                                time_sig_den = null,
+                                key = null,
+                                track_count = 0L,
+                                audio_tracks = 0L,
+                                midi_tracks = 0L,
+                                return_tracks = 0L,
+                                live_version = null,
+                                last_modified = 2.0,
+                                last_scanned = 2.0,
+                                parse_status = "ok",
+                                parse_error = null,
+                                mac_paths_count = 0L,
+                                effort_score = null,
+                                effort_breakdown = null,
+                                file_size_bytes = 0L,
+                            )
+                        }
+                        assertEquals(2, awaitItem().size, "expected 2 rows after second commit")
+
+                        cancelAndIgnoreRemainingEvents()
                     }
-                    assertEquals(1, awaitItem().size, "expected 1 row after first commit")
-
-                    handle.catalog.transaction {
-                        handle.catalog.catalogQueries.insertOrReplaceProject(
-                            path = "$tmp/B.als", name = "B", parent_dir = "$tmp",
-                            tempo = null, time_sig_num = null, time_sig_den = null, key = null,
-                            track_count = 0L, audio_tracks = 0L, midi_tracks = 0L, return_tracks = 0L,
-                            live_version = null, last_modified = 2.0, last_scanned = 2.0,
-                            parse_status = "ok", parse_error = null, mac_paths_count = 0L,
-                            effort_score = null, effort_breakdown = null, file_size_bytes = 0L,
-                        )
-                    }
-                    assertEquals(2, awaitItem().size, "expected 2 rows after second commit")
-
-                    cancelAndIgnoreRemainingEvents()
+            } finally {
+                handle.driver.close()
+                // Best-effort cleanup; Windows file locks can linger briefly after close.
+                runCatching {
+                    Files.deleteIfExists(tmp.resolve("catalog.db"))
+                    Files.deleteIfExists(tmp.resolve("catalog.db-wal"))
+                    Files.deleteIfExists(tmp.resolve("catalog.db-shm"))
                 }
-        } finally {
-            handle.driver.close()
-            // Best-effort cleanup; Windows file locks can linger briefly after close.
-            runCatching {
-                Files.deleteIfExists(tmp.resolve("catalog.db"))
-                Files.deleteIfExists(tmp.resolve("catalog.db-wal"))
-                Files.deleteIfExists(tmp.resolve("catalog.db-shm"))
             }
         }
-    }
 }

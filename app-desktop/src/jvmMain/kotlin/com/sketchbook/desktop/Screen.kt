@@ -18,11 +18,17 @@ import kotlinx.serialization.Serializable
 sealed interface Screen : NavKey {
     @Serializable data object Projects : Screen
 
-    @Serializable data class ProjectDetail(val id: ProjectId) : Screen
+    @Serializable data class ProjectDetail(
+        val id: ProjectId,
+    ) : Screen
 
-    @Serializable data class Timeline(val uuid: ProjectUuid) : Screen
+    @Serializable data class Timeline(
+        val uuid: ProjectUuid,
+    ) : Screen
 
-    @Serializable data class Inbox(val tab: InboxTab = InboxTab.Proposals) : Screen
+    @Serializable data class Inbox(
+        val tab: InboxTab = InboxTab.Proposals,
+    ) : Screen
 
     @Serializable data object Settings : Screen
 }

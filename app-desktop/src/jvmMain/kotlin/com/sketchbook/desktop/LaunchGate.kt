@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.map
  */
 sealed interface LaunchDecision {
     data object Onboarding : LaunchDecision
+
     data object MainApp : LaunchDecision
     // Future: data class Migration(...) — adding a new variant + branch here is the only churn.
 }
@@ -27,16 +28,19 @@ sealed interface LaunchDecision {
  * sealed variant + a new mapping branch is the only churn required.
  */
 @Inject
-class LaunchGate(private val settings: SettingsRepository) {
-
+class LaunchGate(
+    private val settings: SettingsRepository,
+) {
     /**
      * Live flow of decisions. Re-emits when [SettingsRepository] state changes — e.g. when
      * `OnboardingViewModel.Finish` writes `firstRunCompletedAt`, this flow flips from
      * [LaunchDecision.Onboarding] to [LaunchDecision.MainApp].
      */
-    fun observe(): Flow<LaunchDecision> = settings.observe()
-        .map { if (it.firstRunCompletedAt == null) LaunchDecision.Onboarding else LaunchDecision.MainApp }
-        .distinctUntilChanged()
+    fun observe(): Flow<LaunchDecision> =
+        settings
+            .observe()
+            .map { if (it.firstRunCompletedAt == null) LaunchDecision.Onboarding else LaunchDecision.MainApp }
+            .distinctUntilChanged()
 
     /** Convenience one-shot for callers that just need the current decision (e.g. tests). */
     suspend fun resolve(): LaunchDecision = observe().first()

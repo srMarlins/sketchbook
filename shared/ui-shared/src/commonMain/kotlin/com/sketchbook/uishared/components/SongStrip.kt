@@ -80,7 +80,10 @@ enum class SongStageTone { Sketch, InProgress, Mixing, Done, Stuck }
  * Per-row cloud-sync indicator: small glyph + tone. Mirrors the pip web/'s SongStrip carried
  * in its trailing slot.
  */
-enum class SongSyncBadge(val glyph: String, val description: String) {
+enum class SongSyncBadge(
+    val glyph: String,
+    val description: String,
+) {
     Synced("☁︎", "synced"),
     Pending("☁︎↑", "upload pending"),
     Uploading("☁︎↑", "uploading"),
@@ -106,26 +109,27 @@ fun SongStrip(
     Box(modifier = modifier.fillMaxWidth()) {
         if (isGroup) {
             Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .offset(x = 3.dp, y = 3.dp)
-                    .clip(shape)
-                    .background(colors.surfaceSunken)
-                    .border(1.dp, colors.ruleLine, shape),
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .offset(x = 3.dp, y = 3.dp)
+                        .clip(shape)
+                        .background(colors.surfaceSunken)
+                        .border(1.dp, colors.ruleLine, shape),
             )
         }
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(shape)
-                .background(colors.surfaceCard)
-                .border(1.dp, borderColor, shape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onOpen,
-                )
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(shape)
+                    .background(colors.surfaceCard)
+                    .border(1.dp, borderColor, shape)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onOpen,
+                    ).padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -144,11 +148,12 @@ fun SongStrip(
                     ) {
                         // Color bar
                         Box(
-                            modifier = Modifier
-                                .width(6.dp)
-                                .height(28.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(colorVar),
+                            modifier =
+                                Modifier
+                                    .width(6.dp)
+                                    .height(28.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(colorVar),
                         )
                         // Name + warning
                         Row(
@@ -261,18 +266,25 @@ private fun Stat(
         ProvideContentColor(colors.inkMuted) {
             Text(label, style = AppTheme.typography.mono.copy(fontSize = 9.sp(), letterSpacing = 0.5.sp()))
         }
-        val tone = when {
-            empty -> colors.inkFaint
-            accent -> colors.accentAction
-            else -> colors.inkSecondary
-        }
+        val tone =
+            when {
+                empty -> colors.inkFaint
+                accent -> colors.accentAction
+                else -> colors.inkSecondary
+            }
         ProvideContentColor(tone) {
             Text(
                 value,
-                style = AppTheme.typography.mono.copy(
-                    fontSize = 12.sp(),
-                    fontWeight = if (accent) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal,
-                ),
+                style =
+                    AppTheme.typography.mono.copy(
+                        fontSize = 12.sp(),
+                        fontWeight =
+                            if (accent) {
+                                androidx.compose.ui.text.font.FontWeight.SemiBold
+                            } else {
+                                androidx.compose.ui.text.font.FontWeight.Normal
+                            },
+                    ),
             )
         }
     }
@@ -281,19 +293,20 @@ private fun Stat(
 @Composable
 private fun SyncPip(badge: SongSyncBadge) {
     val colors = AppTheme.colors
-    val tint = when (badge) {
-        SongSyncBadge.Synced -> colors.accentPositive
+    val tint =
+        when (badge) {
+            SongSyncBadge.Synced -> colors.accentPositive
 
-        SongSyncBadge.Pending,
-        SongSyncBadge.Uploading,
-        -> colors.pinBlue
+            SongSyncBadge.Pending,
+            SongSyncBadge.Uploading,
+            -> colors.pinBlue
 
-        SongSyncBadge.Conflict -> colors.accentWarning
+            SongSyncBadge.Conflict -> colors.accentWarning
 
-        SongSyncBadge.LocalOnly -> colors.inkFaint
+            SongSyncBadge.LocalOnly -> colors.inkFaint
 
-        SongSyncBadge.Unknown -> colors.inkFaint
-    }
+            SongSyncBadge.Unknown -> colors.inkFaint
+        }
     Box(
         modifier = Modifier.padding(horizontal = 4.dp),
     ) {
@@ -314,32 +327,35 @@ private fun SyncPip(badge: SongSyncBadge) {
 @Composable
 private fun StageChip(chip: SongStageChip) {
     val colors = AppTheme.colors
-    val tint = when (chip.tone) {
-        SongStageTone.Sketch -> colors.tintCream
-        SongStageTone.InProgress -> colors.accentAction
-        SongStageTone.Mixing -> colors.accentSecondary
-        SongStageTone.Done -> colors.accentPositive
-        SongStageTone.Stuck -> colors.accentDanger
-    }
+    val tint =
+        when (chip.tone) {
+            SongStageTone.Sketch -> colors.tintCream
+            SongStageTone.InProgress -> colors.accentAction
+            SongStageTone.Mixing -> colors.accentSecondary
+            SongStageTone.Done -> colors.accentPositive
+            SongStageTone.Stuck -> colors.accentDanger
+        }
     // Sketch is the only "tint" tone (already light); the four accent tones are saturated, so
     // ink-on-tint readability flips to the kraft-cream surface for legibility. ruleLine border
     // stays uniform across both modes per `feedback_color_restraint`.
     val isLight = chip.tone == SongStageTone.Sketch
     val fg = if (isLight) colors.inkSecondary else colors.surfaceCard
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(tint)
-            .border(1.dp, colors.ruleLine, RoundedCornerShape(50))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(tint)
+                .border(1.dp, colors.ruleLine, RoundedCornerShape(50))
+                .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         ProvideContentColor(fg) {
             Text(
                 chip.label,
-                style = AppTheme.typography.mono.copy(
-                    fontSize = 10.sp(),
-                    letterSpacing = 0.5.sp(),
-                ),
+                style =
+                    AppTheme.typography.mono.copy(
+                        fontSize = 10.sp(),
+                        letterSpacing = 0.5.sp(),
+                    ),
             )
         }
     }
@@ -349,11 +365,12 @@ private fun StageChip(chip: SongStageChip) {
 private fun VersionPill(count: Int) {
     val colors = AppTheme.colors
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(colors.tintCream)
-            .border(1.dp, colors.ruleLine, RoundedCornerShape(50))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(colors.tintCream)
+                .border(1.dp, colors.ruleLine, RoundedCornerShape(50))
+                .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         ProvideContentColor(colors.inkSecondary) {
             Text(
@@ -368,11 +385,12 @@ private fun VersionPill(count: Int) {
 private fun TagChip(label: String) {
     val colors = AppTheme.colors
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(colors.tintBlue)
-            .border(1.dp, colors.ruleLine, RoundedCornerShape(50))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(colors.tintBlue)
+                .border(1.dp, colors.ruleLine, RoundedCornerShape(50))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
         ProvideContentColor(colors.inkSecondary) {
             Text(label, style = AppTheme.typography.mono.copy(fontSize = 10.sp()))
@@ -386,11 +404,12 @@ private fun LaunchIcon(onLaunch: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val isHovered by interaction.collectIsHoveredAsState()
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(if (isHovered) colors.tintBlue else Color.Transparent)
-            .clickable(interactionSource = interaction, indication = null, onClick = onLaunch)
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(if (isHovered) colors.tintBlue else Color.Transparent)
+                .clickable(interactionSource = interaction, indication = null, onClick = onLaunch)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
     ) {
         ProvideContentColor(colors.inkSecondary) {
             Text("↗", style = AppTheme.typography.body)
@@ -406,8 +425,15 @@ private fun fmtSeconds(sec: Double?): String {
     return "$m:${s.toString().padStart(2, '0')}"
 }
 
-private fun fmtTimeSig(num: Int?, den: Int?): String = if (num == null || den == null) "—" else "$num/$den"
+private fun fmtTimeSig(
+    num: Int?,
+    den: Int?,
+): String = if (num == null || den == null) "—" else "$num/$den"
 
-private fun Int.sp(): androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit(this.toFloat(), androidx.compose.ui.unit.TextUnitType.Sp)
+private fun Int.sp(): androidx.compose.ui.unit.TextUnit =
+    androidx.compose.ui.unit
+        .TextUnit(this.toFloat(), androidx.compose.ui.unit.TextUnitType.Sp)
 
-private fun Double.sp(): androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit(this.toFloat(), androidx.compose.ui.unit.TextUnitType.Sp)
+private fun Double.sp(): androidx.compose.ui.unit.TextUnit =
+    androidx.compose.ui.unit
+        .TextUnit(this.toFloat(), androidx.compose.ui.unit.TextUnitType.Sp)

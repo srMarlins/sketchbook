@@ -24,8 +24,13 @@ import com.sketchbook.uishared.theme.AppTheme
  * clears its local target.
  */
 sealed interface NeedsAttentionDetailTarget {
-    data class Mac(val finding: MacImportFinding) : NeedsAttentionDetailTarget
-    data class Missing(val finding: MissingSampleFinding) : NeedsAttentionDetailTarget
+    data class Mac(
+        val finding: MacImportFinding,
+    ) : NeedsAttentionDetailTarget
+
+    data class Missing(
+        val finding: MissingSampleFinding,
+    ) : NeedsAttentionDetailTarget
 }
 
 /**
@@ -160,7 +165,10 @@ private fun MissingSampleDetail(
 }
 
 @Composable
-private fun LabelledRow(label: String, value: String) {
+private fun LabelledRow(
+    label: String,
+    value: String,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),

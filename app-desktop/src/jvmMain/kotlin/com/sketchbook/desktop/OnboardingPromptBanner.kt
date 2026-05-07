@@ -34,19 +34,22 @@ fun OnboardingPromptBanner(
     modifier: Modifier = Modifier,
 ) {
     val colors = AppTheme.colors
-    val copy = when (prompt) {
-        OnboardingPrompt.AddSamples ->
-            "Add a samples folder later? Powers the missing-files finder."
-    }
+    val copy =
+        when (prompt) {
+            OnboardingPrompt.AddSamples -> {
+                "Add a samples folder later? Powers the missing-files finder."
+            }
+        }
     Surface(
         color = colors.tintCream,
         padding = PaddingValues(AppTheme.spacing.sm),
         modifier = modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onClick),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
         ) {
@@ -61,13 +64,14 @@ fun OnboardingPromptBanner(
             // Wrapped in its own clickable Box so taps on the × don't bubble up to the row's
             // navigate-to-Settings handler.
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
-                    .clickable(onClick = onDismiss)
-                    .padding(
-                        horizontal = AppTheme.spacing.sm,
-                        vertical = AppTheme.spacing.xs,
-                    ),
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
+                        .clickable(onClick = onDismiss)
+                        .padding(
+                            horizontal = AppTheme.spacing.sm,
+                            vertical = AppTheme.spacing.xs,
+                        ),
             ) {
                 ProvideContentColor(colors.inkMuted) {
                     Text(

@@ -12,7 +12,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AlsParserTest {
-
     private fun gzip(xml: String): ByteArrayInputStream {
         val out = ByteArrayOutputStream()
         GZIPOutputStream(out).use { it.write(xml.toByteArray(Charsets.UTF_8)) }
@@ -23,34 +22,37 @@ class AlsParserTest {
 
     @Test
     fun extractsLiveVersionFromCreator() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton MajorVersion="11" MinorVersion="11.3" Creator="Ableton Live 11.3.21">
             </Ableton>""",
-        )
+            )
         assertEquals("11.3.21", md.lastSavedLiveVersion)
     }
 
     @Test
     fun extractsTempo() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton>
               <LiveSet>
                 <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="128.500"/></Tempo></Mixer></DeviceChain></MainTrack>
               </LiveSet>
             </Ableton>""",
-        )
+            )
         assertEquals(128.5, md.tempo)
     }
 
     @Test
     fun decodesTimeSignature7over8() {
         // numerator = (encoded % 99) + 1 → for 7/8: encoded = (7-1) + 99*3 = 6 + 297 = 303 (denom index 3 = 8)
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><MainTrack><DeviceChain><Mixer><TimeSignature><Manual Value="303"/></TimeSignature></Mixer></DeviceChain></MainTrack></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(7, md.timeSignatureNumerator)
         assertEquals(8, md.timeSignatureDenominator)
     }
@@ -58,25 +60,27 @@ class AlsParserTest {
     @Test
     fun decodesTimeSignature4over4Default() {
         // 4/4: numerator 4 → encoded % 99 = 3; denom 4 → index 2 → encoded = 3 + 99*2 = 201
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><TimeSignature><Manual Value="201"/></TimeSignature></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(4, md.timeSignatureNumerator)
         assertEquals(4, md.timeSignatureDenominator)
     }
 
     @Test
     fun countsTracksByType() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks>
               <AudioTrack/><AudioTrack/><AudioTrack/>
               <MidiTrack/><MidiTrack/>
               <ReturnTrack/>
               <GroupTrack><Tracks><AudioTrack/></Tracks></GroupTrack>
             </Tracks></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(4, md.audioTrackCount) // 3 top-level + 1 nested in GroupTrack
         assertEquals(2, md.midiTrackCount)
         assertEquals(1, md.returnTrackCount)
@@ -86,8 +90,9 @@ class AlsParserTest {
 
     @Test
     fun extractsVst3Plugin() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks><AudioTrack>
               <Name><EffectiveName Value="Drums"/></Name>
               <DeviceChain><Devices>
@@ -100,7 +105,7 @@ class AlsParserTest {
                 </PluginDevice>
               </Devices></DeviceChain>
             </AudioTrack></Tracks></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(1, md.plugins.size)
         val p = md.plugins[0]
         assertEquals("Pro-Q 3", p.name)
@@ -110,8 +115,9 @@ class AlsParserTest {
 
     @Test
     fun extractsVst2Plugin() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks><AudioTrack>
               <Name><EffectiveName Value="Bass"/></Name>
               <DeviceChain><Devices>
@@ -124,7 +130,7 @@ class AlsParserTest {
                 </PluginDevice>
               </Devices></DeviceChain>
             </AudioTrack></Tracks></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(1, md.plugins.size)
         assertEquals("Serum", md.plugins[0].name)
         assertEquals(PluginFormat.Vst2, md.plugins[0].format)
@@ -133,8 +139,9 @@ class AlsParserTest {
 
     @Test
     fun extractsAuPluginViaPluginDevice() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks><MidiTrack>
               <Name><EffectiveName Value="Synth"/></Name>
               <DeviceChain><Devices>
@@ -147,7 +154,7 @@ class AlsParserTest {
                 </PluginDevice>
               </Devices></DeviceChain>
             </MidiTrack></Tracks></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(1, md.plugins.size)
         assertEquals("Massive", md.plugins[0].name)
         assertEquals(PluginFormat.Au, md.plugins[0].format)
@@ -155,8 +162,9 @@ class AlsParserTest {
 
     @Test
     fun extractsStandaloneAuPluginDevice() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks><MidiTrack>
               <Name><EffectiveName Value="Pad"/></Name>
               <DeviceChain><Devices>
@@ -165,7 +173,7 @@ class AlsParserTest {
                 </AuPluginDevice>
               </Devices></DeviceChain>
             </MidiTrack></Tracks></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(1, md.plugins.size)
         assertEquals("ChromaPhone", md.plugins[0].name)
         assertEquals(PluginFormat.Au, md.plugins[0].format)
@@ -174,8 +182,9 @@ class AlsParserTest {
 
     @Test
     fun extractsAbletonNativeDevices() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks><AudioTrack>
               <Name><EffectiveName Value="Master"/></Name>
               <DeviceChain><Devices>
@@ -184,7 +193,7 @@ class AlsParserTest {
                 <Limiter/>
               </Devices></DeviceChain>
             </AudioTrack></Tracks></LiveSet></Ableton>""",
-        )
+            )
         val names = md.plugins.map { it.name }
         assertEquals(listOf("Eq8", "Compressor2", "Limiter"), names)
         assertTrue(md.plugins.all { it.format == PluginFormat.AbletonNative })
@@ -193,8 +202,9 @@ class AlsParserTest {
 
     @Test
     fun extractsSampleViaPathAttribute() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks><AudioTrack><DeviceChain>
               <SampleRef>
                 <FileRef>
@@ -202,14 +212,15 @@ class AlsParserTest {
                 </FileRef>
               </SampleRef>
             </DeviceChain></AudioTrack></Tracks></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(listOf(SampleRef("Samples/Imported/kick.wav")), md.sampleRefs)
     }
 
     @Test
     fun extractsSampleViaRelativePathElements() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks><AudioTrack><DeviceChain>
               <SampleRef>
                 <FileRef>
@@ -221,15 +232,16 @@ class AlsParserTest {
                 </FileRef>
               </SampleRef>
             </DeviceChain></AudioTrack></Tracks></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(listOf(SampleRef("Samples/Imported/snare.wav")), md.sampleRefs)
     }
 
     @Test
     fun ignoresOriginalFileRefSibling() {
         // SampleRef has both FileRef (current) and OriginalFileRef (history). Use FileRef only.
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks><AudioTrack><DeviceChain>
               <SampleRef>
                 <FileRef>
@@ -242,21 +254,22 @@ class AlsParserTest {
                 </OriginalFileRef>
               </SampleRef>
             </DeviceChain></AudioTrack></Tracks></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(1, md.sampleRefs.size)
         assertEquals("Samples/now.wav", md.sampleRefs[0].rawPath)
     }
 
     @Test
     fun countsMacPathPrefixes() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet>
               <SampleRef><FileRef><Path Value="/Users/alice/Samples/k.wav"/></FileRef></SampleRef>
               <SampleRef><FileRef><Path Value="/Volumes/Audio/Samples/h.wav"/></FileRef></SampleRef>
               <SampleRef><FileRef><Path Value="Samples/c.wav"/></FileRef></SampleRef>
             </LiveSet></Ableton>""",
-        )
+            )
         assertEquals(2, md.macPathsCount)
         assertEquals(3, md.sampleRefs.size)
     }
@@ -264,74 +277,80 @@ class AlsParserTest {
     @Test
     fun parsesScaleInformationIntoKeySignatureString() {
         // Live's encoding: RootNote is semitones-from-C (0=C, 2=D), Name is "Major"|"Minor"|modal name.
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet>
               <ScaleInformation>
                 <RootNote Value="2"/>
                 <Name Value="Minor"/>
               </ScaleInformation>
             </LiveSet></Ableton>""",
-        )
+            )
         assertEquals("D Minor", md.keySignature)
     }
 
     @Test
     fun parsesFsharpMajorIntoKeySignatureString() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet>
               <ScaleInformation>
                 <RootNote Value="6"/>
                 <Name Value="Major"/>
               </ScaleInformation>
             </LiveSet></Ableton>""",
-        )
+            )
         assertEquals("F# Major", md.keySignature)
     }
 
     @Test
     fun returnsNullKeySignatureWhenScaleInformationAbsent() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet>
               <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="120"/></Tempo></Mixer></DeviceChain></MainTrack>
             </LiveSet></Ableton>""",
-        )
+            )
         assertNull(md.keySignature)
     }
 
     @Test
     fun returnsNullKeySignatureWhenOnlyRootNoteIsPresent() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet>
               <ScaleInformation>
                 <RootNote Value="5"/>
               </ScaleInformation>
             </LiveSet></Ableton>""",
-        )
+            )
         assertNull(md.keySignature)
     }
 
     @Test
     fun ignoresNameOutsideScaleInformation() {
         // A <Name Value="Minor"/> in some unrelated subtree must not be picked up as the scale name.
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks><AudioTrack>
               <Name><EffectiveName Value="Minor"/></Name>
               <DeviceChain/>
             </AudioTrack></Tracks></LiveSet></Ableton>""",
-        )
+            )
         assertNull(md.keySignature)
     }
 
     @Test
     fun handlesEmptyProject() {
-        val md = parse(
-            """<?xml version="1.0"?><Ableton Creator="Ableton Live 12.0.0"><LiveSet/></Ableton>""",
-        )
+        val md =
+            parse(
+                """<?xml version="1.0"?><Ableton Creator="Ableton Live 12.0.0"><LiveSet/></Ableton>""",
+            )
         assertNull(md.tempo)
         assertNull(md.timeSignatureNumerator)
         assertEquals(0, md.totalTrackCount)
@@ -343,15 +362,16 @@ class AlsParserTest {
 
     @Test
     fun handlesNonAsciiTrackNamesAndPaths() {
-        val md = parse(
-            """<?xml version="1.0"?>
+        val md =
+            parse(
+                """<?xml version="1.0"?>
             <Ableton><LiveSet><Tracks><AudioTrack>
               <Name><EffectiveName Value="ドラム"/></Name>
               <DeviceChain>
                 <SampleRef><FileRef><Path Value="Samples/é/ñ/kïck.wav"/></FileRef></SampleRef>
               </DeviceChain>
             </AudioTrack></Tracks></LiveSet></Ableton>""",
-        )
+            )
         assertEquals(1, md.audioTrackCount)
         assertEquals(1, md.sampleRefs.size)
         assertEquals("Samples/é/ñ/kïck.wav", md.sampleRefs[0].rawPath)
@@ -359,9 +379,10 @@ class AlsParserTest {
 
     @Test
     fun extractsLive12SampleRefMetadataAndOriginalFileRefSibling() {
-        val md = javaClass.getResourceAsStream("/live12-sampleref.xml.gz")!!.use {
-            AlsParser.parse(it)
-        }
+        val md =
+            javaClass.getResourceAsStream("/live12-sampleref.xml.gz")!!.use {
+                AlsParser.parse(it)
+            }
         assertEquals(1, md.sampleRefs.size)
         val s = md.sampleRefs[0]
         assertEquals("D:/Audio/Project/Samples/Imported/kick.wav", s.rawPath)
@@ -377,9 +398,10 @@ class AlsParserTest {
         // Live ≤10 stores per-sample metadata in `<FileRef><SearchHint><FileSize/><Crc/></SearchHint></FileRef>`
         // — not the flat `OriginalFileSize`/`OriginalCrc` fields Live 11+ writes. Verify the parser
         // falls back to the SearchHint nested form when the flat fields are absent.
-        val md = javaClass.getResourceAsStream("/live10-sampleref.xml.gz")!!.use {
-            AlsParser.parse(it)
-        }
+        val md =
+            javaClass.getResourceAsStream("/live10-sampleref.xml.gz")!!.use {
+                AlsParser.parse(it)
+            }
         assertEquals("10.1.30", md.lastSavedLiveVersion)
         assertEquals(1, md.sampleRefs.size)
         val s = md.sampleRefs[0]

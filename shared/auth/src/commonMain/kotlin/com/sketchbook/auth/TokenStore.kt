@@ -13,8 +13,13 @@ package com.sketchbook.auth
  */
 interface TokenStore {
     suspend fun read(): String?
+
     suspend fun write(refreshToken: String)
+
     suspend fun clear()
 }
 
-class TokenStoreException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
+class TokenStoreException(
+    message: String,
+    cause: Throwable? = null,
+) : RuntimeException(message, cause)

@@ -21,7 +21,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class JvmPluginPresenceProbeTest {
-
     @Test
     fun normalizesPluginNamesCorrectly() {
         // Pure-function pin. The probe collapses plugin display names to a comparable token before
@@ -37,245 +36,275 @@ class JvmPluginPresenceProbeTest {
     }
 
     @Test
-    fun marksInstalledWhenFilesystemHasMatchingPluginFile() = runTest {
-        val (catalog, driver, pluginDir, cleanup) = setupCatalogWithPlugin(
-            pluginName = "Serum",
-            pluginType = "vst3",
-        )
-        try {
-            // Seed a matching .vst3 file in the dir we hand to the probe.
-            Files.write(pluginDir.resolve("Serum.vst3"), ByteArray(8))
-            val probe = JvmPluginPresenceProbe.forTest(
-                catalog = catalog,
-                settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
-                ioDispatcher = Dispatchers.Unconfined,
-            )
+    fun marksInstalledWhenFilesystemHasMatchingPluginFile() =
+        runTest {
+            val (catalog, driver, pluginDir, cleanup) =
+                setupCatalogWithPlugin(
+                    pluginName = "Serum",
+                    pluginType = "vst3",
+                )
+            try {
+                // Seed a matching .vst3 file in the dir we hand to the probe.
+                Files.write(pluginDir.resolve("Serum.vst3"), ByteArray(8))
+                val probe =
+                    JvmPluginPresenceProbe.forTest(
+                        catalog = catalog,
+                        settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
+                        ioDispatcher = Dispatchers.Unconfined,
+                    )
 
-            val result = probe.probe()
+                val result = probe.probe()
 
-            assertEquals(1, result.installedCount)
-            assertEquals(0, result.missingCount)
-            val row = catalog.catalogQueries.selectAllDistinctPlugins().executeAsList().single()
-            assertTrue(isInstalled(driver, row.plugin_name, row.plugin_type))
-        } finally {
-            cleanup()
+                assertEquals(1, result.installedCount)
+                assertEquals(0, result.missingCount)
+                val row =
+                    catalog.catalogQueries
+                        .selectAllDistinctPlugins()
+                        .executeAsList()
+                        .single()
+                assertTrue(isInstalled(driver, row.plugin_name, row.plugin_type))
+            } finally {
+                cleanup()
+            }
         }
-    }
 
     @Test
-    fun marksMissingWhenFilesystemDoesNotContainPlugin() = runTest {
-        val (catalog, driver, pluginDir, cleanup) = setupCatalogWithPlugin(
-            pluginName = "GhostPlugin",
-            pluginType = "vst3",
-        )
-        try {
-            // Empty dir — no matching file. Probe should flip is_installed to 0.
-            val probe = JvmPluginPresenceProbe.forTest(
-                catalog = catalog,
-                settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
-                ioDispatcher = Dispatchers.Unconfined,
-            )
+    fun marksMissingWhenFilesystemDoesNotContainPlugin() =
+        runTest {
+            val (catalog, driver, pluginDir, cleanup) =
+                setupCatalogWithPlugin(
+                    pluginName = "GhostPlugin",
+                    pluginType = "vst3",
+                )
+            try {
+                // Empty dir — no matching file. Probe should flip is_installed to 0.
+                val probe =
+                    JvmPluginPresenceProbe.forTest(
+                        catalog = catalog,
+                        settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
+                        ioDispatcher = Dispatchers.Unconfined,
+                    )
 
-            val result = probe.probe()
+                val result = probe.probe()
 
-            assertEquals(0, result.installedCount)
-            assertEquals(1, result.missingCount)
-            assertTrue(!isInstalled(driver, "GhostPlugin", "vst3"))
-        } finally {
-            cleanup()
+                assertEquals(0, result.installedCount)
+                assertEquals(1, result.missingCount)
+                assertTrue(!isInstalled(driver, "GhostPlugin", "vst3"))
+            } finally {
+                cleanup()
+            }
         }
-    }
 
     @Test
-    fun gracefullySkipsMissingPluginDirectories() = runTest {
-        val (catalog, _, _, cleanup) = setupCatalogWithPlugin(
-            pluginName = "Serum",
-            pluginType = "vst3",
-        )
-        try {
-            // /nonexistent — must not throw, must not crash. With no installed-set built, the row
-            // gets marked missing (we have no evidence of installation).
-            val probe = JvmPluginPresenceProbe.forTest(
-                catalog = catalog,
-                settings = FakePluginSettings(
-                    pluginFolders = listOf(Path.of("/this/path/does/not/exist/plugins").toString()),
-                ),
-                ioDispatcher = Dispatchers.Unconfined,
-            )
+    fun gracefullySkipsMissingPluginDirectories() =
+        runTest {
+            val (catalog, _, _, cleanup) =
+                setupCatalogWithPlugin(
+                    pluginName = "Serum",
+                    pluginType = "vst3",
+                )
+            try {
+                // /nonexistent — must not throw, must not crash. With no installed-set built, the row
+                // gets marked missing (we have no evidence of installation).
+                val probe =
+                    JvmPluginPresenceProbe.forTest(
+                        catalog = catalog,
+                        settings =
+                            FakePluginSettings(
+                                pluginFolders = listOf(Path.of("/this/path/does/not/exist/plugins").toString()),
+                            ),
+                        ioDispatcher = Dispatchers.Unconfined,
+                    )
 
-            val result = probe.probe()
+                val result = probe.probe()
 
-            // Best-effort: walk failures don't abort. Outcome here is missing because there's
-            // nothing to match against.
-            assertEquals(0, result.installedCount)
-            assertEquals(1, result.missingCount)
-        } finally {
-            cleanup()
+                // Best-effort: walk failures don't abort. Outcome here is missing because there's
+                // nothing to match against.
+                assertEquals(0, result.installedCount)
+                assertEquals(1, result.missingCount)
+            } finally {
+                cleanup()
+            }
         }
-    }
 
     @Test
-    fun probeIsIdempotent() = runTest {
-        val (catalog, driver, pluginDir, cleanup) = setupCatalogWithPlugin(
-            pluginName = "Serum",
-            pluginType = "vst3",
-        )
-        try {
-            Files.write(pluginDir.resolve("Serum.vst3"), ByteArray(8))
-            val probe = JvmPluginPresenceProbe.forTest(
-                catalog = catalog,
-                settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
-                ioDispatcher = Dispatchers.Unconfined,
-            )
+    fun probeIsIdempotent() =
+        runTest {
+            val (catalog, driver, pluginDir, cleanup) =
+                setupCatalogWithPlugin(
+                    pluginName = "Serum",
+                    pluginType = "vst3",
+                )
+            try {
+                Files.write(pluginDir.resolve("Serum.vst3"), ByteArray(8))
+                val probe =
+                    JvmPluginPresenceProbe.forTest(
+                        catalog = catalog,
+                        settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
+                        ioDispatcher = Dispatchers.Unconfined,
+                    )
 
-            val a = probe.probe()
-            val b = probe.probe()
+                val a = probe.probe()
+                val b = probe.probe()
 
-            assertEquals(a.installedCount, b.installedCount)
-            assertEquals(a.missingCount, b.missingCount)
-            assertTrue(isInstalled(driver, "Serum", "vst3"))
-        } finally {
-            cleanup()
+                assertEquals(a.installedCount, b.installedCount)
+                assertEquals(a.missingCount, b.missingCount)
+                assertTrue(isInstalled(driver, "Serum", "vst3"))
+            } finally {
+                cleanup()
+            }
         }
-    }
 
     @Test
-    fun usesConfiguredPluginFoldersFromSettings() = runTest {
-        // T3: the probe must read `pluginFolders` from `SettingsRepository` and use those instead
-        // of the OS defaults. Two plugins are seeded in the catalog: one whose file exists in the
-        // user-configured dir (must flip to installed), and one named after a plugin that the
-        // probe would only find by walking OS-default directories (must stay missing because the
-        // probe must NOT touch OS defaults when the user has a non-empty configured list).
-        val (catalog, driver, configuredDir, cleanup) = setupCatalogWithPlugin(
-            pluginName = "Serum",
-            pluginType = "vst3",
-        )
-        try {
-            // Add a second catalog row that, in the absence of this test, would only be matched if
-            // the probe walked the OS-default dirs. The configured dir does not contain a file for
-            // it; the test asserts the probe stays out of OS defaults.
-            val projectId = catalog.catalogQueries.selectProjectIdByPath("/lib/song.als").executeAsOne()
-            catalog.catalogQueries.insertProjectPlugin(
-                project_id = projectId,
-                plugin_name = "Massive",
-                plugin_type = "vst3",
-                track_name = "Track 2",
-            )
-            // Seed Serum.vst3 in the user-configured dir only.
-            Files.write(configuredDir.resolve("Serum.vst3"), ByteArray(8))
+    fun usesConfiguredPluginFoldersFromSettings() =
+        runTest {
+            // T3: the probe must read `pluginFolders` from `SettingsRepository` and use those instead
+            // of the OS defaults. Two plugins are seeded in the catalog: one whose file exists in the
+            // user-configured dir (must flip to installed), and one named after a plugin that the
+            // probe would only find by walking OS-default directories (must stay missing because the
+            // probe must NOT touch OS defaults when the user has a non-empty configured list).
+            val (catalog, driver, configuredDir, cleanup) =
+                setupCatalogWithPlugin(
+                    pluginName = "Serum",
+                    pluginType = "vst3",
+                )
+            try {
+                // Add a second catalog row that, in the absence of this test, would only be matched if
+                // the probe walked the OS-default dirs. The configured dir does not contain a file for
+                // it; the test asserts the probe stays out of OS defaults.
+                val projectId = catalog.catalogQueries.selectProjectIdByPath("/lib/song.als").executeAsOne()
+                catalog.catalogQueries.insertProjectPlugin(
+                    project_id = projectId,
+                    plugin_name = "Massive",
+                    plugin_type = "vst3",
+                    track_name = "Track 2",
+                )
+                // Seed Serum.vst3 in the user-configured dir only.
+                Files.write(configuredDir.resolve("Serum.vst3"), ByteArray(8))
 
-            val fakeSettings = FakePluginSettings(pluginFolders = listOf(configuredDir.toString()))
-            val probe = JvmPluginPresenceProbe.forTest(
-                catalog = catalog,
-                settings = fakeSettings,
-                ioDispatcher = Dispatchers.Unconfined,
-            )
+                val fakeSettings = FakePluginSettings(pluginFolders = listOf(configuredDir.toString()))
+                val probe =
+                    JvmPluginPresenceProbe.forTest(
+                        catalog = catalog,
+                        settings = fakeSettings,
+                        ioDispatcher = Dispatchers.Unconfined,
+                    )
 
-            val result = probe.probe()
+                val result = probe.probe()
 
-            assertEquals(1, result.installedCount)
-            assertEquals(1, result.missingCount)
-            assertTrue(isInstalled(driver, "Serum", "vst3"))
-            assertTrue(!isInstalled(driver, "Massive", "vst3"))
-        } finally {
-            cleanup()
+                assertEquals(1, result.installedCount)
+                assertEquals(1, result.missingCount)
+                assertTrue(isInstalled(driver, "Serum", "vst3"))
+                assertTrue(!isInstalled(driver, "Massive", "vst3"))
+            } finally {
+                cleanup()
+            }
         }
-    }
 
     @Test
-    fun nonEmptyConfiguredListWithGarbagePathsFlagsEveryPluginMissing() = runTest {
-        // Direct proof of no-silent-fallback: configured list is non-empty but points at paths that
-        // don't exist. Probe must NOT walk OS defaults — every plugin must come back missing, even
-        // ones that are likely installed on the host's default plugin dirs. `GhostPlugin` and
-        // `Massive` are seeded; the former is fictional so it can't accidentally match anything,
-        // the latter is a real common plugin and pins the rule even if the host has Massive.vst3
-        // sitting in `%CommonProgramFiles%\VST3`.
-        val (catalog, driver, _, cleanup) = setupCatalogWithPlugin(
-            pluginName = "GhostPlugin",
-            pluginType = "vst3",
-        )
-        try {
-            val projectId = catalog.catalogQueries.selectProjectIdByPath("/lib/song.als").executeAsOne()
-            catalog.catalogQueries.insertProjectPlugin(
-                project_id = projectId,
-                plugin_name = "Massive",
-                plugin_type = "vst3",
-                track_name = "Track 2",
-            )
-            val fakeSettings = FakePluginSettings(
-                pluginFolders = listOf("/nonexistent/path/that/doesnt/exist"),
-            )
-            val probe = JvmPluginPresenceProbe.forTest(
-                catalog = catalog,
-                settings = fakeSettings,
-                ioDispatcher = Dispatchers.Unconfined,
-            )
+    fun nonEmptyConfiguredListWithGarbagePathsFlagsEveryPluginMissing() =
+        runTest {
+            // Direct proof of no-silent-fallback: configured list is non-empty but points at paths that
+            // don't exist. Probe must NOT walk OS defaults — every plugin must come back missing, even
+            // ones that are likely installed on the host's default plugin dirs. `GhostPlugin` and
+            // `Massive` are seeded; the former is fictional so it can't accidentally match anything,
+            // the latter is a real common plugin and pins the rule even if the host has Massive.vst3
+            // sitting in `%CommonProgramFiles%\VST3`.
+            val (catalog, driver, _, cleanup) =
+                setupCatalogWithPlugin(
+                    pluginName = "GhostPlugin",
+                    pluginType = "vst3",
+                )
+            try {
+                val projectId = catalog.catalogQueries.selectProjectIdByPath("/lib/song.als").executeAsOne()
+                catalog.catalogQueries.insertProjectPlugin(
+                    project_id = projectId,
+                    plugin_name = "Massive",
+                    plugin_type = "vst3",
+                    track_name = "Track 2",
+                )
+                val fakeSettings =
+                    FakePluginSettings(
+                        pluginFolders = listOf("/nonexistent/path/that/doesnt/exist"),
+                    )
+                val probe =
+                    JvmPluginPresenceProbe.forTest(
+                        catalog = catalog,
+                        settings = fakeSettings,
+                        ioDispatcher = Dispatchers.Unconfined,
+                    )
 
-            val result = probe.probe()
+                val result = probe.probe()
 
-            assertEquals(0, result.installedCount)
-            val rows = catalog.catalogQueries.selectAllDistinctPlugins().executeAsList()
-            assertTrue(
-                rows.all { !isInstalled(driver, it.plugin_name, it.plugin_type) },
-                "no plugin should be flagged installed when configured paths don't exist",
-            )
-        } finally {
-            cleanup()
+                assertEquals(0, result.installedCount)
+                val rows = catalog.catalogQueries.selectAllDistinctPlugins().executeAsList()
+                assertTrue(
+                    rows.all { !isInstalled(driver, it.plugin_name, it.plugin_type) },
+                    "no plugin should be flagged installed when configured paths don't exist",
+                )
+            } finally {
+                cleanup()
+            }
         }
-    }
 
     @Test
-    fun doesNotThrowWhenSettingsListIsEmpty() = runTest {
-        // T3: an empty configured list is the explicit signal "use platform defaults". With an
-        // unwritable / nonexistent default set on a sandboxed test machine, the probe should
-        // simply walk an empty installed-set and mark everything missing — the key behavior is
-        // that the probe doesn't crash and respects the empty-list-means-defaults contract.
-        val (catalog, _, _, cleanup) = setupCatalogWithPlugin(
-            pluginName = "Serum",
-            pluginType = "vst3",
-        )
-        try {
-            val fakeSettings = FakePluginSettings(pluginFolders = emptyList())
-            val probe = JvmPluginPresenceProbe.forTest(
-                catalog = catalog,
-                settings = fakeSettings,
-                ioDispatcher = Dispatchers.Unconfined,
-            )
+    fun doesNotThrowWhenSettingsListIsEmpty() =
+        runTest {
+            // T3: an empty configured list is the explicit signal "use platform defaults". With an
+            // unwritable / nonexistent default set on a sandboxed test machine, the probe should
+            // simply walk an empty installed-set and mark everything missing — the key behavior is
+            // that the probe doesn't crash and respects the empty-list-means-defaults contract.
+            val (catalog, _, _, cleanup) =
+                setupCatalogWithPlugin(
+                    pluginName = "Serum",
+                    pluginType = "vst3",
+                )
+            try {
+                val fakeSettings = FakePluginSettings(pluginFolders = emptyList())
+                val probe =
+                    JvmPluginPresenceProbe.forTest(
+                        catalog = catalog,
+                        settings = fakeSettings,
+                        ioDispatcher = Dispatchers.Unconfined,
+                    )
 
-            // Best-effort: this only asserts the probe runs without throwing when falling back to
-            // OS defaults. Whether Serum gets flagged installed depends on the host machine, so we
-            // don't pin it. The behavior under test is "empty list ⇒ try defaults, don't throw".
-            probe.probe()
-        } finally {
-            cleanup()
+                // Best-effort: this only asserts the probe runs without throwing when falling back to
+                // OS defaults. Whether Serum gets flagged installed depends on the host machine, so we
+                // don't pin it. The behavior under test is "empty list ⇒ try defaults, don't throw".
+                probe.probe()
+            } finally {
+                cleanup()
+            }
         }
-    }
 
     @Test
-    fun matchesByPrefixHeuristic() = runTest {
-        // The catalog has "FabFilter Pro-Q 3" — installed file is "FabFilter Pro-Q 3.vst3". After
-        // normalization the catalog token is "fabfilterproq" and the file token is "fabfilterproq",
-        // both trimmed of trailing digits. Either-direction prefix match wins.
-        val (catalog, _, pluginDir, cleanup) = setupCatalogWithPlugin(
-            pluginName = "FabFilter Pro-Q 3",
-            pluginType = "vst3",
-        )
-        try {
-            Files.write(pluginDir.resolve("FabFilter Pro-Q 3.vst3"), ByteArray(8))
-            val probe = JvmPluginPresenceProbe.forTest(
-                catalog = catalog,
-                settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
-                ioDispatcher = Dispatchers.Unconfined,
-            )
+    fun matchesByPrefixHeuristic() =
+        runTest {
+            // The catalog has "FabFilter Pro-Q 3" — installed file is "FabFilter Pro-Q 3.vst3". After
+            // normalization the catalog token is "fabfilterproq" and the file token is "fabfilterproq",
+            // both trimmed of trailing digits. Either-direction prefix match wins.
+            val (catalog, _, pluginDir, cleanup) =
+                setupCatalogWithPlugin(
+                    pluginName = "FabFilter Pro-Q 3",
+                    pluginType = "vst3",
+                )
+            try {
+                Files.write(pluginDir.resolve("FabFilter Pro-Q 3.vst3"), ByteArray(8))
+                val probe =
+                    JvmPluginPresenceProbe.forTest(
+                        catalog = catalog,
+                        settings = FakePluginSettings(pluginFolders = listOf(pluginDir.toString())),
+                        ioDispatcher = Dispatchers.Unconfined,
+                    )
 
-            val result = probe.probe()
+                val result = probe.probe()
 
-            assertEquals(1, result.installedCount)
-            assertEquals(0, result.missingCount)
-        } finally {
-            cleanup()
+                assertEquals(1, result.installedCount)
+                assertEquals(0, result.missingCount)
+            } finally {
+                cleanup()
+            }
         }
-    }
 
     // -- helpers ---------------------------------------------------------------------------------
 
@@ -313,7 +342,10 @@ class JvmPluginPresenceProbeTest {
             effort_breakdown = null,
             file_size_bytes = 0L,
         )
-        val projectId = handle.catalog.catalogQueries.selectProjectIdByPath("/lib/song.als").executeAsOne()
+        val projectId =
+            handle.catalog.catalogQueries
+                .selectProjectIdByPath("/lib/song.als")
+                .executeAsOne()
         handle.catalog.catalogQueries.insertProjectPlugin(
             project_id = projectId,
             plugin_name = pluginName,
@@ -342,31 +374,50 @@ class JvmPluginPresenceProbeTest {
     /** Minimal `SettingsRepository` stand-in for tests that exercise plugin-folder reads. Only
      *  `observe()` and `setPluginFolders` are meaningful; the other methods short-circuit because
      *  the probe never touches them. */
-    private class FakePluginSettings(pluginFolders: List<String>) : SettingsRepository {
-        private val flow = MutableStateFlow(
-            Settings(
-                libraryRoots = emptyList(),
+    private class FakePluginSettings(
+        pluginFolders: List<String>,
+    ) : SettingsRepository {
+        private val flow =
+            MutableStateFlow(
+                Settings(
+                    libraryRoots = emptyList(),
+                    selfContainedProjects = emptySet(),
+                    pluginFolders = pluginFolders,
+                ),
+            )
 
-                selfContainedProjects = emptySet(),
-                pluginFolders = pluginFolders,
-            ),
-        )
         override fun observe(): Flow<Settings> = flow
+
         override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> = Result.success(Unit)
+
         override suspend fun removeRoot(root: LibraryRoot): Result<Unit> = Result.success(Unit)
+
         override suspend fun setCloudBucket(bucket: String?): Result<Unit> = Result.success(Unit)
-        override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit> = Result.success(Unit)
+
+        override suspend fun setSelfContained(
+            uuid: ProjectUuid,
+            value: Boolean,
+        ): Result<Unit> = Result.success(Unit)
+
         override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> = Result.success(Unit)
+
         override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit> = Result.success(Unit)
+
         override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> = Result.success(Unit)
+
         override suspend fun setPluginFolders(folders: List<String>): Result<Unit> {
             flow.value = flow.value.copy(pluginFolders = folders)
             return Result.success(Unit)
         }
+
         override suspend fun resetFirstRun(): Result<Unit> = Result.success(Unit)
     }
 
-    private fun isInstalled(driver: app.cash.sqldelight.db.SqlDriver, name: String, type: String): Boolean {
+    private fun isInstalled(
+        driver: app.cash.sqldelight.db.SqlDriver,
+        name: String,
+        type: String,
+    ): Boolean {
         // selectAllDistinctPlugins (T1) returns the (name, type) pair but not the flag; the
         // missing-coverage view that filters on `is_installed = 0` belongs to T2. To keep this
         // test in T1's world, read the column directly via the driver.

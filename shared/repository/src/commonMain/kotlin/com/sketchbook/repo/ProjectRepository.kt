@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.Flow
  * [SketchbookError] subclasses wrapped via `Result.failure`; unexpected exceptions propagate.
  */
 interface ProjectRepository {
-
     /**
      * Live list of non-archived projects matching [query]. Empty query returns everything,
      * ordered by `last_modified DESC`. Non-empty query goes through FTS5 (`MATCH`).
@@ -96,16 +95,28 @@ interface ProjectRepository {
     fun observeMissingPluginSummary(): Flow<MissingPluginSummary?> = kotlinx.coroutines.flow.flowOf(null)
 
     /** Move the project's working tree to a new parent directory. Path-rename only; no FS I/O. */
-    suspend fun move(id: ProjectId, newParentDir: String): Result<JournalEntry>
+    suspend fun move(
+        id: ProjectId,
+        newParentDir: String,
+    ): Result<JournalEntry>
 
     /** Rename the project (catalog-level — folder rename is the caller's job). */
-    suspend fun rename(id: ProjectId, newName: String): Result<JournalEntry>
+    suspend fun rename(
+        id: ProjectId,
+        newName: String,
+    ): Result<JournalEntry>
 
     /** Toggle archived. Same call archives or unarchives based on current state. */
-    suspend fun archive(id: ProjectId, archived: Boolean = true): Result<JournalEntry>
+    suspend fun archive(
+        id: ProjectId,
+        archived: Boolean = true,
+    ): Result<JournalEntry>
 
     /** Replace the project's tag set (creates missing tags as a side effect). */
-    suspend fun setTags(id: ProjectId, tags: List<String>): Result<JournalEntry>
+    suspend fun setTags(
+        id: ProjectId,
+        tags: List<String>,
+    ): Result<JournalEntry>
 
     /**
      * PR-R: set or clear the per-project stage override. `null` clears it (chip falls back to the
@@ -116,9 +127,11 @@ interface ProjectRepository {
     suspend fun setStageOverride(
         id: ProjectId,
         stage: com.sketchbook.core.Stage?,
-    ): Result<JournalEntry> = Result.failure(
-        com.sketchbook.core.SketchbookError.NotFound("setStageOverride not implemented"),
-    )
+    ): Result<JournalEntry> =
+        Result.failure(
+            com.sketchbook.core.SketchbookError
+                .NotFound("setStageOverride not implemented"),
+        )
 }
 
 /**
@@ -175,12 +188,13 @@ data class LibraryHealth(
     val compositePercent: Float
         get() {
             if (total <= 0) return 0f
-            val ratios = buildList<Float> {
-                add(synced.toFloat() / total)
-                add(sampleClean.toFloat() / total)
-                pluginInstalled?.let { add(it.toFloat() / total) }
-                stageNotStuck?.let { add(it.toFloat() / total) }
-            }
+            val ratios =
+                buildList<Float> {
+                    add(synced.toFloat() / total)
+                    add(sampleClean.toFloat() / total)
+                    pluginInstalled?.let { add(it.toFloat() / total) }
+                    stageNotStuck?.let { add(it.toFloat() / total) }
+                }
             return ratios.average().toFloat()
         }
 

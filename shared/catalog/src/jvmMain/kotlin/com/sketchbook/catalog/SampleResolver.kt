@@ -18,13 +18,18 @@ import java.nio.file.Paths
  *    The path is resolved against [projectDir] before checking.
  */
 object SampleResolver {
-
-    data class Resolution(val foundCount: Int, val missingCount: Int) {
+    data class Resolution(
+        val foundCount: Int,
+        val missingCount: Int,
+    ) {
         val total: Int get() = foundCount + missingCount
     }
 
     /** Run the resolver across [refs] for a project rooted at [projectDir]. */
-    fun resolve(refs: List<SampleRef>, projectDir: Path): Resolution {
+    fun resolve(
+        refs: List<SampleRef>,
+        projectDir: Path,
+    ): Resolution {
         var found = 0
         var missing = 0
         for (ref in refs) {
@@ -34,11 +39,17 @@ object SampleResolver {
     }
 
     /** Per-ref miss detection. Returns true if the file exists on disk. */
-    fun exists(rawPath: String, projectDir: Path): Boolean = existsForRef(rawPath, projectDir)
+    fun exists(
+        rawPath: String,
+        projectDir: Path,
+    ): Boolean = existsForRef(rawPath, projectDir)
 
     /** Resolve [rawPath] (relative or absolute) and return the file's size in bytes, or null
      *  if the file is missing/unreadable. Mirrors [exists] but reads `Files.size`. */
-    fun sizeOf(rawPath: String, projectDir: Path): Long? {
+    fun sizeOf(
+        rawPath: String,
+        projectDir: Path,
+    ): Long? {
         if (rawPath.isBlank()) return null
         return try {
             val p = Paths.get(rawPath)
@@ -49,7 +60,10 @@ object SampleResolver {
         }
     }
 
-    private fun existsForRef(rawPath: String, projectDir: Path): Boolean {
+    private fun existsForRef(
+        rawPath: String,
+        projectDir: Path,
+    ): Boolean {
         if (rawPath.isBlank()) return false
         return try {
             val p = Paths.get(rawPath)

@@ -11,6 +11,13 @@ sealed interface SaveEvent {
     val path: Path
     val timestamp: Instant
 
-    data class Saved(override val path: Path, override val timestamp: Instant) : SaveEvent
-    data class Removed(override val path: Path, override val timestamp: Instant) : SaveEvent
+    data class Saved(
+        override val path: Path,
+        override val timestamp: Instant,
+    ) : SaveEvent
+
+    data class Removed(
+        override val path: Path,
+        override val timestamp: Instant,
+    ) : SaveEvent
 }

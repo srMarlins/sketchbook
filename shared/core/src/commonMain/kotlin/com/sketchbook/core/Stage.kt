@@ -15,7 +15,10 @@ import kotlin.time.Instant
  * variant `name`. Adding a new variant means writing a migration that's tolerant of values
  * outside the new enum (treat as `null`); see [parseOrNull].
  */
-enum class Stage(val label: String, val displayName: String) {
+enum class Stage(
+    val label: String,
+    val displayName: String,
+) {
     /** Track count <5, no mastering, no bounce, edited recently — fresh idea. */
     Sketch(label = "sketch", displayName = "Sketch"),
 
@@ -37,10 +40,11 @@ enum class Stage(val label: String, val displayName: String) {
          * Round-trip parse from the column string. Tolerant of unknown values (returns null) so
          * a future Stage variant added by a newer Sketchbook build doesn't crash older readers.
          */
-        fun parseOrNull(raw: String?): Stage? = when (raw) {
-            null -> null
-            else -> values().firstOrNull { it.name == raw }
-        }
+        fun parseOrNull(raw: String?): Stage? =
+            when (raw) {
+                null -> null
+                else -> values().firstOrNull { it.name == raw }
+            }
     }
 }
 
@@ -61,7 +65,6 @@ enum class Stage(val label: String, val displayName: String) {
  * 6. else → `null`
  */
 object StageInferrer {
-
     /**
      * Substring matches inside plugin names (case-insensitive) that mark a mastering chain.
      * OTT is intentionally excluded: it's a popular upward/downward compressor used on individual
@@ -89,10 +92,11 @@ object StageInferrer {
         lastModified: Instant,
         now: Instant,
     ): Stage? {
-        val hasMastering = pluginNames.any { name ->
-            val lower = name.lowercase()
-            MASTERING_NEEDLES.any { needle -> lower.contains(needle) }
-        }
+        val hasMastering =
+            pluginNames.any { name ->
+                val lower = name.lowercase()
+                MASTERING_NEEDLES.any { needle -> lower.contains(needle) }
+            }
         val age = now - lastModified
 
         // Rule 1: Done — mastered + bounced + cooled off.

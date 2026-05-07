@@ -8,7 +8,9 @@ import kotlinx.serialization.Serializable
  */
 @JvmInline
 @Serializable
-value class ProjectId(val value: Long) {
+value class ProjectId(
+    val value: Long,
+) {
     init {
         require(value > 0) { "ProjectId must be positive, got $value" }
     }
@@ -20,7 +22,9 @@ value class ProjectId(val value: Long) {
  */
 @JvmInline
 @Serializable
-value class ProjectUuid(val value: String) {
+value class ProjectUuid(
+    val value: String,
+) {
     init {
         require(value.isNotBlank()) { "ProjectUuid must not be blank" }
         // Tenants assemble cloud blob keys as "<userId>/blobs/.../<projectUuid>/...". A "/" or
@@ -43,7 +47,9 @@ value class ProjectUuid(val value: String) {
  */
 @JvmInline
 @Serializable
-value class BlobHash(val value: String) {
+value class BlobHash(
+    val value: String,
+) {
     init {
         require(value.startsWith(PREFIX)) { "BlobHash must start with '$PREFIX', got '$value'" }
         val digest = value.removePrefix(PREFIX)
@@ -70,12 +76,15 @@ value class BlobHash(val value: String) {
  */
 @JvmInline
 @Serializable
-value class SnapshotRev(val value: Long) {
+value class SnapshotRev(
+    val value: Long,
+) {
     init {
         require(value >= 0) { "SnapshotRev must be non-negative, got $value" }
     }
 
     operator fun compareTo(other: SnapshotRev): Int = value.compareTo(other.value)
+
     fun next(): SnapshotRev = SnapshotRev(value + 1)
 }
 
@@ -84,7 +93,9 @@ value class SnapshotRev(val value: Long) {
  */
 @JvmInline
 @Serializable
-value class UserId(val value: String) {
+value class UserId(
+    val value: String,
+) {
     init {
         require(value.isNotBlank()) { "UserId must not be blank" }
         require(value.length <= MAX_LEN) { "UserId too long: ${value.length} > $MAX_LEN" }

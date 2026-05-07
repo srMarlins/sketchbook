@@ -44,55 +44,59 @@ import kotlinx.coroutines.launch
 class NeedsAttentionViewModel(
     private val repository: RepairRepository,
 ) : ViewModel() {
-
-    private val _effects = MutableSharedFlow<Effect>(
-        replay = 0,
-        extraBufferCapacity = 8,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    private val _effects =
+        MutableSharedFlow<Effect>(
+            replay = 0,
+            extraBufferCapacity = 8,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
     private val pending = MutableStateFlow(Pending())
     private val search = MutableStateFlow("")
 
-    val state: StateFlow<State> = combine(
-        repository.observeFindings(),
-        pending,
-        search,
-    ) { findings, p, q ->
-        // Filter the upstream lists by the search query before bucketizing/sorting so the
-        // project-boundary flags reflect only the visible rows. Empty query short-circuits.
-        val visibleMac = if (q.isBlank()) {
-            findings.macImports
-        } else {
-            findings.macImports.filter { it.matchesSearch(q) }
-        }
-        val visibleMissing = if (q.isBlank()) {
-            findings.missingSamples
-        } else {
-            findings.missingSamples.filter { it.matchesSearch(q) }
-        }
-        val macEntries = macEntries(visibleMac)
-        val missingByConfidence = bucketize(visibleMissing)
-        // Auto-clean: if a pending row has already left the findings list, drop the pending
-        // flag. Avoids the row visually flashing back to idle during the SQL ack/re-emit gap.
-        val macIds = findings.macImports.mapTo(HashSet(findings.macImports.size)) { it.projectId }
-        val missingKeys = findings.missingSamples.mapTo(
-            HashSet(findings.missingSamples.size),
-        ) { it.projectId to it.missingPath }
-        State(
-            macImports = visibleMac,
-            macEntries = macEntries,
-            missingSamples = visibleMissing,
-            missingByConfidence = missingByConfidence,
-            missingSamplesTotal = findings.missingSamplesTotal,
-            missingSamplesTruncated = findings.missingSamplesTruncated,
-            pendingMacRepairs = p.macRepairs.intersect(macIds),
-            pendingMissingApplies = p.missingApplies.intersect(missingKeys),
-            search = q,
-            loading = false,
-        )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
+    val state: StateFlow<State> =
+        combine(
+            repository.observeFindings(),
+            pending,
+            search,
+        ) { findings, p, q ->
+            // Filter the upstream lists by the search query before bucketizing/sorting so the
+            // project-boundary flags reflect only the visible rows. Empty query short-circuits.
+            val visibleMac =
+                if (q.isBlank()) {
+                    findings.macImports
+                } else {
+                    findings.macImports.filter { it.matchesSearch(q) }
+                }
+            val visibleMissing =
+                if (q.isBlank()) {
+                    findings.missingSamples
+                } else {
+                    findings.missingSamples.filter { it.matchesSearch(q) }
+                }
+            val macEntries = macEntries(visibleMac)
+            val missingByConfidence = bucketize(visibleMissing)
+            // Auto-clean: if a pending row has already left the findings list, drop the pending
+            // flag. Avoids the row visually flashing back to idle during the SQL ack/re-emit gap.
+            val macIds = findings.macImports.mapTo(HashSet(findings.macImports.size)) { it.projectId }
+            val missingKeys =
+                findings.missingSamples.mapTo(
+                    HashSet(findings.missingSamples.size),
+                ) { it.projectId to it.missingPath }
+            State(
+                macImports = visibleMac,
+                macEntries = macEntries,
+                missingSamples = visibleMissing,
+                missingByConfidence = missingByConfidence,
+                missingSamplesTotal = findings.missingSamplesTotal,
+                missingSamplesTruncated = findings.missingSamplesTruncated,
+                pendingMacRepairs = p.macRepairs.intersect(macIds),
+                pendingMissingApplies = p.missingApplies.intersect(missingKeys),
+                search = q,
+                loading = false,
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
     private fun MacImportFinding.matchesSearch(q: String): Boolean {
         val needle = q.lowercase()
@@ -111,122 +115,150 @@ class NeedsAttentionViewModel(
 
     fun dispatch(intent: Intent) {
         when (intent) {
-            is Intent.SetSearch -> search.value = intent.query
-
-            is Intent.AckMacImport -> viewModelScope.launch {
-                val r = repository.acknowledgeMacImport(intent.projectId)
-                emitAck(r.isSuccess, intent.projectId.value.toString(), "ack")
+            is Intent.SetSearch -> {
+                search.value = intent.query
             }
 
-            is Intent.RepairMacPaths -> viewModelScope.launch {
-                pending.update { it.copy(macRepairs = it.macRepairs + intent.projectId) }
-                val r = runCatching { repository.applyMacPathRepair(intent.projectId) }
-                    .getOrElse { Result.failure(it) }
-                if (r.isSuccess) {
-                    // Auto-cleanup will drop pending once the row leaves macImports.
-                    _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
-                } else {
-                    pending.update { it.copy(macRepairs = it.macRepairs - intent.projectId) }
-                    _effects.tryEmit(Effect.Failed(intent.projectId.value.toString(), "repair failed"))
+            is Intent.AckMacImport -> {
+                viewModelScope.launch {
+                    val r = repository.acknowledgeMacImport(intent.projectId)
+                    emitAck(r.isSuccess, intent.projectId.value.toString(), "ack")
                 }
             }
 
-            is Intent.DismissMissingSample -> viewModelScope.launch {
-                val r = repository.dismissMissingSample(intent.projectId, intent.missingPath)
-                emitAck(r.isSuccess, intent.projectId.value.toString(), "dismiss")
-            }
-
-            is Intent.ApplyMatch -> viewModelScope.launch {
-                val key = intent.projectId to intent.missingPath
-                pending.update { it.copy(missingApplies = it.missingApplies + key) }
-                val r = runCatching {
-                    repository.applyMissingSampleMatch(
-                        projectId = intent.projectId,
-                        missingPath = intent.missingPath,
-                        candidatePath = intent.candidatePath,
-                    )
-                }.getOrElse { Result.failure(it) }
-                if (r.isSuccess) {
-                    _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
-                } else {
-                    pending.update { it.copy(missingApplies = it.missingApplies - key) }
-                    _effects.tryEmit(Effect.Failed(intent.projectId.value.toString(), "apply failed"))
-                }
-            }
-
-            is Intent.BulkAck -> viewModelScope.launch {
-                val successes = mutableListOf<String>()
-                val failures = mutableListOf<String>()
-                for (id in intent.projectIds) {
-                    val r = runCatching { repository.acknowledgeMacImport(id) }
-                        .getOrElse { Result.failure(it) }
-                    val k = id.value.toString()
-                    if (r.isSuccess) successes += k else failures += k
-                }
-                _effects.tryEmit(Effect.BulkAcked(successes, failures))
-            }
-
-            is Intent.BulkRepairMacPaths -> viewModelScope.launch {
-                pending.update { it.copy(macRepairs = it.macRepairs + intent.projectIds) }
-                val successes = mutableListOf<String>()
-                val failures = mutableListOf<String>()
-                for (id in intent.projectIds) {
-                    val r = runCatching { repository.applyMacPathRepair(id) }
-                        .getOrElse { Result.failure(it) }
-                    val k = id.value.toString()
+            is Intent.RepairMacPaths -> {
+                viewModelScope.launch {
+                    pending.update { it.copy(macRepairs = it.macRepairs + intent.projectId) }
+                    val r =
+                        runCatching { repository.applyMacPathRepair(intent.projectId) }
+                            .getOrElse { Result.failure(it) }
                     if (r.isSuccess) {
-                        successes += k
+                        // Auto-cleanup will drop pending once the row leaves macImports.
+                        _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
                     } else {
-                        failures += k
-                        pending.update { it.copy(macRepairs = it.macRepairs - id) }
+                        pending.update { it.copy(macRepairs = it.macRepairs - intent.projectId) }
+                        _effects.tryEmit(Effect.Failed(intent.projectId.value.toString(), "repair failed"))
                     }
                 }
-                _effects.tryEmit(Effect.BulkRepaired(successes, failures))
             }
 
-            is Intent.BulkApplyAutoMatch -> viewModelScope.launch {
-                val keys = intent.findings.map { it.projectId to it.missingPath }
-                pending.update { it.copy(missingApplies = it.missingApplies + keys) }
-                val successes = mutableListOf<String>()
-                val failures = mutableListOf<String>()
-                for (f in intent.findings) {
-                    val key = f.projectId to f.missingPath
-                    val resultKey = "${f.projectId.value}|${f.missingPath}"
-                    val auto = f.autoMatch
-                    if (auto == null) {
-                        failures += resultKey
-                        pending.update { it.copy(missingApplies = it.missingApplies - key) }
-                        continue
-                    }
-                    val r = runCatching {
-                        repository.applyMissingSampleMatch(f.projectId, f.missingPath, auto.path)
-                    }.getOrElse { Result.failure(it) }
+            is Intent.DismissMissingSample -> {
+                viewModelScope.launch {
+                    val r = repository.dismissMissingSample(intent.projectId, intent.missingPath)
+                    emitAck(r.isSuccess, intent.projectId.value.toString(), "dismiss")
+                }
+            }
+
+            is Intent.ApplyMatch -> {
+                viewModelScope.launch {
+                    val key = intent.projectId to intent.missingPath
+                    pending.update { it.copy(missingApplies = it.missingApplies + key) }
+                    val r =
+                        runCatching {
+                            repository.applyMissingSampleMatch(
+                                projectId = intent.projectId,
+                                missingPath = intent.missingPath,
+                                candidatePath = intent.candidatePath,
+                            )
+                        }.getOrElse { Result.failure(it) }
                     if (r.isSuccess) {
-                        successes += resultKey
+                        _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
                     } else {
-                        failures += resultKey
                         pending.update { it.copy(missingApplies = it.missingApplies - key) }
+                        _effects.tryEmit(Effect.Failed(intent.projectId.value.toString(), "apply failed"))
                     }
                 }
-                _effects.tryEmit(Effect.BulkApplied(successes, failures))
             }
 
-            is Intent.BulkDismiss -> viewModelScope.launch {
-                val successes = mutableListOf<String>()
-                val failures = mutableListOf<String>()
-                for (f in intent.findings) {
-                    val r = runCatching {
-                        repository.dismissMissingSample(f.projectId, f.missingPath)
-                    }.getOrElse { Result.failure(it) }
-                    val k = "${f.projectId.value}|${f.missingPath}"
-                    if (r.isSuccess) successes += k else failures += k
+            is Intent.BulkAck -> {
+                viewModelScope.launch {
+                    val successes = mutableListOf<String>()
+                    val failures = mutableListOf<String>()
+                    for (id in intent.projectIds) {
+                        val r =
+                            runCatching { repository.acknowledgeMacImport(id) }
+                                .getOrElse { Result.failure(it) }
+                        val k = id.value.toString()
+                        if (r.isSuccess) successes += k else failures += k
+                    }
+                    _effects.tryEmit(Effect.BulkAcked(successes, failures))
                 }
-                _effects.tryEmit(Effect.BulkDismissed(successes, failures))
+            }
+
+            is Intent.BulkRepairMacPaths -> {
+                viewModelScope.launch {
+                    pending.update { it.copy(macRepairs = it.macRepairs + intent.projectIds) }
+                    val successes = mutableListOf<String>()
+                    val failures = mutableListOf<String>()
+                    for (id in intent.projectIds) {
+                        val r =
+                            runCatching { repository.applyMacPathRepair(id) }
+                                .getOrElse { Result.failure(it) }
+                        val k = id.value.toString()
+                        if (r.isSuccess) {
+                            successes += k
+                        } else {
+                            failures += k
+                            pending.update { it.copy(macRepairs = it.macRepairs - id) }
+                        }
+                    }
+                    _effects.tryEmit(Effect.BulkRepaired(successes, failures))
+                }
+            }
+
+            is Intent.BulkApplyAutoMatch -> {
+                viewModelScope.launch {
+                    val keys = intent.findings.map { it.projectId to it.missingPath }
+                    pending.update { it.copy(missingApplies = it.missingApplies + keys) }
+                    val successes = mutableListOf<String>()
+                    val failures = mutableListOf<String>()
+                    for (f in intent.findings) {
+                        val key = f.projectId to f.missingPath
+                        val resultKey = "${f.projectId.value}|${f.missingPath}"
+                        val auto = f.autoMatch
+                        if (auto == null) {
+                            failures += resultKey
+                            pending.update { it.copy(missingApplies = it.missingApplies - key) }
+                            continue
+                        }
+                        val r =
+                            runCatching {
+                                repository.applyMissingSampleMatch(f.projectId, f.missingPath, auto.path)
+                            }.getOrElse { Result.failure(it) }
+                        if (r.isSuccess) {
+                            successes += resultKey
+                        } else {
+                            failures += resultKey
+                            pending.update { it.copy(missingApplies = it.missingApplies - key) }
+                        }
+                    }
+                    _effects.tryEmit(Effect.BulkApplied(successes, failures))
+                }
+            }
+
+            is Intent.BulkDismiss -> {
+                viewModelScope.launch {
+                    val successes = mutableListOf<String>()
+                    val failures = mutableListOf<String>()
+                    for (f in intent.findings) {
+                        val r =
+                            runCatching {
+                                repository.dismissMissingSample(f.projectId, f.missingPath)
+                            }.getOrElse { Result.failure(it) }
+                        val k = "${f.projectId.value}|${f.missingPath}"
+                        if (r.isSuccess) successes += k else failures += k
+                    }
+                    _effects.tryEmit(Effect.BulkDismissed(successes, failures))
+                }
             }
         }
     }
 
-    private fun emitAck(success: Boolean, key: String, kind: String) {
+    private fun emitAck(
+        success: Boolean,
+        key: String,
+        kind: String,
+    ) {
         if (success) {
             _effects.tryEmit(Effect.Acknowledged(key, kind))
         } else {
@@ -244,10 +276,11 @@ class NeedsAttentionViewModel(
     private fun macEntries(macs: List<MacImportFinding>): List<MacEntry> {
         if (macs.isEmpty()) return emptyList()
         val withBase = macs.map { it to baseName(it.name) }
-        val sorted = withBase.sortedWith(
-            compareBy<Pair<MacImportFinding, String>> { it.second.lowercase() }
-                .thenByDescending { it.first.macPathsCount },
-        )
+        val sorted =
+            withBase.sortedWith(
+                compareBy<Pair<MacImportFinding, String>> { it.second.lowercase() }
+                    .thenByDescending { it.first.macPathsCount },
+            )
         var prev: String? = null
         return sorted.mapIndexed { index, (f, base) ->
             val boundary = index > 0 && !base.equals(prev, ignoreCase = true)
@@ -300,10 +333,16 @@ class NeedsAttentionViewModel(
     }
 
     @Immutable
-    data class MacEntry(val finding: MacImportFinding, val isProjectBoundary: Boolean)
+    data class MacEntry(
+        val finding: MacImportFinding,
+        val isProjectBoundary: Boolean,
+    )
 
     @Immutable
-    data class MissingEntry(val finding: MissingSampleFinding, val isProjectBoundary: Boolean)
+    data class MissingEntry(
+        val finding: MissingSampleFinding,
+        val isProjectBoundary: Boolean,
+    )
 
     @Immutable
     data class MissingByConfidence(
@@ -332,29 +371,80 @@ class NeedsAttentionViewModel(
     )
 
     sealed interface Intent {
-        data class SetSearch(val query: String) : Intent
-        data class AckMacImport(val projectId: ProjectId) : Intent
-        data class RepairMacPaths(val projectId: ProjectId) : Intent
-        data class DismissMissingSample(val projectId: ProjectId, val missingPath: String) : Intent
+        data class SetSearch(
+            val query: String,
+        ) : Intent
+
+        data class AckMacImport(
+            val projectId: ProjectId,
+        ) : Intent
+
+        data class RepairMacPaths(
+            val projectId: ProjectId,
+        ) : Intent
+
+        data class DismissMissingSample(
+            val projectId: ProjectId,
+            val missingPath: String,
+        ) : Intent
+
         data class ApplyMatch(
             val projectId: ProjectId,
             val missingPath: String,
             val candidatePath: String,
         ) : Intent
-        data class BulkAck(val projectIds: List<ProjectId>) : Intent
-        data class BulkRepairMacPaths(val projectIds: List<ProjectId>) : Intent
-        data class BulkApplyAutoMatch(val findings: List<MissingSampleFinding>) : Intent
-        data class BulkDismiss(val findings: List<MissingSampleFinding>) : Intent
+
+        data class BulkAck(
+            val projectIds: List<ProjectId>,
+        ) : Intent
+
+        data class BulkRepairMacPaths(
+            val projectIds: List<ProjectId>,
+        ) : Intent
+
+        data class BulkApplyAutoMatch(
+            val findings: List<MissingSampleFinding>,
+        ) : Intent
+
+        data class BulkDismiss(
+            val findings: List<MissingSampleFinding>,
+        ) : Intent
     }
 
     sealed interface Effect {
-        data class Acknowledged(val key: String, val kind: String) : Effect
-        data class MatchApplied(val key: String) : Effect
-        data class Failed(val key: String, val reason: String) : Effect
-        data class BulkAcked(val successKeys: List<String>, val failureKeys: List<String>) : Effect
-        data class BulkRepaired(val successKeys: List<String>, val failureKeys: List<String>) : Effect
-        data class BulkApplied(val successKeys: List<String>, val failureKeys: List<String>) : Effect
-        data class BulkDismissed(val successKeys: List<String>, val failureKeys: List<String>) : Effect
+        data class Acknowledged(
+            val key: String,
+            val kind: String,
+        ) : Effect
+
+        data class MatchApplied(
+            val key: String,
+        ) : Effect
+
+        data class Failed(
+            val key: String,
+            val reason: String,
+        ) : Effect
+
+        data class BulkAcked(
+            val successKeys: List<String>,
+            val failureKeys: List<String>,
+        ) : Effect
+
+        data class BulkRepaired(
+            val successKeys: List<String>,
+            val failureKeys: List<String>,
+        ) : Effect
+
+        data class BulkApplied(
+            val successKeys: List<String>,
+            val failureKeys: List<String>,
+        ) : Effect
+
+        data class BulkDismissed(
+            val successKeys: List<String>,
+            val failureKeys: List<String>,
+        ) : Effect
     }
 
     private companion object {

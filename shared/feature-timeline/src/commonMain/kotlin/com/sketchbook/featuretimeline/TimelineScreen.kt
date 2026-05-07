@@ -51,10 +51,11 @@ fun TimelineScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(AppTheme.colors.surfacePage)
-            .padding(PaddingValues(AppTheme.spacing.md)),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(AppTheme.colors.surfacePage)
+                .padding(PaddingValues(AppTheme.spacing.md)),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
     ) {
         Header(
@@ -154,16 +155,22 @@ private fun SnapshotRow(
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
         when (kind) {
-            SnapshotKind.Branch -> Badge(color = AppTheme.colors.accentAction) {
-                Text("branch", style = AppTheme.typography.caption)
+            SnapshotKind.Branch -> {
+                Badge(color = AppTheme.colors.accentAction) {
+                    Text("branch", style = AppTheme.typography.caption)
+                }
             }
 
-            SnapshotKind.Named -> Badge(color = AppTheme.colors.pinGreen) {
-                Text("named", style = AppTheme.typography.caption)
+            SnapshotKind.Named -> {
+                Badge(color = AppTheme.colors.pinGreen) {
+                    Text("named", style = AppTheme.typography.caption)
+                }
             }
 
-            SnapshotKind.Auto -> Badge(color = AppTheme.colors.accentSecondary) {
-                Text("auto", style = AppTheme.typography.caption)
+            SnapshotKind.Auto -> {
+                Badge(color = AppTheme.colors.accentSecondary) {
+                    Text("auto", style = AppTheme.typography.caption)
+                }
             }
         }
         EditableLabelCell(
@@ -216,40 +223,42 @@ private fun EditableLabelCell(
                 textStyle = AppTheme.typography.bodyEmphasis.copy(color = colors.inkPrimary),
                 cursorBrush = SolidColor(colors.inkPrimary),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    onCommit(buffer)
-                    editing = false
-                }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester)
-                    .onPreviewKeyEvent { event ->
-                        // Esc cancels: drop the buffer, exit edit mode, no commit.
-                        if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
-                            buffer = initialEditValue
-                            editing = false
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    .onFocusChanged { focus ->
-                        // Blur commits — but only if we're still in edit mode (Esc may have just
-                        // flipped editing to false above, and we don't want a double-commit).
-                        if (!focus.isFocused && editing) {
-                            onCommit(buffer)
-                            editing = false
-                        }
-                    },
+                keyboardActions =
+                    KeyboardActions(onDone = {
+                        onCommit(buffer)
+                        editing = false
+                    }),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
+                        .onPreviewKeyEvent { event ->
+                            // Esc cancels: drop the buffer, exit edit mode, no commit.
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                                buffer = initialEditValue
+                                editing = false
+                                true
+                            } else {
+                                false
+                            }
+                        }.onFocusChanged { focus ->
+                            // Blur commits — but only if we're still in edit mode (Esc may have just
+                            // flipped editing to false above, and we don't want a double-commit).
+                            if (!focus.isFocused && editing) {
+                                onCommit(buffer)
+                                editing = false
+                            }
+                        },
             )
             Text(subtitle, style = AppTheme.typography.caption)
         }
     } else {
         Column(
-            modifier = modifier.clickable {
-                buffer = initialEditValue
-                editing = true
-            },
+            modifier =
+                modifier.clickable {
+                    buffer = initialEditValue
+                    editing = true
+                },
         ) {
             Box {
                 Text(displayLabel, style = AppTheme.typography.bodyEmphasis)
@@ -284,31 +293,41 @@ private fun ConfirmRewindDialog(
 
 @Composable
 private fun ProgressLine(progress: MaterializationProgress) {
-    val text = when (progress) {
-        is MaterializationProgress.Started -> "Starting…"
-
-        is MaterializationProgress.Downloading -> {
-            val pct = if (progress.bytesTotal > 0) {
-                ((progress.bytesDone * 100) / progress.bytesTotal).coerceIn(0L, 100L)
-            } else {
-                0L
+    val text =
+        when (progress) {
+            is MaterializationProgress.Started -> {
+                "Starting…"
             }
-            "Downloading blobs · $pct% (${progress.blobsRemaining} remaining)"
+
+            is MaterializationProgress.Downloading -> {
+                val pct =
+                    if (progress.bytesTotal > 0) {
+                        ((progress.bytesDone * 100) / progress.bytesTotal).coerceIn(0L, 100L)
+                    } else {
+                        0L
+                    }
+                "Downloading blobs · $pct% (${progress.blobsRemaining} remaining)"
+            }
+
+            is MaterializationProgress.WritingFiles -> {
+                "Writing files · ${progress.filesDone}/${progress.filesTotal}"
+            }
+
+            is MaterializationProgress.Done -> {
+                "Done."
+            }
+
+            is MaterializationProgress.Failed -> {
+                "Failed: ${progress.reason}"
+            }
         }
-
-        is MaterializationProgress.WritingFiles ->
-            "Writing files · ${progress.filesDone}/${progress.filesTotal}"
-
-        is MaterializationProgress.Done -> "Done."
-
-        is MaterializationProgress.Failed -> "Failed: ${progress.reason}"
-    }
     Text(text, style = AppTheme.typography.caption)
 }
 
-private fun humanBytes(b: Long): String = when {
-    b < 1024 -> "$b B"
-    b < 1024 * 1024 -> "${b / 1024} KB"
-    b < 1024L * 1024 * 1024 -> "${b / (1024 * 1024)} MB"
-    else -> "${b / (1024L * 1024 * 1024)} GB"
-}
+private fun humanBytes(b: Long): String =
+    when {
+        b < 1024 -> "$b B"
+        b < 1024 * 1024 -> "${b / 1024} KB"
+        b < 1024L * 1024 * 1024 -> "${b / (1024 * 1024)} MB"
+        else -> "${b / (1024L * 1024 * 1024)} GB"
+    }

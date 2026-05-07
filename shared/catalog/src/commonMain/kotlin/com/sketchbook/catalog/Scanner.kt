@@ -9,7 +9,9 @@ sealed interface ScanProgress {
     val total: Int
     val done: Int
 
-    data class Started(override val total: Int) : ScanProgress {
+    data class Started(
+        override val total: Int,
+    ) : ScanProgress {
         override val done: Int = 0
     }
 

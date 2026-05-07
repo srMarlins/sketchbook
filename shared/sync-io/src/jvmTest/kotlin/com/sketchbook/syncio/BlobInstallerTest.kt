@@ -11,7 +11,6 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class BlobInstallerTest {
-
     private val root = createTempDirectory("blob-installer-test-")
 
     @AfterTest fun cleanup() {
@@ -44,10 +43,11 @@ class BlobInstallerTest {
     @Test
     fun refusesToClobberDifferentContent() {
         val blob = root.resolve("blob.bin").also { it.writeBytes("hello".toByteArray()) }
-        val target = root.resolve("project/Samples/k.wav").also {
-            Files.createDirectories(it.parent)
-            it.writeBytes("other content".toByteArray())
-        }
+        val target =
+            root.resolve("project/Samples/k.wav").also {
+                Files.createDirectories(it.parent)
+                it.writeBytes("other content".toByteArray())
+            }
         assertFailsWith<FileAlreadyExistsException> {
             BlobInstaller.install(blob, target)
         }

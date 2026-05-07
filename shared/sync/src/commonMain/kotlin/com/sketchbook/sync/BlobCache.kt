@@ -18,10 +18,12 @@ import com.sketchbook.core.BlobHash
  * (`JvmBlobCache.getOrFetch`) and keep this commonMain interface narrow.
  */
 interface BlobCache {
-
     /**
      * Returns true iff [hash] is currently present in the cache for [scope]. Cheap — no I/O
      * beyond an SQLite SELECT. Used by tests + LRU bookkeeping.
      */
-    suspend fun contains(hash: BlobHash, scope: BlobScope): Boolean
+    suspend fun contains(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): Boolean
 }

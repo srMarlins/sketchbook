@@ -48,10 +48,11 @@ fun ProposalDetailPane(
     onDismiss: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val proposal = remember(proposalId, state.pending, state.resolved) {
-        (state.pending.asSequence() + state.resolved.asSequence())
-            .firstOrNull { it.proposalId == proposalId }
-    }
+    val proposal =
+        remember(proposalId, state.pending, state.resolved) {
+            (state.pending.asSequence() + state.resolved.asSequence())
+                .firstOrNull { it.proposalId == proposalId }
+        }
     if (proposal == null) {
         DetailPaneEmpty("Proposal not found")
         return
@@ -139,9 +140,10 @@ private fun ActionDetail(
                 Text(
                     if (expanded) "Hide JSON" else "Show JSON",
                     style = AppTheme.typography.caption,
-                    modifier = Modifier
-                        .clickable(onClick = onToggle)
-                        .padding(AppTheme.spacing.xs),
+                    modifier =
+                        Modifier
+                            .clickable(onClick = onToggle)
+                            .padding(AppTheme.spacing.xs),
                 )
             }
         }
@@ -157,7 +159,10 @@ private fun ActionDetail(
 }
 
 @Composable
-private fun LabelledRow(label: String, value: String) {
+private fun LabelledRow(
+    label: String,
+    value: String,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
@@ -181,43 +186,64 @@ private fun actionFields(
     projectNamesById: Map<Long, String>,
 ): List<Pair<String, String>> {
     fun s(key: String): String? = (action.args[key] as? JsonPrimitive)?.contentOrNull
-    fun arr(key: String): List<String> = (action.args[key] as? JsonArray)
-        ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
-        ?.filter { it.isNotBlank() }
-        .orEmpty()
+
+    fun arr(key: String): List<String> =
+        (action.args[key] as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            ?.filter { it.isNotBlank() }
+            .orEmpty()
     val pidLong = s("project_id")?.toLongOrNull()
     val resolvedName = pidLong?.let { projectNamesById[it] }
-    val projectField = when {
-        resolvedName != null -> listOf("Project" to "$resolvedName (#$pidLong)")
-        pidLong != null -> listOf("Project" to "#$pidLong")
-        else -> emptyList()
-    }
+    val projectField =
+        when {
+            resolvedName != null -> listOf("Project" to "$resolvedName (#$pidLong)")
+            pidLong != null -> listOf("Project" to "#$pidLong")
+            else -> emptyList()
+        }
     return when (action.type) {
-        "MoveProject" -> projectField + listOf(
-            "From" to (s("from") ?: "—"),
-            "To" to (s("to") ?: "—"),
-        )
+        "MoveProject" -> {
+            projectField +
+                listOf(
+                    "From" to (s("from") ?: "—"),
+                    "To" to (s("to") ?: "—"),
+                )
+        }
 
-        "RenameProject" -> projectField + listOf(
-            "From" to ((s("from_") ?: s("from")) ?: "—"),
-            "To" to (s("to") ?: "—"),
-        )
+        "RenameProject" -> {
+            projectField +
+                listOf(
+                    "From" to ((s("from_") ?: s("from")) ?: "—"),
+                    "To" to (s("to") ?: "—"),
+                )
+        }
 
-        "ArchiveProject" -> projectField + listOf("Action" to "Archive")
+        "ArchiveProject" -> {
+            projectField + listOf("Action" to "Archive")
+        }
 
-        "SetTags" -> projectField + listOf(
-            "Before" to arr("before").joinToString(", ").ifEmpty { "(none)" },
-            "After" to arr("after").joinToString(", ").ifEmpty { "(none)" },
-        )
+        "SetTags" -> {
+            projectField +
+                listOf(
+                    "Before" to arr("before").joinToString(", ").ifEmpty { "(none)" },
+                    "After" to arr("after").joinToString(", ").ifEmpty { "(none)" },
+                )
+        }
 
-        "SetColorTag" -> projectField + listOf(
-            "Before" to (s("before") ?: "(none)"),
-            "After" to (s("after") ?: "(none)"),
-        )
+        "SetColorTag" -> {
+            projectField +
+                listOf(
+                    "Before" to (s("before") ?: "(none)"),
+                    "After" to (s("after") ?: "(none)"),
+                )
+        }
 
-        "Undo" -> listOf("Action" to "Undo previous batch")
+        "Undo" -> {
+            listOf("Action" to "Undo previous batch")
+        }
 
-        else -> action.args.entries.map { (k, v) -> k to v.toString() }
+        else -> {
+            action.args.entries.map { (k, v) -> k to v.toString() }
+        }
     }
 }
 

@@ -10,7 +10,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class JvmWorkingTreeIsInUseTest {
-
     private val tmp = createTempDirectory("isinuse-")
 
     @AfterTest fun cleanup() {

@@ -38,157 +38,163 @@ class SnapshotPipeline(
     private val clock: Clock = Clock.System,
     private val leaseTtl: Duration = 15.minutes,
 ) {
+    fun run(input: PipelineInput): Flow<SnapshotProgress> =
+        flow {
+            val uuid = input.uuid
+            val parentRev = input.lastKnownManifest?.rev
+            val parentFiles = input.lastKnownManifest?.files ?: emptyMap()
+            val parentExpectedHead = input.expectedHeadGeneration
+            val blobScope: BlobScope = if (input.selfContained) BlobScope.Private(uuid) else BlobScope.Shared
 
-    fun run(input: PipelineInput): Flow<SnapshotProgress> = flow {
-        val uuid = input.uuid
-        val parentRev = input.lastKnownManifest?.rev
-        val parentFiles = input.lastKnownManifest?.files ?: emptyMap()
-        val parentExpectedHead = input.expectedHeadGeneration
-        val blobScope: BlobScope = if (input.selfContained) BlobScope.Private(uuid) else BlobScope.Shared
+            // 1) Lease.
+            val leaseInstant = clock.now()
+            val lock =
+                LeaseLock(
+                    ownerHostId = hostId,
+                    ownerHostName = hostName,
+                    acquiredAt = leaseInstant,
+                    expiresAt = leaseInstant + leaseTtl,
+                )
+            val leaseGen: Generation =
+                when (val r = cloud.acquireLock(uuid, lock)) {
+                    is LeaseAcquireResult.Acquired -> {
+                        emit(SnapshotProgress.LeaseAcquired(uuid))
+                        r.generation
+                    }
 
-        // 1) Lease.
-        val leaseInstant = clock.now()
-        val lock = LeaseLock(
-            ownerHostId = hostId,
-            ownerHostName = hostName,
-            acquiredAt = leaseInstant,
-            expiresAt = leaseInstant + leaseTtl,
-        )
-        val leaseGen: Generation = when (val r = cloud.acquireLock(uuid, lock)) {
-            is LeaseAcquireResult.Acquired -> {
-                emit(SnapshotProgress.LeaseAcquired(uuid))
-                r.generation
-            }
-
-            is LeaseAcquireResult.Held -> {
-                emit(SnapshotProgress.LeaseHeld(uuid, r.held.ownerHostName))
-                emit(SnapshotProgress.Failed(uuid, "lock held by ${r.held.ownerHostName}"))
-                return@flow
-            }
-        }
-
-        try {
-            // 2) Walk + diff.
-            val rels = input.tree.list()
-            val unchanged = mutableMapOf<String, ManifestFile>()
-            val toUpload = mutableMapOf<String, ManifestFile>()
-            rels.forEachIndexed { i, rel ->
-                emit(SnapshotProgress.Hashing(uuid, i + 1, rels.size))
-                val stat = input.tree.stat(rel)
-                val parent = parentFiles[rel]
-                if (parent != null && parent.size == stat.size && parent.mtime == stat.mtime) {
-                    unchanged[rel] = parent
-                    return@forEachIndexed
+                    is LeaseAcquireResult.Held -> {
+                        emit(SnapshotProgress.LeaseHeld(uuid, r.held.ownerHostName))
+                        emit(SnapshotProgress.Failed(uuid, "lock held by ${r.held.ownerHostName}"))
+                        return@flow
+                    }
                 }
-                val hash = input.tree.hash(rel)
-                val entry = ManifestFile(hash = hash, size = stat.size, mtime = stat.mtime)
-                if (parent != null && parent.hash == hash) {
-                    unchanged[rel] = entry
-                } else {
-                    toUpload[rel] = entry
-                }
-            }
 
-            // 3) Upload deduped: HEAD-then-PUT each unique blob. `actuallyUploadedBytes` tracks
-            // only the bytes that left this host — when `headBlob` returns true we count it as
-            // reused, not new. The figure flows into the manifest's stats.newBytes.
-            var bytesDone = 0L
-            val totalUploadBytes = toUpload.values.sumOf { it.size }
-            val uniqueByHash = toUpload.values.groupBy { it.hash }
-            var actuallyUploadedBytes = 0L
-            for ((hash, entries) in uniqueByHash) {
-                val first = entries.first()
-                val anyRel = toUpload.entries.first { it.value.hash == hash }.key
-                if (cloud.headBlob(hash, blobScope)) {
+            try {
+                // 2) Walk + diff.
+                val rels = input.tree.list()
+                val unchanged = mutableMapOf<String, ManifestFile>()
+                val toUpload = mutableMapOf<String, ManifestFile>()
+                rels.forEachIndexed { i, rel ->
+                    emit(SnapshotProgress.Hashing(uuid, i + 1, rels.size))
+                    val stat = input.tree.stat(rel)
+                    val parent = parentFiles[rel]
+                    if (parent != null && parent.size == stat.size && parent.mtime == stat.mtime) {
+                        unchanged[rel] = parent
+                        return@forEachIndexed
+                    }
+                    val hash = input.tree.hash(rel)
+                    val entry = ManifestFile(hash = hash, size = stat.size, mtime = stat.mtime)
+                    if (parent != null && parent.hash == hash) {
+                        unchanged[rel] = entry
+                    } else {
+                        toUpload[rel] = entry
+                    }
+                }
+
+                // 3) Upload deduped: HEAD-then-PUT each unique blob. `actuallyUploadedBytes` tracks
+                // only the bytes that left this host — when `headBlob` returns true we count it as
+                // reused, not new. The figure flows into the manifest's stats.newBytes.
+                var bytesDone = 0L
+                val totalUploadBytes = toUpload.values.sumOf { it.size }
+                val uniqueByHash = toUpload.values.groupBy { it.hash }
+                var actuallyUploadedBytes = 0L
+                for ((hash, entries) in uniqueByHash) {
+                    val first = entries.first()
+                    val anyRel = toUpload.entries.first { it.value.hash == hash }.key
+                    if (cloud.headBlob(hash, blobScope)) {
+                        bytesDone += first.size
+                        emit(SnapshotProgress.Uploading(uuid, hash, bytesDone, totalUploadBytes))
+                        continue
+                    }
+                    cloud.putBlob(hash, input.tree.read(anyRel), first.size, blobScope)
+                    actuallyUploadedBytes += first.size
                     bytesDone += first.size
                     emit(SnapshotProgress.Uploading(uuid, hash, bytesDone, totalUploadBytes))
-                    continue
                 }
-                cloud.putBlob(hash, input.tree.read(anyRel), first.size, blobScope)
-                actuallyUploadedBytes += first.size
-                bytesDone += first.size
-                emit(SnapshotProgress.Uploading(uuid, hash, bytesDone, totalUploadBytes))
+
+                // 4) Compose manifest. New rev = parentRev+1, or 1 if no parent.
+                val newRev = parentRev?.next() ?: SnapshotRev(1)
+                emit(SnapshotProgress.WritingManifest(uuid, newRev))
+
+                val files = LinkedHashMap<String, ManifestFile>(unchanged.size + toUpload.size)
+                files.putAll(unchanged)
+                files.putAll(toUpload)
+                val totalBytes = files.values.sumOf { it.size }
+                val newBytes = actuallyUploadedBytes
+                // Caller can promote this snapshot to a Named entry by setting [PipelineInput.kind]
+                // (with optional [PipelineInput.label]). The Z3 quick-capture hotkey uses that to
+                // force a labeled timeline row regardless of dirty flag. Default stays Auto so the
+                // existing watcher-driven path is unchanged.
+                val auto =
+                    Manifest(
+                        ownerUserId = ownerUserId,
+                        projectUuid = uuid,
+                        rev = newRev,
+                        parentRev = parentRev,
+                        timestamp = clock.now(),
+                        hostId = hostId,
+                        hostName = hostName,
+                        kind = input.kind,
+                        label = input.label,
+                        files = files,
+                        stats =
+                            ManifestStats(
+                                fileCount = files.size,
+                                totalBytes = totalBytes,
+                                newBytes = newBytes,
+                            ),
+                        selfContained = input.selfContained,
+                    )
+
+                // 5) CAS HEAD. On Conflict, re-fetch and write our work as a branch.
+                val casResult = cloud.appendManifestHead(uuid, parentExpectedHead, auto)
+                val saved =
+                    casResult.fold(
+                        onSuccess = {
+                            SnapshotProgress.Saved(uuid, newRev, input.kind, input.label)
+                        },
+                        onFailure = { err ->
+                            if (err is SketchbookError.Conflict) {
+                                // Re-fetch latest HEAD generation by listing manifests; pick the last one
+                                // and rev one above it. Fake/real backends both return ManifestRefs sorted
+                                // by rev; if the list is empty something is wrong, propagate as failure.
+                                val refs = cloud.listManifests(uuid, sinceRev = parentRev)
+                                val latest = refs.maxByOrNull { it.rev }
+                                if (latest == null) {
+                                    emit(SnapshotProgress.Failed(uuid, "conflict but cannot find new HEAD"))
+                                    return@fold null
+                                }
+                                val branchRev = SnapshotRev(latest.rev + 1)
+                                val ts = clock.now()
+                                val label = "auto-fork: $hostName-${ts.toEpochMilliseconds()}"
+                                val branch =
+                                    auto.copy(
+                                        rev = branchRev,
+                                        parentRev = parentRev,
+                                        kind = SnapshotKind.Branch,
+                                        label = label,
+                                        timestamp = ts,
+                                    )
+                                val branchResult = cloud.appendManifestHead(uuid, latest.generation, branch)
+                                branchResult.fold(
+                                    onSuccess = {
+                                        SnapshotProgress.Saved(uuid, branchRev, SnapshotKind.Branch, label)
+                                    },
+                                    onFailure = { e ->
+                                        SnapshotProgress.Failed(uuid, "branch write failed: ${e.message}")
+                                    },
+                                )
+                            } else {
+                                SnapshotProgress.Failed(uuid, "head write failed: ${err.message}")
+                            }
+                        },
+                    )
+                if (saved != null) emit(saved)
+            } finally {
+                // 6) Release lease (best-effort; pipeline outcome already emitted).
+                runCatching { cloud.releaseLock(uuid, leaseGen) }
             }
-
-            // 4) Compose manifest. New rev = parentRev+1, or 1 if no parent.
-            val newRev = parentRev?.next() ?: SnapshotRev(1)
-            emit(SnapshotProgress.WritingManifest(uuid, newRev))
-
-            val files = LinkedHashMap<String, ManifestFile>(unchanged.size + toUpload.size)
-            files.putAll(unchanged)
-            files.putAll(toUpload)
-            val totalBytes = files.values.sumOf { it.size }
-            val newBytes = actuallyUploadedBytes
-            // Caller can promote this snapshot to a Named entry by setting [PipelineInput.kind]
-            // (with optional [PipelineInput.label]). The Z3 quick-capture hotkey uses that to
-            // force a labeled timeline row regardless of dirty flag. Default stays Auto so the
-            // existing watcher-driven path is unchanged.
-            val auto = Manifest(
-                ownerUserId = ownerUserId,
-                projectUuid = uuid,
-                rev = newRev,
-                parentRev = parentRev,
-                timestamp = clock.now(),
-                hostId = hostId,
-                hostName = hostName,
-                kind = input.kind,
-                label = input.label,
-                files = files,
-                stats = ManifestStats(
-                    fileCount = files.size,
-                    totalBytes = totalBytes,
-                    newBytes = newBytes,
-                ),
-                selfContained = input.selfContained,
-            )
-
-            // 5) CAS HEAD. On Conflict, re-fetch and write our work as a branch.
-            val casResult = cloud.appendManifestHead(uuid, parentExpectedHead, auto)
-            val saved = casResult.fold(
-                onSuccess = {
-                    SnapshotProgress.Saved(uuid, newRev, input.kind, input.label)
-                },
-                onFailure = { err ->
-                    if (err is SketchbookError.Conflict) {
-                        // Re-fetch latest HEAD generation by listing manifests; pick the last one
-                        // and rev one above it. Fake/real backends both return ManifestRefs sorted
-                        // by rev; if the list is empty something is wrong, propagate as failure.
-                        val refs = cloud.listManifests(uuid, sinceRev = parentRev)
-                        val latest = refs.maxByOrNull { it.rev }
-                        if (latest == null) {
-                            emit(SnapshotProgress.Failed(uuid, "conflict but cannot find new HEAD"))
-                            return@fold null
-                        }
-                        val branchRev = SnapshotRev(latest.rev + 1)
-                        val ts = clock.now()
-                        val label = "auto-fork: $hostName-${ts.toEpochMilliseconds()}"
-                        val branch = auto.copy(
-                            rev = branchRev,
-                            parentRev = parentRev,
-                            kind = SnapshotKind.Branch,
-                            label = label,
-                            timestamp = ts,
-                        )
-                        val branchResult = cloud.appendManifestHead(uuid, latest.generation, branch)
-                        branchResult.fold(
-                            onSuccess = {
-                                SnapshotProgress.Saved(uuid, branchRev, SnapshotKind.Branch, label)
-                            },
-                            onFailure = { e ->
-                                SnapshotProgress.Failed(uuid, "branch write failed: ${e.message}")
-                            },
-                        )
-                    } else {
-                        SnapshotProgress.Failed(uuid, "head write failed: ${err.message}")
-                    }
-                },
-            )
-            if (saved != null) emit(saved)
-        } finally {
-            // 6) Release lease (best-effort; pipeline outcome already emitted).
-            runCatching { cloud.releaseLock(uuid, leaseGen) }
         }
-    }
 }
 
 /**

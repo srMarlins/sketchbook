@@ -22,7 +22,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ProposalApplyTest {
-
     private val tmp: Path = createTempDirectory("prop-")
 
     @AfterTest fun cleanup() {
@@ -30,88 +29,114 @@ class ProposalApplyTest {
     }
 
     @Test
-    fun applySetTagsAndArchiveCommitsBoth() = runTest {
-        val library = tmp.resolve("library").also { it.toFile().mkdirs() }
-        Fixtures.writeCleanProject(library)
-        val handle = CatalogDb.openInMemory()
-        val fts = CatalogFts(handle.driver)
-        JvmScanner(handle.catalog, fts).scan(library).toList()
-        val row = handle.catalog.catalogQueries.selectAllProjects().executeAsList().single()
-        val pid = row.id
+    fun applySetTagsAndArchiveCommitsBoth() =
+        runTest {
+            val library = tmp.resolve("library").also { it.toFile().mkdirs() }
+            Fixtures.writeCleanProject(library)
+            val handle = CatalogDb.openInMemory()
+            val fts = CatalogFts(handle.driver)
+            JvmScanner(handle.catalog, fts).scan(library).toList()
+            val row =
+                handle.catalog.catalogQueries
+                    .selectAllProjects()
+                    .executeAsList()
+                    .single()
+            val pid = row.id
 
-        val journal = InMemoryJournalRepository()
-        val repo = SqlProjectRepository(
-            catalog = handle.catalog,
-            ioDispatcher = UnconfinedTestDispatcher(),
-            journal = journal,
-            fts = com.sketchbook.repo.ProjectFtsSearcher { _ -> emptyList() },
-        )
-        val executor = ProposalActionExecutor(repo)
+            val journal = InMemoryJournalRepository()
+            val repo =
+                SqlProjectRepository(
+                    catalog = handle.catalog,
+                    ioDispatcher = UnconfinedTestDispatcher(),
+                    journal = journal,
+                    fts = com.sketchbook.repo.ProjectFtsSearcher { _ -> emptyList() },
+                )
+            val executor = ProposalActionExecutor(repo)
 
-        val actions = listOf(
-            ProposalAction(
-                type = "SetTags",
-                args = buildJsonObject {
-                    put("project_id", pid)
-                    put("tags", JsonArray(listOf(JsonPrimitive("ai"), JsonPrimitive("review"))))
-                },
-            ),
-            ProposalAction(
-                type = "ArchiveProject",
-                args = buildJsonObject { put("project_id", pid) },
-            ),
-        )
+            val actions =
+                listOf(
+                    ProposalAction(
+                        type = "SetTags",
+                        args =
+                            buildJsonObject {
+                                put("project_id", pid)
+                                put("tags", JsonArray(listOf(JsonPrimitive("ai"), JsonPrimitive("review"))))
+                            },
+                    ),
+                    ProposalAction(
+                        type = "ArchiveProject",
+                        args = buildJsonObject { put("project_id", pid) },
+                    ),
+                )
 
-        val r = executor.apply(actions)
-        assertTrue(r.isSuccess, "apply failed: ${r.exceptionOrNull()}")
+            val r = executor.apply(actions)
+            assertTrue(r.isSuccess, "apply failed: ${r.exceptionOrNull()}")
 
-        val tags = handle.catalog.catalogQueries.selectTagsForProject(pid).executeAsList()
-        assertEquals(listOf("ai", "review"), tags.sorted())
-        val refreshed = handle.catalog.catalogQueries.selectProjectById(pid).executeAsOne()
-        assertEquals(1L, refreshed.is_archived)
-    }
+            val tags =
+                handle.catalog.catalogQueries
+                    .selectTagsForProject(pid)
+                    .executeAsList()
+            assertEquals(listOf("ai", "review"), tags.sorted())
+            val refreshed =
+                handle.catalog.catalogQueries
+                    .selectProjectById(pid)
+                    .executeAsOne()
+            assertEquals(1L, refreshed.is_archived)
+        }
 
     @Test
-    fun unknownActionTypeFailsButFirstActionAlreadyCommitted() = runTest {
-        val library = tmp.resolve("library2").also { it.toFile().mkdirs() }
-        Fixtures.writeCleanProject(library)
-        val handle = CatalogDb.openInMemory()
-        val fts = CatalogFts(handle.driver)
-        JvmScanner(handle.catalog, fts).scan(library).toList()
-        val pid = handle.catalog.catalogQueries.selectAllProjects().executeAsList().single().id
+    fun unknownActionTypeFailsButFirstActionAlreadyCommitted() =
+        runTest {
+            val library = tmp.resolve("library2").also { it.toFile().mkdirs() }
+            Fixtures.writeCleanProject(library)
+            val handle = CatalogDb.openInMemory()
+            val fts = CatalogFts(handle.driver)
+            JvmScanner(handle.catalog, fts).scan(library).toList()
+            val pid =
+                handle.catalog.catalogQueries
+                    .selectAllProjects()
+                    .executeAsList()
+                    .single()
+                    .id
 
-        val journal = InMemoryJournalRepository()
-        val repo = SqlProjectRepository(
-            catalog = handle.catalog,
-            ioDispatcher = UnconfinedTestDispatcher(),
-            journal = journal,
-            fts = com.sketchbook.repo.ProjectFtsSearcher { _ -> emptyList() },
-        )
-        val executor = ProposalActionExecutor(repo)
+            val journal = InMemoryJournalRepository()
+            val repo =
+                SqlProjectRepository(
+                    catalog = handle.catalog,
+                    ioDispatcher = UnconfinedTestDispatcher(),
+                    journal = journal,
+                    fts = com.sketchbook.repo.ProjectFtsSearcher { _ -> emptyList() },
+                )
+            val executor = ProposalActionExecutor(repo)
 
-        // First action is valid; second is unknown — executor stops on the unknown one.
-        val actions = listOf(
-            ProposalAction(
-                type = "SetTags",
-                args = buildJsonObject {
-                    put("project_id", pid)
-                    put("tags", JsonArray(listOf(JsonPrimitive("first"))))
-                },
-            ),
-            ProposalAction(
-                type = "RecolorEverythingToTaupe", // not a real action
-                args = buildJsonObject { put("project_id", pid) },
-            ),
-        )
+            // First action is valid; second is unknown — executor stops on the unknown one.
+            val actions =
+                listOf(
+                    ProposalAction(
+                        type = "SetTags",
+                        args =
+                            buildJsonObject {
+                                put("project_id", pid)
+                                put("tags", JsonArray(listOf(JsonPrimitive("first"))))
+                            },
+                    ),
+                    ProposalAction(
+                        type = "RecolorEverythingToTaupe", // not a real action
+                        args = buildJsonObject { put("project_id", pid) },
+                    ),
+                )
 
-        val r = executor.apply(actions)
-        assertTrue(r.isFailure, "expected failure on unknown action type")
+            val r = executor.apply(actions)
+            assertTrue(r.isFailure, "expected failure on unknown action type")
 
-        // ProposalActionExecutor processes serially. The first action committed; this test
-        // documents the observed behavior — the docstring on apply() says "no partial commits"
-        // but the implementation reads serial-and-stop. If the contract changes to all-or-nothing
-        // (transactional batch), update this assertion to assertTrue(tags.isEmpty()).
-        val tags = handle.catalog.catalogQueries.selectTagsForProject(pid).executeAsList()
-        assertEquals(listOf("first"), tags)
-    }
+            // ProposalActionExecutor processes serially. The first action committed; this test
+            // documents the observed behavior — the docstring on apply() says "no partial commits"
+            // but the implementation reads serial-and-stop. If the contract changes to all-or-nothing
+            // (transactional batch), update this assertion to assertTrue(tags.isEmpty()).
+            val tags =
+                handle.catalog.catalogQueries
+                    .selectTagsForProject(pid)
+                    .executeAsList()
+            assertEquals(listOf("first"), tags)
+        }
 }

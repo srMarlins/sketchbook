@@ -34,7 +34,6 @@ class JvmSampleScanner(
     private val catalog: Catalog,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
-
     /**
      * Scan [rootPath], upserting every audio file under it into the `samples` table. Returns
      * the number of files inserted/replaced. [onProgress] is called once per [BATCH_SIZE]-row
@@ -45,53 +44,55 @@ class JvmSampleScanner(
     suspend fun scan(
         rootPath: String,
         onProgress: (done: Int, total: Int?) -> Unit = { _, _ -> },
-    ): Int = withContext(ioDispatcher) {
-        val root = Paths.get(rootPath)
-        if (!Files.isDirectory(root)) return@withContext 0
-        val realRoot = runCatching { root.toRealPath() }.getOrDefault(root.toAbsolutePath())
+    ): Int =
+        withContext(ioDispatcher) {
+            val root = Paths.get(rootPath)
+            if (!Files.isDirectory(root)) return@withContext 0
+            val realRoot = runCatching { root.toRealPath() }.getOrDefault(root.toAbsolutePath())
 
-        val files = Files.walk(realRoot).use { stream ->
-            stream.asSequence()
-                .filter { it.isRegularFile() }
-                .filter { !it.name.startsWith(".") }
-                .filter { p ->
-                    val ext = p.name.substringAfterLast('.', missingDelimiterValue = "").lowercase()
-                    ext in AUDIO_EXTS
+            val files =
+                Files.walk(realRoot).use { stream ->
+                    stream
+                        .asSequence()
+                        .filter { it.isRegularFile() }
+                        .filter { !it.name.startsWith(".") }
+                        .filter { p ->
+                            val ext = p.name.substringAfterLast('.', missingDelimiterValue = "").lowercase()
+                            ext in AUDIO_EXTS
+                        }.filter { p ->
+                            val canonical = runCatching { p.toRealPath() }.getOrNull() ?: return@filter false
+                            canonical.startsWith(realRoot)
+                        }.toList()
                 }
-                .filter { p ->
-                    val canonical = runCatching { p.toRealPath() }.getOrNull() ?: return@filter false
-                    canonical.startsWith(realRoot)
-                }
-                .toList()
-        }
-        if (files.isEmpty()) {
-            onProgress(0, 0)
-            return@withContext 0
-        }
-
-        var done = 0
-        files.chunked(BATCH_SIZE).forEach { batch ->
-            catalog.transaction {
-                for (file in batch) {
-                    val abs = file.toAbsolutePath().toString()
-                    val parent = file.parent?.toString() ?: ""
-                    val size = runCatching { Files.size(file) }.getOrDefault(0L)
-                    val mtimeSec = runCatching { Files.getLastModifiedTime(file).toMillis() / 1000.0 }
-                        .getOrDefault(0.0)
-                    catalog.catalogQueries.upsertSample(
-                        path = abs,
-                        filename = file.fileName.toString(),
-                        size_bytes = size,
-                        mtime = mtimeSec,
-                        parent_dir = parent,
-                    )
-                }
+            if (files.isEmpty()) {
+                onProgress(0, 0)
+                return@withContext 0
             }
-            done += batch.size
-            onProgress(done, files.size)
+
+            var done = 0
+            files.chunked(BATCH_SIZE).forEach { batch ->
+                catalog.transaction {
+                    for (file in batch) {
+                        val abs = file.toAbsolutePath().toString()
+                        val parent = file.parent?.toString() ?: ""
+                        val size = runCatching { Files.size(file) }.getOrDefault(0L)
+                        val mtimeSec =
+                            runCatching { Files.getLastModifiedTime(file).toMillis() / 1000.0 }
+                                .getOrDefault(0.0)
+                        catalog.catalogQueries.upsertSample(
+                            path = abs,
+                            filename = file.fileName.toString(),
+                            size_bytes = size,
+                            mtime = mtimeSec,
+                            parent_dir = parent,
+                        )
+                    }
+                }
+                done += batch.size
+                onProgress(done, files.size)
+            }
+            done
         }
-        done
-    }
 
     private companion object {
         const val BATCH_SIZE: Int = 200

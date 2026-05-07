@@ -90,13 +90,14 @@ fun SampleRootsStep(
             // isn't a one-pixel-tall string. Caption + inkMuted matches the footer's "Skip
             // all" affordance so the two read as the same kind of action.
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
-                    .clickable(onClick = onSkip)
-                    .padding(
-                        horizontal = AppTheme.spacing.sm,
-                        vertical = AppTheme.spacing.xs,
-                    ),
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))
+                        .clickable(onClick = onSkip)
+                        .padding(
+                            horizontal = AppTheme.spacing.sm,
+                            vertical = AppTheme.spacing.xs,
+                        ),
             ) {
                 ProvideContentColor(colors.inkMuted) {
                     Text(

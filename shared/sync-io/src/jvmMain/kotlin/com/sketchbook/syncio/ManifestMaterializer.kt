@@ -27,16 +27,19 @@ class ManifestMaterializer(
     private val blobCache: JvmBlobCache,
     private val projectRoot: suspend (ProjectUuid) -> Path,
 ) {
-
     /**
      * Materialize the project at [rev] into the working tree at `projectRoot(uuid)`. Returns
      * `Result.success(Unit)` on full laydown; `Result.failure` (with leftover temps cleaned)
      * on any error.
      */
-    suspend fun materialize(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> {
-        val manifest = runCatching { cloud.readManifest(uuid, rev) }.getOrElse {
-            return Result.failure(it)
-        }
+    suspend fun materialize(
+        uuid: ProjectUuid,
+        rev: SnapshotRev,
+    ): Result<Unit> {
+        val manifest =
+            runCatching { cloud.readManifest(uuid, rev) }.getOrElse {
+                return Result.failure(it)
+            }
         val scope: BlobScope =
             if (manifest.selfContained) BlobScope.Private(uuid) else BlobScope.Shared
         val root = projectRoot(uuid)
@@ -48,12 +51,13 @@ class ManifestMaterializer(
         // case — caller (PullPoller wiring or Rewind UI) decides whether to retry or surface.
         // `resolveSafely` throws on traversal-escapes (`..`); surface that as Result.failure
         // rather than letting it escape this function.
-        val busy = runCatching {
-            manifest.files.keys.mapNotNull { rel ->
-                val finalPath = resolveSafely(root, rel)
-                if (Files.exists(finalPath) && isInUse(finalPath)) rel else null
-            }
-        }.getOrElse { return Result.failure(it) }
+        val busy =
+            runCatching {
+                manifest.files.keys.mapNotNull { rel ->
+                    val finalPath = resolveSafely(root, rel)
+                    if (Files.exists(finalPath) && isInUse(finalPath)) rel else null
+                }
+            }.getOrElse { return Result.failure(it) }
         if (busy.isNotEmpty()) {
             return Result.failure(WorkingTreeBusyException(busy))
         }
@@ -96,7 +100,10 @@ class ManifestMaterializer(
     }
 
     /** Resolve [rel] under [root], rejecting traversal escapes (`..`). */
-    private fun resolveSafely(root: Path, rel: String): Path {
+    private fun resolveSafely(
+        root: Path,
+        rel: String,
+    ): Path {
         val candidate = root.resolve(rel).normalize()
         require(candidate.startsWith(root.normalize())) {
             "manifest path '$rel' escapes project root"

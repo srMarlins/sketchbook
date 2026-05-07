@@ -38,29 +38,31 @@ data class ProjectGroup(
  */
 fun deriveProjectGroups(rows: List<ProjectRow>): List<ProjectGroup> {
     val byRoot = rows.groupBy { projectRootDir(it.path.value) }
-    return byRoot.map { (rootDir, group) ->
-        val sorted = group.sortedByDescending { it.updatedAt }
-        val rep = sorted.first()
-        val maxEffort = sorted.mapNotNull { it.effortScore }.maxOrNull()
-        val newestMs = sorted.maxOf { it.updatedAt.toEpochMilliseconds() }
-        val anyOk = sorted.any { it.parseStatus == ParseStatus.Ok }
-        val anyFailed = sorted.any { it.parseStatus == ParseStatus.Failed }
-        val bestStatus = when {
-            anyOk -> ParseStatus.Ok
-            anyFailed -> ParseStatus.Failed
-            else -> ParseStatus.Pending
-        }
-        val maxMissing = sorted.maxOf { it.missingSampleCount }
-        ProjectGroup(
-            id = rootDir,
-            representative = rep,
-            variants = sorted,
-            effortScore = maxEffort,
-            updatedAtMs = newestMs,
-            parseStatusBest = bestStatus,
-            missingSampleCount = maxMissing,
-        )
-    }.sortedByDescending { it.updatedAtMs }
+    return byRoot
+        .map { (rootDir, group) ->
+            val sorted = group.sortedByDescending { it.updatedAt }
+            val rep = sorted.first()
+            val maxEffort = sorted.mapNotNull { it.effortScore }.maxOrNull()
+            val newestMs = sorted.maxOf { it.updatedAt.toEpochMilliseconds() }
+            val anyOk = sorted.any { it.parseStatus == ParseStatus.Ok }
+            val anyFailed = sorted.any { it.parseStatus == ParseStatus.Failed }
+            val bestStatus =
+                when {
+                    anyOk -> ParseStatus.Ok
+                    anyFailed -> ParseStatus.Failed
+                    else -> ParseStatus.Pending
+                }
+            val maxMissing = sorted.maxOf { it.missingSampleCount }
+            ProjectGroup(
+                id = rootDir,
+                representative = rep,
+                variants = sorted,
+                effortScore = maxEffort,
+                updatedAtMs = newestMs,
+                parseStatusBest = bestStatus,
+                missingSampleCount = maxMissing,
+            )
+        }.sortedByDescending { it.updatedAtMs }
 }
 
 /**

@@ -10,7 +10,6 @@ import kotlin.time.Instant
  * lock badge on the detail pane and decide whether to enable the "force-take" action.
  */
 interface LockRepository {
-
     /**
      * Observe the lock status for a single project. Emits the current snapshot immediately and
      * a new value whenever the underlying lock-state machine or `sync_state` row changes.
@@ -32,7 +31,20 @@ interface LockRepository {
  */
 sealed interface LockStatus {
     data object Free : LockStatus
-    data class Ours(val acquiredAt: Instant, val expiresAt: Instant) : LockStatus
-    data class HeldByOther(val ownerHostName: String, val acquiredAt: Instant, val expiresAt: Instant) : LockStatus
-    data class Stale(val ownerHostName: String, val expiresAt: Instant) : LockStatus
+
+    data class Ours(
+        val acquiredAt: Instant,
+        val expiresAt: Instant,
+    ) : LockStatus
+
+    data class HeldByOther(
+        val ownerHostName: String,
+        val acquiredAt: Instant,
+        val expiresAt: Instant,
+    ) : LockStatus
+
+    data class Stale(
+        val ownerHostName: String,
+        val expiresAt: Instant,
+    ) : LockStatus
 }

@@ -13,7 +13,6 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 sealed interface ActionRecord {
-
     val projectId: Long
 
     @Serializable

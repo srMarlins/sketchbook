@@ -40,9 +40,13 @@ data class OnboardingState(
 
 sealed interface OnboardingStep {
     data object Welcome : OnboardingStep
+
     data object ProjectsRoots : OnboardingStep
+
     data object SampleRoots : OnboardingStep
+
     data object PluginFolders : OnboardingStep
+
     data object Done : OnboardingStep
     // Future: data object CloudSignIn — drop in when v1.2 cloud lands.
 }
@@ -53,20 +57,44 @@ sealed interface OnboardingStep {
  * UI model.
  */
 sealed interface OnboardingEvent {
-    data class PersistenceFailed(val message: String) : OnboardingEvent
+    data class PersistenceFailed(
+        val message: String,
+    ) : OnboardingEvent
 }
 
 sealed interface OnboardingIntent {
-    data class AddProjectsRoot(val path: String) : OnboardingIntent
-    data class RemoveProjectsRoot(val path: String) : OnboardingIntent
-    data class AddSampleRoot(val path: String) : OnboardingIntent
-    data class RemoveSampleRoot(val path: String) : OnboardingIntent
-    data class AddPluginFolder(val path: String) : OnboardingIntent
-    data class RemovePluginFolder(val path: String) : OnboardingIntent
+    data class AddProjectsRoot(
+        val path: String,
+    ) : OnboardingIntent
+
+    data class RemoveProjectsRoot(
+        val path: String,
+    ) : OnboardingIntent
+
+    data class AddSampleRoot(
+        val path: String,
+    ) : OnboardingIntent
+
+    data class RemoveSampleRoot(
+        val path: String,
+    ) : OnboardingIntent
+
+    data class AddPluginFolder(
+        val path: String,
+    ) : OnboardingIntent
+
+    data class RemovePluginFolder(
+        val path: String,
+    ) : OnboardingIntent
+
     data object UsePluginDefaults : OnboardingIntent
+
     data object Continue : OnboardingIntent
+
     data object Skip : OnboardingIntent
+
     data object SkipAllUseDefaults : OnboardingIntent
+
     data object Finish : OnboardingIntent
 }
 
@@ -81,8 +109,10 @@ interface ScanTrigger {
 @ContributesIntoMap(AppScope::class)
 @ViewModelKey
 @Inject
-class OnboardingViewModel(private val repository: SettingsRepository, private val scanTrigger: ScanTrigger) : ViewModel() {
-
+class OnboardingViewModel(
+    private val repository: SettingsRepository,
+    private val scanTrigger: ScanTrigger,
+) : ViewModel() {
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<OnboardingState> = _state.asStateFlow()
 
@@ -93,11 +123,12 @@ class OnboardingViewModel(private val repository: SettingsRepository, private va
      * extraBufferCapacity = 4 (one per persistence call) with [BufferOverflow.DROP_OLDEST]
      * so a slow collector can't backpressure the unwind.
      */
-    private val _events = MutableSharedFlow<OnboardingEvent>(
-        replay = 0,
-        extraBufferCapacity = 4,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    private val _events =
+        MutableSharedFlow<OnboardingEvent>(
+            replay = 0,
+            extraBufferCapacity = 4,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
     val events: Flow<OnboardingEvent> = _events.asSharedFlow()
 
     /**
@@ -109,50 +140,73 @@ class OnboardingViewModel(private val repository: SettingsRepository, private va
 
     fun dispatch(intent: OnboardingIntent) {
         when (intent) {
-            is OnboardingIntent.AddProjectsRoot -> _state.update { s ->
-                s.copy(projectsRoots = (s.projectsRoots + intent.path).distinct()).recomputeCanContinue()
+            is OnboardingIntent.AddProjectsRoot -> {
+                _state.update { s ->
+                    s.copy(projectsRoots = (s.projectsRoots + intent.path).distinct()).recomputeCanContinue()
+                }
             }
 
-            is OnboardingIntent.RemoveProjectsRoot -> _state.update { s ->
-                s.copy(projectsRoots = s.projectsRoots - intent.path).recomputeCanContinue()
+            is OnboardingIntent.RemoveProjectsRoot -> {
+                _state.update { s ->
+                    s.copy(projectsRoots = s.projectsRoots - intent.path).recomputeCanContinue()
+                }
             }
 
-            is OnboardingIntent.AddSampleRoot -> _state.update { s ->
-                s.copy(sampleRoots = (s.sampleRoots + intent.path).distinct())
+            is OnboardingIntent.AddSampleRoot -> {
+                _state.update { s ->
+                    s.copy(sampleRoots = (s.sampleRoots + intent.path).distinct())
+                }
             }
 
-            is OnboardingIntent.RemoveSampleRoot -> _state.update { s ->
-                s.copy(sampleRoots = s.sampleRoots - intent.path)
+            is OnboardingIntent.RemoveSampleRoot -> {
+                _state.update { s ->
+                    s.copy(sampleRoots = s.sampleRoots - intent.path)
+                }
             }
 
-            is OnboardingIntent.AddPluginFolder -> _state.update { s ->
-                s.copy(pluginFolders = (s.pluginFolders + intent.path).distinct())
+            is OnboardingIntent.AddPluginFolder -> {
+                _state.update { s ->
+                    s.copy(pluginFolders = (s.pluginFolders + intent.path).distinct())
+                }
             }
 
-            is OnboardingIntent.RemovePluginFolder -> _state.update { s ->
-                s.copy(pluginFolders = s.pluginFolders - intent.path)
+            is OnboardingIntent.RemovePluginFolder -> {
+                _state.update { s ->
+                    s.copy(pluginFolders = s.pluginFolders - intent.path)
+                }
             }
 
-            OnboardingIntent.UsePluginDefaults -> _state.update {
-                it.copy(pluginFolders = defaultPluginFolders())
+            OnboardingIntent.UsePluginDefaults -> {
+                _state.update {
+                    it.copy(pluginFolders = defaultPluginFolders())
+                }
             }
 
-            OnboardingIntent.Continue -> advance()
-
-            OnboardingIntent.Skip -> skip()
-
-            OnboardingIntent.SkipAllUseDefaults -> _state.update { s ->
-                // SkipAll is a *navigation* shortcut — preserve every entered list and only fill
-                // pluginFolders with OS defaults if the user emptied them. Persistence happens in
-                // Finish, not here. The user can still review on Done before committing.
-                val pluginFolders = if (s.pluginFolders.isEmpty()) defaultPluginFolders() else s.pluginFolders
-                s.copy(
-                    pluginFolders = pluginFolders,
-                    currentIndex = s.steps.indexOf(OnboardingStep.Done),
-                ).recomputeCanContinue()
+            OnboardingIntent.Continue -> {
+                advance()
             }
 
-            OnboardingIntent.Finish -> finish()
+            OnboardingIntent.Skip -> {
+                skip()
+            }
+
+            OnboardingIntent.SkipAllUseDefaults -> {
+                _state.update { s ->
+                    // SkipAll is a *navigation* shortcut — preserve every entered list and only fill
+                    // pluginFolders with OS defaults if the user emptied them. Persistence happens in
+                    // Finish, not here. The user can still review on Done before committing.
+                    val pluginFolders = if (s.pluginFolders.isEmpty()) defaultPluginFolders() else s.pluginFolders
+                    s
+                        .copy(
+                            pluginFolders = pluginFolders,
+                            currentIndex = s.steps.indexOf(OnboardingStep.Done),
+                        ).recomputeCanContinue()
+                }
+            }
+
+            OnboardingIntent.Finish -> {
+                finish()
+            }
         }
     }
 
@@ -191,36 +245,39 @@ class OnboardingViewModel(private val repository: SettingsRepository, private va
         _events.tryEmit(OnboardingEvent.PersistenceFailed(message))
     }
 
-    private fun advance() = _state.update { s ->
-        if (s.currentIndex >= s.steps.lastIndex) {
-            s
-        } else {
-            s.copy(currentIndex = s.currentIndex + 1).recomputeCanContinue()
+    private fun advance() =
+        _state.update { s ->
+            if (s.currentIndex >= s.steps.lastIndex) {
+                s
+            } else {
+                s.copy(currentIndex = s.currentIndex + 1).recomputeCanContinue()
+            }
         }
-    }
 
-    private fun skip() = _state.update { s ->
-        // Welcome (index 0), ProjectsRoots (required), and Done (terminal) are not skippable.
-        when (s.steps[s.currentIndex]) {
-            OnboardingStep.Welcome,
-            OnboardingStep.ProjectsRoots,
-            OnboardingStep.Done,
-            -> s
+    private fun skip() =
+        _state.update { s ->
+            // Welcome (index 0), ProjectsRoots (required), and Done (terminal) are not skippable.
+            when (s.steps[s.currentIndex]) {
+                OnboardingStep.Welcome,
+                OnboardingStep.ProjectsRoots,
+                OnboardingStep.Done,
+                -> s
 
-            OnboardingStep.SampleRoots,
-            OnboardingStep.PluginFolders,
-            -> s.copy(currentIndex = s.currentIndex + 1).recomputeCanContinue()
+                OnboardingStep.SampleRoots,
+                OnboardingStep.PluginFolders,
+                -> s.copy(currentIndex = s.currentIndex + 1).recomputeCanContinue()
+            }
         }
-    }
 
     private fun initialState(): OnboardingState {
-        val steps = listOf(
-            OnboardingStep.Welcome,
-            OnboardingStep.ProjectsRoots,
-            OnboardingStep.SampleRoots,
-            OnboardingStep.PluginFolders,
-            OnboardingStep.Done,
-        )
+        val steps =
+            listOf(
+                OnboardingStep.Welcome,
+                OnboardingStep.ProjectsRoots,
+                OnboardingStep.SampleRoots,
+                OnboardingStep.PluginFolders,
+                OnboardingStep.Done,
+            )
         return OnboardingState(
             steps = steps,
             currentIndex = 0,
@@ -231,10 +288,12 @@ class OnboardingViewModel(private val repository: SettingsRepository, private va
         )
     }
 
-    private fun OnboardingState.recomputeCanContinue(): OnboardingState = copy(
-        canContinue = when (steps[currentIndex]) {
-            OnboardingStep.ProjectsRoots -> projectsRoots.isNotEmpty()
-            else -> true
-        },
-    )
+    private fun OnboardingState.recomputeCanContinue(): OnboardingState =
+        copy(
+            canContinue =
+                when (steps[currentIndex]) {
+                    OnboardingStep.ProjectsRoots -> projectsRoots.isNotEmpty()
+                    else -> true
+                },
+        )
 }

@@ -15,5 +15,8 @@ import com.sketchbook.core.ProjectUuid
  */
 sealed interface BlobScope {
     data object Shared : BlobScope
-    data class Private(val uuid: ProjectUuid) : BlobScope
+
+    data class Private(
+        val uuid: ProjectUuid,
+    ) : BlobScope
 }

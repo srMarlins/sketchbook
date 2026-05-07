@@ -53,28 +53,31 @@ class ProjectDetailViewModel(
     private val projects: ProjectRepository,
     private val snapshots: SnapshotRepository,
 ) : ViewModel() {
-
     private val selectedId = MutableStateFlow<ProjectId?>(null)
     private val tabSelection = MutableStateFlow(Tab.Overview)
 
-    private val _effects = MutableSharedFlow<Effect>(
-        replay = 0,
-        extraBufferCapacity = 8,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    private val _effects =
+        MutableSharedFlow<Effect>(
+            replay = 0,
+            extraBufferCapacity = 8,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
-    private val rowFlow: Flow<ProjectRow?> = selectedId.flatMapLatest { id ->
-        if (id == null) flowOf(null) else projects.observeProject(id)
-    }
+    private val rowFlow: Flow<ProjectRow?> =
+        selectedId.flatMapLatest { id ->
+            if (id == null) flowOf(null) else projects.observeProject(id)
+        }
 
-    private val pluginsFlow: Flow<List<PluginRef>> = selectedId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else projects.observePlugins(id)
-    }
+    private val pluginsFlow: Flow<List<PluginRef>> =
+        selectedId.flatMapLatest { id ->
+            if (id == null) flowOf(emptyList()) else projects.observePlugins(id)
+        }
 
-    private val samplesFlow: Flow<List<SampleEntry>> = selectedId.flatMapLatest { id ->
-        if (id == null) flowOf(emptyList()) else projects.observeSamples(id)
-    }
+    private val samplesFlow: Flow<List<SampleEntry>> =
+        selectedId.flatMapLatest { id ->
+            if (id == null) flowOf(emptyList()) else projects.observeSamples(id)
+        }
 
     /**
      * History flow is empty until [load] is called with a project that has a stable
@@ -90,37 +93,38 @@ class ProjectDetailViewModel(
      */
     private val lockFlow: Flow<LockStatus> = flowOf(LockStatus.Free)
 
-    val state: StateFlow<State> = combine(
-        rowFlow,
-        historyFlow,
-        tabSelection,
-        lockFlow,
-        pluginsFlow,
-        samplesFlow,
-    ) { values ->
-        @Suppress("UNCHECKED_CAST")
-        val row = values[0] as ProjectRow?
+    val state: StateFlow<State> =
+        combine(
+            rowFlow,
+            historyFlow,
+            tabSelection,
+            lockFlow,
+            pluginsFlow,
+            samplesFlow,
+        ) { values ->
+            @Suppress("UNCHECKED_CAST")
+            val row = values[0] as ProjectRow?
 
-        @Suppress("UNCHECKED_CAST")
-        val history = values[1] as List<Snapshot>
-        val tab = values[2] as Tab
-        val lock = values[3] as LockStatus
+            @Suppress("UNCHECKED_CAST")
+            val history = values[1] as List<Snapshot>
+            val tab = values[2] as Tab
+            val lock = values[3] as LockStatus
 
-        @Suppress("UNCHECKED_CAST")
-        val plugins = values[4] as List<PluginRef>
+            @Suppress("UNCHECKED_CAST")
+            val plugins = values[4] as List<PluginRef>
 
-        @Suppress("UNCHECKED_CAST")
-        val samples = values[5] as List<SampleEntry>
-        State(
-            row = row,
-            history = history,
-            tab = tab,
-            loading = row == null && selectedId.value != null,
-            lockStatus = lock,
-            plugins = plugins,
-            samples = samples,
-        )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, State())
+            @Suppress("UNCHECKED_CAST")
+            val samples = values[5] as List<SampleEntry>
+            State(
+                row = row,
+                history = history,
+                tab = tab,
+                loading = row == null && selectedId.value != null,
+                lockStatus = lock,
+                plugins = plugins,
+                samples = samples,
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, State())
 
     fun load(id: ProjectId) {
         selectedId.update { id }
@@ -128,14 +132,21 @@ class ProjectDetailViewModel(
 
     fun dispatch(intent: Intent) {
         when (intent) {
-            is Intent.SelectTab -> tabSelection.update { intent.tab }
+            is Intent.SelectTab -> {
+                tabSelection.update { intent.tab }
+            }
 
             is Intent.OpenInLive -> {
-                val path = state.value.row?.path?.value ?: return
+                val path =
+                    state.value.row
+                        ?.path
+                        ?.value ?: return
                 _effects.tryEmit(Effect.LaunchLive(path))
             }
 
-            is Intent.ForceTakeLock -> Unit
+            is Intent.ForceTakeLock -> {
+                Unit
+            }
 
             // No-op until uuid bridging lands.
             is Intent.Rename -> {
@@ -147,16 +158,20 @@ class ProjectDetailViewModel(
 
             is Intent.SetTags -> {
                 val id = selectedId.value ?: return
-                val cleaned = intent.tags
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
-                    .distinct()
+                val cleaned =
+                    intent.tags
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .distinct()
                 viewModelScope.launch { projects.setTags(id, cleaned) }
             }
 
             is Intent.Move -> {
                 val id = selectedId.value ?: return
-                val current = state.value.row?.path?.value ?: return
+                val current =
+                    state.value.row
+                        ?.path
+                        ?.value ?: return
                 val target = intent.newParentDir.trim()
                 if (target.isEmpty()) return
                 if (target.replace('\\', '/') == parentDirOfPath(current)) return
@@ -195,22 +210,44 @@ class ProjectDetailViewModel(
     enum class Tab { Overview, Tracks, Samples, Plugins, History }
 
     sealed interface Intent {
-        data class SelectTab(val tab: Tab) : Intent
+        data class SelectTab(
+            val tab: Tab,
+        ) : Intent
+
         data object OpenInLive : Intent
+
         data object ForceTakeLock : Intent
-        data class Rename(val name: String) : Intent
-        data class SetTags(val tags: List<String>) : Intent
-        data class Move(val newParentDir: String) : Intent
+
+        data class Rename(
+            val name: String,
+        ) : Intent
+
+        data class SetTags(
+            val tags: List<String>,
+        ) : Intent
+
+        data class Move(
+            val newParentDir: String,
+        ) : Intent
+
         data object ToggleArchive : Intent
 
         /** PR-R: Set or clear the per-project stage override. Null = clear (chip falls back to
          *  the inferred classification). Round-trips through the repository to journal the change. */
-        data class SetStageOverride(val stage: Stage?) : Intent
+        data class SetStageOverride(
+            val stage: Stage?,
+        ) : Intent
     }
 
     sealed interface Effect {
-        data class LaunchLive(val projectPath: String) : Effect
+        data class LaunchLive(
+            val projectPath: String,
+        ) : Effect
+
         data object LockTaken : Effect
-        data class LockTakeFailed(val reason: String) : Effect
+
+        data class LockTakeFailed(
+            val reason: String,
+        ) : Effect
     }
 }

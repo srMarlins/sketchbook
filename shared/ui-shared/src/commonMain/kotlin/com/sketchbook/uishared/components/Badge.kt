@@ -24,10 +24,11 @@ fun Badge(
 ) {
     val shape = RoundedCornerShape(AppTheme.spacing.cornerSmall)
     Box(
-        modifier = modifier
-            .clip(shape)
-            .background(color)
-            .padding(padding),
+        modifier =
+            modifier
+                .clip(shape)
+                .background(color)
+                .padding(padding),
     ) {
         ProvideContentColor(AppTheme.colors.inkOnStripDark) {
             content()

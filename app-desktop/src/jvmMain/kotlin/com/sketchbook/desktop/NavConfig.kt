@@ -10,14 +10,16 @@ import kotlinx.serialization.modules.subclass
  * `SavedStateConfiguration` for Nav3's back-stack persistence on JVM Desktop. Android uses
  * reflection to discover [NavKey] subclasses; Desktop must register them explicitly.
  */
-internal val NavSavedStateConfig: SavedStateConfiguration = SavedStateConfiguration {
-    serializersModule = SerializersModule {
-        polymorphic(NavKey::class) {
-            subclass(Screen.Projects::class)
-            subclass(Screen.ProjectDetail::class)
-            subclass(Screen.Timeline::class)
-            subclass(Screen.Inbox::class)
-            subclass(Screen.Settings::class)
-        }
+internal val NavSavedStateConfig: SavedStateConfiguration =
+    SavedStateConfiguration {
+        serializersModule =
+            SerializersModule {
+                polymorphic(NavKey::class) {
+                    subclass(Screen.Projects::class)
+                    subclass(Screen.ProjectDetail::class)
+                    subclass(Screen.Timeline::class)
+                    subclass(Screen.Inbox::class)
+                    subclass(Screen.Settings::class)
+                }
+            }
     }
-}

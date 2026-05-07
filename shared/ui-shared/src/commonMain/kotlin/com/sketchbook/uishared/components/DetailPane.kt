@@ -33,10 +33,11 @@ fun DetailPane(
     body: @Composable () -> Unit,
 ) {
     Column(
-        modifier = modifier
-            .widthIn(min = 320.dp, max = 420.dp)
-            .fillMaxHeight()
-            .background(AppTheme.colors.surfaceCard),
+        modifier =
+            modifier
+                .widthIn(min = 320.dp, max = 420.dp)
+                .fillMaxHeight()
+                .background(AppTheme.colors.surfaceCard),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(AppTheme.spacing.md),
@@ -59,10 +60,11 @@ fun DetailPane(
         }
         if (footer != null) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(AppTheme.colors.surfaceSunken)
-                    .padding(AppTheme.spacing.md),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(AppTheme.colors.surfaceSunken)
+                        .padding(AppTheme.spacing.md),
                 horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
             ) { footer() }
         }
@@ -70,12 +72,16 @@ fun DetailPane(
 }
 
 @Composable
-fun DetailPaneEmpty(message: String = "Select a row for details", modifier: Modifier = Modifier) {
+fun DetailPaneEmpty(
+    message: String = "Select a row for details",
+    modifier: Modifier = Modifier,
+) {
     Box(
-        modifier = modifier
-            .width(420.dp)
-            .fillMaxHeight()
-            .background(AppTheme.colors.surfaceCard),
+        modifier =
+            modifier
+                .width(420.dp)
+                .fillMaxHeight()
+                .background(AppTheme.colors.surfaceCard),
         contentAlignment = Alignment.Center,
     ) {
         ProvideContentColor(AppTheme.colors.inkMuted) {

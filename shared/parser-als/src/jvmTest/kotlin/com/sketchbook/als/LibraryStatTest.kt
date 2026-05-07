@@ -19,7 +19,6 @@ import kotlin.test.Test
  * [AlsParser]. No new dependencies.
  */
 class LibraryStatTest {
-
     @Test
     fun reportLibraryDistribution() {
         val root = System.getenv("SKETCHBOOK_LIBRARY_ROOT")
@@ -36,11 +35,12 @@ class LibraryStatTest {
             return
         }
 
-        val alsFiles: List<Path> = Files.walk(rootPath).use { stream ->
-            stream
-                .filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".als") }
-                .toList()
-        }
+        val alsFiles: List<Path> =
+            Files.walk(rootPath).use { stream ->
+                stream
+                    .filter { Files.isRegularFile(it) && it.fileName.toString().endsWith(".als") }
+                    .toList()
+            }
 
         var hasSibling = 0
         var noSibling = 0

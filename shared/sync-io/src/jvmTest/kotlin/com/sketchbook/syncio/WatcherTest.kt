@@ -15,7 +15,6 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 class WatcherTest {
-
     private val root = createTempDirectory("watcher-test-")
 
     @AfterTest fun cleanup() {
@@ -23,37 +22,39 @@ class WatcherTest {
     }
 
     @Test
-    fun emitsSingleSavedAfterDebounceWindow() = kotlinx.coroutines.runBlocking {
-        val watcher = Watcher(debounce = 200.milliseconds)
-        val target = root.resolve("Project.als")
-        watcher.watch(root).test(timeout = 10.seconds) {
-            delay(150)
+    fun emitsSingleSavedAfterDebounceWindow() =
+        kotlinx.coroutines.runBlocking {
+            val watcher = Watcher(debounce = 200.milliseconds)
+            val target = root.resolve("Project.als")
+            watcher.watch(root).test(timeout = 10.seconds) {
+                delay(150)
 
-            target.writeBytes("v1".toByteArray())
-            delay(50)
-            target.writeBytes("v2".toByteArray())
+                target.writeBytes("v1".toByteArray())
+                delay(50)
+                target.writeBytes("v2".toByteArray())
 
-            val event = awaitItem()
-            assertEquals(target, event.path)
-            assertEquals(true, event is SaveEvent.Saved)
+                val event = awaitItem()
+                assertEquals(target, event.path)
+                assertEquals(true, event is SaveEvent.Saved)
 
-            cancelAndIgnoreRemainingEvents()
+                cancelAndIgnoreRemainingEvents()
+            }
         }
-    }
 
     @Test
-    fun emitsRemovedOnDelete() = kotlinx.coroutines.runBlocking {
-        val watcher = Watcher(debounce = 100.milliseconds)
-        val target = root.resolve("Project.als")
-        target.writeBytes("v1".toByteArray())
-        watcher.watch(root).test(timeout = 10.seconds) {
-            delay(200)
-            target.deleteIfExists()
-            while (true) {
-                val event = awaitItem()
-                if (event is SaveEvent.Removed && event.path == target) break
+    fun emitsRemovedOnDelete() =
+        kotlinx.coroutines.runBlocking {
+            val watcher = Watcher(debounce = 100.milliseconds)
+            val target = root.resolve("Project.als")
+            target.writeBytes("v1".toByteArray())
+            watcher.watch(root).test(timeout = 10.seconds) {
+                delay(200)
+                target.deleteIfExists()
+                while (true) {
+                    val event = awaitItem()
+                    if (event is SaveEvent.Removed && event.path == target) break
+                }
+                cancelAndIgnoreRemainingEvents()
             }
-            cancelAndIgnoreRemainingEvents()
         }
-    }
 }

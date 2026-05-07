@@ -49,38 +49,38 @@ class JvmPluginPresenceProbe(
     private val catalog: Catalog,
     private val settings: SettingsRepository,
 ) : PluginPresenceProbe {
-
     // Tests construct via [forTest] to swap the dispatcher.
     private var ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 
-    override suspend fun probe(): PluginPresenceProbe.ProbeResult = withContext(ioDispatcher) {
-        val configuredRaw = settings.observe().first().pluginFolders
-        val configured = configuredRaw.mapNotNull { runCatching { Paths.get(it) }.getOrNull() }
-        // Only an *intentionally* empty configured list falls back to OS defaults. A non-empty
-        // list with every entry malformed produces an empty installedDirs (plugins flagged
-        // missing) — which is the right signal for the user to fix their settings, not a quiet
-        // re-route to defaults that masks the misconfiguration.
-        val installedDirs = if (configuredRaw.isEmpty()) defaultInstalledDirs() else configured
-        val installedTokens = collectInstalledTokens(installedDirs)
-        val pairs = catalog.catalogQueries.selectAllDistinctPlugins().executeAsList()
-        if (pairs.isEmpty()) return@withContext PluginPresenceProbe.ProbeResult.EMPTY
+    override suspend fun probe(): PluginPresenceProbe.ProbeResult =
+        withContext(ioDispatcher) {
+            val configuredRaw = settings.observe().first().pluginFolders
+            val configured = configuredRaw.mapNotNull { runCatching { Paths.get(it) }.getOrNull() }
+            // Only an *intentionally* empty configured list falls back to OS defaults. A non-empty
+            // list with every entry malformed produces an empty installedDirs (plugins flagged
+            // missing) — which is the right signal for the user to fix their settings, not a quiet
+            // re-route to defaults that masks the misconfiguration.
+            val installedDirs = if (configuredRaw.isEmpty()) defaultInstalledDirs() else configured
+            val installedTokens = collectInstalledTokens(installedDirs)
+            val pairs = catalog.catalogQueries.selectAllDistinctPlugins().executeAsList()
+            if (pairs.isEmpty()) return@withContext PluginPresenceProbe.ProbeResult.EMPTY
 
-        var installed = 0
-        var missing = 0
-        catalog.transaction {
-            for (pair in pairs) {
-                val n = normalize(pair.plugin_name)
-                val present = isInstalledFor(n, installedTokens)
-                catalog.catalogQueries.markPluginsInstalledByNameAndType(
-                    is_installed = if (present) 1L else 0L,
-                    plugin_name = pair.plugin_name,
-                    plugin_type = pair.plugin_type,
-                )
-                if (present) installed++ else missing++
+            var installed = 0
+            var missing = 0
+            catalog.transaction {
+                for (pair in pairs) {
+                    val n = normalize(pair.plugin_name)
+                    val present = isInstalledFor(n, installedTokens)
+                    catalog.catalogQueries.markPluginsInstalledByNameAndType(
+                        is_installed = if (present) 1L else 0L,
+                        plugin_name = pair.plugin_name,
+                        plugin_type = pair.plugin_type,
+                    )
+                    if (present) installed++ else missing++
+                }
             }
+            PluginPresenceProbe.ProbeResult(installedCount = installed, missingCount = missing)
         }
-        PluginPresenceProbe.ProbeResult(installedCount = installed, missingCount = missing)
-    }
 
     private fun collectInstalledTokens(dirs: List<Path>): Set<String> {
         val tokens = mutableSetOf<String>()
@@ -92,13 +92,13 @@ class JvmPluginPresenceProbe(
                 // without descending into bundle internals. Walking the whole tree would be wasted
                 // I/O and a recipe for permission denials inside individual bundles.
                 Files.walk(dir, 2).use { stream ->
-                    stream.asSequence()
+                    stream
+                        .asSequence()
                         .filter { it != dir }
                         .filter { p ->
                             val ext = p.name.substringAfterLast('.', missingDelimiterValue = "").lowercase()
                             ext in PLUGIN_EXTS && (p.isRegularFile() || isPluginBundle(p))
-                        }
-                        .forEach { p ->
+                        }.forEach { p ->
                             val base = p.name.substringBeforeLast('.')
                             val n = normalize(base)
                             if (n.isNotEmpty()) tokens += n
@@ -134,20 +134,26 @@ class JvmPluginPresenceProbe(
             catalog: Catalog,
             settings: SettingsRepository,
             ioDispatcher: CoroutineDispatcher,
-        ): JvmPluginPresenceProbe = JvmPluginPresenceProbe(catalog, settings).also {
-            it.ioDispatcher = ioDispatcher
-        }
+        ): JvmPluginPresenceProbe =
+            JvmPluginPresenceProbe(catalog, settings).also {
+                it.ioDispatcher = ioDispatcher
+            }
 
         // Visible for tests so [JvmPluginPresenceProbeTest] can pin the normalizer's behavior
         // without exercising the full probe pipeline.
         internal fun normalizeForTest(name: String): String = normalize(name)
 
-        private fun normalize(name: String): String = name.lowercase()
-            .replace(PARENS_REGEX, "") // strip "(3.4.0)" etc.
-            .replace(NON_ALPHANUM_REGEX, "")
-            .replace(TRAILING_DIGITS_REGEX, "") // trailing version digits
+        private fun normalize(name: String): String =
+            name
+                .lowercase()
+                .replace(PARENS_REGEX, "") // strip "(3.4.0)" etc.
+                .replace(NON_ALPHANUM_REGEX, "")
+                .replace(TRAILING_DIGITS_REGEX, "") // trailing version digits
 
-        private fun isInstalledFor(catalogToken: String, installedSet: Set<String>): Boolean {
+        private fun isInstalledFor(
+            catalogToken: String,
+            installedSet: Set<String>,
+        ): Boolean {
             if (catalogToken.isEmpty()) return true // unknown — assume installed
             return installedSet.any { it.startsWith(catalogToken) || catalogToken.startsWith(it) }
         }
@@ -158,8 +164,9 @@ class JvmPluginPresenceProbe(
                 os.contains("win") -> {
                     // %CommonProgramFiles% defaults to C:\Program Files\Common Files but honor
                     // the env var so machines with relocated installs Just Work.
-                    val cpf = System.getenv("CommonProgramFiles")
-                        ?: "C:\\Program Files\\Common Files"
+                    val cpf =
+                        System.getenv("CommonProgramFiles")
+                            ?: "C:\\Program Files\\Common Files"
                     listOf(
                         Paths.get(cpf, "VST3"),
                         Paths.get(cpf, "VST2"),
@@ -167,17 +174,21 @@ class JvmPluginPresenceProbe(
                     )
                 }
 
-                os.contains("mac") -> listOf(
-                    Paths.get("/Library/Audio/Plug-Ins/VST3"),
-                    Paths.get("/Library/Audio/Plug-Ins/VST"),
-                    Paths.get("/Library/Audio/Plug-Ins/Components"),
-                )
+                os.contains("mac") -> {
+                    listOf(
+                        Paths.get("/Library/Audio/Plug-Ins/VST3"),
+                        Paths.get("/Library/Audio/Plug-Ins/VST"),
+                        Paths.get("/Library/Audio/Plug-Ins/Components"),
+                    )
+                }
 
                 // Linux producers overwhelmingly use Wine + Windows VSTs; we'd need to walk the
                 // wineprefix to find plugin DLLs and that's a separate feature. Skip for V1 — the
                 // probe still runs but with an empty installed-set, marking everything missing.
                 // TODO: surface a "this isn't a supported platform yet" signal in the chip.
-                else -> emptyList()
+                else -> {
+                    emptyList()
+                }
             }
         }
     }

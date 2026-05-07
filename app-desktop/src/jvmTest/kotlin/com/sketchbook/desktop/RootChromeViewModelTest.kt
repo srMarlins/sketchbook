@@ -33,7 +33,6 @@ import kotlin.test.assertSame
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RootChromeViewModelTest {
-
     private val mainDispatcher = StandardTestDispatcher()
 
     @BeforeTest fun setUpMain() {
@@ -63,28 +62,32 @@ class RootChromeViewModelTest {
     }
 
     @Test
-    fun `dismissPrompt drives the settings repository via the dispatched samples kind`() = runTest(mainDispatcher) {
-        // Probe: re-implement the dispatch table the VM uses so we can verify the mapping
-        // without standing up the full chrome graph. The VM's `dismissPrompt` is a one-line
-        // `when (prompt) { AddSamples -> repo.dismissOnboardingPrompt(Samples) }` — the test
-        // covers the same contract.
-        val settings = FakeSettingsRepository(
-            initial = Settings(
-                libraryRoots = emptyList(),
-                selfContainedProjects = emptySet(),
-                cacheSettings = BlobCacheSettings.Default,
-                onboardingSkipped = OnboardingSkipFlags(samplesSkipped = true),
-            ),
-        )
+    fun `dismissPrompt drives the settings repository via the dispatched samples kind`() =
+        runTest(mainDispatcher) {
+            // Probe: re-implement the dispatch table the VM uses so we can verify the mapping
+            // without standing up the full chrome graph. The VM's `dismissPrompt` is a one-line
+            // `when (prompt) { AddSamples -> repo.dismissOnboardingPrompt(Samples) }` — the test
+            // covers the same contract.
+            val settings =
+                FakeSettingsRepository(
+                    initial =
+                        Settings(
+                            libraryRoots = emptyList(),
+                            selfContainedProjects = emptySet(),
+                            cacheSettings = BlobCacheSettings.Default,
+                            onboardingSkipped = OnboardingSkipFlags(samplesSkipped = true),
+                        ),
+                )
 
-        suspend fun dispatch(prompt: OnboardingPrompt) = when (prompt) {
-            OnboardingPrompt.AddSamples -> settings.dismissOnboardingPrompt(OnboardingPromptKind.Samples)
+            suspend fun dispatch(prompt: OnboardingPrompt) =
+                when (prompt) {
+                    OnboardingPrompt.AddSamples -> settings.dismissOnboardingPrompt(OnboardingPromptKind.Samples)
+                }
+            dispatch(OnboardingPrompt.AddSamples)
+            advanceUntilIdle()
+
+            assertEquals(listOf(OnboardingPromptKind.Samples), settings.dismissed)
         }
-        dispatch(OnboardingPrompt.AddSamples)
-        advanceUntilIdle()
-
-        assertEquals(listOf(OnboardingPromptKind.Samples), settings.dismissed)
-    }
 }
 
 /**
@@ -92,32 +95,48 @@ class RootChromeViewModelTest {
  * and not visible from app-desktop's JVM tests; pulling it through Gradle test fixtures is out
  * of scope for this PR.
  */
-private class FakeSettingsRepository(initial: Settings) : SettingsRepository {
+private class FakeSettingsRepository(
+    initial: Settings,
+) : SettingsRepository {
     private val flow = MutableStateFlow(initial)
     val dismissed = mutableListOf<OnboardingPromptKind>()
 
     override fun observe(): Flow<Settings> = flow
+
     override suspend fun upsertRoot(root: LibraryRoot) = Result.success(Unit)
+
     override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
+
     override suspend fun setCloudBucket(bucket: String?) = Result.success(Unit)
-    override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean) = Result.success(Unit)
+
+    override suspend fun setSelfContained(
+        uuid: ProjectUuid,
+        value: Boolean,
+    ) = Result.success(Unit)
+
     override suspend fun setCacheSettings(settings: BlobCacheSettings) = Result.success(Unit)
+
     override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Result.success(Unit)
+
     override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> {
         dismissed += kind
         val current = flow.value.onboardingSkipped
-        val updated = when (kind) {
-            OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
-        }
+        val updated =
+            when (kind) {
+                OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
+            }
         flow.value = flow.value.copy(onboardingSkipped = updated)
         return Result.success(Unit)
     }
+
     override suspend fun setPluginFolders(folders: List<String>) = Result.success(Unit)
+
     override suspend fun resetFirstRun(): Result<Unit> {
-        flow.value = flow.value.copy(
-            firstRunCompletedAt = null,
-            onboardingSkipped = OnboardingSkipFlags(),
-        )
+        flow.value =
+            flow.value.copy(
+                firstRunCompletedAt = null,
+                onboardingSkipped = OnboardingSkipFlags(),
+            )
         return Result.success(Unit)
     }
 }

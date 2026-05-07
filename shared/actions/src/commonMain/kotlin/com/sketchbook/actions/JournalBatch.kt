@@ -22,18 +22,20 @@ object JournalJson {
      * compare byte-for-byte. `encodeDefaults` is on so optional `noop`/`hash_before`/etc.
      * always render.
      */
-    val pretty: Json = Json {
-        prettyPrint = true
-        prettyPrintIndent = "  "
-        encodeDefaults = true
-        ignoreUnknownKeys = true
-        classDiscriminator = "type"
-    }
+    val pretty: Json =
+        Json {
+            prettyPrint = true
+            prettyPrintIndent = "  "
+            encodeDefaults = true
+            ignoreUnknownKeys = true
+            classDiscriminator = "type"
+        }
 
-    val compact: Json = Json {
-        prettyPrint = false
-        encodeDefaults = true
-        ignoreUnknownKeys = true
-        classDiscriminator = "type"
-    }
+    val compact: Json =
+        Json {
+            prettyPrint = false
+            encodeDefaults = true
+            ignoreUnknownKeys = true
+            classDiscriminator = "type"
+        }
 }

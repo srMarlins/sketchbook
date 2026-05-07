@@ -24,45 +24,67 @@ import kotlin.time.Instant
 class FileProposalsWriter(
     private val root: Path,
     private val clock: Clock = Clock.System,
-    private val randomHex: () -> String = { Random.nextLong().toULong().toString(16).padStart(16, '0').take(8) },
+    private val randomHex: () -> String = {
+        Random
+            .nextLong()
+            .toULong()
+            .toString(16)
+            .padStart(16, '0')
+            .take(8)
+    },
 ) : ProposalsWriter {
-
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
-    private val json = Json {
-        prettyPrint = true
-        prettyPrintIndent = "  "
-        encodeDefaults = true
-    }
+    private val json =
+        Json {
+            prettyPrint = true
+            prettyPrintIndent = "  "
+            encodeDefaults = true
+        }
 
-    override suspend fun write(actions: List<ProposedAction>, rationale: String?): String {
+    override suspend fun write(
+        actions: List<ProposedAction>,
+        rationale: String?,
+    ): String {
         Files.createDirectories(root)
         val id = newProposalId(clock.now())
-        val payload = buildJsonObject {
-            put("proposal_id", id)
-            put("actor", "claude")
-            put(
-                "actions",
-                buildJsonArray {
-                    actions.forEach { a ->
-                        add(
-                            buildJsonObject {
-                                put("type", a.type)
-                                put("args", a.args)
-                            },
-                        )
-                    }
-                },
-            )
-            put("rationale", rationale?.let(::JsonPrimitive) ?: JsonNull)
-        }
+        val payload =
+            buildJsonObject {
+                put("proposal_id", id)
+                put("actor", "claude")
+                put(
+                    "actions",
+                    buildJsonArray {
+                        actions.forEach { a ->
+                            add(
+                                buildJsonObject {
+                                    put("type", a.type)
+                                    put("args", a.args)
+                                },
+                            )
+                        }
+                    },
+                )
+                put("rationale", rationale?.let(::JsonPrimitive) ?: JsonNull)
+            }
         val file = root.resolve("$id.json")
-        file.writeText(json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), payload))
+        file.writeText(
+            json.encodeToString(
+                kotlinx.serialization.json.JsonObject
+                    .serializer(),
+                payload,
+            ),
+        )
         return id
     }
 
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private fun newProposalId(now: Instant): String {
-        val ts = now.toString().replace(':', '-').substringBefore('.').removeSuffix("Z")
+        val ts =
+            now
+                .toString()
+                .replace(':', '-')
+                .substringBefore('.')
+                .removeSuffix("Z")
         return "${ts}_${randomHex()}"
     }
 }

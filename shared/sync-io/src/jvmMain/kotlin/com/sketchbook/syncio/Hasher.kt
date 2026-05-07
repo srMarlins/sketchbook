@@ -15,7 +15,6 @@ import java.nio.file.Path
  * platform (rare — pure-Java backend, but futureproof). Callers can fall back or bail.
  */
 object Hasher {
-
     private const val BUFFER_SIZE = 64 * 1024
 
     val available: Boolean by lazy {

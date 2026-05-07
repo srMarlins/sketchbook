@@ -36,12 +36,13 @@ fun main() {
     val handle = CatalogDb.openOnDisk(dbPath)
     val fts = CatalogFts(handle.driver)
     val journal = SqlJournalRepository(catalog = handle.catalog, ioDispatcher = Dispatchers.IO)
-    val repository = SqlProjectRepository(
-        catalog = handle.catalog,
-        ioDispatcher = Dispatchers.IO,
-        journal = journal,
-        fts = ProjectFtsSearcher { query -> fts.search(query) },
-    )
+    val repository =
+        SqlProjectRepository(
+            catalog = handle.catalog,
+            ioDispatcher = Dispatchers.IO,
+            journal = journal,
+            fts = ProjectFtsSearcher { query -> fts.search(query) },
+        )
     val proposalsWriter = FileProposalsWriter(root = proposalsDir)
     val tools = Tools(repository = repository, proposalsWriter = proposalsWriter)
     val server = McpServer(tools = tools)
@@ -66,11 +67,12 @@ private fun proposalsDir(): Path {
 private fun dataDir(): Path {
     val os = System.getProperty("os.name").orEmpty().lowercase()
     val home = Paths.get(System.getProperty("user.home"))
-    val dir = when {
-        os.contains("win") -> Paths.get(System.getenv("APPDATA") ?: home.toString()).resolve("Sketchbook")
-        os.contains("mac") -> home.resolve("Library/Application Support/Sketchbook")
-        else -> home.resolve(".local/share/sketchbook")
-    }
+    val dir =
+        when {
+            os.contains("win") -> Paths.get(System.getenv("APPDATA") ?: home.toString()).resolve("Sketchbook")
+            os.contains("mac") -> home.resolve("Library/Application Support/Sketchbook")
+            else -> home.resolve(".local/share/sketchbook")
+        }
     Files.createDirectories(dir)
     return dir
 }

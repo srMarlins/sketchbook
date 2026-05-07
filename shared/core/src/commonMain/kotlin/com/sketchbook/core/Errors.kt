@@ -8,18 +8,27 @@ sealed class SketchbookError(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause) {
-
     /** No row matched the given identifier. */
-    class NotFound(message: String) : SketchbookError(message)
+    class NotFound(
+        message: String,
+    ) : SketchbookError(message)
 
     /** Optimistic-concurrency / lease-lock conflict. */
-    class Conflict(message: String) : SketchbookError(message)
+    class Conflict(
+        message: String,
+    ) : SketchbookError(message)
 
     /** A blob, manifest, or sidecar failed an integrity check (hash mismatch, malformed JSON…). */
-    class IntegrityError(message: String, cause: Throwable? = null) : SketchbookError(message, cause)
+    class IntegrityError(
+        message: String,
+        cause: Throwable? = null,
+    ) : SketchbookError(message, cause)
 
     /** Local I/O failure (disk full, permission denied, file vanished mid-read…). */
-    class IoFailure(message: String, cause: Throwable? = null) : SketchbookError(message, cause)
+    class IoFailure(
+        message: String,
+        cause: Throwable? = null,
+    ) : SketchbookError(message, cause)
 
     /**
      * Cloud HTTP failure. [status] is the HTTP code; [body] is the truncated response body for diag.

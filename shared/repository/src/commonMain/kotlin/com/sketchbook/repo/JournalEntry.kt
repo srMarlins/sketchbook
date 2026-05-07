@@ -54,7 +54,6 @@ data class JournalEntry(
  */
 @Serializable
 sealed interface ActionRecord {
-
     val typeKey: String
 
     @Serializable
@@ -63,6 +62,7 @@ sealed interface ActionRecord {
         val pathAfter: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "Move"
         }
@@ -74,6 +74,7 @@ sealed interface ActionRecord {
         val nameAfter: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "Rename"
         }
@@ -85,6 +86,7 @@ sealed interface ActionRecord {
         val isArchived: Boolean,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "Archive"
         }
@@ -96,6 +98,7 @@ sealed interface ActionRecord {
         val after: List<String>,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "SetTags"
         }
@@ -108,6 +111,7 @@ sealed interface ActionRecord {
         val priorExpiresAtMs: Long?,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "ForceTakeLock"
         }
@@ -123,6 +127,7 @@ sealed interface ActionRecord {
         val theirRev: Long,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "PushConflict"
         }
@@ -142,6 +147,7 @@ sealed interface ActionRecord {
         val alsOutcome: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "MissingSampleMapped"
         }
@@ -162,6 +168,7 @@ sealed interface ActionRecord {
         val alsOutcome: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "MissingSampleUnmapped"
         }
@@ -188,6 +195,7 @@ sealed interface ActionRecord {
         val alsOutcome: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "MacPathRepaired"
         }
@@ -207,6 +215,7 @@ sealed interface ActionRecord {
         val alsOutcome: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "MacPathRestored"
         }
@@ -234,6 +243,7 @@ sealed interface ActionRecord {
         val kindBefore: String,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "SnapshotRelabeled"
         }
@@ -253,6 +263,7 @@ sealed interface ActionRecord {
         val stageAfter: String?,
     ) : ActionRecord {
         override val typeKey: String get() = TYPE_KEY
+
         companion object {
             const val TYPE_KEY: String = "StageOverridden"
         }

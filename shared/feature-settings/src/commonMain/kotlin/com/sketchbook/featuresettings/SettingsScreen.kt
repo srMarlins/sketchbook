@@ -51,10 +51,11 @@ fun SettingsScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val scroll = rememberScrollState()
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(PaddingValues(horizontal = AppTheme.spacing.xl, vertical = AppTheme.spacing.lg)),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .verticalScroll(scroll)
+                .padding(PaddingValues(horizontal = AppTheme.spacing.xl, vertical = AppTheme.spacing.lg)),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(
@@ -280,7 +281,10 @@ fun SettingsScreen(
 }
 
 private fun humanRelative(ms: Long): String {
-    val deltaMs = kotlin.time.Clock.System.now().toEpochMilliseconds() - ms
+    val deltaMs =
+        kotlin.time.Clock.System
+            .now()
+            .toEpochMilliseconds() - ms
     val sec = deltaMs / 1000
     return when {
         sec < 60 -> "${sec}s ago"
@@ -295,14 +299,21 @@ private fun humanGiB(bytes: Long): String {
     return if (gb >= 1.0) "${"%.1f".format(gb)} GiB" else "${bytes / (1024 * 1024)} MiB"
 }
 
-private fun scaleSize(current: Long, direction: Int): BlobCacheSettings {
+private fun scaleSize(
+    current: Long,
+    direction: Int,
+): BlobCacheSettings {
     val gib = (current / (1024L * 1024 * 1024)).coerceAtLeast(1)
     val newGib = (gib + direction * 5L).coerceIn(1L, 500L)
     return BlobCacheSettings(maxSizeBytes = newGib * 1024L * 1024 * 1024, lruEnabled = true)
 }
 
 @Composable
-private fun Section(title: String, hint: String? = null, content: @Composable () -> Unit) {
+private fun Section(
+    title: String,
+    hint: String? = null,
+    content: @Composable () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
         Text(title, style = AppTheme.typography.bodyEmphasis)
         if (hint != null) {
@@ -313,18 +324,22 @@ private fun Section(title: String, hint: String? = null, content: @Composable ()
 }
 
 @Composable
-private fun LibraryRootCard(root: LibraryRoot, onRemove: () -> Unit) {
+private fun LibraryRootCard(
+    root: LibraryRoot,
+    onRemove: () -> Unit,
+) {
     Surface(color = AppTheme.colors.surfaceCard, elevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
         ) {
-            val (kind, color) = when (root) {
-                is LibraryRoot.Projects -> "projects" to AppTheme.colors.pinBlue
-                is LibraryRoot.UserSamples -> "samples" to AppTheme.colors.pinPurple
-                is LibraryRoot.External -> "external (${root.kind.name.lowercase()})" to AppTheme.colors.pinOrange
-            }
+            val (kind, color) =
+                when (root) {
+                    is LibraryRoot.Projects -> "projects" to AppTheme.colors.pinBlue
+                    is LibraryRoot.UserSamples -> "samples" to AppTheme.colors.pinPurple
+                    is LibraryRoot.External -> "external (${root.kind.name.lowercase()})" to AppTheme.colors.pinOrange
+                }
             Badge(color = color) { Text(kind, style = AppTheme.typography.caption) }
             Column(modifier = Modifier.weight(1f)) {
                 Text(root.path, style = AppTheme.typography.body)

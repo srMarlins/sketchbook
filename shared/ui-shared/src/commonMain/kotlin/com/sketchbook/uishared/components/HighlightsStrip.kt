@@ -54,36 +54,46 @@ fun HighlightsStrip(
             val tint = if (empty) colors.surfaceCard else chip.tint
             val alpha = if (empty) 0.55f else 1f
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(tint)
-                    .border(1.dp, borderColor, RoundedCornerShape(50))
-                    .clickable { onSelect(chip.id) }
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(tint)
+                        .border(1.dp, borderColor, RoundedCornerShape(50))
+                        .clickable { onSelect(chip.id) }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (empty) colors.ruleLineStrong else chip.dotColor),
+                    modifier =
+                        Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (empty) colors.ruleLineStrong else chip.dotColor),
                 )
                 ProvideContentColor(if (empty) colors.inkMuted else colors.inkSecondary) {
                     Text(
                         chip.title.uppercase(),
-                        style = AppTheme.typography.mono.copy(
-                            fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                            letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
-                        ),
+                        style =
+                            AppTheme.typography.mono.copy(
+                                fontSize =
+                                    androidx.compose.ui.unit
+                                        .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                                letterSpacing =
+                                    androidx.compose.ui.unit
+                                        .TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            ),
                     )
                 }
                 ProvideContentColor(colors.inkMuted) {
                     Text(
                         "· ${chip.count}",
-                        style = AppTheme.typography.mono.copy(
-                            fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                        ),
+                        style =
+                            AppTheme.typography.mono.copy(
+                                fontSize =
+                                    androidx.compose.ui.unit
+                                        .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                            ),
                     )
                 }
             }

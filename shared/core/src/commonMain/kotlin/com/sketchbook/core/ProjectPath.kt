@@ -14,8 +14,9 @@ import kotlinx.serialization.Serializable
  */
 @JvmInline
 @Serializable
-value class ProjectPath(val value: String) {
-
+value class ProjectPath(
+    val value: String,
+) {
     init {
         require(value.isNotBlank()) { "ProjectPath must not be blank" }
         require('\\' !in value) { "ProjectPath must use forward slashes, got '$value'" }

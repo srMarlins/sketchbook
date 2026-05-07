@@ -121,9 +121,10 @@ fun ProjectListScreen(
 
         LazyColumn(
             state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(PaddingValues(horizontal = AppTheme.spacing.xl, vertical = AppTheme.spacing.lg)),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(PaddingValues(horizontal = AppTheme.spacing.xl, vertical = AppTheme.spacing.lg)),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg),
         ) {
@@ -136,37 +137,42 @@ fun ProjectListScreen(
                 ) {
                     PageHeader(
                         title = state.zoomShelf?.title() ?: "Projects",
-                        subtitle = state.zoomShelf?.subtitle()
-                            ?: "Your Ableton catalog — ${state.groups.size} project${if (state.groups.size == 1) "" else "s"}, " +
-                            "${state.rows.size} `.als` file${if (state.rows.size == 1) "" else "s"}.",
-                        actions = if (state.zoomShelf != null) {
-                            { BackToOverview(onClick = { onZoomShelf(null) }) }
-                        } else {
-                            null
-                        },
+                        subtitle =
+                            state.zoomShelf?.subtitle()
+                                ?: "Your Ableton catalog — ${state.groups.size} project${if (state.groups.size == 1) "" else "s"}, " +
+                                "${state.rows.size} `.als` file${if (state.rows.size == 1) "" else "s"}.",
+                        actions =
+                            if (state.zoomShelf != null) {
+                                { BackToOverview(onClick = { onZoomShelf(null) }) }
+                            } else {
+                                null
+                            },
                     )
                     TextField(
                         value = state.query,
                         onChange = { dispatch(ProjectListViewModel.Intent.Search(it)) },
                         placeholder = "Search projects, plugins, samples…",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onPreviewKeyEvent { event -> handleSearchKey(event, state, dispatch) },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .onPreviewKeyEvent { event -> handleSearchKey(event, state, dispatch) },
                         leading = { Text("⌕", style = AppTheme.typography.body) },
-                        trailing = if (state.query.isNotBlank()) {
-                            {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .clickable(onClick = onClearSearch)
-                                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                                ) {
-                                    Text("×", style = AppTheme.typography.body)
+                        trailing =
+                            if (state.query.isNotBlank()) {
+                                {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .clickable(onClick = onClearSearch)
+                                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                                    ) {
+                                        Text("×", style = AppTheme.typography.body)
+                                    }
                                 }
-                            }
-                        } else {
-                            null
-                        },
+                            } else {
+                                null
+                            },
                     )
                     FilterChipsRow(
                         tempoRange = state.tempoRange,
@@ -227,28 +233,30 @@ fun ProjectListScreen(
         if (state.query.isNotBlank()) {
             // Scrim: paper-fog over the base layer; click anywhere to clear the query.
             Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(AppTheme.colors.surfaceSunken.copy(alpha = 0.85f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onClearSearch,
-                    ),
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .background(AppTheme.colors.surfaceSunken.copy(alpha = 0.85f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onClearSearch,
+                        ),
             )
             // Anchor the panel just under the search field. The header item's height is roughly
             // the page padding (lg) + page title + search field + scan ribbon + spacing —
             // approximated as 200dp so the panel reads as "below the field".
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 200.dp, start = AppTheme.spacing.xl, end = AppTheme.spacing.xl)
-                    .widthIn(max = 1240.dp + AppTheme.spacing.xl.value.dp * 2)
-                    .align(Alignment.TopCenter)
-                    .heightIn(max = (viewportMaxHeight - 220.dp).coerceAtLeast(200.dp))
-                    .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
-                    .background(AppTheme.colors.surfaceCard)
-                    .border(1.dp, AppTheme.colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard)),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 200.dp, start = AppTheme.spacing.xl, end = AppTheme.spacing.xl)
+                        .widthIn(max = 1240.dp + AppTheme.spacing.xl.value.dp * 2)
+                        .align(Alignment.TopCenter)
+                        .heightIn(max = (viewportMaxHeight - 220.dp).coerceAtLeast(200.dp))
+                        .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+                        .background(AppTheme.colors.surfaceCard)
+                        .border(1.dp, AppTheme.colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard)),
             ) {
                 SearchOverlayPanel(
                     groups = state.searchResults,
@@ -299,7 +307,9 @@ private fun handleSearchKey(
             true
         }
 
-        else -> false
+        else -> {
+            false
+        }
     }
 }
 
@@ -307,19 +317,25 @@ private fun handleSearchKey(
 private fun BackToOverview(onClick: () -> Unit) {
     val colors = AppTheme.colors
     Row(
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .clickable(onClick = onClick)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         ProvideContentColor(colors.inkMuted) {
             Text(
                 "← OVERVIEW",
-                style = AppTheme.typography.mono.copy(
-                    fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
-                ),
+                style =
+                    AppTheme.typography.mono.copy(
+                        fontSize =
+                            androidx.compose.ui.unit
+                                .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        letterSpacing =
+                            androidx.compose.ui.unit
+                                .TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
             )
         }
     }
@@ -362,15 +378,28 @@ private fun HomeDashboard(
         // Six chips in fixed display order, mirroring web/src/components/data/HighlightsStrip.tsx
         // CATEGORIES. Empty categories stay in the row (dim) so layout doesn't shift between scans.
         HighlightsStrip(
-            chips = listOf(
-                HighlightChip(ShelfId.CurrentlyWorking.id, "Currently working on", buckets.currentlyWorking.size, colors.pinBlue, colors.tintBlue),
-                HighlightChip(ShelfId.ForgottenGems.id, "Forgotten gems", buckets.forgottenGems.size, colors.accentWarning, colors.tintCream),
-                HighlightChip(ShelfId.AlmostDone.id, "Almost done", buckets.almostDone.size, colors.pinOrange, colors.tintSage),
-                HighlightChip(ShelfId.HasPotential.id, "Has potential", buckets.hasPotential.size, colors.pinPurple, colors.tintRose),
-                HighlightChip(ShelfId.Untriaged.id, "Untriaged", buckets.untriaged.size, colors.inkMuted, colors.surfaceCard),
-                HighlightChip(ShelfId.Broken.id, "Broken", buckets.broken.size, colors.accentDanger, colors.tintRose),
-                HighlightChip(ShelfId.Archived.id, "Archived", buckets.archived.size, colors.inkMuted, colors.surfaceCard),
-            ),
+            chips =
+                listOf(
+                    HighlightChip(
+                        ShelfId.CurrentlyWorking.id,
+                        "Currently working on",
+                        buckets.currentlyWorking.size,
+                        colors.pinBlue,
+                        colors.tintBlue,
+                    ),
+                    HighlightChip(
+                        ShelfId.ForgottenGems.id,
+                        "Forgotten gems",
+                        buckets.forgottenGems.size,
+                        colors.accentWarning,
+                        colors.tintCream,
+                    ),
+                    HighlightChip(ShelfId.AlmostDone.id, "Almost done", buckets.almostDone.size, colors.pinOrange, colors.tintSage),
+                    HighlightChip(ShelfId.HasPotential.id, "Has potential", buckets.hasPotential.size, colors.pinPurple, colors.tintRose),
+                    HighlightChip(ShelfId.Untriaged.id, "Untriaged", buckets.untriaged.size, colors.inkMuted, colors.surfaceCard),
+                    HighlightChip(ShelfId.Broken.id, "Broken", buckets.broken.size, colors.accentDanger, colors.tintRose),
+                    HighlightChip(ShelfId.Archived.id, "Archived", buckets.archived.size, colors.inkMuted, colors.surfaceCard),
+                ),
             onSelect = { id -> ShelfId.fromId(id)?.let(onZoomShelf) },
             modifier = Modifier.fillMaxWidth(),
         )
@@ -379,7 +408,9 @@ private fun HomeDashboard(
             Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
                 EmptyState(
                     title = "No projects yet",
-                    hint = "Open Settings → Library roots and add the folder where you keep your Ableton projects. Sketchbook scans on launch and updates the catalog as files change.",
+                    hint =
+                        "Open Settings → Library roots and add the folder where you keep your " +
+                            "Ableton projects. Sketchbook scans on launch and updates the catalog as files change.",
                 )
             }
         } else if (isWide) {
@@ -390,7 +421,9 @@ private fun HomeDashboard(
                 Box(modifier = Modifier.weight(1f)) {
                     Shelf(
                         title = "Currently working on",
-                        subtitle = "Active sketches — blue color tag or touched in the last 6 months. ${buckets.currentlyWorking.size} total.",
+                        subtitle =
+                            "Active sketches — blue color tag or touched in the last 6 months. " +
+                                "${buckets.currentlyWorking.size} total.",
                         groups = buckets.currentlyWorking.take(SHELF_LIMIT),
                         onOpen = onOpen,
                         onSeeAll = { onZoomShelf(ShelfId.CurrentlyWorking) },
@@ -530,14 +563,15 @@ private fun BoxScope.DetailPanel(
         modifier = Modifier.fillMaxSize(),
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(AppTheme.colors.surfaceOverlay)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onDismiss,
-                ),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(AppTheme.colors.surfaceOverlay)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onDismiss,
+                    ),
         )
     }
     AnimatedVisibility(
@@ -547,10 +581,11 @@ private fun BoxScope.DetailPanel(
         modifier = Modifier.align(Alignment.CenterEnd),
     ) {
         Box(
-            modifier = Modifier
-                .widthIn(min = 460.dp, max = 820.dp)
-                .fillMaxHeight()
-                .background(AppTheme.colors.surfaceCard),
+            modifier =
+                Modifier
+                    .widthIn(min = 460.dp, max = 820.dp)
+                    .fillMaxHeight()
+                    .background(AppTheme.colors.surfaceCard),
         ) {
             val id = openId
             if (id != null && content != null) {
@@ -580,15 +615,17 @@ private fun FilterChipsRow(
     var keyOpen by remember { mutableStateOf(false) }
     var stageOpen by remember { mutableStateOf(false) }
 
-    val tempoLabel = tempoRange?.let { range ->
-        "Tempo: ${formatBpm(range.start)}–${formatBpm(range.endInclusive)}"
-    } ?: "Tempo: any"
+    val tempoLabel =
+        tempoRange?.let { range ->
+            "Tempo: ${formatBpm(range.start)}–${formatBpm(range.endInclusive)}"
+        } ?: "Tempo: any"
     val keyLabel = "Key: ${keyFilter ?: "any"}"
-    val stageLabel = if (stageFilter.isEmpty()) {
-        "Stage: any"
-    } else {
-        "Stage: " + stageFilter.sortedBy { it.ordinal }.joinToString(", ") { it.name.lowercase() }
-    }
+    val stageLabel =
+        if (stageFilter.isEmpty()) {
+            "Stage: any"
+        } else {
+            "Stage: " + stageFilter.sortedBy { it.ordinal }.joinToString(", ") { it.name.lowercase() }
+        }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -684,11 +721,12 @@ private fun StageFilterPopup(
 ) {
     val colors = AppTheme.colors
     Column(
-        modifier = Modifier
-            .widthIn(min = 200.dp, max = 260.dp)
-            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
-            .background(colors.surfaceCard)
-            .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard)),
+        modifier =
+            Modifier
+                .widthIn(min = 200.dp, max = 260.dp)
+                .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+                .background(colors.surfaceCard)
+                .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard)),
     ) {
         StageFilterRow(label = "Any", selected = current.isEmpty(), onClick = onAny)
         for (stage in Stage.values()) {
@@ -702,14 +740,19 @@ private fun StageFilterPopup(
 }
 
 @Composable
-private fun StageFilterRow(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun StageFilterRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     val colors = AppTheme.colors
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (selected) colors.tintCream else colors.surfaceCard)
-            .clickable(onClick = onClick)
-            .padding(horizontal = AppTheme.spacing.md, vertical = 8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(if (selected) colors.tintCream else colors.surfaceCard)
+                .clickable(onClick = onClick)
+                .padding(horizontal = AppTheme.spacing.md, vertical = 8.dp),
     ) {
         ProvideContentColor(if (selected) colors.inkPrimary else colors.inkSecondary) {
             Text(label, style = AppTheme.typography.body)
@@ -719,26 +762,36 @@ private fun StageFilterRow(label: String, selected: Boolean, onClick: () -> Unit
 
 /** Single pill chip — same geometry/typography as HighlightsStrip chips for visual cohesion. */
 @Composable
-private fun FilterChip(label: String, active: Boolean, onClick: () -> Unit) {
+private fun FilterChip(
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
     val colors = AppTheme.colors
     val borderColor = if (active) colors.accentSecondary else colors.ruleLineStrong
     val tint = if (active) colors.tintCream else colors.surfaceCard
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(tint)
-            .border(1.dp, borderColor, RoundedCornerShape(50))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(tint)
+                .border(1.dp, borderColor, RoundedCornerShape(50))
+                .clickable(onClick = onClick)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ProvideContentColor(if (active) colors.inkPrimary else colors.inkSecondary) {
             Text(
                 label.uppercase(),
-                style = AppTheme.typography.mono.copy(
-                    fontSize = androidx.compose.ui.unit.TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    letterSpacing = androidx.compose.ui.unit.TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
-                ),
+                style =
+                    AppTheme.typography.mono.copy(
+                        fontSize =
+                            androidx.compose.ui.unit
+                                .TextUnit(11f, androidx.compose.ui.unit.TextUnitType.Sp),
+                        letterSpacing =
+                            androidx.compose.ui.unit
+                                .TextUnit(0.8f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    ),
             )
         }
     }
@@ -759,12 +812,13 @@ private fun TempoFilterPopup(
     var maxText by remember { mutableStateOf(current?.endInclusive?.let { formatBpm(it) } ?: "") }
 
     Column(
-        modifier = Modifier
-            .widthIn(min = 240.dp, max = 280.dp)
-            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
-            .background(colors.surfaceCard)
-            .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard))
-            .padding(AppTheme.spacing.md),
+        modifier =
+            Modifier
+                .widthIn(min = 240.dp, max = 280.dp)
+                .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+                .background(colors.surfaceCard)
+                .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard))
+                .padding(AppTheme.spacing.md),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
     ) {
         ProvideContentColor(colors.inkSecondary) {
@@ -795,12 +849,13 @@ private fun TempoFilterPopup(
             horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
         ) {
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(50))
-                    .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(50))
-                    .clickable(onClick = onClear)
-                    .padding(vertical = 6.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(50))
+                        .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(50))
+                        .clickable(onClick = onClear)
+                        .padding(vertical = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 ProvideContentColor(colors.inkSecondary) {
@@ -808,16 +863,16 @@ private fun TempoFilterPopup(
                 }
             }
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(50))
-                    .background(colors.tintCream)
-                    .border(1.dp, colors.accentSecondary, RoundedCornerShape(50))
-                    .clickable {
-                        val range = parseTempoRange(minText, maxText)
-                        onApply(range)
-                    }
-                    .padding(vertical = 6.dp),
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(50))
+                        .background(colors.tintCream)
+                        .border(1.dp, colors.accentSecondary, RoundedCornerShape(50))
+                        .clickable {
+                            val range = parseTempoRange(minText, maxText)
+                            onApply(range)
+                        }.padding(vertical = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 ProvideContentColor(colors.inkPrimary) {
@@ -832,7 +887,10 @@ private fun TempoFilterPopup(
  * Parse min/max strings into a clamped range. Empty fields become open-ended (40 / 240).
  * Both empty → null (no filter). Invalid input falls through to null on its side.
  */
-internal fun parseTempoRange(minText: String, maxText: String): ClosedFloatingPointRange<Double>? {
+internal fun parseTempoRange(
+    minText: String,
+    maxText: String,
+): ClosedFloatingPointRange<Double>? {
     val rawMin = minText.trim().toDoubleOrNull()
     val rawMax = maxText.trim().toDoubleOrNull()
     if (rawMin == null && rawMax == null) return null
@@ -863,12 +921,13 @@ private fun KeyFilterPopup(
 ) {
     val colors = AppTheme.colors
     Column(
-        modifier = Modifier
-            .widthIn(min = 200.dp, max = 260.dp)
-            .heightIn(max = 320.dp)
-            .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
-            .background(colors.surfaceCard)
-            .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard)),
+        modifier =
+            Modifier
+                .widthIn(min = 200.dp, max = 260.dp)
+                .heightIn(max = 320.dp)
+                .clip(RoundedCornerShape(AppTheme.spacing.cornerCard))
+                .background(colors.surfaceCard)
+                .border(1.dp, colors.ruleLineStrong, RoundedCornerShape(AppTheme.spacing.cornerCard)),
     ) {
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
             KeyRow(label = "Any", selected = current == null) { onPick(null) }
@@ -889,14 +948,19 @@ private fun KeyFilterPopup(
 }
 
 @Composable
-private fun KeyRow(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun KeyRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     val colors = AppTheme.colors
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(if (selected) colors.tintCream else colors.surfaceCard)
-            .clickable(onClick = onClick)
-            .padding(horizontal = AppTheme.spacing.md, vertical = 8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(if (selected) colors.tintCream else colors.surfaceCard)
+                .clickable(onClick = onClick)
+                .padding(horizontal = AppTheme.spacing.md, vertical = 8.dp),
     ) {
         ProvideContentColor(if (selected) colors.inkPrimary else colors.inkSecondary) {
             Text(label, style = AppTheme.typography.body)
@@ -928,39 +992,45 @@ private fun ProjectGroup.toSongStripData(sync: ProjectSyncState?): SongStripData
     )
 }
 
-private fun Stage.toChip(): SongStageChip = SongStageChip(
-    label = label,
-    tone = when (this) {
-        Stage.Sketch -> SongStageTone.Sketch
-        Stage.InProgress -> SongStageTone.InProgress
-        Stage.Mixing -> SongStageTone.Mixing
-        Stage.Done -> SongStageTone.Done
-        Stage.Stuck -> SongStageTone.Stuck
-    },
-)
+private fun Stage.toChip(): SongStageChip =
+    SongStageChip(
+        label = label,
+        tone =
+            when (this) {
+                Stage.Sketch -> SongStageTone.Sketch
+                Stage.InProgress -> SongStageTone.InProgress
+                Stage.Mixing -> SongStageTone.Mixing
+                Stage.Done -> SongStageTone.Done
+                Stage.Stuck -> SongStageTone.Stuck
+            },
+    )
 
 internal fun ProjectGroup.toSongStripDataForTest(sync: ProjectSyncState?): SongStripData = toSongStripData(sync)
 
-private fun ProjectSyncState.toBadge(): SongSyncBadge = when (this) {
-    ProjectSyncState.Synced -> SongSyncBadge.Synced
+private fun ProjectSyncState.toBadge(): SongSyncBadge =
+    when (this) {
+        ProjectSyncState.Synced -> SongSyncBadge.Synced
 
-    ProjectSyncState.Pending -> SongSyncBadge.Pending
+        ProjectSyncState.Pending -> SongSyncBadge.Pending
 
-    ProjectSyncState.Uploading -> SongSyncBadge.Uploading
+        ProjectSyncState.Uploading -> SongSyncBadge.Uploading
 
-    ProjectSyncState.Conflict -> SongSyncBadge.Conflict
+        ProjectSyncState.Conflict -> SongSyncBadge.Conflict
 
-    // Remote ahead is "we owe a pull" — surface it as Pending in the song-strip badge so the
-    // user reads "this row needs sync attention" without introducing a new badge variant.
-    ProjectSyncState.RemoteAhead -> SongSyncBadge.Pending
+        // Remote ahead is "we owe a pull" — surface it as Pending in the song-strip badge so the
+        // user reads "this row needs sync attention" without introducing a new badge variant.
+        ProjectSyncState.RemoteAhead -> SongSyncBadge.Pending
 
-    ProjectSyncState.LocalOnly -> SongSyncBadge.LocalOnly
+        ProjectSyncState.LocalOnly -> SongSyncBadge.LocalOnly
 
-    ProjectSyncState.Unknown -> SongSyncBadge.Unknown
-}
+        ProjectSyncState.Unknown -> SongSyncBadge.Unknown
+    }
 
 private fun relativeFromMs(ms: Long): String {
-    val deltaMs = kotlin.time.Clock.System.now().toEpochMilliseconds() - ms
+    val deltaMs =
+        kotlin.time.Clock.System
+            .now()
+            .toEpochMilliseconds() - ms
     val days = deltaMs / (24L * 60 * 60 * 1000)
     return when {
         days < 1 -> "today"

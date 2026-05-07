@@ -34,18 +34,23 @@ class JvmBlobCache(
     private val clock: Clock = Clock.System,
     private val cacheSettings: BlobCacheSettings,
 ) : BlobCache {
-
     init {
         Files.createDirectories(cacheRoot)
     }
 
-    override suspend fun contains(hash: BlobHash, scope: BlobScope): Boolean = Files.exists(blobPath(hash, scope))
+    override suspend fun contains(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): Boolean = Files.exists(blobPath(hash, scope))
 
     /**
      * Get the on-disk path for [hash] in [scope], fetching from the cloud on miss. Returns a
      * `java.nio.file.Path` so callers (the JVM materializer) can hardlink/copy directly.
      */
-    suspend fun getOrFetch(hash: BlobHash, scope: BlobScope): Path {
+    suspend fun getOrFetch(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): Path {
         val target = blobPath(hash, scope)
         if (Files.exists(target)) {
             touch(hash)
@@ -54,24 +59,25 @@ class JvmBlobCache(
         Files.createDirectories(target.parent)
         val tempPath = target.resolveSibling("${target.fileName}.fetch-${System.nanoTime()}")
         val source: RawSource = cloud.getBlob(hash, scope)
-        val totalBytes: Long = try {
-            java.io.BufferedOutputStream(Files.newOutputStream(tempPath)).use { out ->
-                source.buffered().use { src ->
-                    val buf = ByteArray(64 * 1024)
-                    var written = 0L
-                    while (true) {
-                        val n = src.readAtMostTo(buf, 0, buf.size)
-                        if (n <= 0) break
-                        out.write(buf, 0, n)
-                        written += n
+        val totalBytes: Long =
+            try {
+                java.io.BufferedOutputStream(Files.newOutputStream(tempPath)).use { out ->
+                    source.buffered().use { src ->
+                        val buf = ByteArray(64 * 1024)
+                        var written = 0L
+                        while (true) {
+                            val n = src.readAtMostTo(buf, 0, buf.size)
+                            if (n <= 0) break
+                            out.write(buf, 0, n)
+                            written += n
+                        }
+                        written
                     }
-                    written
                 }
+            } catch (e: Throwable) {
+                Files.deleteIfExists(tempPath)
+                throw e
             }
-        } catch (e: Throwable) {
-            Files.deleteIfExists(tempPath)
-            throw e
-        }
         try {
             Files.move(tempPath, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } catch (e: Throwable) {
@@ -87,17 +93,24 @@ class JvmBlobCache(
      * Compute the on-disk path for a `(hash, scope)` pair. Uses [BlobHash.hex] (digest only,
      * no `b3:` prefix) — the colon in the wire form isn't a valid Windows path char.
      */
-    private fun blobPath(hash: BlobHash, scope: BlobScope): Path {
+    private fun blobPath(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): Path {
         val h = hash.hex
         val prefix = if (h.length >= 2) h.substring(0, 2) else "00"
-        val scopeDir = when (scope) {
-            BlobScope.Shared -> "shared"
-            is BlobScope.Private -> "private/${scope.uuid.value}"
-        }
+        val scopeDir =
+            when (scope) {
+                BlobScope.Shared -> "shared"
+                is BlobScope.Private -> "private/${scope.uuid.value}"
+            }
         return cacheRoot.resolve(scopeDir).resolve(prefix).resolve(h)
     }
 
-    private fun recordInsert(hash: BlobHash, size: Long) {
+    private fun recordInsert(
+        hash: BlobHash,
+        size: Long,
+    ) {
         catalog.transaction {
             catalog.catalogQueries.insertBlobCache(
                 hash = hash.value,

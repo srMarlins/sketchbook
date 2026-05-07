@@ -46,7 +46,6 @@ class UserGraphHolder(
     private val httpClient: HttpClient,
     private val scope: CoroutineScope,
 ) {
-
     private val _userGraph = MutableStateFlow<UserGraph?>(null)
     val userGraph: StateFlow<UserGraph?> = _userGraph
 
@@ -57,17 +56,19 @@ class UserGraphHolder(
                 settings.observe().map { it.cloudBucket }.distinctUntilChanged(),
             ) { auth, bucket -> auth to bucket }
                 .collect { (auth, bucket) ->
-                    _userGraph.value = if (auth is AuthState.SignedIn && !bucket.isNullOrBlank()) {
-                        val backend = DirectGcsBackend(
-                            http = httpClient,
-                            credentials = OAuthCloudCredentials(authSession),
-                            bucket = bucket,
-                            userId = auth.userId,
-                        )
-                        UserGraph(cloudBackend = backend)
-                    } else {
-                        null
-                    }
+                    _userGraph.value =
+                        if (auth is AuthState.SignedIn && !bucket.isNullOrBlank()) {
+                            val backend =
+                                DirectGcsBackend(
+                                    http = httpClient,
+                                    credentials = OAuthCloudCredentials(authSession),
+                                    bucket = bucket,
+                                    userId = auth.userId,
+                                )
+                            UserGraph(cloudBackend = backend)
+                        } else {
+                            null
+                        }
                 }
         }
     }

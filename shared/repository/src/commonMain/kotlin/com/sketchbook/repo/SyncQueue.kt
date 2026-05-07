@@ -19,7 +19,9 @@ import kotlinx.coroutines.flow.Flow
  */
 interface SyncQueue {
     fun observe(): Flow<SyncQueueState>
+
     fun observeProject(id: ProjectId): Flow<ProjectSyncState>
+
     suspend fun pushNow(uuid: ProjectUuid): Result<Unit>
 }
 

@@ -27,8 +27,9 @@ import kotlin.time.Clock
  */
 @SingleIn(AppScope::class)
 @Inject
-class SyncStateStore(private val catalog: Catalog) {
-
+class SyncStateStore(
+    private val catalog: Catalog,
+) {
     /** Bumped on every write. Consumers can debounce reads by collecting this. */
     private val version = MutableStateFlow(0L)
 
@@ -73,36 +74,41 @@ class SyncStateStore(private val catalog: Catalog) {
     }
 
     /** All sync_state rows. Used by the queue's aggregate observer. */
-    fun all(): List<SyncStateRow> = catalog.catalogQueries.selectAllSyncStates().executeAsList().map { r ->
-        SyncStateRow(
-            uuid = ProjectUuid(r.project_uuid),
-            localRev = r.local_rev,
-            cloudHeadRev = r.cloud_head_rev,
-            dirty = r.dirty != 0L,
-            selfContained = r.self_contained != 0L,
-        )
-    }
+    fun all(): List<SyncStateRow> =
+        catalog.catalogQueries.selectAllSyncStates().executeAsList().map { r ->
+            SyncStateRow(
+                uuid = ProjectUuid(r.project_uuid),
+                localRev = r.local_rev,
+                cloudHeadRev = r.cloud_head_rev,
+                dirty = r.dirty != 0L,
+                selfContained = r.self_contained != 0L,
+            )
+        }
 
     /**
      * Dirty rows ordered oldest-first by `updated_at`. Used by the GcsSyncQueue background
      * drain to pick the longest-pending project off the queue. Tiebreaker is uuid for
      * determinism (matters in tests; users won't notice).
      */
-    fun dirtyOldestFirst(): List<SyncStateRow> = catalog.catalogQueries.selectDirtyOldestFirst().executeAsList().map { r ->
-        SyncStateRow(
-            uuid = ProjectUuid(r.project_uuid),
-            localRev = r.local_rev,
-            cloudHeadRev = r.cloud_head_rev,
-            dirty = r.dirty != 0L,
-            selfContained = r.self_contained != 0L,
-        )
-    }
+    fun dirtyOldestFirst(): List<SyncStateRow> =
+        catalog.catalogQueries.selectDirtyOldestFirst().executeAsList().map { r ->
+            SyncStateRow(
+                uuid = ProjectUuid(r.project_uuid),
+                localRev = r.local_rev,
+                cloudHeadRev = r.cloud_head_rev,
+                dirty = r.dirty != 0L,
+                selfContained = r.self_contained != 0L,
+            )
+        }
 
     /**
      * Commit the result of a successful push: clamp dirty=0, set local_rev = cloud_head_rev =
      * [newRev]. Idempotent.
      */
-    fun markSynced(uuid: ProjectUuid, newRev: Long) {
+    fun markSynced(
+        uuid: ProjectUuid,
+        newRev: Long,
+    ) {
         catalog.transaction {
             catalog.catalogQueries.insertOrReplaceSyncState(
                 project_uuid = uuid.value,
@@ -136,7 +142,10 @@ class SyncStateStore(private val catalog: Catalog) {
      * Advance `cloud_head_rev` on the sync_state row for [uuid]. Called by the PullPoller when
      * a new manifest lands in the cloud. Idempotent — same rev twice is a no-op.
      */
-    fun markCloudHead(uuid: ProjectUuid, rev: Long) {
+    fun markCloudHead(
+        uuid: ProjectUuid,
+        rev: Long,
+    ) {
         val existing = stateOf(uuid)
         if (existing != null && existing.cloudHeadRev >= rev) return
         catalog.transaction {
@@ -154,13 +163,17 @@ class SyncStateStore(private val catalog: Catalog) {
      * write. Consumers (PullPoller wiring in DesktopAppGraph) use this to spawn one polling
      * coroutine per project.
      */
-    fun observeAll(): Flow<List<SyncStateRow>> = kotlinx.coroutines.flow.flow {
-        emit(all())
-        observeVersion().collect { emit(all()) }
-    }
+    fun observeAll(): Flow<List<SyncStateRow>> =
+        kotlinx.coroutines.flow.flow {
+            emit(all())
+            observeVersion().collect { emit(all()) }
+        }
 
     /** Set the per-project self-contained flag (no cross-project blob dedup for this uuid). */
-    fun setSelfContained(uuid: ProjectUuid, value: Boolean) {
+    fun setSelfContained(
+        uuid: ProjectUuid,
+        value: Boolean,
+    ) {
         val existing = stateOf(uuid)
         catalog.transaction {
             catalog.catalogQueries.insertOrReplaceSyncState(
@@ -180,7 +193,9 @@ class SyncStateStore(private val catalog: Catalog) {
     private fun generateUuid(): String {
         // Plain UUIDv4 — the design doc allows ULIDs but UUIDv4 round-trips through the existing
         // ProjectUuid validator (alphanumeric + dash, <= 64 chars) without extra dependencies.
-        return java.util.UUID.randomUUID().toString()
+        return java.util.UUID
+            .randomUUID()
+            .toString()
     }
 }
 

@@ -53,9 +53,10 @@ class FixturesTest {
     @Test
     fun sampleCorpusContainsWavs() {
         val corpusDir = Fixtures.writeSampleCorpus(tmp.resolve("corpus"))
-        val wavs = Files.walk(corpusDir).use { s ->
-            s.filter { it.fileName.toString().endsWith(".wav") }.count()
-        }
+        val wavs =
+            Files.walk(corpusDir).use { s ->
+                s.filter { it.fileName.toString().endsWith(".wav") }.count()
+            }
         assertTrue(wavs >= 2, "expected at least 2 wavs, got $wavs")
     }
 }

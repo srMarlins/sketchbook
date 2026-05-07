@@ -22,14 +22,15 @@ data class AppTypography(
     val caption: TextStyle,
 ) {
     companion object {
-        val Default: AppTypography = AppTypography(
-            display = TextStyle(fontFamily = FontFamily.Cursive, fontSize = 32.sp, fontWeight = FontWeight.Normal),
-            title = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-            body = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 14.sp, fontWeight = FontWeight.Normal),
-            bodyEmphasis = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 14.sp, fontWeight = FontWeight.Medium),
-            mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, fontWeight = FontWeight.Normal),
-            caption = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 12.sp, fontWeight = FontWeight.Normal),
-        )
+        val Default: AppTypography =
+            AppTypography(
+                display = TextStyle(fontFamily = FontFamily.Cursive, fontSize = 32.sp, fontWeight = FontWeight.Normal),
+                title = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+                body = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 14.sp, fontWeight = FontWeight.Normal),
+                bodyEmphasis = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, fontWeight = FontWeight.Normal),
+                caption = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 12.sp, fontWeight = FontWeight.Normal),
+            )
     }
 }
 

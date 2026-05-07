@@ -28,11 +28,12 @@ fun Tag(
 ) {
     val shape = RoundedCornerShape(AppTheme.spacing.cornerSmall)
     Row(
-        modifier = modifier
-            .clip(shape)
-            .background(color.copy(alpha = 0.25f))
-            .border(width = AppTheme.spacing.ruleHairline, color = color, shape = shape)
-            .padding(PaddingValues(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs)),
+        modifier =
+            modifier
+                .clip(shape)
+                .background(color.copy(alpha = 0.25f))
+                .border(width = AppTheme.spacing.ruleHairline, color = color, shape = shape)
+                .padding(PaddingValues(horizontal = AppTheme.spacing.sm, vertical = AppTheme.spacing.xs)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.xs),
     ) {

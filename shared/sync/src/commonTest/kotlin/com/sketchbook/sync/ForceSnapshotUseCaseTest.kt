@@ -17,38 +17,42 @@ import kotlin.test.assertTrue
  * normal path.
  */
 class ForceSnapshotUseCaseTest {
-
     private val uuid = ProjectUuid("01H-test-uuid")
 
     @Test
-    fun forceSnapshotWritesANamedRowEvenIfWorkingTreeIsClean() = runTest {
-        val pipeline = FakeForceSnapshotPipeline()
-        val useCase = ForceSnapshotUseCase(pipeline)
+    fun forceSnapshotWritesANamedRowEvenIfWorkingTreeIsClean() =
+        runTest {
+            val pipeline = FakeForceSnapshotPipeline()
+            val useCase = ForceSnapshotUseCase(pipeline)
 
-        val result = useCase.invoke(uuid, label = "demo for jay")
+            val result = useCase.invoke(uuid, label = "demo for jay")
 
-        assertTrue(result.isSuccess, "force-snapshot result was failure: ${result.exceptionOrNull()}")
-        assertEquals(1, pipeline.recordedSnapshots.size)
-        assertEquals("named", pipeline.recordedSnapshots[0].kind)
-        assertEquals("demo for jay", pipeline.recordedSnapshots[0].label)
-        assertEquals(uuid, pipeline.recordedSnapshots[0].uuid)
-    }
+            assertTrue(result.isSuccess, "force-snapshot result was failure: ${result.exceptionOrNull()}")
+            assertEquals(1, pipeline.recordedSnapshots.size)
+            assertEquals("named", pipeline.recordedSnapshots[0].kind)
+            assertEquals("demo for jay", pipeline.recordedSnapshots[0].label)
+            assertEquals(uuid, pipeline.recordedSnapshots[0].uuid)
+        }
 
     @Test
-    fun blankLabelIsRejectedWithoutHittingThePipeline() = runTest {
-        val pipeline = FakeForceSnapshotPipeline()
-        val useCase = ForceSnapshotUseCase(pipeline)
+    fun blankLabelIsRejectedWithoutHittingThePipeline() =
+        runTest {
+            val pipeline = FakeForceSnapshotPipeline()
+            val useCase = ForceSnapshotUseCase(pipeline)
 
-        val result = useCase.invoke(uuid, label = "   ")
+            val result = useCase.invoke(uuid, label = "   ")
 
-        assertTrue(result.isFailure, "blank label should be rejected")
-        assertEquals(0, pipeline.recordedSnapshots.size, "pipeline must not be called for blank labels")
-    }
+            assertTrue(result.isFailure, "blank label should be rejected")
+            assertEquals(0, pipeline.recordedSnapshots.size, "pipeline must not be called for blank labels")
+        }
 }
 
 private class FakeForceSnapshotPipeline : ForceSnapshotPipeline {
-
-    data class Recorded(val uuid: ProjectUuid, val kind: String, val label: String?)
+    data class Recorded(
+        val uuid: ProjectUuid,
+        val kind: String,
+        val label: String?,
+    )
 
     val recordedSnapshots: MutableList<Recorded> = mutableListOf()
 
@@ -56,11 +60,12 @@ private class FakeForceSnapshotPipeline : ForceSnapshotPipeline {
         uuid: ProjectUuid,
         label: String,
     ): Result<SnapshotRev> {
-        recordedSnapshots += Recorded(
-            uuid = uuid,
-            kind = SnapshotKind.Named.name.lowercase(),
-            label = label,
-        )
+        recordedSnapshots +=
+            Recorded(
+                uuid = uuid,
+                kind = SnapshotKind.Named.name.lowercase(),
+                label = label,
+            )
         return Result.success(SnapshotRev(recordedSnapshots.size.toLong()))
     }
 }

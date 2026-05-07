@@ -18,12 +18,12 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class AlsPatcherTest {
-
     /**
      * Tiny self-contained .als-shaped XML fixture. Parser-als test resources can't reach across
      * modules; replicating one minimal fixture inline keeps this module test-self-contained.
      */
-    private val oneSampleRefXml = """<?xml version="1.0" encoding="UTF-8"?>
+    private val oneSampleRefXml =
+        """<?xml version="1.0" encoding="UTF-8"?>
 <Ableton MajorVersion="11" MinorVersion="11.3" Creator="Ableton Live 11.3.21">
   <LiveSet>
     <Tracks>
@@ -49,7 +49,9 @@ class AlsPatcherTest {
 </Ableton>
 """.toByteArray(Charsets.UTF_8)
 
-    private fun gzipBytesOf(@Suppress("UNUSED_PARAMETER") name: String): ByteArray {
+    private fun gzipBytesOf(
+        @Suppress("UNUSED_PARAMETER") name: String,
+    ): ByteArray {
         // The `name` arg matches the spec's signature for readability; we always return the inline
         // fixture above (only one fixture is needed in this module's tests).
         val out = ByteArrayOutputStream(oneSampleRefXml.size + 64)
@@ -57,7 +59,10 @@ class AlsPatcherTest {
         return out.toByteArray()
     }
 
-    private fun ungzipToString(gzipped: ByteArray): String = GZIPInputStream(ByteArrayInputStream(gzipped)).use { it.readBytes().toString(Charsets.UTF_8) }
+    private fun ungzipToString(gzipped: ByteArray): String =
+        GZIPInputStream(ByteArrayInputStream(gzipped)).use {
+            it.readBytes().toString(Charsets.UTF_8)
+        }
 
     @Test
     fun `patcher writes new als atomically and leaves no temp files on success`() {
@@ -68,16 +73,18 @@ class AlsPatcherTest {
         // Sleep just enough that mtime has a chance to differ on filesystems with second-resolution mtimes.
         Thread.sleep(1100)
 
-        val result = AlsPatcher().patch(
-            als,
-            mapping = mapOf("/old/missing.wav" to "/new/found.wav"),
-        )
+        val result =
+            AlsPatcher().patch(
+                als,
+                mapping = mapOf("/old/missing.wav" to "/new/found.wav"),
+            )
         assertEquals(AlsPatcher.Outcome.Patched, result)
         assertContains(ungzipToString(Files.readAllBytes(als)), "/new/found.wav")
         assertNotEquals(before, Files.getLastModifiedTime(als))
-        val tempCount = Files.list(tmpDir).use { stream ->
-            stream.filter { it.fileName.toString().endsWith(".tmp") || it.fileName.toString().contains(".patcher-tmp") }.count()
-        }
+        val tempCount =
+            Files.list(tmpDir).use { stream ->
+                stream.filter { it.fileName.toString().endsWith(".tmp") || it.fileName.toString().contains(".patcher-tmp") }.count()
+            }
         assertEquals(0, tempCount)
     }
 
@@ -154,9 +161,10 @@ class AlsPatcherTest {
         )
 
         // No temp files left behind.
-        val tempCount = Files.list(tmpDir).use { stream ->
-            stream.filter { it.fileName.toString().contains(".patcher-tmp") }.count()
-        }
+        val tempCount =
+            Files.list(tmpDir).use { stream ->
+                stream.filter { it.fileName.toString().contains(".patcher-tmp") }.count()
+            }
         assertEquals(0, tempCount)
     }
 
@@ -166,10 +174,11 @@ class AlsPatcherTest {
         val als = tmpDir.resolve("a.als")
         val originalBytes = gzipBytesOf("rewriter/oneSampleRef.als.xml")
         Files.write(als, originalBytes)
-        val patcher = AlsPatcher(
-            busyDetector = { false },
-            rewriter = { _, _ -> byteArrayOf(0x1F.toByte(), 0x8B.toByte(), 0xFF.toByte()) }, // truncated gzip
-        )
+        val patcher =
+            AlsPatcher(
+                busyDetector = { false },
+                rewriter = { _, _ -> byteArrayOf(0x1F.toByte(), 0x8B.toByte(), 0xFF.toByte()) }, // truncated gzip
+            )
         val outcome = patcher.patch(als, mapOf("x" to "y"))
         assertTrue(outcome is AlsPatcher.Outcome.Failed)
         assertContentEquals(originalBytes, Files.readAllBytes(als)) // file unchanged
@@ -205,7 +214,8 @@ class AlsPatcherTest {
      * so the [SampleRefEdit] overload can demonstrably rewrite Path / OriginalFileSize / OriginalCrc
      * end-to-end through the on-disk patcher.
      */
-    private val sampleRefWithSiblingXml = """<?xml version="1.0" encoding="UTF-8"?>
+    private val sampleRefWithSiblingXml =
+        """<?xml version="1.0" encoding="UTF-8"?>
 <Ableton MajorVersion="12" MinorVersion="12.0" Creator="Ableton Live 12.0.5">
   <LiveSet>
     <Tracks>
@@ -257,12 +267,13 @@ class AlsPatcherTest {
     fun `patch with SampleRefEdit list rewrites Path OriginalFileSize and OriginalCrc end-to-end`() {
         val tmpDir = createTempDirectory("patcher-edits")
         val als = tmpDir.resolve("Sibling.als").also { Files.write(it, gzipSiblingFixture()) }
-        val edit = SampleRefEdit(
-            oldPath = "/old/kick.wav",
-            newPath = "/new/kick.wav",
-            newOriginalFileSize = 12345L,
-            newOriginalCrc = 0L,
-        )
+        val edit =
+            SampleRefEdit(
+                oldPath = "/old/kick.wav",
+                newPath = "/new/kick.wav",
+                newOriginalFileSize = 12345L,
+                newOriginalCrc = 0L,
+            )
         val outcome = AlsPatcher().patch(als, listOf(edit))
         assertEquals(AlsPatcher.Outcome.Patched, outcome)
         // Re-parse the patched on-disk file via the canonical AlsParser; both the primary FileRef
@@ -275,9 +286,10 @@ class AlsPatcherTest {
         assertEquals(0L, s.originalCrc)
         assertTrue(s.hasOriginalFileRefSibling, "fixture has the sibling")
         // No leftover temp files.
-        val tempCount = Files.list(tmpDir).use { stream ->
-            stream.filter { it.fileName.toString().contains(".patcher-tmp") }.count()
-        }
+        val tempCount =
+            Files.list(tmpDir).use { stream ->
+                stream.filter { it.fileName.toString().contains(".patcher-tmp") }.count()
+            }
         assertEquals(0, tempCount)
     }
 

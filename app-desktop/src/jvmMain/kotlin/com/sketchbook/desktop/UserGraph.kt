@@ -17,4 +17,6 @@ import com.sketchbook.cloud.CloudBackend
  *
  * See `docs/architecture/dependency-injection.md` §1.1.
  */
-class UserGraph(val cloudBackend: CloudBackend)
+class UserGraph(
+    val cloudBackend: CloudBackend,
+)

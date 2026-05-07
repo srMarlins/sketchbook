@@ -10,7 +10,6 @@ package com.sketchbook.repo
  * real file-system pipe.
  */
 interface AlsPatchService {
-
     /** Mirrors `AlsPatcher.Outcome` 1:1. Repository code only needs the discriminator. */
     enum class Outcome { Patched, NoChange, SkippedBusy, Failed }
 
@@ -21,7 +20,10 @@ interface AlsPatchService {
      * @param alsPath absolute path to the `.als` file. Stringly-typed because `commonMain` can't
      *   reference `java.nio.file.Path`.
      */
-    suspend fun patch(alsPath: String, mapping: Map<String, String>): Outcome
+    suspend fun patch(
+        alsPath: String,
+        mapping: Map<String, String>,
+    ): Outcome
 
     /**
      * Rich-edit overload. Each [com.sketchbook.core.SampleRefEdit] is matched on the SampleRef's
@@ -37,7 +39,10 @@ interface AlsPatchService {
      * @param alsPath absolute path to the `.als` file. Stringly-typed because `commonMain` can't
      *   reference `java.nio.file.Path`.
      */
-    suspend fun patch(alsPath: String, edits: List<com.sketchbook.core.SampleRefEdit>): Outcome
+    suspend fun patch(
+        alsPath: String,
+        edits: List<com.sketchbook.core.SampleRefEdit>,
+    ): Outcome
 
     /**
      * Atomically replace the contents of [alsPath] with the supplied [bytes]. Used by PR-W W4's
@@ -47,5 +52,8 @@ interface AlsPatchService {
      * Implementations must honor busy detection (Live holding the file open) and use the same
      * atomic temp+rename dance [patch] does so concurrent readers never see a half-written file.
      */
-    suspend fun restore(alsPath: String, bytes: ByteArray): Outcome
+    suspend fun restore(
+        alsPath: String,
+        bytes: ByteArray,
+    ): Outcome
 }

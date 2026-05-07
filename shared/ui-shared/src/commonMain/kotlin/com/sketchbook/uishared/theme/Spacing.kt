@@ -25,20 +25,21 @@ data class AppSpacing(
     val ruleLineHeight: Dp,
 ) {
     companion object {
-        val Default: AppSpacing = AppSpacing(
-            xs = 4.dp,
-            sm = 8.dp,
-            md = 12.dp,
-            lg = 16.dp,
-            xl = 24.dp,
-            xxl = 32.dp,
-            cornerSmall = 4.dp,
-            cornerMedium = 8.dp,
-            cornerCard = 6.dp,
-            cornerInput = 4.dp,
-            ruleHairline = 1.dp,
-            ruleLineHeight = 28.dp,
-        )
+        val Default: AppSpacing =
+            AppSpacing(
+                xs = 4.dp,
+                sm = 8.dp,
+                md = 12.dp,
+                lg = 16.dp,
+                xl = 24.dp,
+                xxl = 32.dp,
+                cornerSmall = 4.dp,
+                cornerMedium = 8.dp,
+                cornerCard = 6.dp,
+                cornerInput = 4.dp,
+                ruleHairline = 1.dp,
+                ruleLineHeight = 28.dp,
+            )
     }
 }
 

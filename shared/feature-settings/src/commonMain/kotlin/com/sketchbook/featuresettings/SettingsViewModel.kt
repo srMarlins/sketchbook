@@ -33,74 +33,94 @@ class SettingsViewModel(
     private val repository: SettingsRepository,
     private val authSession: AuthSession,
 ) : ViewModel() {
-
-    private val _effects = MutableSharedFlow<Effect>(
-        replay = 0,
-        extraBufferCapacity = 8,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    private val _effects =
+        MutableSharedFlow<Effect>(
+            replay = 0,
+            extraBufferCapacity = 8,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
-    val state: StateFlow<State> = combine(
-        repository.observe(),
-        authSession.state,
-    ) { settings, auth ->
-        State(
-            libraryRoots = settings.libraryRoots,
-            cloudBucket = settings.cloudBucket,
-            auth = auth,
-            selfContainedProjects = settings.selfContainedProjects,
-            cacheSettings = settings.cacheSettings,
-            loading = false,
-        )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
+    val state: StateFlow<State> =
+        combine(
+            repository.observe(),
+            authSession.state,
+        ) { settings, auth ->
+            State(
+                libraryRoots = settings.libraryRoots,
+                cloudBucket = settings.cloudBucket,
+                auth = auth,
+                selfContainedProjects = settings.selfContainedProjects,
+                cacheSettings = settings.cacheSettings,
+                loading = false,
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, State(loading = true))
 
     fun dispatch(intent: Intent) {
         when (intent) {
-            is Intent.AddRoot -> launchWithEffect(intent.root.path) {
-                repository.upsertRoot(intent.root)
-            }
-
-            is Intent.RemoveRoot -> launchWithEffect(intent.root.path) {
-                repository.removeRoot(intent.root)
-            }
-
-            is Intent.SetCloudBucket -> launchWithEffect("cloud-bucket") {
-                repository.setCloudBucket(intent.bucket)
-            }
-
-            is Intent.ToggleSelfContained -> launchWithEffect(intent.uuid.value) {
-                repository.setSelfContained(intent.uuid, intent.value)
-            }
-
-            is Intent.SetCacheSize -> launchWithEffect("cache-size") {
-                repository.setCacheSettings(intent.settings)
-            }
-
-            is Intent.SetCacheLru -> launchWithEffect("cache-lru") {
-                val current = state.value.cacheSettings
-                repository.setCacheSettings(current.copy(lruEnabled = intent.enabled))
-            }
-
-            Intent.SignIn -> viewModelScope.launch {
-                val r = authSession.signIn()
-                if (r.isFailure) {
-                    _effects.tryEmit(
-                        Effect.Failed("auth", r.exceptionOrNull()?.message ?: "sign-in failed"),
-                    )
-                } else {
-                    _effects.tryEmit(Effect.Saved("auth"))
+            is Intent.AddRoot -> {
+                launchWithEffect(intent.root.path) {
+                    repository.upsertRoot(intent.root)
                 }
             }
 
-            Intent.SignOut -> viewModelScope.launch {
-                authSession.signOut()
-                _effects.tryEmit(Effect.Saved("auth"))
+            is Intent.RemoveRoot -> {
+                launchWithEffect(intent.root.path) {
+                    repository.removeRoot(intent.root)
+                }
+            }
+
+            is Intent.SetCloudBucket -> {
+                launchWithEffect("cloud-bucket") {
+                    repository.setCloudBucket(intent.bucket)
+                }
+            }
+
+            is Intent.ToggleSelfContained -> {
+                launchWithEffect(intent.uuid.value) {
+                    repository.setSelfContained(intent.uuid, intent.value)
+                }
+            }
+
+            is Intent.SetCacheSize -> {
+                launchWithEffect("cache-size") {
+                    repository.setCacheSettings(intent.settings)
+                }
+            }
+
+            is Intent.SetCacheLru -> {
+                launchWithEffect("cache-lru") {
+                    val current = state.value.cacheSettings
+                    repository.setCacheSettings(current.copy(lruEnabled = intent.enabled))
+                }
+            }
+
+            Intent.SignIn -> {
+                viewModelScope.launch {
+                    val r = authSession.signIn()
+                    if (r.isFailure) {
+                        _effects.tryEmit(
+                            Effect.Failed("auth", r.exceptionOrNull()?.message ?: "sign-in failed"),
+                        )
+                    } else {
+                        _effects.tryEmit(Effect.Saved("auth"))
+                    }
+                }
+            }
+
+            Intent.SignOut -> {
+                viewModelScope.launch {
+                    authSession.signOut()
+                    _effects.tryEmit(Effect.Saved("auth"))
+                }
             }
         }
     }
 
-    private inline fun launchWithEffect(key: String, crossinline block: suspend () -> Result<*>) {
+    private inline fun launchWithEffect(
+        key: String,
+        crossinline block: suspend () -> Result<*>,
+    ) {
         viewModelScope.launch {
             val r = block()
             if (r.isSuccess) {
@@ -122,18 +142,44 @@ class SettingsViewModel(
     )
 
     sealed interface Intent {
-        data class AddRoot(val root: LibraryRoot) : Intent
-        data class RemoveRoot(val root: LibraryRoot) : Intent
-        data class SetCloudBucket(val bucket: String?) : Intent
-        data class ToggleSelfContained(val uuid: ProjectUuid, val value: Boolean) : Intent
-        data class SetCacheSize(val settings: BlobCacheSettings) : Intent
-        data class SetCacheLru(val enabled: Boolean) : Intent
+        data class AddRoot(
+            val root: LibraryRoot,
+        ) : Intent
+
+        data class RemoveRoot(
+            val root: LibraryRoot,
+        ) : Intent
+
+        data class SetCloudBucket(
+            val bucket: String?,
+        ) : Intent
+
+        data class ToggleSelfContained(
+            val uuid: ProjectUuid,
+            val value: Boolean,
+        ) : Intent
+
+        data class SetCacheSize(
+            val settings: BlobCacheSettings,
+        ) : Intent
+
+        data class SetCacheLru(
+            val enabled: Boolean,
+        ) : Intent
+
         data object SignIn : Intent
+
         data object SignOut : Intent
     }
 
     sealed interface Effect {
-        data class Saved(val key: String) : Effect
-        data class Failed(val key: String, val reason: String) : Effect
+        data class Saved(
+            val key: String,
+        ) : Effect
+
+        data class Failed(
+            val key: String,
+            val reason: String,
+        ) : Effect
     }
 }

@@ -48,38 +48,40 @@ class TimelineViewModel(
     private val snapshots: SnapshotRepository,
     private val zone: TimeZone = TimeZone.currentSystemDefault(),
 ) : ViewModel() {
-
     private val selectedUuid = MutableStateFlow<ProjectUuid?>(null)
     private val showAll = MutableStateFlow(false)
     private val pendingRewind = MutableStateFlow<SnapshotRev?>(null)
     private val rewindProgress = MutableStateFlow<MaterializationProgress?>(null)
 
-    private val _effects = MutableSharedFlow<Effect>(
-        replay = 0,
-        extraBufferCapacity = 8,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    private val _effects =
+        MutableSharedFlow<Effect>(
+            replay = 0,
+            extraBufferCapacity = 8,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
     val effects: SharedFlow<Effect> = _effects.asSharedFlow()
 
-    private val historyFlow: Flow<List<Snapshot>> = selectedUuid.flatMapLatest { uuid ->
-        if (uuid == null) flowOf(emptyList()) else snapshots.observeHistory(uuid)
-    }
+    private val historyFlow: Flow<List<Snapshot>> =
+        selectedUuid.flatMapLatest { uuid ->
+            if (uuid == null) flowOf(emptyList()) else snapshots.observeHistory(uuid)
+        }
 
-    val state: StateFlow<State> = combine(
-        historyFlow,
-        showAll,
-        pendingRewind,
-        rewindProgress,
-    ) { history, all, pending, progress ->
-        State(
-            uuid = selectedUuid.value,
-            history = history,
-            showAll = all,
-            pendingRewind = pending,
-            loading = selectedUuid.value != null && history.isEmpty(),
-            rewindProgress = progress,
-        )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, State())
+    val state: StateFlow<State> =
+        combine(
+            historyFlow,
+            showAll,
+            pendingRewind,
+            rewindProgress,
+        ) { history, all, pending, progress ->
+            State(
+                uuid = selectedUuid.value,
+                history = history,
+                showAll = all,
+                pendingRewind = pending,
+                loading = selectedUuid.value != null && history.isEmpty(),
+                rewindProgress = progress,
+            )
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, State())
 
     fun load(uuid: ProjectUuid) {
         selectedUuid.update { uuid }
@@ -95,7 +97,10 @@ class TimelineViewModel(
         }
     }
 
-    private fun relabel(rev: SnapshotRev, newLabel: String?) {
+    private fun relabel(
+        rev: SnapshotRev,
+        newLabel: String?,
+    ) {
         val uuid = selectedUuid.value ?: return
         viewModelScope.launch {
             // Trim before passing through; treat blank-after-trim as a clear gesture so
@@ -134,7 +139,9 @@ class TimelineViewModel(
                         rewindProgress.update { null }
                     }
 
-                    else -> Unit
+                    else -> {
+                        Unit
+                    }
                 }
             }
         }
@@ -142,10 +149,12 @@ class TimelineViewModel(
 
     /** Default-filtered, day-grouped snapshots, newest day first; within a day newest rev first. */
     fun visibleGroups(state: State = this.state.value): List<DayGroup> {
-        val visible = state.history
-            .filter { state.showAll || it.kind != SnapshotKind.Auto }
-            .sortedByDescending { it.rev.value }
-        return visible.groupBy { it.timestamp.toLocalDateTime(zone).date }
+        val visible =
+            state.history
+                .filter { state.showAll || it.kind != SnapshotKind.Auto }
+                .sortedByDescending { it.rev.value }
+        return visible
+            .groupBy { it.timestamp.toLocalDateTime(zone).date }
             .toSortedMap(compareByDescending { it })
             .map { (date, snaps) -> DayGroup(date, snaps) }
     }
@@ -160,22 +169,48 @@ class TimelineViewModel(
         val rewindProgress: MaterializationProgress? = null,
     )
 
-    data class DayGroup(val date: LocalDate, val snapshots: List<Snapshot>)
+    data class DayGroup(
+        val date: LocalDate,
+        val snapshots: List<Snapshot>,
+    )
 
     sealed interface Intent {
         data object ToggleShowAll : Intent
-        data class RequestRewind(val rev: SnapshotRev) : Intent
+
+        data class RequestRewind(
+            val rev: SnapshotRev,
+        ) : Intent
+
         data object CancelRewind : Intent
-        data class ConfirmRewind(val rev: SnapshotRev) : Intent
+
+        data class ConfirmRewind(
+            val rev: SnapshotRev,
+        ) : Intent
 
         /** PR-Z Z2: edit a snapshot's label inline. `null` (or blank-after-trim) clears it. */
-        data class RelabelSnapshot(val rev: SnapshotRev, val newLabel: String?) : Intent
+        data class RelabelSnapshot(
+            val rev: SnapshotRev,
+            val newLabel: String?,
+        ) : Intent
     }
 
     sealed interface Effect {
-        data class RewindStarted(val rev: SnapshotRev) : Effect
-        data class RewindCompleted(val rev: SnapshotRev) : Effect
-        data class RewindFailed(val rev: SnapshotRev, val reason: String) : Effect
-        data class RelabelFailed(val rev: SnapshotRev, val reason: String) : Effect
+        data class RewindStarted(
+            val rev: SnapshotRev,
+        ) : Effect
+
+        data class RewindCompleted(
+            val rev: SnapshotRev,
+        ) : Effect
+
+        data class RewindFailed(
+            val rev: SnapshotRev,
+            val reason: String,
+        ) : Effect
+
+        data class RelabelFailed(
+            val rev: SnapshotRev,
+            val reason: String,
+        ) : Effect
     }
 }

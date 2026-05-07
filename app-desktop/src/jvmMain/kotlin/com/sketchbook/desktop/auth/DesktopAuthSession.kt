@@ -27,7 +27,6 @@ class DesktopAuthSession(
     private val identityStore: PrefsIdentityStore,
     scope: CoroutineScope,
 ) : AuthSession {
-
     private val _state = MutableStateFlow<AuthState>(loadInitial())
     override val state: StateFlow<AuthState> = _state.asStateFlow()
 
@@ -55,9 +54,10 @@ class DesktopAuthSession(
 
     private fun loadInitial(): AuthState = identityStore.load() ?: AuthState.SignedOut
 
-    override suspend fun signIn(): Result<AuthState.SignedIn> = inner.signIn().also { r ->
-        r.getOrNull()?.let { identityStore.save(it) }
-    }
+    override suspend fun signIn(): Result<AuthState.SignedIn> =
+        inner.signIn().also { r ->
+            r.getOrNull()?.let { identityStore.save(it) }
+        }
 
     override suspend fun signOut() {
         inner.signOut()

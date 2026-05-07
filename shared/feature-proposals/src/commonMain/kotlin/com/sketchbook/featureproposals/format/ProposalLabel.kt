@@ -48,15 +48,17 @@ fun proposalLabel(
     val nameFromArgs = s("name")?.takeIf { it.isNotBlank() }
     val pathFromArgs = s("path")?.takeIf { it.isNotBlank() }
     val catalogName = pidLong?.let { projectNameById[it] }
-    val projectLabel = pidLong?.let {
-        resolveProjectDisplay(
-            id = ProjectId(it),
-            hints = ProjectDisplayHints(
-                denormName = nameFromArgs ?: catalogName,
-                pathHint = pathFromArgs,
-            ),
-        )
-    } ?: nameFromArgs ?: pathFromArgs?.let(::filenameOf)?.takeIf { it.isNotBlank() } ?: "project"
+    val projectLabel =
+        pidLong?.let {
+            resolveProjectDisplay(
+                id = ProjectId(it),
+                hints =
+                    ProjectDisplayHints(
+                        denormName = nameFromArgs ?: catalogName,
+                        pathHint = pathFromArgs,
+                    ),
+            )
+        } ?: nameFromArgs ?: pathFromArgs?.let(::filenameOf)?.takeIf { it.isNotBlank() } ?: "project"
     return when (action.type) {
         "MoveProject" -> {
             val to = s("to").orEmpty()
@@ -79,17 +81,20 @@ fun proposalLabel(
             )
         }
 
-        "ArchiveProject" -> ProposalLabel(
-            verb = "Archive",
-            target = projectLabel,
-            tintHint = VerbTint.Remove,
-        )
+        "ArchiveProject" -> {
+            ProposalLabel(
+                verb = "Archive",
+                target = projectLabel,
+                tintHint = VerbTint.Remove,
+            )
+        }
 
         "SetTags" -> {
-            val tags = (action.args["after"] as? JsonArray)
-                ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
-                ?.filter { it.isNotBlank() }
-                ?: tagsList(action)
+            val tags =
+                (action.args["after"] as? JsonArray)
+                    ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                    ?.filter { it.isNotBlank() }
+                    ?: tagsList(action)
             ProposalLabel(
                 verb = if (tags.isEmpty()) "Clear tags" else "Tag",
                 target = projectLabel,
@@ -108,30 +113,40 @@ fun proposalLabel(
             )
         }
 
-        "Undo" -> ProposalLabel(
-            verb = "Undo",
-            target = "previous batch",
-            tintHint = VerbTint.Action,
-        )
+        "Undo" -> {
+            ProposalLabel(
+                verb = "Undo",
+                target = "previous batch",
+                tintHint = VerbTint.Action,
+            )
+        }
 
-        else -> ProposalLabel(verb = action.type, target = "", tintHint = VerbTint.Neutral)
+        else -> {
+            ProposalLabel(verb = action.type, target = "", tintHint = VerbTint.Neutral)
+        }
     }
 }
 
 private fun tagsList(action: ProposalAction): List<String> {
     val raw = action.args["tags"]
     return when (raw) {
-        is JsonArray -> raw.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
-            .filter { it.isNotEmpty() }
+        is JsonArray -> {
+            raw
+                .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
+                .filter { it.isNotEmpty() }
+        }
 
-        is JsonPrimitive ->
+        is JsonPrimitive -> {
             raw.contentOrNull
                 ?.split(',')
                 ?.map { it.trim() }
                 ?.filter { it.isNotEmpty() }
                 .orEmpty()
+        }
 
-        else -> emptyList()
+        else -> {
+            emptyList()
+        }
     }
 }
 

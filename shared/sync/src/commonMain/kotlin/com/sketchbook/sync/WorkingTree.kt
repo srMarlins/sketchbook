@@ -9,7 +9,6 @@ import kotlin.time.Instant
  * can run identically against a real filesystem and against in-memory test doubles.
  */
 interface WorkingTree {
-
     /** Project-relative paths of every snapshottable file in the tree. */
     fun list(): List<String>
 
@@ -23,4 +22,7 @@ interface WorkingTree {
     fun hash(relativePath: String): BlobHash
 }
 
-data class FileStat(val size: Long, val mtime: Instant)
+data class FileStat(
+    val size: Long,
+    val mtime: Instant,
+)

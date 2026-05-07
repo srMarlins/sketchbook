@@ -26,17 +26,20 @@ import kotlin.time.Instant
  * Sample files the user *does* want synced (their User Library, drum hits) live elsewhere — a
  * project-local `Samples` subdirectory is by Live's convention regenerable, so we don't sync it.
  */
-class JvmWorkingTree(private val root: Path) : WorkingTree {
-
-    override fun list(): List<String> = Files.walk(root, FileVisitOption.FOLLOW_LINKS).use { stream ->
-        stream.asSequence()
-            .filter { it.isRegularFile() }
-            .filter { p -> p.none { c -> c.fileName?.toString() in SKIP_DIRS } }
-            .filter { !it.fileName.toString().startsWith(".") }
-            .filter { !it.fileName.toString().endsWith(".als.bak", ignoreCase = true) }
-            .map { root.relativize(it).toString().replace('\\', '/') }
-            .toList()
-    }
+class JvmWorkingTree(
+    private val root: Path,
+) : WorkingTree {
+    override fun list(): List<String> =
+        Files.walk(root, FileVisitOption.FOLLOW_LINKS).use { stream ->
+            stream
+                .asSequence()
+                .filter { it.isRegularFile() }
+                .filter { p -> p.none { c -> c.fileName?.toString() in SKIP_DIRS } }
+                .filter { !it.fileName.toString().startsWith(".") }
+                .filter { !it.fileName.toString().endsWith(".als.bak", ignoreCase = true) }
+                .map { root.relativize(it).toString().replace('\\', '/') }
+                .toList()
+        }
 
     override fun stat(relativePath: String): FileStat {
         val abs = root.resolve(relativePath)
@@ -73,15 +76,16 @@ class JvmWorkingTree(private val root: Path) : WorkingTree {
  */
 internal fun isInUse(path: Path): Boolean {
     if (!Files.exists(path)) return false
-    val channel = try {
-        FileChannel.open(path, StandardOpenOption.WRITE)
-    } catch (_: java.nio.file.AccessDeniedException) {
-        // Windows sharing mode prevents WRITE access — Live has it.
-        return true
-    } catch (_: Throwable) {
-        // FileSystemException etc. opening — fail open so a flaky probe can't gate real work.
-        return false
-    }
+    val channel =
+        try {
+            FileChannel.open(path, StandardOpenOption.WRITE)
+        } catch (_: java.nio.file.AccessDeniedException) {
+            // Windows sharing mode prevents WRITE access — Live has it.
+            return true
+        } catch (_: Throwable) {
+            // FileSystemException etc. opening — fail open so a flaky probe can't gate real work.
+            return false
+        }
     return channel.use { ch ->
         // Once we hold a writable channel: tryLock returning null OR throwing means somebody
         // else holds an overlapping lock (in-process or out-of-process). Treat both as busy —

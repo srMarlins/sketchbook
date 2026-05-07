@@ -22,7 +22,10 @@ interface AudioIdSidecar {
      * Writes [uuid] to `<projectDir>/.audio-id`, replacing any existing content. Returns true on
      * success, false if the directory doesn't exist or write fails.
      */
-    fun write(projectDir: String, uuid: ProjectUuid): Boolean
+    fun write(
+        projectDir: String,
+        uuid: ProjectUuid,
+    ): Boolean
 
     /** True if `<projectDir>/.audio-id` exists. */
     fun exists(projectDir: String): Boolean

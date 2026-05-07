@@ -39,7 +39,6 @@ class InMemorySyncQueue(
     private val projects: ProjectRepository,
     private val scope: CoroutineScope,
 ) : SyncQueue {
-
     private val perProject = MutableStateFlow<Map<ProjectId, ProjectSyncState>>(emptyMap())
     private val online = MutableStateFlow(true)
 
@@ -64,14 +63,15 @@ class InMemorySyncQueue(
         }
     }
 
-    private val queue: Flow<SyncQueueState> = combine(perProject, online) { states, isOnline ->
-        SyncQueueState(
-            pending = states.count { it.value == ProjectSyncState.Pending },
-            uploading = states.count { it.value == ProjectSyncState.Uploading },
-            downloading = 0,
-            online = isOnline,
-        )
-    }
+    private val queue: Flow<SyncQueueState> =
+        combine(perProject, online) { states, isOnline ->
+            SyncQueueState(
+                pending = states.count { it.value == ProjectSyncState.Pending },
+                uploading = states.count { it.value == ProjectSyncState.Uploading },
+                downloading = 0,
+                online = isOnline,
+            )
+        }
 
     override fun observe(): Flow<SyncQueueState> = queue
 
@@ -101,10 +101,11 @@ class InMemorySyncQueue(
     /** Read-through synchronous accessor for UI lookups inside non-suspending composables. */
     fun snapshotFor(id: ProjectId): ProjectSyncState = perProject.value[id] ?: defaultStateFor(id)
 
-    private fun defaultStateFor(id: ProjectId): ProjectSyncState = when (id.value.mod(7)) {
-        4 -> ProjectSyncState.Pending
-        5 -> ProjectSyncState.Conflict
-        6 -> ProjectSyncState.LocalOnly
-        else -> ProjectSyncState.Synced
-    }
+    private fun defaultStateFor(id: ProjectId): ProjectSyncState =
+        when (id.value.mod(7)) {
+            4 -> ProjectSyncState.Pending
+            5 -> ProjectSyncState.Conflict
+            6 -> ProjectSyncState.LocalOnly
+            else -> ProjectSyncState.Synced
+        }
 }

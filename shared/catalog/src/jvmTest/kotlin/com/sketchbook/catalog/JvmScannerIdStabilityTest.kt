@@ -29,8 +29,10 @@ import kotlin.test.assertNotNull
  * silently dangle), so the assertion on id stability is what protects against the bug class.
  */
 class JvmScannerIdStabilityTest {
-
-    private fun writeAls(target: Path, xml: String) {
+    private fun writeAls(
+        target: Path,
+        xml: String,
+    ) {
         Files.createDirectories(target.parent)
         Files.newOutputStream(target).use { out ->
             GZIPOutputStream(out).use { it.write(xml.toByteArray(Charsets.UTF_8)) }
@@ -38,85 +40,90 @@ class JvmScannerIdStabilityTest {
     }
 
     @Test
-    fun rescanPreservesProjectId() = runTest {
-        val root = createTempDirectory("scanner-id-stability-")
-        try {
-            val alsPath = root.resolve("Projects/Foo/Foo.als")
-            writeAls(
-                alsPath,
-                """<?xml version="1.0"?>
+    fun rescanPreservesProjectId() =
+        runTest {
+            val root = createTempDirectory("scanner-id-stability-")
+            try {
+                val alsPath = root.resolve("Projects/Foo/Foo.als")
+                writeAls(
+                    alsPath,
+                    """<?xml version="1.0"?>
                 <Ableton Creator="Ableton Live 12.0.0"><LiveSet>
                   <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="120.0"/></Tempo></Mixer></DeviceChain></MainTrack>
                   <Tracks><AudioTrack><Name><EffectiveName Value="Drums"/></Name></AudioTrack></Tracks>
                 </LiveSet></Ableton>""",
-            )
+                )
 
-            val handle = CatalogDb.openInMemory()
-            val catalog = handle.catalog
-            val scanner = JvmScanner(
-                catalog,
-                CatalogFts(handle.driver),
-                ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
-            )
+                val handle = CatalogDb.openInMemory()
+                val catalog = handle.catalog
+                val scanner =
+                    JvmScanner(
+                        catalog,
+                        CatalogFts(handle.driver),
+                        ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
+                    )
 
-            // First scan — capture id1.
-            scanner.scan(root).toList()
-            val abs = alsPath.toRealPath().toAbsolutePath().toString()
-            val id1 = catalog.catalogQueries.selectProjectIdByPath(abs).executeAsOneOrNull()
-            assertNotNull(id1, "first scan must persist a row at $abs")
+                // First scan — capture id1.
+                scanner.scan(root).toList()
+                val abs = alsPath.toRealPath().toAbsolutePath().toString()
+                val id1 = catalog.catalogQueries.selectProjectIdByPath(abs).executeAsOneOrNull()
+                assertNotNull(id1, "first scan must persist a row at $abs")
 
-            // Append a journal entry keyed on id1. Mirrors what SqlJournalRepository writes —
-            // we go through the raw query so the test doesn't depend on the repository module.
-            catalog.catalogQueries.insertJournalEntry(
-                occurred_at = 1_700_000_000_000L,
-                actor = "test",
-                action_type = "test.action",
-                project_id = id1,
-                payload_json = "{}",
-                project_name = "Foo",
-                project_path = abs,
-            )
+                // Append a journal entry keyed on id1. Mirrors what SqlJournalRepository writes —
+                // we go through the raw query so the test doesn't depend on the repository module.
+                catalog.catalogQueries.insertJournalEntry(
+                    occurred_at = 1_700_000_000_000L,
+                    actor = "test",
+                    action_type = "test.action",
+                    project_id = id1,
+                    payload_json = "{}",
+                    project_name = "Foo",
+                    project_path = abs,
+                )
 
-            // Rewrite the .als with a different tempo + bump mtime so the scanner doesn't take
-            // the incremental-skip fast path. Same path, different contents.
-            writeAls(
-                alsPath,
-                """<?xml version="1.0"?>
+                // Rewrite the .als with a different tempo + bump mtime so the scanner doesn't take
+                // the incremental-skip fast path. Same path, different contents.
+                writeAls(
+                    alsPath,
+                    """<?xml version="1.0"?>
                 <Ableton Creator="Ableton Live 12.1.0"><LiveSet>
                   <MainTrack><DeviceChain><Mixer><Tempo><Manual Value="140.0"/></Tempo></Mixer></DeviceChain></MainTrack>
                   <Tracks><AudioTrack><Name><EffectiveName Value="Drums"/></Name></AudioTrack></Tracks>
                 </LiveSet></Ableton>""",
-            )
-            Files.setLastModifiedTime(
-                alsPath,
-                java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 60_000),
-            )
+                )
+                Files.setLastModifiedTime(
+                    alsPath,
+                    java.nio.file.attribute.FileTime
+                        .fromMillis(System.currentTimeMillis() + 60_000),
+                )
 
-            // Second scan — must hit the UPDATE branch and keep the same id.
-            scanner.scan(root).toList()
-            val id2 = catalog.catalogQueries.selectProjectIdByPath(abs).executeAsOneOrNull()
-            assertNotNull(id2, "second scan must keep the row at $abs")
+                // Second scan — must hit the UPDATE branch and keep the same id.
+                scanner.scan(root).toList()
+                val id2 = catalog.catalogQueries.selectProjectIdByPath(abs).executeAsOneOrNull()
+                assertNotNull(id2, "second scan must keep the row at $abs")
 
-            assertEquals(id1, id2, "rescan must preserve project_id (was $id1, now $id2)")
+                assertEquals(id1, id2, "rescan must preserve project_id (was $id1, now $id2)")
 
-            // The journal entry's project_id must still resolve to a live project row. If the
-            // INSERT OR REPLACE bug regressed, id1 would no longer match any row.
-            val resolved = catalog.catalogQueries.selectProjectById(id1).executeAsOneOrNull()
-            assertNotNull(
-                resolved,
-                "journal entry's project_id $id1 must still resolve after rescan",
-            )
-            // Confirm the rescan actually rewrote the row (proves we hit UPDATE, not a no-op).
-            assertEquals(140.0, resolved.tempo)
+                // The journal entry's project_id must still resolve to a live project row. If the
+                // INSERT OR REPLACE bug regressed, id1 would no longer match any row.
+                val resolved = catalog.catalogQueries.selectProjectById(id1).executeAsOneOrNull()
+                assertNotNull(
+                    resolved,
+                    "journal entry's project_id $id1 must still resolve after rescan",
+                )
+                // Confirm the rescan actually rewrote the row (proves we hit UPDATE, not a no-op).
+                assertEquals(140.0, resolved.tempo)
 
-            val journalRows = catalog.catalogQueries.selectJournalForProject(
-                project_id = id1,
-                limit_ = 10L,
-            ).executeAsList()
-            assertEquals(1, journalRows.size)
-            assertEquals(id1, journalRows.single().project_id)
-        } finally {
-            root.toFile().deleteRecursively()
+                val journalRows =
+                    catalog.catalogQueries
+                        .selectJournalForProject(
+                            project_id = id1,
+                            limit_ = 10L,
+                        ).executeAsList()
+                assertEquals(1, journalRows.size)
+                assertEquals(id1, journalRows.single().project_id)
+            } finally {
+                root.toFile().deleteRecursively()
+            }
         }
-    }
 }

@@ -68,78 +68,81 @@ private fun bootstrapGraph(resetFirstRun: Boolean): DesktopAppGraph {
     return graph
 }
 
-private fun runApp(resetFirstRun: Boolean) = application {
-    val graph = remember { bootstrapGraph(resetFirstRun) }
-    val backStack = rememberNavBackStack(NavSavedStateConfig, Screen.Projects)
-    val windowState = rememberWindowState(size = DpSize(1360.dp, 900.dp))
-    val typography: AppTypography = remember { Fonts.load() }
+private fun runApp(resetFirstRun: Boolean) =
+    application {
+        val graph = remember { bootstrapGraph(resetFirstRun) }
+        val backStack = rememberNavBackStack(NavSavedStateConfig, Screen.Projects)
+        val windowState = rememberWindowState(size = DpSize(1360.dp, 900.dp))
+        val typography: AppTypography = remember { Fonts.load() }
 
-    // Launch decision: route through LaunchGate so it remains the canonical source of truth.
-    // When `OnboardingIntent.Finish` writes `firstRunCompletedAt`, the gate's flow re-emits
-    // and this state advances from Onboarding → MainApp, which transparently swaps the surface
-    // from OnboardingScreen → RootContent.
-    var decision: LaunchDecision? by remember { mutableStateOf(null) }
-    LaunchedEffect(graph) { graph.launchGate.observe().collect { decision = it } }
+        // Launch decision: route through LaunchGate so it remains the canonical source of truth.
+        // When `OnboardingIntent.Finish` writes `firstRunCompletedAt`, the gate's flow re-emits
+        // and this state advances from Onboarding → MainApp, which transparently swaps the surface
+        // from OnboardingScreen → RootContent.
+        var decision: LaunchDecision? by remember { mutableStateOf(null) }
+        LaunchedEffect(graph) { graph.launchGate.observe().collect { decision = it } }
 
-    Window(
-        onCloseRequest = ::exitApplication,
-        state = windowState,
-        title = "Sketchbook",
-    ) {
-        MenuBar {
-            Menu("File", mnemonic = 'F') {
-                Item("Library settings", onClick = {
-                    backStack.clear()
-                    backStack.add(Screen.Settings)
-                })
-                Item("Inbox", onClick = {
-                    backStack.clear()
-                    backStack.add(Screen.Inbox(com.sketchbook.desktop.inbox.InboxTab.NeedsAttention))
-                })
-                Separator()
-                Item("Quit", onClick = ::exitApplication)
+        Window(
+            onCloseRequest = ::exitApplication,
+            state = windowState,
+            title = "Sketchbook",
+        ) {
+            MenuBar {
+                Menu("File", mnemonic = 'F') {
+                    Item("Library settings", onClick = {
+                        backStack.clear()
+                        backStack.add(Screen.Settings)
+                    })
+                    Item("Inbox", onClick = {
+                        backStack.clear()
+                        backStack.add(Screen.Inbox(com.sketchbook.desktop.inbox.InboxTab.NeedsAttention))
+                    })
+                    Separator()
+                    Item("Quit", onClick = ::exitApplication)
+                }
+                Menu("Project", mnemonic = 'P') {
+                    Item("Projects", onClick = {
+                        backStack.clear()
+                        backStack.add(Screen.Projects)
+                    })
+                    Item("Proposals", onClick = {
+                        backStack.clear()
+                        backStack.add(Screen.Inbox(com.sketchbook.desktop.inbox.InboxTab.Proposals))
+                    })
+                }
             }
-            Menu("Project", mnemonic = 'P') {
-                Item("Projects", onClick = {
-                    backStack.clear()
-                    backStack.add(Screen.Projects)
-                })
-                Item("Proposals", onClick = {
-                    backStack.clear()
-                    backStack.add(Screen.Inbox(com.sketchbook.desktop.inbox.InboxTab.Proposals))
-                })
-            }
-        }
-        AppTheme(typography = typography) {
-            // Install the Metro VM factory once at the window root so every Composable below —
-            // including the chrome and per-NavEntry VMs — can call `metroViewModel<X>()` without
-            // seeing the graph.
-            CompositionLocalProvider(LocalMetroViewModelFactory provides graph.metroViewModelFactory) {
-                when (decision) {
-                    null -> {
-                        // Boot splash while the SettingsRepository flow is resolving.
-                        PaperPage {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                InkLoading()
+            AppTheme(typography = typography) {
+                // Install the Metro VM factory once at the window root so every Composable below —
+                // including the chrome and per-NavEntry VMs — can call `metroViewModel<X>()` without
+                // seeing the graph.
+                CompositionLocalProvider(LocalMetroViewModelFactory provides graph.metroViewModelFactory) {
+                    when (decision) {
+                        null -> {
+                            // Boot splash while the SettingsRepository flow is resolving.
+                            PaperPage {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    InkLoading()
+                                }
                             }
                         }
-                    }
 
-                    LaunchDecision.Onboarding -> {
-                        val onboardingVm: OnboardingViewModel = metroViewModel()
-                        OnboardingScreen(
-                            vm = onboardingVm,
-                            onPickFolder = ::pickFolderJvm,
-                            onPickFile = ::pickFileJvm,
-                        )
-                    }
+                        LaunchDecision.Onboarding -> {
+                            val onboardingVm: OnboardingViewModel = metroViewModel()
+                            OnboardingScreen(
+                                vm = onboardingVm,
+                                onPickFolder = ::pickFolderJvm,
+                                onPickFile = ::pickFileJvm,
+                            )
+                        }
 
-                    LaunchDecision.MainApp -> RootContent(backStack = backStack)
+                        LaunchDecision.MainApp -> {
+                            RootContent(backStack = backStack)
+                        }
+                    }
                 }
             }
         }
     }
-}

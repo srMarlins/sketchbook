@@ -52,37 +52,43 @@ fun ActivityBar(
     val phase by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = durationMs, easing = ease),
-            repeatMode = RepeatMode.Restart,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(durationMillis = durationMs, easing = ease),
+                repeatMode = RepeatMode.Restart,
+            ),
         label = "phase",
     )
-    val accent: Color = when (state) {
-        ActivityState.Idle -> Color.Transparent
-        ActivityState.Scanning -> colors.accentAction
-        ActivityState.Syncing -> colors.pinBlue
-    }
+    val accent: Color =
+        when (state) {
+            ActivityState.Idle -> Color.Transparent
+            ActivityState.Scanning -> colors.accentAction
+            ActivityState.Syncing -> colors.pinBlue
+        }
     val baseFill = colors.ruleLine
     val pool = if (state == ActivityState.Idle) Color.Transparent else accent.copy(alpha = 0.08f)
 
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(3.dp)
-            .background(baseFill)
-            .drawBehind {
-                if (state == ActivityState.Idle) return@drawBehind
-                // Faint constant accent pool so the bar reads "lit" between sweeps.
-                drawRect(color = pool, topLeft = Offset(0f, 0f), size = size)
-                drawSweep(phase, accent)
-                // Second sweep, 180° out of phase, gives the bar a continuous "in motion" feel.
-                drawSweep((phase + 0.5f) % 1f, accent.copy(alpha = 0.55f))
-            },
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .background(baseFill)
+                .drawBehind {
+                    if (state == ActivityState.Idle) return@drawBehind
+                    // Faint constant accent pool so the bar reads "lit" between sweeps.
+                    drawRect(color = pool, topLeft = Offset(0f, 0f), size = size)
+                    drawSweep(phase, accent)
+                    // Second sweep, 180° out of phase, gives the bar a continuous "in motion" feel.
+                    drawSweep((phase + 0.5f) % 1f, accent.copy(alpha = 0.55f))
+                },
     )
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSweep(phase: Float, accent: Color) {
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSweep(
+    phase: Float,
+    accent: Color,
+) {
     val w = size.width
     // Sweep is wider than the visible bar so the head can enter/leave smoothly. Width is 36%
     // of the bar; head travels from -width/2 to w + width/2, i.e. fully off-screen on both
@@ -99,20 +105,22 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSweep(phase: Fl
         Brush.horizontalGradient(
             // 4-stop gradient: leading tail, peak, trailing tail. The peak is at 55% (slightly
             // forward of center) so the head reads as the wet ink leading the dry tail.
-            colorStops = arrayOf(
-                0f to Color.Transparent,
-                0.18f to accent.copy(alpha = 0.35f),
-                0.55f to accent,
-                0.85f to accent.copy(alpha = 0.45f),
-                1f to Color.Transparent,
-            ),
+            colorStops =
+                arrayOf(
+                    0f to Color.Transparent,
+                    0.18f to accent.copy(alpha = 0.35f),
+                    0.55f to accent,
+                    0.85f to accent.copy(alpha = 0.45f),
+                    1f to Color.Transparent,
+                ),
             startX = left,
             endX = right,
         ),
         topLeft = Offset(visibleLeft.coerceAtLeast(0f), 0f),
-        size = Size(
-            width = (visibleRight.coerceAtMost(w) - visibleLeft.coerceAtLeast(0f)).coerceAtLeast(0f),
-            height = size.height,
-        ),
+        size =
+            Size(
+                width = (visibleRight.coerceAtMost(w) - visibleLeft.coerceAtLeast(0f)).coerceAtLeast(0f),
+                height = size.height,
+            ),
     )
 }

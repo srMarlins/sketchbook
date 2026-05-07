@@ -19,7 +19,6 @@ package com.sketchbook.repo
  * `@Inject @ContributesBinding(AppScope::class)`.
  */
 interface PluginPresenceProbe {
-
     /**
      * Walk all configured plugin directories, normalize installed plugin filenames, and update
      * `project_plugins.is_installed` for every distinct (plugin_name, plugin_type) in the catalog.

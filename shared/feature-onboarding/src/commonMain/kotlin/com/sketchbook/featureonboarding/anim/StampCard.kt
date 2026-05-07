@@ -34,10 +34,11 @@ fun StampCard(
         launch {
             scale.animateTo(
                 targetValue = 1f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
+                animationSpec =
+                    spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
             )
         }
         launch {
@@ -49,9 +50,10 @@ fun StampCard(
     }
 
     androidx.compose.foundation.layout.Box(
-        modifier = modifier
-            .scale(scale.value)
-            .alpha(alpha.value),
+        modifier =
+            modifier
+                .scale(scale.value)
+                .alpha(alpha.value),
     ) {
         content()
     }
