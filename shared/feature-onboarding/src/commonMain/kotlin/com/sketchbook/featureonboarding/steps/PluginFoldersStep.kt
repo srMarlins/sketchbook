@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import com.sketchbook.featureonboarding.anim.TypingHeading
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.ProvideContentColor
@@ -52,12 +54,11 @@ fun PluginFoldersStep(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg),
     ) {
-        ProvideContentColor(colors.inkPrimary) {
-            Text(
-                text = "Plugin folders.",
-                style = AppTheme.typography.title,
-            )
-        }
+        TypingHeading(
+            text = "Plugin folders.",
+            style = AppTheme.typography.title,
+            color = colors.inkPrimary,
+        )
         ProvideContentColor(colors.inkMuted) {
             Text(
                 text = "Used to flag projects with missing plugins.",
@@ -71,10 +72,12 @@ fun PluginFoldersStep(
                 verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
             ) {
                 for (path in paths) {
-                    FolderRow(
-                        path = path,
-                        onRemove = { onRemovePath(path) },
-                    )
+                    key(path) {
+                        FolderRow(
+                            path = path,
+                            onRemove = { onRemovePath(path) },
+                        )
+                    }
                 }
             }
         }
@@ -87,15 +90,11 @@ fun PluginFoldersStep(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.md),
         ) {
-            Button(
-                onClick = {
-                    val picked = onPickFolder()
-                    if (picked != null) onAddPath(picked)
-                },
-                variant = ButtonVariant.Secondary,
-            ) {
-                Text("+ Add folder")
-            }
+            AddFolderButton(
+                onPickFolder = onPickFolder,
+                onAddPath = onAddPath,
+                inkColor = colors.inkPrimary,
+            )
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(AppTheme.spacing.cornerInput))

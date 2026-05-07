@@ -1,6 +1,8 @@
 package com.sketchbook.featureonboarding.steps
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,8 +10,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import com.sketchbook.featureonboarding.anim.TypingHeading
+import com.sketchbook.featureonboarding.anim.inkUnderline
+import com.sketchbook.featureonboarding.anim.rememberInkUnderlineActive
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.ProvideContentColor
@@ -52,12 +59,11 @@ fun ProjectsRootsStep(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg),
     ) {
-        ProvideContentColor(colors.inkPrimary) {
-            Text(
-                text = "Where are your Ableton projects?",
-                style = AppTheme.typography.title,
-            )
-        }
+        TypingHeading(
+            text = "Where are your Ableton projects?",
+            style = AppTheme.typography.title,
+            color = colors.inkPrimary,
+        )
         ProvideContentColor(colors.inkMuted) {
             Text(
                 text = "Add one folder or several.",
@@ -94,23 +100,24 @@ fun ProjectsRootsStep(
                 verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
             ) {
                 for (path in paths) {
-                    FolderRow(
-                        path = path,
-                        onRemove = { onRemovePath(path) },
-                    )
+                    // Key by path so each row's StampCard plays its scale+fade animation
+                    // exactly once when the path is first added, and not when an unrelated
+                    // path is removed (which would shift positional indices).
+                    key(path) {
+                        FolderRow(
+                            path = path,
+                            onRemove = { onRemovePath(path) },
+                        )
+                    }
                 }
             }
         }
 
-        Button(
-            onClick = {
-                val picked = onPickFolder()
-                if (picked != null) onAddPath(picked)
-            },
-            variant = ButtonVariant.Secondary,
-        ) {
-            Text("+ Add folder")
-        }
+        AddFolderButton(
+            onPickFolder = onPickFolder,
+            onAddPath = onAddPath,
+            inkColor = colors.inkPrimary,
+        )
 
         Button(
             onClick = onContinue,
@@ -122,3 +129,35 @@ fun ProjectsRootsStep(
     }
 }
 
+/**
+ * `+ Add folder` button wrapped in a hoverable Box so we can paint the ink-underline
+ * accent on hover/focus. Done as a file-local helper so the three step composables can
+ * share the same wiring without each one repeating the InteractionSource plumbing.
+ *
+ * The underline tracks the wrapper Box (which is the same width as the button's clickable
+ * area) and reads hover via a `MutableInteractionSource` driven by `Modifier.hoverable`.
+ */
+@Composable
+internal fun AddFolderButton(
+    onPickFolder: () -> String?,
+    onAddPath: (String) -> Unit,
+    inkColor: androidx.compose.ui.graphics.Color,
+) {
+    val source = remember { MutableInteractionSource() }
+    val active = rememberInkUnderlineActive(source)
+    Box(
+        modifier = Modifier
+            .hoverable(source)
+            .inkUnderline(active = active, color = inkColor),
+    ) {
+        Button(
+            onClick = {
+                val picked = onPickFolder()
+                if (picked != null) onAddPath(picked)
+            },
+            variant = ButtonVariant.Secondary,
+        ) {
+            Text("+ Add folder")
+        }
+    }
+}

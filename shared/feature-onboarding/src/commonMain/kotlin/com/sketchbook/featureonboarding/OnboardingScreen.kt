@@ -4,8 +4,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,9 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,8 +25,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sketchbook.featureonboarding.anim.EmphasizedDecelerate
+import com.sketchbook.featureonboarding.anim.InkDots
 import com.sketchbook.featureonboarding.steps.DoneStep
 import com.sketchbook.featureonboarding.steps.PluginFoldersStep
 import com.sketchbook.featureonboarding.steps.ProjectsRootsStep
@@ -75,20 +77,37 @@ fun OnboardingScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.xl),
             ) {
-                DotIndicator(total = state.steps.size, currentIndex = state.currentIndex)
+                InkDots(count = state.steps.size, currentIndex = state.currentIndex)
 
+                // Resolve 16dp → px once per recomposition; the AnimatedContent transitionSpec
+                // captures it as an Int so the per-transition lambda doesn't need ambient density.
+                val slidePx = with(LocalDensity.current) { 16.dp.toPx().toInt() }
                 AnimatedContent(
                     targetState = state.currentIndex,
                     transitionSpec = {
-                        fadeIn(tween(280)) togetherWith fadeOut(tween(220))
+                        // Page-turn accent: 16dp horizontal slide layered onto the existing
+                        // fade. Forward-only (onboarding has no back button) so we always
+                        // slide-from-right; if a back-step is added later, branch on
+                        // `targetState > initialState`.
+                        val enterFade = fadeIn(tween(280, easing = EmphasizedDecelerate))
+                        val exitFade = fadeOut(tween(220))
+                        val enterSlide = slideInHorizontally(
+                            animationSpec = tween(280, easing = EmphasizedDecelerate),
+                        ) { slidePx }
+                        val exitSlide = slideOutHorizontally(
+                            animationSpec = tween(220),
+                        ) { -slidePx }
+                        (enterFade + enterSlide) togetherWith (exitFade + exitSlide)
                     },
                     label = "onboarding-step",
                 ) { index ->
                     when (state.steps[index]) {
                         OnboardingStep.Welcome ->
                             WelcomeStep(onContinue = { vm.dispatch(OnboardingIntent.Continue) })
+
                         OnboardingStep.Done ->
                             DoneStep(onFinish = { vm.dispatch(OnboardingIntent.Finish) })
+
                         OnboardingStep.ProjectsRoots -> ProjectsRootsStep(
                             paths = state.projectsRoots,
                             osDefaultSuggestion = remember { defaultProjectsRootSuggestion() },
@@ -98,6 +117,7 @@ fun OnboardingScreen(
                             onContinue = { vm.dispatch(OnboardingIntent.Continue) },
                             canContinue = state.canContinue,
                         )
+
                         OnboardingStep.SampleRoots -> SampleRootsStep(
                             paths = state.sampleRoots,
                             onAddPath = { vm.dispatch(OnboardingIntent.AddSampleRoot(it)) },
@@ -106,6 +126,7 @@ fun OnboardingScreen(
                             onContinue = { vm.dispatch(OnboardingIntent.Continue) },
                             onSkip = { vm.dispatch(OnboardingIntent.Skip) },
                         )
+
                         OnboardingStep.PluginFolders -> PluginFoldersStep(
                             paths = state.pluginFolders,
                             onAddPath = { vm.dispatch(OnboardingIntent.AddPluginFolder(it)) },
@@ -123,25 +144,6 @@ fun OnboardingScreen(
                     onSkipAll = { vm.dispatch(OnboardingIntent.SkipAllUseDefaults) },
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun DotIndicator(total: Int, currentIndex: Int) {
-    val colors = AppTheme.colors
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        for (i in 0 until total) {
-            val color = if (i == currentIndex) colors.inkPrimary else colors.inkFaint
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(color),
-            )
         }
     }
 }

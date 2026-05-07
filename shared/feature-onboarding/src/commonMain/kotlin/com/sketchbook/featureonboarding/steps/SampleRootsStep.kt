@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import com.sketchbook.featureonboarding.anim.TypingHeading
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.ProvideContentColor
@@ -45,12 +47,11 @@ fun SampleRootsStep(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg),
     ) {
-        ProvideContentColor(colors.inkPrimary) {
-            Text(
-                text = "Sample folders?",
-                style = AppTheme.typography.title,
-            )
-        }
+        TypingHeading(
+            text = "Sample folders?",
+            style = AppTheme.typography.title,
+            color = colors.inkPrimary,
+        )
 
         if (paths.isNotEmpty()) {
             Column(
@@ -58,23 +59,21 @@ fun SampleRootsStep(
                 verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
             ) {
                 for (path in paths) {
-                    FolderRow(
-                        path = path,
-                        onRemove = { onRemovePath(path) },
-                    )
+                    key(path) {
+                        FolderRow(
+                            path = path,
+                            onRemove = { onRemovePath(path) },
+                        )
+                    }
                 }
             }
         }
 
-        Button(
-            onClick = {
-                val picked = onPickFolder()
-                if (picked != null) onAddPath(picked)
-            },
-            variant = ButtonVariant.Secondary,
-        ) {
-            Text("+ Add folder")
-        }
+        AddFolderButton(
+            onPickFolder = onPickFolder,
+            onAddPath = onAddPath,
+            inkColor = colors.inkPrimary,
+        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.sketchbook.featureonboarding.anim.TypingHeading
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.ProvideContentColor
@@ -28,12 +29,11 @@ fun WelcomeStep(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg),
     ) {
-        ProvideContentColor(colors.inkPrimary) {
-            Text(
-                text = "Welcome to Sketchbook.",
-                style = AppTheme.typography.title,
-            )
-        }
+        TypingHeading(
+            text = "Welcome to Sketchbook.",
+            style = AppTheme.typography.title,
+            color = colors.inkPrimary,
+        )
         ProvideContentColor(colors.inkMuted) {
             Text(
                 text = "Point it at your library and it'll do the rest. Takes a minute.",

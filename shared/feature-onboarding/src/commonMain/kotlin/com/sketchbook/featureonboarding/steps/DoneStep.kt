@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.sketchbook.featureonboarding.anim.TypingHeading
 import com.sketchbook.uishared.components.Button
 import com.sketchbook.uishared.components.ButtonVariant
 import com.sketchbook.uishared.components.InkLoading
@@ -30,12 +31,11 @@ fun DoneStep(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.lg),
     ) {
-        ProvideContentColor(colors.inkPrimary) {
-            Text(
-                text = "Done.",
-                style = AppTheme.typography.title,
-            )
-        }
+        TypingHeading(
+            text = "Done.",
+            style = AppTheme.typography.title,
+            color = colors.inkPrimary,
+        )
         ProvideContentColor(colors.inkMuted) {
             Text(
                 text = "Scanning starts now — you can use Sketchbook while it runs.",
