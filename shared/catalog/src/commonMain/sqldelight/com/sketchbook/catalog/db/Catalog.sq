@@ -816,5 +816,11 @@ insertTreeJournalEntry:
 INSERT INTO tree_journal(tree_id, tree_kind, timestamp, host_id, event_kind, payload_json, rev)
 VALUES (:tree_id, :tree_kind, :timestamp, :host_id, :event_kind, :payload_json, :rev);
 
+-- Echo the AUTOINCREMENT id of the most recent insertTreeJournalEntry. Called inside the
+-- same transaction so SqlTreeJournal.appendEvent can return the assigned sequence number.
+lastTreeJournalId:
+SELECT last_insert_rowid();
+
 selectTreeJournal:
-SELECT * FROM tree_journal WHERE tree_id = :tree_id ORDER BY timestamp DESC LIMIT :limit_;
+SELECT * FROM tree_journal WHERE tree_id = :tree_id
+ORDER BY timestamp DESC, id DESC LIMIT :limit_;

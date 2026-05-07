@@ -7,6 +7,7 @@ import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.repo.SnapshotRepository
+import com.sketchbook.repo.TreeJournal
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -14,14 +15,22 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Polls cloud HEAD per project and persists newly-seen manifests as snapshot rows.
+ * Polls cloud HEAD per tree and persists newly-seen manifests as history rows.
  *
- * Subscribes are lightweight — just fetch HEAD + (optionally) the new manifests since last seen.
- * Materialization is on-demand (PR-22).
+ * - For [TrackedTreeKind.Project], writes go to the legacy `snapshots` table via
+ *   [SnapshotRepository.recordSnapshot] — that's the table the existing project timeline UI
+ *   and `SyncStateStore` already read from.
+ * - For non-project kinds (UserLibrary etc., commit 8 onward), writes go through
+ *   [TreeJournal.recordSnapshot] which records both the `tree_snapshots` row + a
+ *   `tree_journal` `snapshot` event in one transaction.
+ *
+ * Subscriptions are lightweight — fetch HEAD + (optionally) the new manifests since last
+ * seen. Materialization is on-demand (PR-22).
  */
 class PullPoller(
     private val cloud: CloudBackend,
     private val snapshots: SnapshotRepository,
+    private val treeJournal: TreeJournal? = null,
     private val pollInterval: Duration = 30.seconds,
 ) {
     /**
@@ -36,8 +45,11 @@ class PullPoller(
     /**
      * Tree-keyed subscription. Project callers route through the [ProjectUuid] overload above
      * so existing call sites stay terse; non-project kinds (UserLibrary in commit 8) call this
-     * form directly. Wire format is still v=1 — the manifest's `project_uuid` field is present
-     * for [TrackedTreeKind.Project] and synthesized to the tree-id for non-project kinds.
+     * form directly. For non-project kinds [treeJournal] must be provided at construction —
+     * the legacy `snapshots` table is project-only.
+     *
+     * Wire format is still v=1 — the manifest's `project_uuid` field is present for
+     * [TrackedTreeKind.Project] and synthesized to the tree-id for non-project kinds.
      */
     fun subscribe(
         treeId: TrackedTreeId,
@@ -75,7 +87,18 @@ class PullPoller(
                             totalBytes = manifest.stats.totalBytes,
                             newBytes = manifest.stats.newBytes,
                         )
-                    snapshots.recordSnapshot(snapshot, manifestPath = ref.path, manifestHash = "")
+                    if (kind == TrackedTreeKind.Project) {
+                        snapshots.recordSnapshot(snapshot, manifestPath = ref.path, manifestHash = "")
+                    } else {
+                        // Non-project kinds: route to the parallel `tree_*` tables. A null
+                        // [treeJournal] here means a caller subscribed for a non-project kind
+                        // without wiring the dependency — fail loudly so the misconfiguration
+                        // surfaces in tests rather than silently dropping history rows.
+                        val journal =
+                            treeJournal
+                                ?: error("PullPoller subscribed for non-project kind ${kind.wireName} without a TreeJournal")
+                        journal.recordSnapshot(manifest, treeId, kind, manifestPath = ref.path)
+                    }
                     sinceRev = rev
                     emit(snapshot)
                 }
