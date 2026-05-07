@@ -9,7 +9,10 @@ import kotlinx.serialization.Serializable
  * transition — see `docs/plans/2026-05-07-backend-generalization-design.md` §"TreeRegistry shape".
  */
 @Serializable
-data class Collaborator(@SerialName("user_id") val userId: UserId, @SerialName("role") val role: CollabRole)
+data class Collaborator(
+    @SerialName("user_id") val userId: UserId,
+    @SerialName("role") val role: CollabRole,
+)
 
 @Serializable
 enum class CollabRole {

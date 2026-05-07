@@ -30,98 +30,110 @@ import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 class TreeRegistryTest {
-
     private val now = Instant.parse("2026-05-07T12:00:00Z")
     private val clock = FixedClock(now)
 
     @Test
-    fun fetchOnEmptyBucketReturnsEmptySnapshotWithNullGeneration() = runTest {
-        val handle = CatalogDb.openInMemory()
-        val cloud = FakeDocCloud()
-        val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
-        val snapshot = registry.fetch()
-        assertEquals(emptyList(), snapshot.entries)
-        assertNull(snapshot.generation)
-    }
+    fun fetchOnEmptyBucketReturnsEmptySnapshotWithNullGeneration() =
+        runTest {
+            val handle = CatalogDb.openInMemory()
+            val cloud = FakeDocCloud()
+            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+            val snapshot = registry.fetch()
+            assertEquals(emptyList(), snapshot.entries)
+            assertNull(snapshot.generation)
+        }
 
     @Test
-    fun registerWritesEntryAndUpdatesCache() = runTest {
-        val handle = CatalogDb.openInMemory()
-        val cloud = FakeDocCloud()
-        val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+    fun registerWritesEntryAndUpdatesCache() =
+        runTest {
+            val handle = CatalogDb.openInMemory()
+            val cloud = FakeDocCloud()
+            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
 
-        val entry = registry.register(
-            kind = TrackedTreeKind.Project,
-            scopeKey = "project-uuid-1",
-            displayName = "lofi-sketch",
-            treeId = TrackedTreeId("tt-01HZ3W"),
-            createdByHost = "host-a",
-        ).getOrThrow()
+            val entry =
+                registry
+                    .register(
+                        kind = TrackedTreeKind.Project,
+                        scopeKey = "project-uuid-1",
+                        displayName = "lofi-sketch",
+                        treeId = TrackedTreeId("tt-01HZ3W"),
+                        createdByHost = "host-a",
+                    ).getOrThrow()
 
-        assertEquals(TrackedTreeId("tt-01HZ3W"), entry.treeId)
-        // Cloud doc is now present.
-        val read = cloud.readDoc(TreeRegistry.REGISTRY_KEY)!!
-        assertTrue(read.bytes.decodeToString().contains("tt-01HZ3W"))
-        // Local cache reflects the entry.
-        val looked = registry.lookup(TrackedTreeKind.Project, "project-uuid-1")
-        assertNotNull(looked)
-        assertEquals(TrackedTreeId("tt-01HZ3W"), looked.treeId)
-    }
-
-    @Test
-    fun registerIsIdempotentForSameScope() = runTest {
-        val handle = CatalogDb.openInMemory()
-        val cloud = FakeDocCloud()
-        val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
-
-        val first = registry.register(
-            kind = TrackedTreeKind.Project,
-            scopeKey = "p1",
-            displayName = "first",
-            treeId = TrackedTreeId("tt-1"),
-            createdByHost = "host-a",
-        ).getOrThrow()
-        val second = registry.register(
-            kind = TrackedTreeKind.Project,
-            scopeKey = "p1",
-            displayName = "second-attempt",
-            treeId = TrackedTreeId("tt-2"),
-            createdByHost = "host-a",
-        ).getOrThrow()
-        // Same entry returned; no second tree minted.
-        assertEquals(first.treeId, second.treeId)
-        assertEquals("first", second.displayName)
-    }
+            assertEquals(TrackedTreeId("tt-01HZ3W"), entry.treeId)
+            // Cloud doc is now present.
+            val read = cloud.readDoc(TreeRegistry.REGISTRY_KEY)!!
+            assertTrue(read.bytes.decodeToString().contains("tt-01HZ3W"))
+            // Local cache reflects the entry.
+            val looked = registry.lookup(TrackedTreeKind.Project, "project-uuid-1")
+            assertNotNull(looked)
+            assertEquals(TrackedTreeId("tt-01HZ3W"), looked.treeId)
+        }
 
     @Test
-    fun registerRetriesOnCasConflict() = runTest {
-        val handle = CatalogDb.openInMemory()
-        val cloud = FakeDocCloud(injectConflictsOnFirstWrite = 2)
-        val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
-        val entry = registry.register(
-            kind = TrackedTreeKind.UserLibrary,
-            scopeKey = "default",
-            displayName = "User Library",
-            treeId = TrackedTreeId("tt-ul"),
-            createdByHost = "host-a",
-        ).getOrThrow()
-        assertEquals(TrackedTreeId("tt-ul"), entry.treeId)
-    }
+    fun registerIsIdempotentForSameScope() =
+        runTest {
+            val handle = CatalogDb.openInMemory()
+            val cloud = FakeDocCloud()
+            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+
+            val first =
+                registry
+                    .register(
+                        kind = TrackedTreeKind.Project,
+                        scopeKey = "p1",
+                        displayName = "first",
+                        treeId = TrackedTreeId("tt-1"),
+                        createdByHost = "host-a",
+                    ).getOrThrow()
+            val second =
+                registry
+                    .register(
+                        kind = TrackedTreeKind.Project,
+                        scopeKey = "p1",
+                        displayName = "second-attempt",
+                        treeId = TrackedTreeId("tt-2"),
+                        createdByHost = "host-a",
+                    ).getOrThrow()
+            // Same entry returned; no second tree minted.
+            assertEquals(first.treeId, second.treeId)
+            assertEquals("first", second.displayName)
+        }
+
+    @Test
+    fun registerRetriesOnCasConflict() =
+        runTest {
+            val handle = CatalogDb.openInMemory()
+            val cloud = FakeDocCloud(injectConflictsOnFirstWrite = 2)
+            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+            val entry =
+                registry
+                    .register(
+                        kind = TrackedTreeKind.UserLibrary,
+                        scopeKey = "default",
+                        displayName = "User Library",
+                        treeId = TrackedTreeId("tt-ul"),
+                        createdByHost = "host-a",
+                    ).getOrThrow()
+            assertEquals(TrackedTreeId("tt-ul"), entry.treeId)
+        }
 
     @Test
     fun canReadOwnerOnlyByDefault() {
         val handle = CatalogDb.openInMemory()
         val cloud = FakeDocCloud()
         val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
-        val entry = TreeRegistryEntry(
-            treeId = TrackedTreeId("t"),
-            kind = TrackedTreeKind.Project,
-            scopeKey = "x",
-            displayName = "x",
-            ownerUserId = UserId("alice"),
-            createdAt = now,
-            createdByHost = "h",
-        )
+        val entry =
+            TreeRegistryEntry(
+                treeId = TrackedTreeId("t"),
+                kind = TrackedTreeKind.Project,
+                scopeKey = "x",
+                displayName = "x",
+                ownerUserId = UserId("alice"),
+                createdAt = now,
+                createdByHost = "h",
+            )
         assertTrue(registry.canRead(entry, UserId("alice")))
         assertEquals(false, registry.canRead(entry, UserId("bob")))
     }
@@ -131,19 +143,21 @@ class TreeRegistryTest {
         val handle = CatalogDb.openInMemory()
         val cloud = FakeDocCloud()
         val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
-        val entry = TreeRegistryEntry(
-            treeId = TrackedTreeId("t"),
-            kind = TrackedTreeKind.Project,
-            scopeKey = "x",
-            displayName = "x",
-            ownerUserId = UserId("alice"),
-            collaborators = listOf(
-                Collaborator(UserId("bob"), CollabRole.Read),
-                Collaborator(UserId("carol"), CollabRole.Write),
-            ),
-            createdAt = now,
-            createdByHost = "h",
-        )
+        val entry =
+            TreeRegistryEntry(
+                treeId = TrackedTreeId("t"),
+                kind = TrackedTreeKind.Project,
+                scopeKey = "x",
+                displayName = "x",
+                ownerUserId = UserId("alice"),
+                collaborators =
+                    listOf(
+                        Collaborator(UserId("bob"), CollabRole.Read),
+                        Collaborator(UserId("carol"), CollabRole.Write),
+                    ),
+                createdAt = now,
+                createdByHost = "h",
+            )
         assertTrue(registry.canWrite(entry, UserId("alice")))
         assertEquals(false, registry.canWrite(entry, UserId("bob")))
         assertTrue(registry.canWrite(entry, UserId("carol")))
@@ -151,31 +165,84 @@ class TreeRegistryTest {
     }
 }
 
-private class FixedClock(private val instant: Instant) : kotlin.time.Clock {
+private class FixedClock(
+    private val instant: Instant,
+) : kotlin.time.Clock {
     override fun now(): Instant = instant
 }
 
 /** Minimal CloudBackend that only implements the CloudDoc API. Enough for TreeRegistry. */
-private class FakeDocCloud(private var injectConflictsOnFirstWrite: Int = 0) : CloudBackend {
+private class FakeDocCloud(
+    private var injectConflictsOnFirstWrite: Int = 0,
+) : CloudBackend {
     private val docs = mutableMapOf<CloudDocKey, Pair<ByteArray, Generation>>()
     private var nextGen = 1L
 
-    override suspend fun headBlob(hash: BlobHash, scope: BlobScope) = false
-    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) = error("n/a")
-    override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource = error("n/a")
-    override suspend fun readManifest(treeId: TrackedTreeId, kind: TrackedTreeKind, rev: SnapshotRev): Manifest = error("n/a")
-    override suspend fun listManifests(treeId: TrackedTreeId, kind: TrackedTreeKind, sinceRev: SnapshotRev?) = emptyList<ManifestRef>()
-    override suspend fun appendManifestHead(treeId: TrackedTreeId, kind: TrackedTreeKind, expectedHead: Generation?, manifest: Manifest) = Result.failure<Generation>(SketchbookError.Conflict("n/a"))
-    override suspend fun acquireLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock) = LeaseAcquireResult.Acquired(Generation("1"))
-    override suspend fun refreshLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock, expected: Generation) = LeaseRefreshResult.Refreshed(Generation("1"))
-    override suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation) {}
+    override suspend fun headBlob(
+        hash: BlobHash,
+        scope: BlobScope,
+    ) = false
+
+    override suspend fun putBlob(
+        hash: BlobHash,
+        source: RawSource,
+        size: Long,
+        scope: BlobScope,
+    ) = error("n/a")
+
+    override suspend fun getBlob(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): RawSource = error("n/a")
+
+    override suspend fun readManifest(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        rev: SnapshotRev,
+    ): Manifest = error("n/a")
+
+    override suspend fun listManifests(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        sinceRev: SnapshotRev?,
+    ) = emptyList<ManifestRef>()
+
+    override suspend fun appendManifestHead(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        expectedHead: Generation?,
+        manifest: Manifest,
+    ) = Result.failure<Generation>(SketchbookError.Conflict("n/a"))
+
+    override suspend fun acquireLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        lock: LeaseLock,
+    ) = LeaseAcquireResult.Acquired(Generation("1"))
+
+    override suspend fun refreshLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        lock: LeaseLock,
+        expected: Generation,
+    ) = LeaseRefreshResult.Refreshed(Generation("1"))
+
+    override suspend fun releaseLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        expected: Generation,
+    ) {}
 
     override suspend fun readDoc(key: CloudDocKey): CloudDocRead? {
         val d = docs[key] ?: return null
         return CloudDocRead(d.first, d.second)
     }
 
-    override suspend fun writeDoc(key: CloudDocKey, expected: Generation?, bytes: ByteArray): Result<Generation> {
+    override suspend fun writeDoc(
+        key: CloudDocKey,
+        expected: Generation?,
+        bytes: ByteArray,
+    ): Result<Generation> {
         if (injectConflictsOnFirstWrite > 0) {
             injectConflictsOnFirstWrite -= 1
             // Inject a stale read for the next attempt: bump the underlying doc out from under us.
@@ -196,7 +263,8 @@ private class FakeDocCloud(private var injectConflictsOnFirstWrite: Int = 0) : C
         return Result.success(gen)
     }
 
-    override suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef> = docs
-        .filter { it.key.path.startsWith(prefix.value) }
-        .map { CloudDocRef(it.key, it.value.second) }
+    override suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef> =
+        docs
+            .filter { it.key.path.startsWith(prefix.value) }
+            .map { CloudDocRef(it.key, it.value.second) }
 }

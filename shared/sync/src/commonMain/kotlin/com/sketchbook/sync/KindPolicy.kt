@@ -27,31 +27,34 @@ data class KindPolicy(
     val contributesToPluginManifest: Boolean,
 ) {
     companion object {
-        val Project: KindPolicy = KindPolicy(
-            leaseRequired = true,
-            conflictMode = ConflictMode.BranchFork,
-            privateScopeAllowed = true,
-            alsPatchingEnabled = true,
-            contributesToPluginManifest = true,
-        )
+        val Project: KindPolicy =
+            KindPolicy(
+                leaseRequired = true,
+                conflictMode = ConflictMode.BranchFork,
+                privateScopeAllowed = true,
+                alsPatchingEnabled = true,
+                contributesToPluginManifest = true,
+            )
 
-        val UserLibrary: KindPolicy = KindPolicy(
-            leaseRequired = false,
-            conflictMode = ConflictMode.Merge(DeletePolicy.Tombstones),
-            privateScopeAllowed = false,
-            alsPatchingEnabled = false,
-            contributesToPluginManifest = true,
-        )
+        val UserLibrary: KindPolicy =
+            KindPolicy(
+                leaseRequired = false,
+                conflictMode = ConflictMode.Merge(DeletePolicy.Tombstones),
+                privateScopeAllowed = false,
+                alsPatchingEnabled = false,
+                contributesToPluginManifest = true,
+            )
 
         /**
          * Resolve a kind to its policy. [TrackedTreeKind.Unknown] (newer-binary entries) has no
          * known policy and throws — callers should filter unknown kinds out of pipeline work
          * upstream rather than rely on a default.
          */
-        fun forKind(kind: TrackedTreeKind): KindPolicy = when (kind) {
-            is TrackedTreeKind.Project -> Project
-            is TrackedTreeKind.UserLibrary -> UserLibrary
-            is TrackedTreeKind.Unknown -> error("No KindPolicy for unknown kind '${kind.wireName}'")
-        }
+        fun forKind(kind: TrackedTreeKind): KindPolicy =
+            when (kind) {
+                is TrackedTreeKind.Project -> Project
+                is TrackedTreeKind.UserLibrary -> UserLibrary
+                is TrackedTreeKind.Unknown -> error("No KindPolicy for unknown kind '${kind.wireName}'")
+            }
     }
 }

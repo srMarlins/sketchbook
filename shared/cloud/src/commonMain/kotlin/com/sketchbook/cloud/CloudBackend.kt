@@ -20,9 +20,11 @@ import kotlinx.io.RawSource
  * mints real registry-backed ids.
  */
 interface CloudBackend {
-
     /** True iff a blob with [hash] exists in the bucket within [scope]. */
-    suspend fun headBlob(hash: BlobHash, scope: BlobScope = BlobScope.Shared): Boolean
+    suspend fun headBlob(
+        hash: BlobHash,
+        scope: BlobScope = BlobScope.Shared,
+    ): Boolean
 
     /**
      * Upload a blob at the content-addressed path within [scope]. No-op (returns successfully)
@@ -37,13 +39,24 @@ interface CloudBackend {
     )
 
     /** Download a blob. Caller closes the returned [RawSource]. */
-    suspend fun getBlob(hash: BlobHash, scope: BlobScope = BlobScope.Shared): RawSource
+    suspend fun getBlob(
+        hash: BlobHash,
+        scope: BlobScope = BlobScope.Shared,
+    ): RawSource
 
     /** Read a single manifest by `(treeId, kind, rev)`. */
-    suspend fun readManifest(treeId: TrackedTreeId, kind: TrackedTreeKind, rev: SnapshotRev): Manifest
+    suspend fun readManifest(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        rev: SnapshotRev,
+    ): Manifest
 
     /** List manifests for a tree, optionally only those after [sinceRev] (for incremental pull). */
-    suspend fun listManifests(treeId: TrackedTreeId, kind: TrackedTreeKind, sinceRev: SnapshotRev?): List<ManifestRef>
+    suspend fun listManifests(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        sinceRev: SnapshotRev?,
+    ): List<ManifestRef>
 
     /**
      * Append a new manifest as the tree's HEAD. CAS via [expectedHead]:
@@ -62,7 +75,11 @@ interface CloudBackend {
     ): Result<Generation>
 
     /** CAS-acquire the lease lock for a tree. */
-    suspend fun acquireLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock): LeaseAcquireResult
+    suspend fun acquireLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        lock: LeaseLock,
+    ): LeaseAcquireResult
 
     /** Heartbeat-refresh an existing lease lock; fails if our generation no longer matches. */
     suspend fun refreshLock(
@@ -73,7 +90,11 @@ interface CloudBackend {
     ): LeaseRefreshResult
 
     /** Release our lease lock. */
-    suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation)
+    suspend fun releaseLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        expected: Generation,
+    )
 
     /**
      * Read a small structured-JSON [CloudDoc] at [key]. Returns `null` when the object does not
@@ -91,14 +112,24 @@ interface CloudBackend {
      * Returns the new object's [Generation] on success; failure with
      * [com.sketchbook.core.SketchbookError.Conflict] on CAS mismatch.
      */
-    suspend fun writeDoc(key: CloudDocKey, expected: Generation?, bytes: ByteArray): Result<Generation>
+    suspend fun writeDoc(
+        key: CloudDocKey,
+        expected: Generation?,
+        bytes: ByteArray,
+    ): Result<Generation>
 
     /** List all [CloudDoc] objects whose key starts with [prefix]. */
     suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef>
 }
 
 /** Result of a [CloudBackend.readDoc] call. */
-class CloudDocRead(val bytes: ByteArray, val generation: Generation)
+class CloudDocRead(
+    val bytes: ByteArray,
+    val generation: Generation,
+)
 
 /** Pointer to a [CloudDoc] returned by [CloudBackend.listDocs]. */
-data class CloudDocRef(val key: CloudDocKey, val generation: Generation)
+data class CloudDocRef(
+    val key: CloudDocKey,
+    val generation: Generation,
+)

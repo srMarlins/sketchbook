@@ -69,10 +69,12 @@ class DirectGcsBackend(
     private val userId: UserId,
     private val json: Json = ManifestJson,
 ) : CloudBackend {
-
     private val tenantPrefix = "users/${userId.value}"
 
-    override suspend fun headBlob(hash: BlobHash, scope: BlobScope): Boolean {
+    override suspend fun headBlob(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): Boolean {
         val path = blobPath(hash, scope)
         val response = http.head(objectUrl(path)) { authHeader() }
         return when (response.status) {
@@ -82,7 +84,12 @@ class DirectGcsBackend(
         }
     }
 
-    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) {
+    override suspend fun putBlob(
+        hash: BlobHash,
+        source: RawSource,
+        size: Long,
+        scope: BlobScope,
+    ) {
         val path = blobPath(hash, scope)
         if (size <= RESUMABLE_THRESHOLD) {
             putBlobSingle(path, source, size)
@@ -97,17 +104,22 @@ class DirectGcsBackend(
      * can write to the wire. Suitable up to a few MB; larger blobs use [putBlobResumable] which
      * can recover from network blips and isn't subject to GCS's single-request size cap.
      */
-    private suspend fun putBlobSingle(path: String, source: RawSource, size: Long) {
-        val response = http.post(uploadUrl()) {
-            authHeader()
-            parameter("uploadType", "media")
-            parameter("name", path)
-            // x-goog-if-generation-match: 0 → "must not exist". Idempotent: an existing
-            // identical blob returns 412 which we treat as success (content-addressed).
-            headers { append("x-goog-if-generation-match", "0") }
-            contentType(ContentType.Application.OctetStream)
-            setBody(StreamingSourceContent(source, size))
-        }
+    private suspend fun putBlobSingle(
+        path: String,
+        source: RawSource,
+        size: Long,
+    ) {
+        val response =
+            http.post(uploadUrl()) {
+                authHeader()
+                parameter("uploadType", "media")
+                parameter("name", path)
+                // x-goog-if-generation-match: 0 → "must not exist". Idempotent: an existing
+                // identical blob returns 412 which we treat as success (content-addressed).
+                headers { append("x-goog-if-generation-match", "0") }
+                contentType(ContentType.Application.OctetStream)
+                setBody(StreamingSourceContent(source, size))
+            }
         when (response.status) {
             HttpStatusCode.OK -> Unit
 
@@ -135,11 +147,16 @@ class DirectGcsBackend(
      * body + `Content-Range: bytes <asterisk-slash><total>`). Not in v1 because the desktop is
      * single-process and the user can simply retry the snapshot.
      */
-    private suspend fun putBlobResumable(path: String, source: RawSource, size: Long) {
+    private suspend fun putBlobResumable(
+        path: String,
+        source: RawSource,
+        size: Long,
+    ) {
         val tmp = stageSourceToTempFile(source)
         try {
-            val sessionUrl = initiateResumableSession(path, size)
-                ?: return // precondition already satisfied (412 on init)
+            val sessionUrl =
+                initiateResumableSession(path, size)
+                    ?: return // precondition already satisfied (412 on init)
             var offset = 0L
             while (offset < size) {
                 val chunkEnd = minOf(offset + RESUMABLE_CHUNK_BYTES, size) - 1
@@ -157,27 +174,37 @@ class DirectGcsBackend(
      * `null` if the precondition rejected the upload (412 — a content-addressable blob that
      * already exists). Throws on any other failure.
      */
-    private suspend fun initiateResumableSession(path: String, size: Long): String? {
-        val response = http.post(uploadUrl()) {
-            authHeader()
-            parameter("uploadType", "resumable")
-            parameter("name", path)
-            headers {
-                append("x-goog-if-generation-match", "0")
-                append("X-Upload-Content-Type", "application/octet-stream")
-                append("X-Upload-Content-Length", size.toString())
+    private suspend fun initiateResumableSession(
+        path: String,
+        size: Long,
+    ): String? {
+        val response =
+            http.post(uploadUrl()) {
+                authHeader()
+                parameter("uploadType", "resumable")
+                parameter("name", path)
+                headers {
+                    append("x-goog-if-generation-match", "0")
+                    append("X-Upload-Content-Type", "application/octet-stream")
+                    append("X-Upload-Content-Length", size.toString())
+                }
+                contentType(ContentType.Application.Json)
+                setBody("{}")
             }
-            contentType(ContentType.Application.Json)
-            setBody("{}")
-        }
         return when (response.status) {
-            HttpStatusCode.OK -> response.headers[HttpHeaders.Location]
-                ?: throw SketchbookError.IntegrityError("missing Location header on resumable session init for $path")
+            HttpStatusCode.OK -> {
+                response.headers[HttpHeaders.Location]
+                    ?: throw SketchbookError.IntegrityError("missing Location header on resumable session init for $path")
+            }
 
-            HttpStatusCode.PreconditionFailed -> null
+            HttpStatusCode.PreconditionFailed -> {
+                null
+            }
 
             // already present, content-addressed → noop
-            else -> throw remoteFailure(response, "POST resumable-init $path")
+            else -> {
+                throw remoteFailure(response, "POST resumable-init $path")
+            }
         }
     }
 
@@ -194,13 +221,14 @@ class DirectGcsBackend(
         total: Long,
     ): Boolean {
         val length = endInclusive - start + 1
-        val response = http.put(sessionUrl) {
-            headers {
-                append("Content-Range", "bytes $start-$endInclusive/$total")
+        val response =
+            http.put(sessionUrl) {
+                headers {
+                    append("Content-Range", "bytes $start-$endInclusive/$total")
+                }
+                contentType(ContentType.Application.OctetStream)
+                setBody(FileRangeContent(file, start, length))
             }
-            contentType(ContentType.Application.OctetStream)
-            setBody(FileRangeContent(file, start, length))
-        }
         return when (response.status.value) {
             200, 201 -> true
 
@@ -238,12 +266,16 @@ class DirectGcsBackend(
         return tmp
     }
 
-    override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource {
+    override suspend fun getBlob(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): RawSource {
         val path = blobPath(hash, scope)
-        val response = http.get(objectUrl(path)) {
-            authHeader()
-            parameter("alt", "media")
-        }
+        val response =
+            http.get(objectUrl(path)) {
+                authHeader()
+                parameter("alt", "media")
+            }
         if (!response.status.isSuccess) throw remoteFailure(response, "GET $path")
         // Stream the response body into a temp file, then hand the caller a RawSource backed by
         // that file. Avoids materializing potentially-hundreds-of-MB of blob into the heap and
@@ -262,12 +294,14 @@ class DirectGcsBackend(
         // resolve via list. Most callers invoke this only after listManifests; PR-9 callers use
         // the ref directly.
         val refs = listManifests(treeId, kind, sinceRev = SnapshotRev(rev.value - 1))
-        val target = refs.firstOrNull { it.rev == rev.value }
-            ?: throw SketchbookError.NotFound("no manifest at tree=${treeId.value} rev=${rev.value}")
-        val response = http.get(objectUrl(target.path)) {
-            authHeader()
-            parameter("alt", "media")
-        }
+        val target =
+            refs.firstOrNull { it.rev == rev.value }
+                ?: throw SketchbookError.NotFound("no manifest at tree=${treeId.value} rev=${rev.value}")
+        val response =
+            http.get(objectUrl(target.path)) {
+                authHeader()
+                parameter("alt", "media")
+            }
         if (!response.status.isSuccess) throw remoteFailure(response, "GET ${target.path}")
         return json.decodeFromString(Manifest.serializer(), response.bodyAsText())
     }
@@ -278,14 +312,16 @@ class DirectGcsBackend(
         sinceRev: SnapshotRev?,
     ): List<ManifestRef> {
         val prefix = manifestsPrefix(treeId, kind)
-        val response = http.get(listUrl()) {
-            authHeader()
-            parameter("prefix", prefix)
-        }
+        val response =
+            http.get(listUrl()) {
+                authHeader()
+                parameter("prefix", prefix)
+            }
         if (!response.status.isSuccess) throw remoteFailure(response, "LIST $prefix")
         val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
         val items = body["items"]?.jsonArray ?: return emptyList()
-        return items.mapNotNull { it.toManifestRef(prefix) }
+        return items
+            .mapNotNull { it.toManifestRef(prefix) }
             .filter { sinceRev == null || it.rev > sinceRev.value }
             .sortedBy { it.rev }
     }
@@ -306,41 +342,47 @@ class DirectGcsBackend(
 
         // Timestamped object — must not exist (rev is unique).
         run {
-            val resp = http.post(uploadUrl()) {
-                authHeader()
-                parameter("uploadType", "media")
-                parameter("name", timestamped)
-                headers { append("x-goog-if-generation-match", "0") }
-                contentType(ContentType.Application.Json)
-                setBody(body)
-            }
+            val resp =
+                http.post(uploadUrl()) {
+                    authHeader()
+                    parameter("uploadType", "media")
+                    parameter("name", timestamped)
+                    headers { append("x-goog-if-generation-match", "0") }
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
             if (resp.status != HttpStatusCode.OK && resp.status != HttpStatusCode.PreconditionFailed) {
                 return Result.failure(remoteFailure(resp, "PUT $timestamped"))
             }
         }
 
         // HEAD pointer — CAS via expectedHead.
-        val resp = http.post(uploadUrl()) {
-            authHeader()
-            parameter("uploadType", "media")
-            parameter("name", headPath)
-            if (expectedHead != null) {
-                headers { append("x-goog-if-generation-match", expectedHead.raw) }
+        val resp =
+            http.post(uploadUrl()) {
+                authHeader()
+                parameter("uploadType", "media")
+                parameter("name", headPath)
+                if (expectedHead != null) {
+                    headers { append("x-goog-if-generation-match", expectedHead.raw) }
+                }
+                contentType(ContentType.Application.Json)
+                setBody(body)
             }
-            contentType(ContentType.Application.Json)
-            setBody(body)
-        }
         return when (resp.status) {
             HttpStatusCode.OK -> {
-                val gen = resp.headers["x-goog-generation"]
-                    ?: return Result.failure(SketchbookError.IntegrityError("missing x-goog-generation on HEAD write"))
+                val gen =
+                    resp.headers["x-goog-generation"]
+                        ?: return Result.failure(SketchbookError.IntegrityError("missing x-goog-generation on HEAD write"))
                 Result.success(Generation(gen))
             }
 
-            HttpStatusCode.PreconditionFailed ->
+            HttpStatusCode.PreconditionFailed -> {
                 Result.failure(SketchbookError.Conflict("HEAD generation mismatch on tree=${treeId.value}"))
+            }
 
-            else -> Result.failure(remoteFailure(resp, "PUT $headPath"))
+            else -> {
+                Result.failure(remoteFailure(resp, "PUT $headPath"))
+            }
         }
     }
 
@@ -351,33 +393,39 @@ class DirectGcsBackend(
     ): LeaseAcquireResult {
         val path = lockPath(treeId, kind)
         val body = json.encodeToString(LeaseLock.serializer(), lock).toByteArray(Charsets.UTF_8)
-        val resp = http.post(uploadUrl()) {
-            authHeader()
-            parameter("uploadType", "media")
-            parameter("name", path)
-            headers { append("x-goog-if-generation-match", "0") }
-            contentType(ContentType.Application.Json)
-            setBody(body)
-        }
+        val resp =
+            http.post(uploadUrl()) {
+                authHeader()
+                parameter("uploadType", "media")
+                parameter("name", path)
+                headers { append("x-goog-if-generation-match", "0") }
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
         return when (resp.status) {
             HttpStatusCode.OK -> {
-                val gen = resp.headers["x-goog-generation"]
-                    ?: throw SketchbookError.IntegrityError("missing x-goog-generation on lock write")
+                val gen =
+                    resp.headers["x-goog-generation"]
+                        ?: throw SketchbookError.IntegrityError("missing x-goog-generation on lock write")
                 LeaseAcquireResult.Acquired(Generation(gen))
             }
 
             HttpStatusCode.PreconditionFailed -> {
-                val existing = http.get(objectUrl(path)) {
-                    authHeader()
-                    parameter("alt", "media")
-                }
+                val existing =
+                    http.get(objectUrl(path)) {
+                        authHeader()
+                        parameter("alt", "media")
+                    }
                 val existingLock = json.decodeFromString(LeaseLock.serializer(), existing.bodyAsText())
-                val gen = existing.headers["x-goog-generation"]
-                    ?: throw SketchbookError.IntegrityError("missing x-goog-generation on held lock read")
+                val gen =
+                    existing.headers["x-goog-generation"]
+                        ?: throw SketchbookError.IntegrityError("missing x-goog-generation on held lock read")
                 LeaseAcquireResult.Held(existingLock, Generation(gen))
             }
 
-            else -> throw remoteFailure(resp, "PUT $path")
+            else -> {
+                throw remoteFailure(resp, "PUT $path")
+            }
         }
     }
 
@@ -389,33 +437,44 @@ class DirectGcsBackend(
     ): LeaseRefreshResult {
         val path = lockPath(treeId, kind)
         val body = json.encodeToString(LeaseLock.serializer(), lock).toByteArray(Charsets.UTF_8)
-        val resp = http.post(uploadUrl()) {
-            authHeader()
-            parameter("uploadType", "media")
-            parameter("name", path)
-            headers { append("x-goog-if-generation-match", expected.raw) }
-            contentType(ContentType.Application.Json)
-            setBody(body)
-        }
+        val resp =
+            http.post(uploadUrl()) {
+                authHeader()
+                parameter("uploadType", "media")
+                parameter("name", path)
+                headers { append("x-goog-if-generation-match", expected.raw) }
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
         return when (resp.status) {
             HttpStatusCode.OK -> {
-                val gen = resp.headers["x-goog-generation"]
-                    ?: throw SketchbookError.IntegrityError("missing x-goog-generation on lock refresh")
+                val gen =
+                    resp.headers["x-goog-generation"]
+                        ?: throw SketchbookError.IntegrityError("missing x-goog-generation on lock refresh")
                 LeaseRefreshResult.Refreshed(Generation(gen))
             }
 
-            HttpStatusCode.PreconditionFailed -> LeaseRefreshResult.Stale
+            HttpStatusCode.PreconditionFailed -> {
+                LeaseRefreshResult.Stale
+            }
 
-            else -> throw remoteFailure(resp, "REFRESH $path")
+            else -> {
+                throw remoteFailure(resp, "REFRESH $path")
+            }
         }
     }
 
-    override suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation) {
+    override suspend fun releaseLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        expected: Generation,
+    ) {
         val path = lockPath(treeId, kind)
-        val resp = http.delete(objectUrl(path)) {
-            authHeader()
-            headers { append("x-goog-if-generation-match", expected.raw) }
-        }
+        val resp =
+            http.delete(objectUrl(path)) {
+                authHeader()
+                headers { append("x-goog-if-generation-match", expected.raw) }
+            }
         if (resp.status != HttpStatusCode.NoContent && resp.status != HttpStatusCode.NotFound) {
             throw remoteFailure(resp, "DELETE $path")
         }
@@ -423,55 +482,71 @@ class DirectGcsBackend(
 
     override suspend fun readDoc(key: CloudDocKey): CloudDocRead? {
         val path = docPath(key)
-        val response = http.get(objectUrl(path)) {
-            authHeader()
-            parameter("alt", "media")
-        }
+        val response =
+            http.get(objectUrl(path)) {
+                authHeader()
+                parameter("alt", "media")
+            }
         return when (response.status) {
             HttpStatusCode.OK -> {
-                val gen = response.headers["x-goog-generation"]
-                    ?: throw SketchbookError.IntegrityError("missing x-goog-generation on doc read")
+                val gen =
+                    response.headers["x-goog-generation"]
+                        ?: throw SketchbookError.IntegrityError("missing x-goog-generation on doc read")
                 CloudDocRead(response.bodyAsBytes(), Generation(gen))
             }
 
-            HttpStatusCode.NotFound -> null
+            HttpStatusCode.NotFound -> {
+                null
+            }
 
-            else -> throw remoteFailure(response, "GET $path")
+            else -> {
+                throw remoteFailure(response, "GET $path")
+            }
         }
     }
 
-    override suspend fun writeDoc(key: CloudDocKey, expected: Generation?, bytes: ByteArray): Result<Generation> {
+    override suspend fun writeDoc(
+        key: CloudDocKey,
+        expected: Generation?,
+        bytes: ByteArray,
+    ): Result<Generation> {
         val path = docPath(key)
-        val resp = http.post(uploadUrl()) {
-            authHeader()
-            parameter("uploadType", "media")
-            parameter("name", path)
-            if (expected != null) {
-                headers { append("x-goog-if-generation-match", expected.raw) }
+        val resp =
+            http.post(uploadUrl()) {
+                authHeader()
+                parameter("uploadType", "media")
+                parameter("name", path)
+                if (expected != null) {
+                    headers { append("x-goog-if-generation-match", expected.raw) }
+                }
+                contentType(ContentType.Application.Json)
+                setBody(bytes)
             }
-            contentType(ContentType.Application.Json)
-            setBody(bytes)
-        }
         return when (resp.status) {
             HttpStatusCode.OK -> {
-                val gen = resp.headers["x-goog-generation"]
-                    ?: return Result.failure(SketchbookError.IntegrityError("missing x-goog-generation on doc write"))
+                val gen =
+                    resp.headers["x-goog-generation"]
+                        ?: return Result.failure(SketchbookError.IntegrityError("missing x-goog-generation on doc write"))
                 Result.success(Generation(gen))
             }
 
-            HttpStatusCode.PreconditionFailed ->
+            HttpStatusCode.PreconditionFailed -> {
                 Result.failure(SketchbookError.Conflict("doc generation mismatch on $path"))
+            }
 
-            else -> Result.failure(remoteFailure(resp, "PUT $path"))
+            else -> {
+                Result.failure(remoteFailure(resp, "PUT $path"))
+            }
         }
     }
 
     override suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef> {
         val fullPrefix = "$tenantPrefix/${prefix.value}"
-        val response = http.get(listUrl()) {
-            authHeader()
-            parameter("prefix", fullPrefix)
-        }
+        val response =
+            http.get(listUrl()) {
+                authHeader()
+                parameter("prefix", fullPrefix)
+            }
         if (!response.status.isSuccess) throw remoteFailure(response, "LIST $fullPrefix")
         val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
         val items = body["items"]?.jsonArray ?: return emptyList()
@@ -490,7 +565,10 @@ class DirectGcsBackend(
 
     private fun listUrl(): String = "https://storage.googleapis.com/storage/v1/b/$bucket/o"
 
-    private fun blobPath(hash: BlobHash, scope: BlobScope): String {
+    private fun blobPath(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): String {
         val shard = hash.hex.substring(0, 2)
         return when (scope) {
             BlobScope.Shared -> "$tenantPrefix/blobs/$shard/${hash.value}"
@@ -503,10 +581,14 @@ class DirectGcsBackend(
      * `trees/<kind>/<tree_id>/`. Until then, [TrackedTreeKind.Project] callers pass the
      * project UUID as the tree-id string, so the path resolves to the legacy layout.
      */
-    private fun manifestsPrefix(treeId: TrackedTreeId, kind: TrackedTreeKind): String = when (kind) {
-        TrackedTreeKind.Project -> "$tenantPrefix/manifests/${treeId.value}/"
-        else -> "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/manifests/"
-    }
+    private fun manifestsPrefix(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+    ): String =
+        when (kind) {
+            TrackedTreeKind.Project -> "$tenantPrefix/manifests/${treeId.value}/"
+            else -> "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/manifests/"
+        }
 
     private fun manifestPath(
         treeId: TrackedTreeId,
@@ -519,12 +601,19 @@ class DirectGcsBackend(
         return manifestsPrefix(treeId, kind) + tail
     }
 
-    private fun headPath(treeId: TrackedTreeId, kind: TrackedTreeKind): String = manifestsPrefix(treeId, kind) + "HEAD"
+    private fun headPath(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+    ): String = manifestsPrefix(treeId, kind) + "HEAD"
 
-    private fun lockPath(treeId: TrackedTreeId, kind: TrackedTreeKind): String = when (kind) {
-        TrackedTreeKind.Project -> "$tenantPrefix/locks/${treeId.value}.lock"
-        else -> "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/lock"
-    }
+    private fun lockPath(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+    ): String =
+        when (kind) {
+            TrackedTreeKind.Project -> "$tenantPrefix/locks/${treeId.value}.lock"
+            else -> "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/lock"
+        }
 
     private fun docPath(key: CloudDocKey): String = "$tenantPrefix/${key.path}"
 
@@ -547,7 +636,10 @@ class DirectGcsBackend(
         return ManifestRef(rev = rev, path = name, generation = Generation(gen))
     }
 
-    private suspend fun remoteFailure(resp: HttpResponse, op: String): SketchbookError.RemoteFailure {
+    private suspend fun remoteFailure(
+        resp: HttpResponse,
+        op: String,
+    ): SketchbookError.RemoteFailure {
         val bodySnippet = runCatching { resp.bodyAsText() }.getOrNull()
         return SketchbookError.RemoteFailure(
             status = resp.status.value,
@@ -557,24 +649,32 @@ class DirectGcsBackend(
     }
 }
 
-internal val ManifestJson = Json {
-    encodeDefaults = true
-    ignoreUnknownKeys = true
-    prettyPrint = false
-}
+internal val ManifestJson =
+    Json {
+        encodeDefaults = true
+        ignoreUnknownKeys = true
+        prettyPrint = false
+    }
 
 private val HttpStatusCode.isSuccess: Boolean get() = value in 200..299
 
 private fun Source.readAllBytes(): ByteArray = readByteArray()
 
-private class ByteArrayRawSource(private val bytes: ByteArray) : RawSource {
+private class ByteArrayRawSource(
+    private val bytes: ByteArray,
+) : RawSource {
     private var consumed = false
-    override fun readAtMostTo(sink: kotlinx.io.Buffer, byteCount: Long): Long {
+
+    override fun readAtMostTo(
+        sink: kotlinx.io.Buffer,
+        byteCount: Long,
+    ): Long {
         if (consumed) return -1
         sink.write(bytes)
         consumed = true
         return bytes.size.toLong()
     }
+
     override fun close() {}
 }
 
@@ -605,7 +705,6 @@ private class StreamingSourceContent(
     private val source: RawSource,
     override val contentLength: Long,
 ) : OutgoingContent.WriteChannelContent() {
-
     override val contentType: ContentType = ContentType.Application.OctetStream
 
     override suspend fun writeTo(channel: ByteWriteChannel) {
@@ -639,7 +738,6 @@ private class FileRangeContent(
     private val offset: Long,
     override val contentLength: Long,
 ) : OutgoingContent.WriteChannelContent() {
-
     override val contentType: ContentType = ContentType.Application.OctetStream
 
     override suspend fun writeTo(channel: ByteWriteChannel) {
@@ -670,7 +768,10 @@ private class FileRangeContent(
  * the file and deletes it on close. Used by `getBlob` so a 543 MB download doesn't sit on the
  * heap waiting for the caller to consume it.
  */
-private suspend fun drainToTempFile(channel: ByteReadChannel, prefix: String): RawSource {
+private suspend fun drainToTempFile(
+    channel: ByteReadChannel,
+    prefix: String,
+): RawSource {
     val tmp = Files.createTempFile(prefix, ".bin")
     try {
         // Ktor's JVM `toInputStream` adapter (in ktor-io-jvm) gives us a blocking
@@ -693,12 +794,17 @@ private suspend fun drainToTempFile(channel: ByteReadChannel, prefix: String): R
     return TempFileRawSource(tmp)
 }
 
-private class TempFileRawSource(private val path: Path) : RawSource {
+private class TempFileRawSource(
+    private val path: Path,
+) : RawSource {
     private val stream = Files.newInputStream(path, StandardOpenOption.READ)
     private val chunk = ByteArray(STREAM_CHUNK_BYTES)
     private var closed = false
 
-    override fun readAtMostTo(sink: Buffer, byteCount: Long): Long {
+    override fun readAtMostTo(
+        sink: Buffer,
+        byteCount: Long,
+    ): Long {
         if (closed) return -1
         val target = minOf(byteCount, chunk.size.toLong()).toInt()
         val read = stream.read(chunk, 0, target)

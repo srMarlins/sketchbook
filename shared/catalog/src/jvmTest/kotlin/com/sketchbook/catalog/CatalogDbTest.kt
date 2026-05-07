@@ -27,7 +27,10 @@ class CatalogDbTest {
             "repair_acks",
             "proposal_acks",
             "journal_entries",
-            "tree_sync_state", "tree_registry_cache", "tree_snapshots", "tree_journal",
+            "tree_sync_state",
+            "tree_registry_cache",
+            "tree_snapshots",
+            "tree_journal",
         )) {
             assertTrue(t in tables, "missing table $t — got $tables")
         }

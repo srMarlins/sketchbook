@@ -13,7 +13,9 @@ package com.sketchbook.sync
 sealed interface ConflictMode {
     data object BranchFork : ConflictMode
 
-    data class Merge(val deletePolicy: DeletePolicy) : ConflictMode
+    data class Merge(
+        val deletePolicy: DeletePolicy,
+    ) : ConflictMode
 }
 
 /** How tombstones flow through merges. Only consulted when [ConflictMode.Merge]. */

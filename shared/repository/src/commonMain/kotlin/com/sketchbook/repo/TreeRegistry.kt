@@ -35,7 +35,6 @@ import kotlin.time.Instant
  * once v1.2 lands.
  */
 interface TreeRegistry {
-
     /**
      * Read the registry from cloud. Updates the local cache as a side effect. Returns the
      * current snapshot + the [Generation] for read-modify-write CAS. If no registry doc exists
@@ -48,7 +47,10 @@ interface TreeRegistry {
      * Find a tree by `(kind, scopeKey)` from the local cache. Cheap; does not touch the cloud.
      * Returns `null` when the registry has not been fetched yet or the tree is unknown.
      */
-    suspend fun lookup(kind: TrackedTreeKind, scopeKey: String): TreeRegistryEntry?
+    suspend fun lookup(
+        kind: TrackedTreeKind,
+        scopeKey: String,
+    ): TreeRegistryEntry?
 
     /**
      * Register a new tree. CAS retries on registry-doc conflict (another machine added a tree
@@ -65,10 +67,16 @@ interface TreeRegistry {
     ): Result<TreeRegistryEntry>
 
     /** True if [userId] can read [entry]. v1: always the owner; v1.2: + collaborators with any role. */
-    fun canRead(entry: TreeRegistryEntry, userId: UserId): Boolean
+    fun canRead(
+        entry: TreeRegistryEntry,
+        userId: UserId,
+    ): Boolean
 
     /** True if [userId] can write [entry]. v1: always the owner; v1.2: + collaborators with Write/Admin. */
-    fun canWrite(entry: TreeRegistryEntry, userId: UserId): Boolean
+    fun canWrite(
+        entry: TreeRegistryEntry,
+        userId: UserId,
+    ): Boolean
 
     companion object {
         const val REGISTER_MAX_RETRIES: Int = 5
@@ -77,7 +85,10 @@ interface TreeRegistry {
 }
 
 /** Snapshot of the registry doc + the cloud generation token for CAS. */
-data class TreeRegistrySnapshot(val entries: List<TreeRegistryEntry>, val generation: Generation?)
+data class TreeRegistrySnapshot(
+    val entries: List<TreeRegistryEntry>,
+    val generation: Generation?,
+)
 
 @Serializable
 data class TreeRegistryEntry(
@@ -108,23 +119,27 @@ class CloudTreeRegistry(
     private val clock: Clock = Clock.System,
     private val ownerUserId: UserId = UserId.DEFAULT,
 ) : TreeRegistry {
-
     override suspend fun fetch(): TreeRegistrySnapshot {
         val read = cloud.readDoc(TreeRegistry.REGISTRY_KEY)
-        val (entries, gen) = if (read == null) {
-            emptyList<TreeRegistryEntry>() to null
-        } else {
-            val doc = JSON.decodeFromString(TreeRegistryDoc.serializer(), read.bytes.decodeToString())
-            doc.trees to read.generation
-        }
+        val (entries, gen) =
+            if (read == null) {
+                emptyList<TreeRegistryEntry>() to null
+            } else {
+                val doc = JSON.decodeFromString(TreeRegistryDoc.serializer(), read.bytes.decodeToString())
+                doc.trees to read.generation
+            }
         refreshCache(entries)
         return TreeRegistrySnapshot(entries, gen)
     }
 
-    override suspend fun lookup(kind: TrackedTreeKind, scopeKey: String): TreeRegistryEntry? {
-        val rows = catalog.catalogQueries
-            .selectTreeRegistryByKindScope(tree_kind = kind.wireName, scope_key = scopeKey)
-            .executeAsList()
+    override suspend fun lookup(
+        kind: TrackedTreeKind,
+        scopeKey: String,
+    ): TreeRegistryEntry? {
+        val rows =
+            catalog.catalogQueries
+                .selectTreeRegistryByKindScope(tree_kind = kind.wireName, scope_key = scopeKey)
+                .executeAsList()
         val row = rows.firstOrNull() ?: return null
         return TreeRegistryEntry(
             treeId = TrackedTreeId(row.tree_id),
@@ -154,36 +169,44 @@ class CloudTreeRegistry(
             current.entries.firstOrNull { it.kind == kind && it.scopeKey == scopeKey }?.let {
                 return Result.success(it)
             }
-            val newEntry = TreeRegistryEntry(
-                treeId = treeId,
-                kind = kind,
-                scopeKey = scopeKey,
-                displayName = displayName,
-                ownerUserId = ownerUserId,
-                createdAt = clock.now(),
-                createdByHost = createdByHost,
-            )
+            val newEntry =
+                TreeRegistryEntry(
+                    treeId = treeId,
+                    kind = kind,
+                    scopeKey = scopeKey,
+                    displayName = displayName,
+                    ownerUserId = ownerUserId,
+                    createdAt = clock.now(),
+                    createdByHost = createdByHost,
+                )
             val doc = TreeRegistryDoc(ownerUserId = ownerUserId, trees = current.entries + newEntry)
             val expected = current.generation ?: Generation.ZERO
             val bytes = JSON.encodeToString(TreeRegistryDoc.serializer(), doc).encodeToByteArray()
             val result = cloud.writeDoc(TreeRegistry.REGISTRY_KEY, expected, bytes)
-            result.onSuccess {
-                refreshCache(doc.trees)
-                return Result.success(newEntry)
-            }.onFailure { err ->
-                if (err !is SketchbookError.Conflict) return Result.failure(err)
-                // Retry on CAS conflict.
-            }
+            result
+                .onSuccess {
+                    refreshCache(doc.trees)
+                    return Result.success(newEntry)
+                }.onFailure { err ->
+                    if (err !is SketchbookError.Conflict) return Result.failure(err)
+                    // Retry on CAS conflict.
+                }
         }
         return Result.failure(SketchbookError.Conflict("registry CAS retries exhausted"))
     }
 
-    override fun canRead(entry: TreeRegistryEntry, userId: UserId): Boolean {
+    override fun canRead(
+        entry: TreeRegistryEntry,
+        userId: UserId,
+    ): Boolean {
         if (entry.ownerUserId == userId) return true
         return entry.collaborators.any { it.userId == userId }
     }
 
-    override fun canWrite(entry: TreeRegistryEntry, userId: UserId): Boolean {
+    override fun canWrite(
+        entry: TreeRegistryEntry,
+        userId: UserId,
+    ): Boolean {
         if (entry.ownerUserId == userId) return true
         return entry.collaborators.any { it.userId == userId && it.role != CollabRole.Read }
     }
@@ -205,10 +228,11 @@ class CloudTreeRegistry(
     }
 
     private companion object {
-        val JSON = Json {
-            encodeDefaults = true
-            ignoreUnknownKeys = true
-            prettyPrint = false
-        }
+        val JSON =
+            Json {
+                encodeDefaults = true
+                ignoreUnknownKeys = true
+                prettyPrint = false
+            }
     }
 }

@@ -26,7 +26,12 @@ import kotlin.time.Clock
  * host beats a stale add on the other (provided the delete's tombstone has the later mtime —
  * which is the case when the producer emits tombstones at observation time).
  */
-fun mergeManifests(local: Manifest, remote: Manifest, hostId: String, clock: Clock): Manifest {
+fun mergeManifests(
+    local: Manifest,
+    remote: Manifest,
+    hostId: String,
+    clock: Clock,
+): Manifest {
     val mergedFiles = LinkedHashMap<String, ManifestFile>()
     val rels = (local.files.keys + remote.files.keys).toSortedSet()
     for (rel in rels) {
@@ -45,11 +50,12 @@ fun mergeManifests(local: Manifest, remote: Manifest, hostId: String, clock: Clo
         kind = SnapshotKind.Auto,
         label = null,
         files = mergedFiles,
-        stats = ManifestStats(
-            fileCount = live.size,
-            totalBytes = live.sumOf { it.size },
-            newBytes = local.stats.newBytes,
-        ),
+        stats =
+            ManifestStats(
+                fileCount = live.size,
+                totalBytes = live.sumOf { it.size },
+                newBytes = local.stats.newBytes,
+            ),
     )
 }
 

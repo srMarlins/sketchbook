@@ -28,13 +28,29 @@ class ThrashingCloudBackend(
     private val targetTreeId: TrackedTreeId,
     private val targetKind: TrackedTreeKind,
 ) : CloudBackend {
+    override suspend fun headBlob(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): Boolean = delegate.headBlob(hash, scope)
 
-    override suspend fun headBlob(hash: BlobHash, scope: BlobScope): Boolean = delegate.headBlob(hash, scope)
-    override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) =
-        delegate.putBlob(hash, source, size, scope)
-    override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource = delegate.getBlob(hash, scope)
-    override suspend fun readManifest(treeId: TrackedTreeId, kind: TrackedTreeKind, rev: SnapshotRev): Manifest =
-        delegate.readManifest(treeId, kind, rev)
+    override suspend fun putBlob(
+        hash: BlobHash,
+        source: RawSource,
+        size: Long,
+        scope: BlobScope,
+    ) = delegate.putBlob(hash, source, size, scope)
+
+    override suspend fun getBlob(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): RawSource = delegate.getBlob(hash, scope)
+
+    override suspend fun readManifest(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        rev: SnapshotRev,
+    ): Manifest = delegate.readManifest(treeId, kind, rev)
+
     override suspend fun listManifests(
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
@@ -58,16 +74,27 @@ class ThrashingCloudBackend(
         kind: TrackedTreeKind,
         lock: LeaseLock,
     ): LeaseAcquireResult = delegate.acquireLock(treeId, kind, lock)
+
     override suspend fun refreshLock(
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
         lock: LeaseLock,
         expected: Generation,
     ): LeaseRefreshResult = delegate.refreshLock(treeId, kind, lock, expected)
-    override suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation) =
-        delegate.releaseLock(treeId, kind, expected)
+
+    override suspend fun releaseLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        expected: Generation,
+    ) = delegate.releaseLock(treeId, kind, expected)
+
     override suspend fun readDoc(key: CloudDocKey): CloudDocRead? = delegate.readDoc(key)
-    override suspend fun writeDoc(key: CloudDocKey, expected: Generation?, bytes: ByteArray): Result<Generation> =
-        delegate.writeDoc(key, expected, bytes)
+
+    override suspend fun writeDoc(
+        key: CloudDocKey,
+        expected: Generation?,
+        bytes: ByteArray,
+    ): Result<Generation> = delegate.writeDoc(key, expected, bytes)
+
     override suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef> = delegate.listDocs(prefix)
 }

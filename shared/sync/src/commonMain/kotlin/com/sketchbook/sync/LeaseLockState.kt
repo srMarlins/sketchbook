@@ -38,7 +38,6 @@ class LeaseLockState(
     private val ttl: Duration = 15.minutes,
     private val heartbeatInterval: Duration = 5.minutes,
 ) {
-
     private val treeId: TrackedTreeId = TrackedTreeId(uuid.value)
     private val kind: TrackedTreeKind = TrackedTreeKind.Project
 
@@ -49,41 +48,49 @@ class LeaseLockState(
 
     suspend fun acquire(scope: CoroutineScope): LockState {
         val now = clock.now()
-        val lock = LeaseLock(
-            ownerUserId = ownerUserId,
-            ownerHostId = hostId,
-            ownerHostName = hostName,
-            acquiredAt = now,
-            expiresAt = now + ttl,
-        )
-        val outcome = when (val result = cloud.acquireLock(treeId, kind, lock)) {
-            is LeaseAcquireResult.Acquired -> {
-                heartbeatJob?.cancel()
-                heartbeatJob = scope.launch { heartbeatLoop(result.generation, lock.heartbeatSeq) }
-                LockState.Owned(lock, result.generation)
-            }
+        val lock =
+            LeaseLock(
+                ownerUserId = ownerUserId,
+                ownerHostId = hostId,
+                ownerHostName = hostName,
+                acquiredAt = now,
+                expiresAt = now + ttl,
+            )
+        val outcome =
+            when (val result = cloud.acquireLock(treeId, kind, lock)) {
+                is LeaseAcquireResult.Acquired -> {
+                    heartbeatJob?.cancel()
+                    heartbeatJob = scope.launch { heartbeatLoop(result.generation, lock.heartbeatSeq) }
+                    LockState.Owned(lock, result.generation)
+                }
 
-            is LeaseAcquireResult.Held -> LockState.HeldByOther(result.held, result.generation)
-        }
+                is LeaseAcquireResult.Held -> {
+                    LockState.HeldByOther(result.held, result.generation)
+                }
+            }
         _state.value = outcome
         return outcome
     }
 
-    private suspend fun heartbeatLoop(initialGeneration: Generation, initialSeq: Long) {
+    private suspend fun heartbeatLoop(
+        initialGeneration: Generation,
+        initialSeq: Long,
+    ) {
         var generation = initialGeneration
         var seq = initialSeq
         while (true) {
             delay(heartbeatInterval)
             val now = clock.now()
             seq += 1
-            val refreshed = LeaseLock(
-                ownerUserId = ownerUserId,
-                ownerHostId = hostId,
-                ownerHostName = hostName,
-                acquiredAt = (state.value as? LockState.Owned)?.lock?.acquiredAt ?: now,
-                expiresAt = now + ttl,
-                heartbeatSeq = seq,
-            )
+            val refreshed =
+                LeaseLock(
+                    ownerUserId = ownerUserId,
+                    ownerHostId = hostId,
+                    ownerHostName = hostName,
+                    acquiredAt = (state.value as? LockState.Owned)?.lock?.acquiredAt ?: now,
+                    expiresAt = now + ttl,
+                    heartbeatSeq = seq,
+                )
             when (val r = cloud.refreshLock(treeId, kind, refreshed, generation)) {
                 is LeaseRefreshResult.Refreshed -> {
                     generation = r.generation
@@ -111,8 +118,16 @@ class LeaseLockState(
 
 sealed interface LockState {
     data object Idle : LockState
-    data class Owned(val lock: LeaseLock, val generation: Generation) : LockState
-    data class HeldByOther(val held: LeaseLock, val generation: Generation) : LockState
+
+    data class Owned(
+        val lock: LeaseLock,
+        val generation: Generation,
+    ) : LockState
+
+    data class HeldByOther(
+        val held: LeaseLock,
+        val generation: Generation,
+    ) : LockState
 
     /** Heartbeat detected someone took the lock from us. */
     data object Lost : LockState

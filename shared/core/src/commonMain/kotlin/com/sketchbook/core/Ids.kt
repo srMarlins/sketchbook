@@ -96,7 +96,9 @@ value class SnapshotRev(
  */
 @JvmInline
 @Serializable
-value class TrackedTreeId(val value: String) {
+value class TrackedTreeId(
+    val value: String,
+) {
     init {
         require(value.isNotBlank()) { "TrackedTreeId must not be blank" }
         require(value.length <= MAX_LEN) { "TrackedTreeId too long: ${value.length} > $MAX_LEN" }

@@ -12,7 +12,9 @@ import kotlin.jvm.JvmInline
  * `profile/plugin_manifest_<host_id>.json`. The cloud impl prepends the tenant prefix.
  */
 @JvmInline
-value class CloudDocKey(val path: String) {
+value class CloudDocKey(
+    val path: String,
+) {
     init {
         require(path.isNotBlank()) { "CloudDocKey path must not be blank" }
         require(!path.startsWith("/")) { "CloudDocKey path must be relative, got '$path'" }
@@ -21,7 +23,9 @@ value class CloudDocKey(val path: String) {
 
     /** Path prefix for `listDocs` — matches all keys whose [path] starts with [value]. */
     @JvmInline
-    value class Prefix(val value: String) {
+    value class Prefix(
+        val value: String,
+    ) {
         init {
             require(!value.startsWith("/")) { "CloudDocKey.Prefix must be relative, got '$value'" }
         }

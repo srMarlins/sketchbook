@@ -8,7 +8,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class KindPolicyTest {
-
     @Test
     fun projectPolicyMatchesDesignTable() {
         val p = KindPolicy.forKind(TrackedTreeKind.Project)

@@ -28,21 +28,27 @@ sealed interface TrackedTreeKind {
      * Kind we don't know how to interpret on this binary. Preserves the wire string so the
      * registry round-trips unchanged when an older binary reads a newer entry.
      */
-    data class Unknown(override val wireName: String) : TrackedTreeKind
+    data class Unknown(
+        override val wireName: String,
+    ) : TrackedTreeKind
 
     companion object {
-        fun fromWire(name: String): TrackedTreeKind = when (name) {
-            Project.wireName -> Project
-            UserLibrary.wireName -> UserLibrary
-            else -> Unknown(name)
-        }
+        fun fromWire(name: String): TrackedTreeKind =
+            when (name) {
+                Project.wireName -> Project
+                UserLibrary.wireName -> UserLibrary
+                else -> Unknown(name)
+            }
     }
 }
 
 internal object TrackedTreeKindSerializer : KSerializer<TrackedTreeKind> {
     override val descriptor: SerialDescriptor = String.serializer().descriptor
 
-    override fun serialize(encoder: Encoder, value: TrackedTreeKind) {
+    override fun serialize(
+        encoder: Encoder,
+        value: TrackedTreeKind,
+    ) {
         encoder.encodeString(value.wireName)
     }
 

@@ -14,7 +14,6 @@ import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 class ManifestMergerTest {
-
     private val uuid = ProjectUuid("01H-merge-uuid")
     private val t0 = Instant.parse("2026-05-07T00:00:00Z")
     private val t1 = Instant.parse("2026-05-07T00:01:00Z")
@@ -29,36 +28,40 @@ class ManifestMergerTest {
         host: String,
         files: Map<String, ManifestFile>,
         parent: SnapshotRev? = null,
-    ): Manifest = Manifest(
-        projectUuid = uuid,
-        rev = SnapshotRev(rev),
-        parentRev = parent,
-        timestamp = t0,
-        hostId = host,
-        hostName = host,
-        kind = SnapshotKind.Auto,
-        files = files,
-        stats = ManifestStats(
-            fileCount = files.values.count { !it.deleted },
-            totalBytes = files.values.filterNot { it.deleted }.sumOf { it.size },
-            newBytes = 0,
-        ),
-    )
+    ): Manifest =
+        Manifest(
+            projectUuid = uuid,
+            rev = SnapshotRev(rev),
+            parentRev = parent,
+            timestamp = t0,
+            hostId = host,
+            hostName = host,
+            kind = SnapshotKind.Auto,
+            files = files,
+            stats =
+                ManifestStats(
+                    fileCount = files.values.count { !it.deleted },
+                    totalBytes = files.values.filterNot { it.deleted }.sumOf { it.size },
+                    newBytes = 0,
+                ),
+        )
 
     @Test
     fun disjointRelpathsAreUnioned() {
-        val local = mf(
-            2,
-            "host-a",
-            mapOf("a" to ManifestFile(blob("aa"), 1, t0)),
-            parent = SnapshotRev(1),
-        )
-        val remote = mf(
-            2,
-            "host-b",
-            mapOf("b" to ManifestFile(blob("bb"), 1, t0)),
-            parent = SnapshotRev(1),
-        )
+        val local =
+            mf(
+                2,
+                "host-a",
+                mapOf("a" to ManifestFile(blob("aa"), 1, t0)),
+                parent = SnapshotRev(1),
+            )
+        val remote =
+            mf(
+                2,
+                "host-b",
+                mapOf("b" to ManifestFile(blob("bb"), 1, t0)),
+                parent = SnapshotRev(1),
+            )
 
         val merged = mergeManifests(local, remote, mergerHost, clock)
 
@@ -71,16 +74,18 @@ class ManifestMergerTest {
 
     @Test
     fun sameRelpathLwwByMtime() {
-        val local = mf(
-            2,
-            "host-a",
-            mapOf("x" to ManifestFile(blob("aa"), 5, t1)),
-        )
-        val remote = mf(
-            2,
-            "host-b",
-            mapOf("x" to ManifestFile(blob("bb"), 7, t2)),
-        )
+        val local =
+            mf(
+                2,
+                "host-a",
+                mapOf("x" to ManifestFile(blob("aa"), 5, t1)),
+            )
+        val remote =
+            mf(
+                2,
+                "host-b",
+                mapOf("x" to ManifestFile(blob("bb"), 7, t2)),
+            )
 
         val merged = mergeManifests(local, remote, mergerHost, clock)
         assertEquals(blob("bb"), merged.files["x"]!!.hash)
@@ -90,16 +95,18 @@ class ManifestMergerTest {
     @Test
     fun tieBreakByHostIdLexicographic() {
         // Identical mtime → host-a (smaller lexically) wins.
-        val local = mf(
-            2,
-            "host-a",
-            mapOf("x" to ManifestFile(blob("aa"), 5, t1)),
-        )
-        val remote = mf(
-            2,
-            "host-b",
-            mapOf("x" to ManifestFile(blob("bb"), 7, t1)),
-        )
+        val local =
+            mf(
+                2,
+                "host-a",
+                mapOf("x" to ManifestFile(blob("aa"), 5, t1)),
+            )
+        val remote =
+            mf(
+                2,
+                "host-b",
+                mapOf("x" to ManifestFile(blob("bb"), 7, t1)),
+            )
         val merged = mergeManifests(local, remote, mergerHost, clock)
         assertEquals(blob("aa"), merged.files["x"]!!.hash)
     }
@@ -107,16 +114,18 @@ class ManifestMergerTest {
     @Test
     fun tombstoneSurvivesMerge() {
         // Local has tombstone for "x" with later mtime; remote has live copy.
-        val local = mf(
-            2,
-            "host-a",
-            mapOf("x" to ManifestFile(hash = blob("aa"), size = 0, mtime = t2, deleted = true)),
-        )
-        val remote = mf(
-            2,
-            "host-b",
-            mapOf("x" to ManifestFile(hash = blob("bb"), size = 7, mtime = t1)),
-        )
+        val local =
+            mf(
+                2,
+                "host-a",
+                mapOf("x" to ManifestFile(hash = blob("aa"), size = 0, mtime = t2, deleted = true)),
+            )
+        val remote =
+            mf(
+                2,
+                "host-b",
+                mapOf("x" to ManifestFile(hash = blob("bb"), size = 7, mtime = t1)),
+            )
         val merged = mergeManifests(local, remote, mergerHost, clock)
         assertTrue(merged.files["x"]!!.deleted)
         // Tombstones excluded from stats.
@@ -126,21 +135,23 @@ class ManifestMergerTest {
 
     @Test
     fun statsRecomputedFromMergedFiles() {
-        val local = mf(
-            2,
-            "host-a",
-            mapOf(
-                "a" to ManifestFile(blob("aa"), 10, t1),
-                "b" to ManifestFile(blob("bb"), 20, t1),
-            ),
-        )
-        val remote = mf(
-            2,
-            "host-b",
-            mapOf(
-                "c" to ManifestFile(blob("cc"), 30, t1),
-            ),
-        )
+        val local =
+            mf(
+                2,
+                "host-a",
+                mapOf(
+                    "a" to ManifestFile(blob("aa"), 10, t1),
+                    "b" to ManifestFile(blob("bb"), 20, t1),
+                ),
+            )
+        val remote =
+            mf(
+                2,
+                "host-b",
+                mapOf(
+                    "c" to ManifestFile(blob("cc"), 30, t1),
+                ),
+            )
         val merged = mergeManifests(local, remote, mergerHost, clock)
         assertEquals(3, merged.stats.fileCount)
         assertEquals(60L, merged.stats.totalBytes)
