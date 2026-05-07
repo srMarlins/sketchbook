@@ -64,6 +64,10 @@ dependencyAnalysis {
                     "org.jetbrains.compose.runtime:runtime",
                     "org.jetbrains.compose.foundation:foundation",
                     "org.jetbrains.compose.ui:ui",
+                    "org.jetbrains.compose.ui:ui-test",
+                    // Same KMP-variant story for Roborazzi's compose-desktop module: declared
+                    // artifact carries only metadata, the *-desktop suffix carries the JVM jar.
+                    "io.github.takahirom.roborazzi:roborazzi-compose-desktop",
                     "org.jetbrains.compose.desktop:desktop-jvm-windows-x64",
                     "org.jetbrains.compose.desktop:desktop-jvm-macos-x64",
                     "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64",

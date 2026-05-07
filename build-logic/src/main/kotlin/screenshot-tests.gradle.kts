@@ -20,7 +20,10 @@ kotlin {
         // the project ever adds them.
         val jvmTest by getting {
             dependencies {
-                implementation(kotlin("test"))
+                // kotlin("test") is intentionally NOT added here — feature modules already
+                // declare it in commonTest, which jvmTest inherits via the KMP source-set
+                // hierarchy. Re-declaring it here would trip dependency-analysis's
+                // redundant-declaration check.
                 implementation(libs.findLibrary("roborazzi-compose-desktop").get())
                 // Compose's official UI test harness — provides runDesktopComposeUiTest.
                 implementation(compose.uiTest)
