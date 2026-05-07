@@ -25,7 +25,7 @@ import java.nio.file.StandardCopyOption
 class ManifestMaterializer(
     private val cloud: CloudBackend,
     private val blobCache: JvmBlobCache,
-    private val projectRoot: (ProjectUuid) -> Path,
+    private val projectRoot: suspend (ProjectUuid) -> Path,
 ) {
 
     /**

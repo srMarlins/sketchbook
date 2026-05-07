@@ -61,7 +61,7 @@ class ManifestMaterializerBusyTest {
             },
         )
         val handle = CatalogDb.openInMemory()
-        val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = { BlobCacheSettings.Default })
+        val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = BlobCacheSettings.Default)
         val mat = ManifestMaterializer(cloud, cache) { projectRoot }
 
         // Hold an exclusive lock on the .als for the duration of materialize.
