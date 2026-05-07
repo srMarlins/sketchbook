@@ -45,36 +45,31 @@ fun main(args: Array<String>) {
     runApp(resetFirstRun = "--reset-first-run" in args)
 }
 
+private fun bootstrapGraph(resetFirstRun: Boolean): DesktopAppGraph {
+    val graph = buildDesktopAppGraph()
+    // Dev-only: clear the onboarding gate before anything else observes Settings, so
+    // LaunchGate sees `firstRunCompletedAt = null` on its first emission and routes to the
+    // Onboarding surface. Roots / plugin folders / cloud config survive.
+    if (resetFirstRun) runBlocking { graph.settingsRepository.resetFirstRun() }
+    startBackgroundPull(graph)
+    startWatcher(graph)
+    graph.libraryScanCoordinator.start()
+    // Touch the holder so Metro instantiates the AppScope singleton at startup. The holder's
+    // `init { scope.launch { ... } }` then begins observing auth + bucket and rebuilds the
+    // per-user graph in the background.
+    @Suppress("UnusedExpression")
+    graph.userGraphHolder
+    // Dev convenience: if SKETCHBOOK_DEFAULT_ROOT is set, seed it on first launch so the
+    // iteration loop (build → run → screenshot) doesn't require clicking through the folder
+    // picker every time. No-op for normal users (env unset).
+    System.getenv("SKETCHBOOK_DEFAULT_ROOT")?.takeIf(String::isNotBlank)?.let { root ->
+        graph.appScope.launch { graph.settingsRepository.upsertRoot(LibraryRoot.Projects(root)) }
+    }
+    return graph
+}
+
 private fun runApp(resetFirstRun: Boolean) = application {
-    val graph = remember {
-        buildDesktopAppGraph().also {
-            // Dev-only: clear the onboarding gate before anything else observes Settings, so
-            // LaunchGate sees `firstRunCompletedAt = null` on its first emission and routes to
-            // the Onboarding surface. Roots / plugin folders / cloud config survive — only the
-            // gate state is reset.
-            if (resetFirstRun) {
-                runBlocking { it.settingsRepository.resetFirstRun() }
-            }
-            startBackgroundPull(it)
-            startWatcher(it)
-            it.libraryScanCoordinator.start()
-            // Touch the holder so Metro instantiates the AppScope singleton at startup. The
-            // holder's `init { scope.launch { ... } }` block then begins observing auth + bucket
-            // and rebuilds the per-user graph in the background.
-            it.userGraphHolder
-        }
-    }
-    // Dev convenience: if SKETCHBOOK_DEFAULT_ROOT is set and Settings has no roots, seed it
-    // once at launch so the iteration loop (build → run → screenshot) doesn't require clicking
-    // through the folder picker every time. No-op for normal users (env unset).
-    remember(graph) {
-        val envRoot = System.getenv("SKETCHBOOK_DEFAULT_ROOT")
-        if (!envRoot.isNullOrBlank()) {
-            graph.appScope.launch {
-                graph.settingsRepository.upsertRoot(LibraryRoot.Projects(envRoot))
-            }
-        }
-    }
+    val graph = remember { bootstrapGraph(resetFirstRun) }
     val backStack = rememberNavBackStack(NavSavedStateConfig, Screen.Projects)
     val windowState = rememberWindowState(size = DpSize(1360.dp, 900.dp))
     val typography: AppTypography = remember { Fonts.load() }

@@ -346,7 +346,7 @@ class JvmPluginPresenceProbeTest {
         private val flow = MutableStateFlow(
             Settings(
                 libraryRoots = emptyList(),
-        
+
                 selfContainedProjects = emptySet(),
                 pluginFolders = pluginFolders,
             ),
