@@ -4,6 +4,8 @@ import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.repo.SnapshotRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -22,44 +24,53 @@ class PullPoller(
     private val snapshots: SnapshotRepository,
     private val pollInterval: Duration = 30.seconds,
 ) {
+
     /**
      * Long-running flow that emits each new [Snapshot] as it lands. Cancelling the collector
      * stops polling.
      */
-    fun subscribe(
-        uuid: ProjectUuid,
-        startAfter: SnapshotRev? = null,
-    ): Flow<Snapshot> =
+    fun subscribe(uuid: ProjectUuid, startAfter: SnapshotRev? = null): Flow<Snapshot> =
+        subscribe(treeId = TrackedTreeId(uuid.value), kind = TrackedTreeKind.Project, startAfter = startAfter)
+
+    /**
+     * Tree-keyed subscription. Project callers route through the [ProjectUuid] overload above
+     * so existing call sites stay terse; non-project kinds (UserLibrary in commit 8) call this
+     * form directly. Wire format is still v=1 — the manifest's `project_uuid` field is present
+     * for [TrackedTreeKind.Project] and synthesized to the tree-id for non-project kinds.
+     */
+    fun subscribe(treeId: TrackedTreeId, kind: TrackedTreeKind, startAfter: SnapshotRev? = null): Flow<Snapshot> =
+        pollFlow(treeId, kind, startAfter)
+
+    private fun pollFlow(treeId: TrackedTreeId, kind: TrackedTreeKind, startAfter: SnapshotRev?): Flow<Snapshot> =
         flow {
-            var sinceRev: SnapshotRev? = startAfter
-            while (true) {
-                val refs = runCatching { cloud.listManifests(uuid, sinceRev) }.getOrElse { emptyList() }
-                val sorted = refs.sortedBy { it.rev }
-                for (ref in sorted) {
-                    val rev = SnapshotRev(ref.rev)
-                    val current = sinceRev
-                    if (current != null && rev <= current) continue
-                    val manifest = runCatching { cloud.readManifest(uuid, rev) }.getOrNull() ?: continue
-                    val snapshot =
-                        Snapshot(
-                            projectUuid = manifest.projectUuid,
-                            rev = manifest.rev,
-                            parentRev = manifest.parentRev,
-                            timestamp = manifest.timestamp,
-                            hostId = manifest.hostId,
-                            hostName = manifest.hostName,
-                            kind = manifest.kind,
-                            label = manifest.label,
-                            selfContained = manifest.selfContained,
-                            fileCount = manifest.stats.fileCount,
-                            totalBytes = manifest.stats.totalBytes,
-                            newBytes = manifest.stats.newBytes,
-                        )
-                    snapshots.recordSnapshot(snapshot, manifestPath = ref.path, manifestHash = "")
-                    sinceRev = rev
-                    emit(snapshot)
-                }
-                delay(pollInterval)
+        var sinceRev: SnapshotRev? = startAfter
+        while (true) {
+            val refs = runCatching { cloud.listManifests(treeId, kind, sinceRev) }.getOrElse { emptyList() }
+            val sorted = refs.sortedBy { it.rev }
+            for (ref in sorted) {
+                val rev = SnapshotRev(ref.rev)
+                val current = sinceRev
+                if (current != null && rev <= current) continue
+                val manifest = runCatching { cloud.readManifest(treeId, kind, rev) }.getOrNull() ?: continue
+                val snapshot = Snapshot(
+                    projectUuid = manifest.projectUuid,
+                    rev = manifest.rev,
+                    parentRev = manifest.parentRev,
+                    timestamp = manifest.timestamp,
+                    hostId = manifest.hostId,
+                    hostName = manifest.hostName,
+                    kind = manifest.kind,
+                    label = manifest.label,
+                    selfContained = manifest.selfContained,
+                    fileCount = manifest.stats.fileCount,
+                    totalBytes = manifest.stats.totalBytes,
+                    newBytes = manifest.stats.newBytes,
+                )
+                snapshots.recordSnapshot(snapshot, manifestPath = ref.path, manifestHash = "")
+                sinceRev = rev
+                emit(snapshot)
             }
+            delay(pollInterval)
         }
+    }
 }

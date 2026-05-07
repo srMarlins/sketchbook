@@ -75,6 +75,7 @@ class GcsSyncQueue(
     private val ioDispatcher: kotlin.coroutines.CoroutineContext = Dispatchers.IO,
 ) : SyncQueue,
     ForceSnapshotPipeline {
+
     private val uploading = MutableStateFlow<Set<ProjectUuid>>(emptySet())
     private val conflicts = MutableStateFlow<Set<ProjectUuid>>(emptySet())
 
@@ -94,57 +95,50 @@ class GcsSyncQueue(
     /** Read-side accessor for the detail-panel's conflict caption. */
     fun conflictMessage(uuid: ProjectUuid): String? = conflictMessages.value[uuid]
 
-    override fun observe(): Flow<SyncQueueState> =
-        combine(
-            syncState.observeVersion().onStart { emit(0L) },
-            uploading,
-        ) { _, up ->
-            val rows = withContext(ioDispatcher) { syncState.all() }
-            SyncQueueState(
-                pending = rows.count { it.dirty },
-                uploading = up.size,
-                downloading = 0,
-                online = true,
-            )
-        }
+    override fun observe(): Flow<SyncQueueState> = combine(
+        syncState.observeVersion().onStart { emit(0L) },
+        uploading,
+    ) { _, up ->
+        val rows = withContext(ioDispatcher) { syncState.all() }
+        SyncQueueState(
+            pending = rows.count { it.dirty },
+            uploading = up.size,
+            downloading = 0,
+            online = true,
+        )
+    }
 
-    override fun observeProject(id: ProjectId): Flow<ProjectSyncState> =
-        combine(
-            syncState.observeVersion().onStart { emit(0L) },
-            uploading,
-            conflicts,
-        ) { _, up, conf ->
-            val uuid = withContext(ioDispatcher) { syncState.identityFor(id) }
-            when {
-                uuid in up -> {
-                    ProjectSyncState.Uploading
-                }
+    override fun observeProject(id: ProjectId): Flow<ProjectSyncState> = combine(
+        syncState.observeVersion().onStart { emit(0L) },
+        uploading,
+        conflicts,
+    ) { _, up, conf ->
+        val uuid = withContext(ioDispatcher) { syncState.identityFor(id) }
+        when {
+            uuid in up -> ProjectSyncState.Uploading
 
-                uuid in conf -> {
-                    ProjectSyncState.Conflict
-                }
+            uuid in conf -> ProjectSyncState.Conflict
 
-                else -> {
-                    val row = withContext(ioDispatcher) { syncState.stateOf(uuid) }
-                    when {
-                        row == null -> ProjectSyncState.LocalOnly
-                        row.dirty -> ProjectSyncState.Pending
-                        row.cloudHeadRev > row.localRev -> ProjectSyncState.RemoteAhead
-                        row.localRev > 0 -> ProjectSyncState.Synced
-                        else -> ProjectSyncState.LocalOnly
-                    }
+            else -> {
+                val row = withContext(ioDispatcher) { syncState.stateOf(uuid) }
+                when {
+                    row == null -> ProjectSyncState.LocalOnly
+                    row.dirty -> ProjectSyncState.Pending
+                    row.cloudHeadRev > row.localRev -> ProjectSyncState.RemoteAhead
+                    row.localRev > 0 -> ProjectSyncState.Synced
+                    else -> ProjectSyncState.LocalOnly
                 }
             }
         }
+    }
 
     /**
      * Push by [ProjectUuid]. Looks up the local row, runs the snapshot pipeline against the
      * project's parent directory, marks state on success.
      */
     override suspend fun pushNow(uuid: ProjectUuid): Result<Unit> {
-        val pid =
-            syncState.projectIdFor(uuid)
-                ?: return Result.failure(IllegalStateException("no local project for uuid $uuid"))
+        val pid = syncState.projectIdFor(uuid)
+            ?: return Result.failure(IllegalStateException("no local project for uuid $uuid"))
         return runPipeline(pid, uuid).map { }
     }
 
@@ -160,13 +154,9 @@ class GcsSyncQueue(
      * lease lifecycle, and journaling all run via the normal path. CAS conflicts still demote
      * the result to a Branch — divergence wins over Named, mirroring auto-save semantics.
      */
-    override suspend fun recordForcedNamed(
-        uuid: ProjectUuid,
-        label: String,
-    ): Result<SnapshotRev> {
-        val pid =
-            withContext(ioDispatcher) { syncState.projectIdFor(uuid) }
-                ?: return Result.failure(IllegalStateException("no local project for uuid $uuid"))
+    override suspend fun recordForcedNamed(uuid: ProjectUuid, label: String): Result<SnapshotRev> {
+        val pid = withContext(ioDispatcher) { syncState.projectIdFor(uuid) }
+            ?: return Result.failure(IllegalStateException("no local project for uuid $uuid"))
         return runPipeline(pid, uuid, kind = SnapshotKind.Named, label = label)
     }
 
@@ -176,43 +166,39 @@ class GcsSyncQueue(
         kind: SnapshotKind = SnapshotKind.Auto,
         label: String? = null,
     ): Result<SnapshotRev> {
-        val row: ProjectRow =
-            projects.observeProject(pid).first()
-                ?: return Result.failure(IllegalStateException("project row $pid not found"))
+        val row: ProjectRow = projects.observeProject(pid).first()
+            ?: return Result.failure(IllegalStateException("project row $pid not found"))
         // ProjectPath.fromPlatform strips leading slashes for portable storage. Restore the
         // absolute form before handing off to NIO: a Windows drive-letter path ("Z:/...") needs
         // no fix-up, but a Unix path arrives as "tmp/foo/x.als" and must be reified as
         // "/tmp/foo/x.als" so Paths.get() resolves it absolutely.
         val rawPath = row.path.value
         val alsPath = if (rawPath.length >= 2 && rawPath[1] == ':') rawPath else "/$rawPath"
-        val rootDir =
-            Paths.get(alsPath).parent
-                ?: return Result.failure(IllegalStateException("project path has no parent: $alsPath"))
+        val rootDir = Paths.get(alsPath).parent
+            ?: return Result.failure(IllegalStateException("project path has no parent: $alsPath"))
 
         uploading.value = uploading.value + uuid
         conflicts.value = conflicts.value - uuid
         try {
             val tree = JvmWorkingTree(rootDir)
             val current = withContext(ioDispatcher) { syncState.stateOf(uuid) }
-            val expectedHead =
-                if (current == null || current.cloudHeadRev == 0L) {
-                    Generation.ZERO
-                } else {
-                    // We don't persist the GCS object generation per snapshot today — pass null
-                    // (no precondition) and let the pipeline's branch path catch any concurrent
-                    // writer. v1.2 will track generation alongside cloud_head_rev.
-                    null
-                }
-            val input =
-                PipelineInput(
-                    uuid = uuid,
-                    tree = tree,
-                    lastKnownManifest = null,
-                    expectedHeadGeneration = expectedHead,
-                    selfContained = current?.selfContained ?: false,
-                    kind = kind,
-                    label = label,
-                )
+            val expectedHead = if (current == null || current.cloudHeadRev == 0L) {
+                Generation.ZERO
+            } else {
+                // We don't persist the GCS object generation per snapshot today — pass null
+                // (no precondition) and let the pipeline's branch path catch any concurrent
+                // writer. v1.2 will track generation alongside cloud_head_rev.
+                null
+            }
+            val input = PipelineInput(
+                uuid = uuid,
+                tree = tree,
+                lastKnownManifest = null,
+                expectedHeadGeneration = expectedHead,
+                selfContained = current?.selfContained ?: false,
+                snapshotKind = kind,
+                label = label,
+            )
 
             var savedRev: Long? = null
             var savedKind: SnapshotKind? = null
@@ -225,13 +211,9 @@ class GcsSyncQueue(
                             savedKind = progress.kind
                         }
 
-                        is SnapshotProgress.Failed -> {
-                            failureReason = progress.reason
-                        }
+                        is SnapshotProgress.Failed -> failureReason = progress.reason
 
-                        else -> {
-                            Unit
-                        }
+                        else -> Unit
                     }
                 }
             }
@@ -245,7 +227,7 @@ class GcsSyncQueue(
                     conflictMessages.value = conflictMessages.value + (
                         uuid to
                             "Remote diverged — your work was saved as a branch. Pull + re-push to merge."
-                    )
+                        )
                     recordConflictJournal(pid, ourRev = finalRev, theirRev = finalRev - 1)
                 }
                 Result.success(SnapshotRev(finalRev))
@@ -254,7 +236,7 @@ class GcsSyncQueue(
                 conflictMessages.value = conflictMessages.value + (
                     uuid to
                         (failureReason ?: "Push failed — retry or check Settings → Cloud.")
-                )
+                    )
                 Result.failure(IllegalStateException(failureReason ?: "pipeline did not complete"))
             }
         } catch (t: Throwable) {
@@ -267,11 +249,7 @@ class GcsSyncQueue(
         }
     }
 
-    private suspend fun recordConflictJournal(
-        pid: ProjectId,
-        ourRev: Long,
-        theirRev: Long,
-    ) {
+    private suspend fun recordConflictJournal(pid: ProjectId, ourRev: Long, theirRev: Long) {
         val j = journal ?: return
         runCatching {
             j.append(
@@ -323,11 +301,10 @@ class GcsSyncQueue(
 
     private suspend fun drainOnce() {
         val now = clock.now()
-        val candidates =
-            withContext(ioDispatcher) { syncState.dirtyOldestFirst() }
-                .filterNot { it.uuid in conflicts.value }
-                .filterNot { (backoff[it.uuid]?.nextAttempt ?: now) > now }
-                .filterNot { isInQuietPeriod(it.uuid, now) }
+        val candidates = withContext(ioDispatcher) { syncState.dirtyOldestFirst() }
+            .filterNot { it.uuid in conflicts.value }
+            .filterNot { (backoff[it.uuid]?.nextAttempt ?: now) > now }
+            .filterNot { isInQuietPeriod(it.uuid, now) }
         val target = candidates.firstOrNull() ?: return
         val pid = withContext(ioDispatcher) { syncState.projectIdFor(target.uuid) } ?: return
         val result = runPipeline(pid, target.uuid)
@@ -342,24 +319,19 @@ class GcsSyncQueue(
         }
     }
 
-    private fun bumpBackoff(
-        uuid: ProjectUuid,
-        now: Instant,
-    ) {
+    private fun bumpBackoff(uuid: ProjectUuid, now: Instant) {
         val current = backoff[uuid]
-        val nextIdx =
-            if (current == null) {
-                0
-            } else {
-                (BACKOFF_INTERVALS_SECONDS.indexOf(current.intervalSeconds).coerceAtLeast(0) + 1)
-                    .coerceAtMost(BACKOFF_INTERVALS_SECONDS.lastIndex)
-            }
+        val nextIdx = if (current == null) {
+            0
+        } else {
+            (BACKOFF_INTERVALS_SECONDS.indexOf(current.intervalSeconds).coerceAtLeast(0) + 1)
+                .coerceAtMost(BACKOFF_INTERVALS_SECONDS.lastIndex)
+        }
         val seconds = BACKOFF_INTERVALS_SECONDS[nextIdx]
-        backoff[uuid] =
-            BackoffEntry(
-                nextAttempt = now + seconds.seconds,
-                intervalSeconds = seconds,
-            )
+        backoff[uuid] = BackoffEntry(
+            nextAttempt = now + seconds.seconds,
+            intervalSeconds = seconds,
+        )
     }
 
     /**
@@ -368,29 +340,22 @@ class GcsSyncQueue(
      * uploading on every keystroke wastes bandwidth. 30s is short enough that idle work
      * uploads quickly but long enough to coalesce a working session.
      */
-    private suspend fun isInQuietPeriod(
-        uuid: ProjectUuid,
-        now: Instant,
-    ): Boolean {
+    private suspend fun isInQuietPeriod(uuid: ProjectUuid, now: Instant): Boolean {
         val pid = withContext(ioDispatcher) { syncState.projectIdFor(uuid) } ?: return false
         val row = projects.observeProject(pid).first() ?: return false
         val rawPath = row.path.value
         val alsPath = if (rawPath.length >= 2 && rawPath[1] == ':') rawPath else "/$rawPath"
         return runCatching {
-            val mtime =
-                withContext(ioDispatcher) {
-                    Instant.fromEpochMilliseconds(
-                        Files.getLastModifiedTime(Paths.get(alsPath)).toMillis(),
-                    )
-                }
+            val mtime = withContext(ioDispatcher) {
+                Instant.fromEpochMilliseconds(
+                    Files.getLastModifiedTime(Paths.get(alsPath)).toMillis(),
+                )
+            }
             (now - mtime).inWholeSeconds < QUIET_PERIOD_SECONDS
         }.getOrDefault(false)
     }
 
-    private data class BackoffEntry(
-        val nextAttempt: Instant,
-        val intervalSeconds: Long,
-    )
+    private data class BackoffEntry(val nextAttempt: Instant, val intervalSeconds: Long)
 
     private companion object {
         /** Capped exponential. Last entry is the cap — once reached, all further bumps stay. */
@@ -405,13 +370,9 @@ class GcsSyncQueue(
     fun snapshotFor(id: ProjectId): ProjectSyncState {
         val uuid = syncState.identityFor(id)
         return when {
-            uuid in uploading.value -> {
-                ProjectSyncState.Uploading
-            }
+            uuid in uploading.value -> ProjectSyncState.Uploading
 
-            uuid in conflicts.value -> {
-                ProjectSyncState.Conflict
-            }
+            uuid in conflicts.value -> ProjectSyncState.Conflict
 
             else -> {
                 val row = syncState.stateOf(uuid)
