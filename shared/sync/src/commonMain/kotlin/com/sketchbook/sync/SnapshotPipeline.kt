@@ -105,7 +105,12 @@ class SnapshotPipeline(
                 // reused, not new. The figure flows into the manifest's stats.newBytes.
                 var bytesDone = 0L
                 val totalUploadBytes = toUpload.values.sumOf { it.size }
-                val uniqueByHash = toUpload.values.groupBy { it.hash }
+                // Uploads never carry tombstones (they're materialize-side deletes, not
+                // upload-side new bytes), so the hash is always non-null here. Forcing the
+                // cast at the boundary keeps the rest of the upload loop typed against
+                // `BlobHash`, not `BlobHash?` — same shape as before the v=2 nullable hash.
+                val uniqueByHash: Map<BlobHash, List<ManifestFile>> =
+                    toUpload.values.groupBy { requireNotNull(it.hash) { "upload entry has no hash" } }
                 var actuallyUploadedBytes = 0L
                 for ((hash, entries) in uniqueByHash) {
                     val first = entries.first()
@@ -137,13 +142,14 @@ class SnapshotPipeline(
                 val auto =
                     Manifest(
                         ownerUserId = ownerUserId,
-                        projectUuid = uuid,
+                        treeId = treeId,
+                        kind = kind,
                         rev = newRev,
                         parentRev = parentRev,
                         timestamp = clock.now(),
                         hostId = hostId,
                         hostName = hostName,
-                        kind = input.snapshotKind,
+                        snapshotKind = input.snapshotKind,
                         label = input.label,
                         files = files,
                         stats =
@@ -215,7 +221,7 @@ class SnapshotPipeline(
             local.copy(
                 rev = branchRev,
                 parentRev = parentRev,
-                kind = SnapshotKind.Branch,
+                snapshotKind = SnapshotKind.Branch,
                 label = label,
                 timestamp = ts,
             )

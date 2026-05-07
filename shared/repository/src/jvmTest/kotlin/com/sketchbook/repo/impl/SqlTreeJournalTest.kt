@@ -48,15 +48,14 @@ class SqlTreeJournalTest {
         files: Map<String, ManifestFile> = emptyMap(),
     ): Manifest =
         Manifest(
-            // v=1 wire still carries `project_uuid`; non-project kinds reuse the field for the
-            // tree id until commit 9 introduces v=2.
-            projectUuid = ProjectUuid(treeId.value),
+            treeId = treeId,
+            kind = kind,
             rev = SnapshotRev(rev),
             parentRev = if (rev > 1) SnapshotRev(rev - 1) else null,
             timestamp = timestamp,
             hostId = "host-a",
             hostName = "DesktopA",
-            kind = kindOfSnapshot,
+            snapshotKind = kindOfSnapshot,
             files = files,
             stats =
                 ManifestStats(
@@ -198,7 +197,7 @@ class SqlTreeJournalTest {
             journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "p/1.json").getOrThrow()
             journal
                 .recordSnapshot(
-                    manifest = manifest(rev = 1).copy(projectUuid = ProjectUuid(other.value)),
+                    manifest = manifest(rev = 1).copy(treeId = other),
                     treeId = other,
                     kind = kind,
                     manifestPath = "p/o1.json",

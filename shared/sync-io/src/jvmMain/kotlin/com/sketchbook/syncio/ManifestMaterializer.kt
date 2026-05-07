@@ -70,11 +70,14 @@ class ManifestMaterializer(
         val staged = mutableListOf<Pair<Path, Path>>()
         try {
             for ((relPath, mfile) in manifest.files) {
+                // Tombstones (deleted=true, hash=null) are honored by commit 11's materializer
+                // refresh — for now we just skip them so the v=2 wire shape compiles cleanly.
+                val hash = mfile.hash ?: continue
                 val finalPath = resolveSafely(root, relPath)
                 val tempPath = finalPath.resolveSibling("${finalPath.fileName}.materialize-${rev.value}")
                 Files.createDirectories(finalPath.parent)
                 // Pull blob into cache (no-op if already cached).
-                val blob = blobCache.getOrFetch(mfile.hash, scope)
+                val blob = blobCache.getOrFetch(hash, scope)
                 // Stage at temp with copy semantics (we don't hardlink the blob to the temp
                 // path — the atomic-move below would replace the final, but on Windows a
                 // hardlinked staged temp can't be atomically renamed across some FS configs.

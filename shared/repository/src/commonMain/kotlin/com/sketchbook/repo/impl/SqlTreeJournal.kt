@@ -80,7 +80,7 @@ class SqlTreeJournal(
                                 parent_rev = manifest.parentRev?.value,
                                 timestamp = manifest.timestamp.toEpochMilliseconds(),
                                 host_id = manifest.hostId,
-                                snapshot_kind = manifest.kind.dbName(),
+                                snapshot_kind = manifest.snapshotKind.dbName(),
                                 label = manifest.label,
                                 file_count = manifest.stats.fileCount.toLong(),
                                 total_bytes = manifest.stats.totalBytes,

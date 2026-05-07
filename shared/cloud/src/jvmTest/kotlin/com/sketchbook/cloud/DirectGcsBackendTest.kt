@@ -137,7 +137,7 @@ class DirectGcsBackendTest {
                 }
             val result =
                 backend.appendManifestHead(
-                    treeId = TrackedTreeId(manifest.projectUuid.value),
+                    treeId = manifest.treeId,
                     kind = TrackedTreeKind.Project,
                     expectedHead = Generation("42"),
                     manifest = manifest,
@@ -162,7 +162,7 @@ class DirectGcsBackendTest {
                 }
             val result =
                 backend.appendManifestHead(
-                    treeId = TrackedTreeId(manifest.projectUuid.value),
+                    treeId = manifest.treeId,
                     kind = TrackedTreeKind.Project,
                     expectedHead = Generation.ZERO,
                     manifest = manifest,
@@ -213,14 +213,14 @@ class DirectGcsBackendTest {
 
     private fun manifestFixture(): Manifest =
         Manifest(
-            version = 1,
-            projectUuid = ProjectUuid("01HZQX5N3M8F9G2K7B1A6Y4WCE"),
+            treeId = TrackedTreeId("01HZQX5N3M8F9G2K7B1A6Y4WCE"),
+            kind = TrackedTreeKind.Project,
             rev = SnapshotRev(1),
             parentRev = null,
             timestamp = Instant.parse("2026-05-05T12:00:00Z"),
             hostId = "macstudio",
             hostName = "MacStudio",
-            kind = SnapshotKind.Auto,
+            snapshotKind = SnapshotKind.Auto,
             files =
                 mapOf(
                     "Project.als" to

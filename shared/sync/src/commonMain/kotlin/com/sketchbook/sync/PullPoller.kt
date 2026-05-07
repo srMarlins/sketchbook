@@ -6,6 +6,7 @@ import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
+import com.sketchbook.core.projectUuid
 import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.TreeJournal
 import kotlinx.coroutines.delay
@@ -72,15 +73,24 @@ class PullPoller(
                     val current = sinceRev
                     if (current != null && rev <= current) continue
                     val manifest = runCatching { cloud.readManifest(treeId, kind, rev) }.getOrNull() ?: continue
+                    // Project-only snapshot row goes to the legacy `snapshots` table; the
+                    // `projectUuid` extension throws on non-project kinds, so we synthesize a
+                    // ProjectUuid for the sync.Snapshot model only when emitting Project rows.
+                    val rowProjectUuid =
+                        if (kind == TrackedTreeKind.Project) {
+                            manifest.projectUuid
+                        } else {
+                            ProjectUuid(treeId.value)
+                        }
                     val snapshot =
                         Snapshot(
-                            projectUuid = manifest.projectUuid,
+                            projectUuid = rowProjectUuid,
                             rev = manifest.rev,
                             parentRev = manifest.parentRev,
                             timestamp = manifest.timestamp,
                             hostId = manifest.hostId,
                             hostName = manifest.hostName,
-                            kind = manifest.kind,
+                            kind = manifest.snapshotKind,
                             label = manifest.label,
                             selfContained = manifest.selfContained,
                             fileCount = manifest.stats.fileCount,

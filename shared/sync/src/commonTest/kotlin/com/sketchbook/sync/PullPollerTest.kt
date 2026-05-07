@@ -71,13 +71,14 @@ class PullPollerTest {
         projectUuid: ProjectUuid = uuid,
     ): Manifest =
         Manifest(
-            projectUuid = projectUuid,
+            treeId = TrackedTreeId(projectUuid.value),
+            kind = TrackedTreeKind.Project,
             rev = SnapshotRev(rev),
             parentRev = if (rev > 1) SnapshotRev(rev - 1) else null,
             timestamp = now,
             hostId = "host-a",
             hostName = "DesktopA",
-            kind = kind,
+            snapshotKind = kind,
             files = emptyMap(),
             stats = ManifestStats(0, 0, 0),
         )

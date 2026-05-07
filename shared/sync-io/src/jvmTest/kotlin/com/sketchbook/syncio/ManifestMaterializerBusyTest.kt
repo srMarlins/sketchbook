@@ -60,7 +60,7 @@ class ManifestMaterializerBusyTest {
                 CountingCloud(
                     manifest,
                     files.entries.associate { (rel, b) ->
-                        manifest.files[rel]!!.hash to b
+                        manifest.files[rel]!!.hash!! to b
                     },
                 )
             val handle = CatalogDb.openInMemory()
@@ -118,13 +118,14 @@ class ManifestMaterializerBusyTest {
                     )
             }
         return Manifest(
-            projectUuid = uuid,
+            treeId = TrackedTreeId(uuid.value),
+            kind = TrackedTreeKind.Project,
             rev = rev,
             parentRev = null,
             timestamp = Instant.parse("2026-05-05T12:00:00Z"),
             hostId = "host-a",
             hostName = "DesktopA",
-            kind = SnapshotKind.Auto,
+            snapshotKind = SnapshotKind.Auto,
             files = mfiles,
             stats =
                 ManifestStats(

@@ -75,12 +75,13 @@ class SnapshotPipelineTest {
             val unchangedHash = FakeWorkingTree.hashOf("v1".encodeToByteArray())
             val parent =
                 Manifest(
-                    projectUuid = uuid,
+                    treeId = TrackedTreeId(uuid.value),
+                    kind = TrackedTreeKind.Project,
                     rev = SnapshotRev(1),
                     timestamp = now,
                     hostId = "host-a",
                     hostName = "DesktopA",
-                    kind = SnapshotKind.Auto,
+                    snapshotKind = SnapshotKind.Auto,
                     files =
                         mapOf(
                             "Project.als" to ManifestFile(unchangedHash, "v1".encodeToByteArray().size.toLong(), mtime0),
@@ -134,12 +135,13 @@ class SnapshotPipelineTest {
             val mtime0 = now
             val parent =
                 Manifest(
-                    projectUuid = uuid,
+                    treeId = TrackedTreeId(uuid.value),
+                    kind = TrackedTreeKind.Project,
                     rev = SnapshotRev(1),
                     timestamp = now,
                     hostId = "host-a",
                     hostName = "DesktopA",
-                    kind = SnapshotKind.Auto,
+                    snapshotKind = SnapshotKind.Auto,
                     files = emptyMap(),
                     stats = ManifestStats(0, 0, 0),
                 )
@@ -148,13 +150,14 @@ class SnapshotPipelineTest {
             // Another host advances HEAD to rev 2 first.
             val intruder =
                 Manifest(
-                    projectUuid = uuid,
+                    treeId = TrackedTreeId(uuid.value),
+                    kind = TrackedTreeKind.Project,
                     rev = SnapshotRev(2),
                     parentRev = SnapshotRev(1),
                     timestamp = now,
                     hostId = "host-b",
                     hostName = "MacStudio",
-                    kind = SnapshotKind.Auto,
+                    snapshotKind = SnapshotKind.Auto,
                     files = emptyMap(),
                     stats = ManifestStats(0, 0, 0),
                 )
@@ -295,13 +298,14 @@ class SnapshotPipelineTest {
             val intruderHash = FakeWorkingTree.hashOf("b-bytes".encodeToByteArray())
             val intruderManifest =
                 Manifest(
-                    projectUuid = uuid,
+                    treeId = TrackedTreeId(uuid.value),
+                    kind = TrackedTreeKind.Project,
                     rev = SnapshotRev(2),
                     parentRev = SnapshotRev(1),
                     timestamp = now,
                     hostId = "host-b",
                     hostName = "MacStudio",
-                    kind = SnapshotKind.Auto,
+                    snapshotKind = SnapshotKind.Auto,
                     files = mapOf("b" to ManifestFile(intruderHash, "b-bytes".encodeToByteArray().size.toLong(), now)),
                     stats = ManifestStats(1, "b-bytes".encodeToByteArray().size.toLong(), 0),
                 )
@@ -348,13 +352,14 @@ class SnapshotPipelineTest {
             // Seed parent rev 1 + intruder rev 2.
             val parent =
                 Manifest(
-                    projectUuid = uuid,
+                    treeId = TrackedTreeId(uuid.value),
+                    kind = TrackedTreeKind.Project,
                     rev = SnapshotRev(1),
                     parentRev = null,
                     timestamp = now,
                     hostId = "host-a",
                     hostName = "DesktopA",
-                    kind = SnapshotKind.Auto,
+                    snapshotKind = SnapshotKind.Auto,
                     files = emptyMap(),
                     stats = ManifestStats(0, 0, 0),
                 )

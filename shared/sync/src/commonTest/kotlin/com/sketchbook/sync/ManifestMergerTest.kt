@@ -7,6 +7,8 @@ import com.sketchbook.core.ManifestStats
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -30,13 +32,14 @@ class ManifestMergerTest {
         parent: SnapshotRev? = null,
     ): Manifest =
         Manifest(
-            projectUuid = uuid,
+            treeId = TrackedTreeId(uuid.value),
+            kind = TrackedTreeKind.Project,
             rev = SnapshotRev(rev),
             parentRev = parent,
             timestamp = t0,
             hostId = host,
             hostName = host,
-            kind = SnapshotKind.Auto,
+            snapshotKind = SnapshotKind.Auto,
             files = files,
             stats =
                 ManifestStats(
@@ -68,7 +71,7 @@ class ManifestMergerTest {
         assertEquals(setOf("a", "b"), merged.files.keys)
         assertEquals(SnapshotRev(3), merged.rev)
         assertEquals(remote.rev, merged.parentRev)
-        assertEquals(SnapshotKind.Auto, merged.kind)
+        assertEquals(SnapshotKind.Auto, merged.snapshotKind)
         assertNull(merged.label)
     }
 

@@ -17,15 +17,15 @@ class ManifestTest {
 
     private fun fixture(): Manifest =
         Manifest(
-            version = 1,
             ownerUserId = UserId("default"),
-            projectUuid = ProjectUuid("01HZQX5N3M8F9G2K7B1A6Y4WCE"),
+            treeId = TrackedTreeId("01HZQX5N3M8F9G2K7B1A6Y4WCE"),
+            kind = TrackedTreeKind.Project,
             rev = SnapshotRev(47),
             parentRev = SnapshotRev(46),
             timestamp = Instant.parse("2026-05-05T14:22:31.412Z"),
             hostId = "macstudio-9d4c",
             hostName = "MacStudio",
-            kind = SnapshotKind.Auto,
+            snapshotKind = SnapshotKind.Auto,
             label = null,
             selfContained = false,
             files =
@@ -57,8 +57,8 @@ class ManifestTest {
     @Test
     fun encodesShortVersionFieldName() {
         val text = json.encodeToString(Manifest.serializer(), fixture())
-        // v not version — wire-stable per design doc §3.1.
-        assertEquals(true, text.contains("\"v\":1"))
+        // v not version — wire-stable per design doc.
+        assertEquals(true, text.contains("\"v\":2"))
         assertEquals(false, text.contains("\"version\":"))
     }
 
@@ -67,7 +67,9 @@ class ManifestTest {
         val text = json.encodeToString(Manifest.serializer(), fixture())
         for (field in listOf(
             "owner_user_id",
-            "project_uuid",
+            "tree_id",
+            "tree_kind",
+            "snapshot_kind",
             "parent_rev",
             "host_id",
             "host_name",
@@ -78,12 +80,20 @@ class ManifestTest {
         )) {
             assertEquals(true, text.contains("\"$field\""), "missing wire field $field")
         }
+        // The renamed v=1 field names must NOT appear in v=2 output.
+        assertEquals(false, text.contains("\"project_uuid\""))
     }
 
     @Test
-    fun encodesKindAsLowercase() {
-        val text = json.encodeToString(Manifest.serializer(), fixture().copy(kind = SnapshotKind.Branch))
-        assertEquals(true, text.contains("\"kind\":\"branch\""))
+    fun encodesSnapshotKindAsLowercase() {
+        val text = json.encodeToString(Manifest.serializer(), fixture().copy(snapshotKind = SnapshotKind.Branch))
+        assertEquals(true, text.contains("\"snapshot_kind\":\"branch\""))
+    }
+
+    @Test
+    fun encodesTreeKindAsLowercase() {
+        val text = json.encodeToString(Manifest.serializer(), fixture())
+        assertEquals(true, text.contains("\"tree_kind\":\"project\""))
     }
 
     @Test
@@ -108,8 +118,10 @@ class ManifestTest {
     }
 
     @Test
-    fun acceptsKnownDesignDocSample() {
-        // Subset of the example in design doc §3.1, with 64-char hashes.
+    fun acceptsV1SampleViaBackCompatDecoder() {
+        // v=1 wire format — what older binaries persist before the migration runs. The
+        // v=1 decoder synthesizes `tree_kind = project` and uses `project_uuid` as the
+        // tree id so the in-memory shape matches what a migrated bucket would carry.
         val sample =
             """
             {
@@ -132,7 +144,17 @@ class ManifestTest {
             """.trimIndent()
         val decoded = json.decodeFromString(Manifest.serializer(), sample)
         assertEquals(SnapshotRev(47), decoded.rev)
-        assertEquals(SnapshotKind.Auto, decoded.kind)
+        assertEquals(SnapshotKind.Auto, decoded.snapshotKind)
+        assertEquals(TrackedTreeKind.Project, decoded.kind)
+        assertEquals(TrackedTreeId("01HZQX5N3M8F9G2K7B1A6Y4WCE"), decoded.treeId)
         assertEquals(1, decoded.files.size)
+    }
+
+    @Test
+    fun decodesV2Roundtrip() {
+        val original = fixture()
+        val text = json.encodeToString(Manifest.serializer(), original)
+        val decoded = json.decodeFromString(Manifest.serializer(), text)
+        assertEquals(original, decoded)
     }
 }

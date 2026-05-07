@@ -90,7 +90,7 @@ class SyncRoundTripTest {
             for ((rel, mfile) in head.files) {
                 val targetPath = hostBRoot.resolve(rel)
                 Files.createDirectories(targetPath.parent)
-                val bytes = cloud.blobBytes(mfile.hash, head.selfContained, uuid)
+                val bytes = cloud.blobBytes(mfile.hash!!, head.selfContained, uuid)
                 Files.write(targetPath, bytes)
             }
 

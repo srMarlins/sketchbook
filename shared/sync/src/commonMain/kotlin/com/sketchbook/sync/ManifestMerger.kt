@@ -47,7 +47,7 @@ fun mergeManifests(
         rev = newRev,
         parentRev = remote.rev,
         timestamp = clock.now(),
-        kind = SnapshotKind.Auto,
+        snapshotKind = SnapshotKind.Auto,
         label = null,
         files = mergedFiles,
         stats =
