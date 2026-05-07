@@ -1,0 +1,14 @@
+-- v8 → v9: add project_path denormalization, mirroring project_name from 7.sqm. The same
+-- bug class (orphaned project_id with no path-bearing action payload) showed up on the
+-- History column even after 8.sqm — backfill only fills project_name when the project
+-- still resolves; for already-orphaned rows, ProjectDisplay's pathHint fallback needs
+-- something to chew on. project_path is captured at journal-append time alongside name.
+ALTER TABLE journal_entries ADD COLUMN project_path TEXT;
+
+-- Backfill from current projects.path. Same constraint as the 8.sqm name backfill: we can
+-- only fill rows whose project_id still resolves. Truly-orphaned rows stay NULL and the
+-- resolver falls through to its sentinel.
+UPDATE journal_entries
+SET project_path = (SELECT p.path FROM projects p WHERE p.id = journal_entries.project_id)
+WHERE project_path IS NULL
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = journal_entries.project_id);

@@ -74,6 +74,7 @@ class JvmScannerIdStabilityTest {
                 project_id = id1,
                 payload_json = "{}",
                 project_name = "Foo",
+                project_path = abs,
             )
 
             // Rewrite the .als with a different tempo + bump mtime so the scanner doesn't take
