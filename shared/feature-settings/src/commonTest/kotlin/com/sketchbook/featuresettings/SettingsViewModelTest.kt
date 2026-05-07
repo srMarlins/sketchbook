@@ -39,7 +39,6 @@ class SettingsViewModelTest {
             LibraryRoot.Projects("Z:/User/audio/Projects"),
             LibraryRoot.External("S:/Splice", alias = "splice", kind = ExternalKind.Splice),
         ),
-        cloudConfigured = false,
         selfContainedProjects = emptySet(),
     )
 
@@ -47,7 +46,6 @@ class SettingsViewModelTest {
         val flow = MutableStateFlow(initial)
         var lastUpsert: LibraryRoot? = null
         var lastRemove: LibraryRoot? = null
-        var lastCredential: String? = null
         var lastSelfContained: Pair<ProjectUuid, Boolean>? = null
         override fun observe(): Flow<Settings> = flow
         override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> {
@@ -60,12 +58,10 @@ class SettingsViewModelTest {
             flow.value = flow.value.copy(libraryRoots = flow.value.libraryRoots - root)
             return Result.success(Unit)
         }
-        override suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit> {
-            lastCredential = serviceAccountJson
-            flow.value = flow.value.copy(cloudConfigured = serviceAccountJson != null)
+        override suspend fun setCloudBucket(bucket: String?): Result<Unit> {
+            flow.value = flow.value.copy(cloudBucket = bucket)
             return Result.success(Unit)
         }
-        override suspend fun setCloudBucket(bucket: String?): Result<Unit> = Result.success(Unit)
         override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit> {
             lastSelfContained = uuid to value
             val updated = if (value) flow.value.selfContainedProjects + uuid else flow.value.selfContainedProjects - uuid
@@ -85,7 +81,7 @@ class SettingsViewModelTest {
             var s = awaitItem()
             while (s.libraryRoots.isEmpty()) s = awaitItem()
             assertEquals(2, s.libraryRoots.size)
-            assertEquals(false, s.cloudConfigured)
+            assertEquals(null, s.cloudBucket)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -100,19 +96,6 @@ class SettingsViewModelTest {
             val effect = awaitItem()
             assertTrue(effect is SettingsViewModel.Effect.Saved)
             assertEquals(newRoot, repo.lastUpsert)
-        }
-    }
-
-    @Test
-    fun setCloudCredentialUpdatesRepoAndEmits() = runTest(mainDispatcher) {
-        val repo = FakeRepo(initial)
-        val vm = SettingsViewModel(repo)
-        vm.effects.test {
-            vm.dispatch(SettingsViewModel.Intent.SetCloudCredential("{\"type\": \"service_account\"}"))
-            val effect = awaitItem()
-            assertTrue(effect is SettingsViewModel.Effect.Saved)
-            assertEquals("cloud", effect.key)
-            assertEquals("{\"type\": \"service_account\"}", repo.lastCredential)
         }
     }
 

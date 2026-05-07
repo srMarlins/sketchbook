@@ -379,12 +379,6 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                                         vm.dispatch(SettingsViewModel.Intent.AddRoot(LibraryRoot.Projects(path)))
                                                     }
                                                 },
-                                                onUploadCredentialClicked = {
-                                                    Os.pickFile(title = "Service account JSON")?.let { path ->
-                                                        val json = runCatching { java.io.File(path).readText() }.getOrNull()
-                                                        vm.dispatch(SettingsViewModel.Intent.SetCloudCredential(json))
-                                                    }
-                                                },
                                             )
                                         }
 

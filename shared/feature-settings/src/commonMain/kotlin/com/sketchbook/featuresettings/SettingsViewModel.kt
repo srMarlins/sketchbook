@@ -42,9 +42,7 @@ class SettingsViewModel(
         .map { settings ->
             State(
                 libraryRoots = settings.libraryRoots,
-                cloudConfigured = settings.cloudConfigured,
                 cloudBucket = settings.cloudBucket,
-                cloudReady = settings.cloudReady,
                 selfContainedProjects = settings.selfContainedProjects,
                 cacheSettings = settings.cacheSettings,
                 loading = false,
@@ -60,10 +58,6 @@ class SettingsViewModel(
 
             is Intent.RemoveRoot -> launchWithEffect(intent.root.path) {
                 repository.removeRoot(intent.root)
-            }
-
-            is Intent.SetCloudCredential -> launchWithEffect("cloud") {
-                repository.setCloudCredential(intent.serviceAccountJson)
             }
 
             is Intent.SetCloudBucket -> launchWithEffect("cloud-bucket") {
@@ -99,9 +93,7 @@ class SettingsViewModel(
     @Immutable
     data class State(
         val libraryRoots: List<LibraryRoot> = emptyList(),
-        val cloudConfigured: Boolean = false,
         val cloudBucket: String? = null,
-        val cloudReady: Boolean = false,
         val selfContainedProjects: Set<ProjectUuid> = emptySet(),
         val cacheSettings: BlobCacheSettings = BlobCacheSettings.Default,
         val loading: Boolean = false,
@@ -110,7 +102,6 @@ class SettingsViewModel(
     sealed interface Intent {
         data class AddRoot(val root: LibraryRoot) : Intent
         data class RemoveRoot(val root: LibraryRoot) : Intent
-        data class SetCloudCredential(val serviceAccountJson: String?) : Intent
         data class SetCloudBucket(val bucket: String?) : Intent
         data class ToggleSelfContained(val uuid: ProjectUuid, val value: Boolean) : Intent
         data class SetCacheSize(val settings: BlobCacheSettings) : Intent

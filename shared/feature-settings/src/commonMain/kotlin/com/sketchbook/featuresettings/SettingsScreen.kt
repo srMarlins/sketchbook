@@ -14,9 +14,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -34,22 +31,18 @@ import com.sketchbook.uishared.theme.AppTheme
 
 /**
  * Settings screen. The page is centered in a max-width column so it doesn't sprawl on a wide
- * window. Cloud sync is parked behind an "Advanced" disclosure — at v1 the cloud isn't actually
- * wired through, and the bare "Upload service-account JSON" button confused real users in
- * testing (there's no context for what it is). The disclosure both explains it and lets us
- * keep the wiring for power users who already have a GCS account ready.
+ * window. Cloud sign-in + bucket configuration land in Phase 5 as a dedicated "Cloud" section;
+ * the legacy service-account JSON disclosure has been removed.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     vm: SettingsViewModel,
     onAddRootClicked: () -> Unit,
-    onUploadCredentialClicked: () -> Unit,
     modifier: Modifier = Modifier,
     syncState: SyncQueueState? = null,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    var showCloud by remember { mutableStateOf(false) }
     val scroll = rememberScrollState()
     Column(
         modifier = modifier
@@ -203,83 +196,6 @@ fun SettingsScreen(
                         "${state.selfContainedProjects.size} project(s) skip cloud dedup. Toggle from each project's detail pane.",
                         style = AppTheme.typography.caption,
                     )
-                }
-            }
-
-            // Cloud sync is parked: at v1 it isn't actually wired through, and the bare
-            // "service-account JSON" button confuses anyone who isn't already running their
-            // own GCS bucket. Keep it tucked away under an Advanced disclosure.
-            Section(
-                title = "Advanced",
-                hint = "Power-user toggles. Most people can ignore this section.",
-            ) {
-                Button(
-                    onClick = { showCloud = !showCloud },
-                    variant = ButtonVariant.Ghost,
-                ) {
-                    Text(if (showCloud) "Hide cloud sync" else "Show cloud sync")
-                }
-                if (showCloud) {
-                    Surface(
-                        color = AppTheme.colors.tintBlue,
-                        padding = PaddingValues(AppTheme.spacing.md),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm)) {
-                            Text("Cloud sync (preview)", style = AppTheme.typography.bodyEmphasis)
-                            Text(
-                                "Sketchbook backs snapshots up to a Google Cloud Storage bucket so projects round-trip across machines. Drop in a service-account JSON with read/write on the bucket, then enter the bucket name below.",
-                                style = AppTheme.typography.body,
-                            )
-                            FlowRow(
-                                verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-                                horizontalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
-                            ) {
-                                Badge(
-                                    color = if (state.cloudReady) {
-                                        AppTheme.colors.accentPositive
-                                    } else if (state.cloudConfigured) {
-                                        AppTheme.colors.accentWarning
-                                    } else {
-                                        AppTheme.colors.accentSecondary
-                                    },
-                                ) {
-                                    Text(
-                                        when {
-                                            state.cloudReady -> "ready"
-                                            state.cloudConfigured -> "needs bucket"
-                                            else -> "not configured"
-                                        },
-                                        style = AppTheme.typography.caption,
-                                    )
-                                }
-                                Button(onClick = onUploadCredentialClicked, variant = ButtonVariant.Secondary) {
-                                    Text(if (state.cloudConfigured) "Replace credential…" else "Choose JSON…")
-                                }
-                                if (state.cloudConfigured) {
-                                    Button(
-                                        onClick = { vm.dispatch(SettingsViewModel.Intent.SetCloudCredential(null)) },
-                                        variant = ButtonVariant.Ghost,
-                                    ) { Text("Clear") }
-                                }
-                            }
-                            // Bucket name field. Saved on every keystroke (in-memory store; the
-                            // flow rebuilds the SyncQueue on transition to ready/unready, not
-                            // on every typed char — distinctUntilChanged on cloudReady).
-                            var bucketDraft by remember(state.cloudBucket) {
-                                mutableStateOf(state.cloudBucket.orEmpty())
-                            }
-                            com.sketchbook.uishared.components.TextField(
-                                value = bucketDraft,
-                                onChange = {
-                                    bucketDraft = it
-                                    vm.dispatch(SettingsViewModel.Intent.SetCloudBucket(it.takeIf { v -> v.isNotBlank() }))
-                                },
-                                placeholder = "Bucket name (e.g. sketchbook-srmarlins)",
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    }
                 }
             }
         }
