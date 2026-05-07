@@ -14,6 +14,8 @@ import com.sketchbook.core.Manifest
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.LockStatus
 import com.sketchbook.repo.impl.InMemoryJournalRepository
@@ -106,10 +108,10 @@ private class FakeLockCloud : CloudBackend {
     override suspend fun headBlob(hash: BlobHash, scope: BlobScope) = false
     override suspend fun putBlob(hash: BlobHash, source: RawSource, size: Long, scope: BlobScope) {}
     override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource = error("not used")
-    override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest = error("not used")
-    override suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?) = emptyList<ManifestRef>()
-    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest) = Result.failure<Generation>(error("not used"))
-    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock): LeaseAcquireResult {
+    override suspend fun readManifest(treeId: TrackedTreeId, kind: TrackedTreeKind, rev: SnapshotRev): Manifest = error("not used")
+    override suspend fun listManifests(treeId: TrackedTreeId, kind: TrackedTreeKind, sinceRev: SnapshotRev?) = emptyList<ManifestRef>()
+    override suspend fun appendManifestHead(treeId: TrackedTreeId, kind: TrackedTreeKind, expectedHead: Generation?, manifest: Manifest) = Result.failure<Generation>(error("not used"))
+    override suspend fun acquireLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock): LeaseAcquireResult {
         val current = this.lock
         return if (current == null) {
             val gen = Generation((nextGen++).toString())
@@ -119,14 +121,14 @@ private class FakeLockCloud : CloudBackend {
             LeaseAcquireResult.Held(current.first, current.second)
         }
     }
-    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation): LeaseRefreshResult {
+    override suspend fun refreshLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock, expected: Generation): LeaseRefreshResult {
         val current = this.lock ?: return LeaseRefreshResult.Stale
         if (current.second != expected) return LeaseRefreshResult.Stale
         val gen = Generation((nextGen++).toString())
         this.lock = lock to gen
         return LeaseRefreshResult.Refreshed(gen)
     }
-    override suspend fun releaseLock(uuid: ProjectUuid, expected: Generation) {
+    override suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation) {
         val current = this.lock ?: return
         if (current.second == expected) this.lock = null
     }

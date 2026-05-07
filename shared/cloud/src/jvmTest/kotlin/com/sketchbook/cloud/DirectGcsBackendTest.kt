@@ -7,6 +7,8 @@ import com.sketchbook.core.ManifestStats
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -124,7 +126,8 @@ class DirectGcsBackendTest {
             }
         }
         val result = backend.appendManifestHead(
-            uuid = ProjectUuid(manifest.projectUuid.value),
+            treeId = TrackedTreeId(manifest.projectUuid.value),
+            kind = TrackedTreeKind.Project,
             expectedHead = Generation("42"),
             manifest = manifest,
         )
@@ -145,7 +148,8 @@ class DirectGcsBackendTest {
             )
         }
         val result = backend.appendManifestHead(
-            uuid = ProjectUuid(manifest.projectUuid.value),
+            treeId = TrackedTreeId(manifest.projectUuid.value),
+            kind = TrackedTreeKind.Project,
             expectedHead = Generation.ZERO,
             manifest = manifest,
         )
@@ -177,7 +181,7 @@ class DirectGcsBackendTest {
                 else -> fail("unexpected call $call")
             }
         }
-        val result = backend.acquireLock(uuid, existing.copy(ownerHostId = "windowspc"))
+        val result = backend.acquireLock(TrackedTreeId(uuid.value), TrackedTreeKind.Project, existing.copy(ownerHostId = "windowspc"))
         assertTrue(result is LeaseAcquireResult.Held)
         assertEquals(Generation("55"), result.generation)
         assertEquals("macstudio", result.held.ownerHostId)

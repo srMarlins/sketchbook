@@ -4,6 +4,8 @@ import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.sync.JvmBlobCache
 import java.nio.file.Files
 import java.nio.file.Path
@@ -34,7 +36,8 @@ class ManifestMaterializer(
      * on any error.
      */
     suspend fun materialize(uuid: ProjectUuid, rev: SnapshotRev): Result<Unit> {
-        val manifest = runCatching { cloud.readManifest(uuid, rev) }.getOrElse {
+        val treeId = TrackedTreeId(uuid.value)
+        val manifest = runCatching { cloud.readManifest(treeId, TrackedTreeKind.Project, rev) }.getOrElse {
             return Result.failure(it)
         }
         val scope: BlobScope =

@@ -13,6 +13,8 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -41,6 +43,8 @@ class SnapshotPipeline(
 
     fun run(input: PipelineInput): Flow<SnapshotProgress> = flow {
         val uuid = input.uuid
+        val treeId = input.treeId
+        val kind = input.kind
         val parentRev = input.lastKnownManifest?.rev
         val parentFiles = input.lastKnownManifest?.files ?: emptyMap()
         val parentExpectedHead = input.expectedHeadGeneration
@@ -49,12 +53,13 @@ class SnapshotPipeline(
         // 1) Lease.
         val leaseInstant = clock.now()
         val lock = LeaseLock(
+            ownerUserId = ownerUserId,
             ownerHostId = hostId,
             ownerHostName = hostName,
             acquiredAt = leaseInstant,
             expiresAt = leaseInstant + leaseTtl,
         )
-        val leaseGen: Generation = when (val r = cloud.acquireLock(uuid, lock)) {
+        val leaseGen: Generation = when (val r = cloud.acquireLock(treeId, kind, lock)) {
             is LeaseAcquireResult.Acquired -> {
                 emit(SnapshotProgress.LeaseAcquired(uuid))
                 r.generation
@@ -131,7 +136,7 @@ class SnapshotPipeline(
                 timestamp = clock.now(),
                 hostId = hostId,
                 hostName = hostName,
-                kind = input.kind,
+                kind = input.snapshotKind,
                 label = input.label,
                 files = files,
                 stats = ManifestStats(
@@ -143,17 +148,17 @@ class SnapshotPipeline(
             )
 
             // 5) CAS HEAD. On Conflict, re-fetch and write our work as a branch.
-            val casResult = cloud.appendManifestHead(uuid, parentExpectedHead, auto)
+            val casResult = cloud.appendManifestHead(treeId, kind, parentExpectedHead, auto)
             val saved = casResult.fold(
                 onSuccess = {
-                    SnapshotProgress.Saved(uuid, newRev, input.kind, input.label)
+                    SnapshotProgress.Saved(uuid, newRev, input.snapshotKind, input.label)
                 },
                 onFailure = { err ->
                     if (err is SketchbookError.Conflict) {
                         // Re-fetch latest HEAD generation by listing manifests; pick the last one
                         // and rev one above it. Fake/real backends both return ManifestRefs sorted
                         // by rev; if the list is empty something is wrong, propagate as failure.
-                        val refs = cloud.listManifests(uuid, sinceRev = parentRev)
+                        val refs = cloud.listManifests(treeId, kind, sinceRev = parentRev)
                         val latest = refs.maxByOrNull { it.rev }
                         if (latest == null) {
                             emit(SnapshotProgress.Failed(uuid, "conflict but cannot find new HEAD"))
@@ -169,7 +174,7 @@ class SnapshotPipeline(
                             label = label,
                             timestamp = ts,
                         )
-                        val branchResult = cloud.appendManifestHead(uuid, latest.generation, branch)
+                        val branchResult = cloud.appendManifestHead(treeId, kind, latest.generation, branch)
                         branchResult.fold(
                             onSuccess = {
                                 SnapshotProgress.Saved(uuid, branchRev, SnapshotKind.Branch, label)
@@ -186,7 +191,7 @@ class SnapshotPipeline(
             if (saved != null) emit(saved)
         } finally {
             // 6) Release lease (best-effort; pipeline outcome already emitted).
-            runCatching { cloud.releaseLock(uuid, leaseGen) }
+            runCatching { cloud.releaseLock(treeId, kind, leaseGen) }
         }
     }
 }
@@ -204,6 +209,13 @@ data class PipelineInput(
     val lastKnownManifest: Manifest?,
     val expectedHeadGeneration: Generation?,
     /**
+     * Tree identity used for cloud calls. v=1 wire still keys manifests by `project_uuid`; until
+     * the migrator (commit 10) mints registry-backed ids, callers pass `TrackedTreeId(uuid.value)`
+     * for [TrackedTreeKind.Project] trees so the legacy paths resolve unchanged.
+     */
+    val treeId: TrackedTreeId = TrackedTreeId(uuid.value),
+    val kind: TrackedTreeKind = TrackedTreeKind.Project,
+    /**
      * When true, blob uploads use [BlobScope.Private] keyed by [uuid]: the project's bytes never
      * dedup with any other project. Driven by `sync_state.self_contained` (managed via
      * `SettingsRepository.setSelfContained`).
@@ -216,7 +228,7 @@ data class PipelineInput(
      * the resulting manifest as [SnapshotKind.Branch] regardless of this hint — divergence
      * always wins over Named.
      */
-    val kind: SnapshotKind = SnapshotKind.Auto,
-    /** Human-readable label attached to the manifest. Pairs with [kind] = Named. */
+    val snapshotKind: SnapshotKind = SnapshotKind.Auto,
+    /** Human-readable label attached to the manifest. Pairs with [snapshotKind] = Named. */
     val label: String? = null,
 )

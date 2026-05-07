@@ -16,6 +16,8 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.sync.JvmBlobCache
 import kotlinx.coroutines.test.runTest
@@ -182,10 +184,10 @@ private class FakeMaterializerCloud(
         buf.write(bytes)
         return buf
     }
-    override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest = manifest
-    override suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?) = emptyList<ManifestRef>()
-    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest) = Result.failure<Generation>(SketchbookError.Conflict("not used"))
-    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) = LeaseAcquireResult.Acquired(Generation("1"))
-    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation) = LeaseRefreshResult.Refreshed(Generation("1"))
-    override suspend fun releaseLock(uuid: ProjectUuid, expected: Generation) {}
+    override suspend fun readManifest(treeId: TrackedTreeId, kind: TrackedTreeKind, rev: SnapshotRev): Manifest = manifest
+    override suspend fun listManifests(treeId: TrackedTreeId, kind: TrackedTreeKind, sinceRev: SnapshotRev?) = emptyList<ManifestRef>()
+    override suspend fun appendManifestHead(treeId: TrackedTreeId, kind: TrackedTreeKind, expectedHead: Generation?, manifest: Manifest) = Result.failure<Generation>(SketchbookError.Conflict("not used"))
+    override suspend fun acquireLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock) = LeaseAcquireResult.Acquired(Generation("1"))
+    override suspend fun refreshLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock, expected: Generation) = LeaseRefreshResult.Refreshed(Generation("1"))
+    override suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation) {}
 }

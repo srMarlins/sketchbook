@@ -6,6 +6,9 @@ import com.sketchbook.cloud.LeaseAcquireResult
 import com.sketchbook.cloud.LeaseLock
 import com.sketchbook.cloud.LeaseRefreshResult
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
+import com.sketchbook.core.UserId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -30,10 +33,14 @@ class LeaseLockState(
     private val uuid: ProjectUuid,
     private val hostId: String,
     private val hostName: String,
+    private val ownerUserId: UserId = UserId.DEFAULT,
     private val clock: Clock = Clock.System,
     private val ttl: Duration = 15.minutes,
     private val heartbeatInterval: Duration = 5.minutes,
 ) {
+
+    private val treeId: TrackedTreeId = TrackedTreeId(uuid.value)
+    private val kind: TrackedTreeKind = TrackedTreeKind.Project
 
     private val _state = MutableStateFlow<LockState>(LockState.Idle)
     val state: StateFlow<LockState> = _state.asStateFlow()
@@ -43,12 +50,13 @@ class LeaseLockState(
     suspend fun acquire(scope: CoroutineScope): LockState {
         val now = clock.now()
         val lock = LeaseLock(
+            ownerUserId = ownerUserId,
             ownerHostId = hostId,
             ownerHostName = hostName,
             acquiredAt = now,
             expiresAt = now + ttl,
         )
-        val outcome = when (val result = cloud.acquireLock(uuid, lock)) {
+        val outcome = when (val result = cloud.acquireLock(treeId, kind, lock)) {
             is LeaseAcquireResult.Acquired -> {
                 heartbeatJob?.cancel()
                 heartbeatJob = scope.launch { heartbeatLoop(result.generation, lock.heartbeatSeq) }
@@ -69,13 +77,14 @@ class LeaseLockState(
             val now = clock.now()
             seq += 1
             val refreshed = LeaseLock(
+                ownerUserId = ownerUserId,
                 ownerHostId = hostId,
                 ownerHostName = hostName,
                 acquiredAt = (state.value as? LockState.Owned)?.lock?.acquiredAt ?: now,
                 expiresAt = now + ttl,
                 heartbeatSeq = seq,
             )
-            when (val r = cloud.refreshLock(uuid, refreshed, generation)) {
+            when (val r = cloud.refreshLock(treeId, kind, refreshed, generation)) {
                 is LeaseRefreshResult.Refreshed -> {
                     generation = r.generation
                     _state.value = LockState.Owned(refreshed, generation)
@@ -94,7 +103,7 @@ class LeaseLockState(
         heartbeatJob?.cancel()
         heartbeatJob = null
         if (current is LockState.Owned) {
-            runCatching { cloud.releaseLock(uuid, current.generation) }
+            runCatching { cloud.releaseLock(treeId, kind, current.generation) }
         }
         _state.value = LockState.Idle
     }

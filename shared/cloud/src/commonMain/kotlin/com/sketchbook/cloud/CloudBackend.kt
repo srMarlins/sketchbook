@@ -2,14 +2,21 @@ package com.sketchbook.cloud
 
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
-import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import kotlinx.io.RawSource
 
 /**
  * Provider-agnostic cloud client. v1 ships [DirectGcsBackend] (jvmMain) against Google Cloud
  * Storage; v1.2 may add an R2/B2 backend at credit expiry. The interface only speaks domain
  * types and provider-neutral [Generation] tokens.
+ *
+ * Manifest + lease APIs are keyed by `(TrackedTreeId, TrackedTreeKind)`: the kind drives
+ * `KindPolicy` decisions in the pipeline (lease required? merge vs branch-fork?) without
+ * forcing the cloud impl to interpret it. v=1 wire format remains in effect — callers pass
+ * `kind = Project` and `treeId = TrackedTreeId(uuid.value)` until the migrator (commit 10)
+ * mints real registry-backed ids.
  */
 interface CloudBackend {
 
@@ -31,14 +38,14 @@ interface CloudBackend {
     /** Download a blob. Caller closes the returned [RawSource]. */
     suspend fun getBlob(hash: BlobHash, scope: BlobScope = BlobScope.Shared): RawSource
 
-    /** Read a single manifest by `(uuid, rev)`. */
-    suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest
+    /** Read a single manifest by `(treeId, kind, rev)`. */
+    suspend fun readManifest(treeId: TrackedTreeId, kind: TrackedTreeKind, rev: SnapshotRev): Manifest
 
-    /** List manifests for a project, optionally only those after [sinceRev] (for incremental pull). */
-    suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?): List<ManifestRef>
+    /** List manifests for a tree, optionally only those after [sinceRev] (for incremental pull). */
+    suspend fun listManifests(treeId: TrackedTreeId, kind: TrackedTreeKind, sinceRev: SnapshotRev?): List<ManifestRef>
 
     /**
-     * Append a new manifest as the project's HEAD. CAS via [expectedHead]:
+     * Append a new manifest as the tree's HEAD. CAS via [expectedHead]:
      * - `null` → no precondition (forced overwrite — discouraged).
      * - [Generation.ZERO] → must-not-exist (initial write).
      * - any other → must match the current HEAD generation; mismatch returns `Result.failure`
@@ -47,17 +54,23 @@ interface CloudBackend {
      * On success, returns the new HEAD's [Generation].
      */
     suspend fun appendManifestHead(
-        uuid: ProjectUuid,
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
         expectedHead: Generation?,
         manifest: Manifest,
     ): Result<Generation>
 
-    /** CAS-acquire the lease lock for a project. */
-    suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock): LeaseAcquireResult
+    /** CAS-acquire the lease lock for a tree. */
+    suspend fun acquireLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock): LeaseAcquireResult
 
     /** Heartbeat-refresh an existing lease lock; fails if our generation no longer matches. */
-    suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation): LeaseRefreshResult
+    suspend fun refreshLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        lock: LeaseLock,
+        expected: Generation,
+    ): LeaseRefreshResult
 
     /** Release our lease lock. */
-    suspend fun releaseLock(uuid: ProjectUuid, expected: Generation)
+    suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation)
 }

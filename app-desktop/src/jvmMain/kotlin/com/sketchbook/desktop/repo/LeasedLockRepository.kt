@@ -7,6 +7,8 @@ import com.sketchbook.cloud.LeaseLock
 import com.sketchbook.cloud.LeaseRefreshResult
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
@@ -84,9 +86,11 @@ class LeasedLockRepository(
         )
         var priorOwnerHostName: String? = null
         var priorExpiresAtMs: Long? = null
+        val treeId = TrackedTreeId(uuid.value)
+        val kind = TrackedTreeKind.Project
         val outcome = runCatching {
             // Best-effort: if a lock already exists, try refresh-overwrite via CAS.
-            val acquireResult = backend.acquireLock(uuid, lock)
+            val acquireResult = backend.acquireLock(treeId, kind, lock)
             when (acquireResult) {
                 is LeaseAcquireResult.Acquired -> {
                     per.flow.value = LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
@@ -97,7 +101,7 @@ class LeasedLockRepository(
                     priorOwnerHostName = acquireResult.held.ownerHostName
                     priorExpiresAtMs = acquireResult.held.expiresAt.toEpochMilliseconds()
                     // Force-take: overwrite via refresh CAS targeting the held generation.
-                    val r = backend.refreshLock(uuid, lock, acquireResult.generation)
+                    val r = backend.refreshLock(treeId, kind, lock, acquireResult.generation)
                     when (r) {
                         is LeaseRefreshResult.Refreshed -> {
                             per.flow.value = LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
@@ -175,10 +179,10 @@ private object NullCloudBackend : CloudBackend {
     override suspend fun headBlob(hash: com.sketchbook.core.BlobHash, scope: com.sketchbook.cloud.BlobScope) = false
     override suspend fun putBlob(hash: com.sketchbook.core.BlobHash, source: kotlinx.io.RawSource, size: Long, scope: com.sketchbook.cloud.BlobScope) = error("cloud not configured")
     override suspend fun getBlob(hash: com.sketchbook.core.BlobHash, scope: com.sketchbook.cloud.BlobScope) = error("cloud not configured")
-    override suspend fun readManifest(uuid: ProjectUuid, rev: com.sketchbook.core.SnapshotRev) = error("cloud not configured")
-    override suspend fun listManifests(uuid: ProjectUuid, sinceRev: com.sketchbook.core.SnapshotRev?) = emptyList<com.sketchbook.cloud.ManifestRef>()
-    override suspend fun appendManifestHead(uuid: ProjectUuid, expectedHead: com.sketchbook.cloud.Generation?, manifest: com.sketchbook.core.Manifest) = Result.failure<com.sketchbook.cloud.Generation>(IllegalStateException("cloud not configured"))
-    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock) = LeaseAcquireResult.Acquired(com.sketchbook.cloud.Generation("0"))
-    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: com.sketchbook.cloud.Generation) = LeaseRefreshResult.Stale
-    override suspend fun releaseLock(uuid: ProjectUuid, expected: com.sketchbook.cloud.Generation) {}
+    override suspend fun readManifest(treeId: TrackedTreeId, kind: TrackedTreeKind, rev: com.sketchbook.core.SnapshotRev) = error("cloud not configured")
+    override suspend fun listManifests(treeId: TrackedTreeId, kind: TrackedTreeKind, sinceRev: com.sketchbook.core.SnapshotRev?) = emptyList<com.sketchbook.cloud.ManifestRef>()
+    override suspend fun appendManifestHead(treeId: TrackedTreeId, kind: TrackedTreeKind, expectedHead: com.sketchbook.cloud.Generation?, manifest: com.sketchbook.core.Manifest) = Result.failure<com.sketchbook.cloud.Generation>(IllegalStateException("cloud not configured"))
+    override suspend fun acquireLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock) = LeaseAcquireResult.Acquired(com.sketchbook.cloud.Generation("0"))
+    override suspend fun refreshLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock, expected: com.sketchbook.cloud.Generation) = LeaseRefreshResult.Stale
+    override suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: com.sketchbook.cloud.Generation) {}
 }

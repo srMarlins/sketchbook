@@ -196,7 +196,7 @@ class GcsSyncQueue(
                 lastKnownManifest = null,
                 expectedHeadGeneration = expectedHead,
                 selfContained = current?.selfContained ?: false,
-                kind = kind,
+                snapshotKind = kind,
                 label = label,
             )
 

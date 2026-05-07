@@ -16,6 +16,8 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
 import com.sketchbook.repo.impl.SqlProjectRepository
 import com.sketchbook.sync.SnapshotPipeline
@@ -457,8 +459,8 @@ private class CountingCloudBackend : CloudBackend {
         private set
 
     private val blobs = mutableMapOf<Pair<BlobScope, BlobHash>, ByteArray>()
-    private val manifests = mutableMapOf<ProjectUuid, MutableList<Pair<ManifestRef, Manifest>>>()
-    private val locks = mutableMapOf<ProjectUuid, Pair<LeaseLock, Generation>>()
+    private val manifests = mutableMapOf<TrackedTreeId, MutableList<Pair<ManifestRef, Manifest>>>()
+    private val locks = mutableMapOf<TrackedTreeId, Pair<LeaseLock, Generation>>()
     private var nextGen = 1L
     private var appendCalls = 0
 
@@ -477,19 +479,20 @@ private class CountingCloudBackend : CloudBackend {
 
     override suspend fun getBlob(hash: BlobHash, scope: BlobScope): RawSource = error("not used in drain tests")
 
-    override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest {
-        val list = manifests[uuid] ?: throw SketchbookError.NotFound("no manifests for $uuid")
+    override suspend fun readManifest(treeId: TrackedTreeId, kind: TrackedTreeKind, rev: SnapshotRev): Manifest {
+        val list = manifests[treeId] ?: throw SketchbookError.NotFound("no manifests for tree=${treeId.value}")
         return list.firstOrNull { it.second.rev == rev }?.second
             ?: throw SketchbookError.NotFound("rev $rev not found")
     }
 
-    override suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?): List<ManifestRef> {
-        val list = manifests[uuid] ?: return emptyList()
+    override suspend fun listManifests(treeId: TrackedTreeId, kind: TrackedTreeKind, sinceRev: SnapshotRev?): List<ManifestRef> {
+        val list = manifests[treeId] ?: return emptyList()
         return list.map { it.first }.filter { sinceRev == null || it.rev > sinceRev.value }
     }
 
     override suspend fun appendManifestHead(
-        uuid: ProjectUuid,
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
         expectedHead: Generation?,
         manifest: Manifest,
     ): Result<Generation> {
@@ -503,32 +506,32 @@ private class CountingCloudBackend : CloudBackend {
         val gen = nextGeneration()
         val ref = ManifestRef(
             rev = manifest.rev.value,
-            path = "manifests/${uuid.value}/${manifest.rev.value}.json",
+            path = "manifests/${treeId.value}/${manifest.rev.value}.json",
             generation = gen,
         )
-        manifests.getOrPut(uuid) { mutableListOf() }.add(ref to manifest)
+        manifests.getOrPut(treeId) { mutableListOf() }.add(ref to manifest)
         return Result.success(gen)
     }
 
-    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock): LeaseAcquireResult {
+    override suspend fun acquireLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock): LeaseAcquireResult {
         lockAcquireCount += 1
-        val existing = locks[uuid]
+        val existing = locks[treeId]
         if (existing != null) return LeaseAcquireResult.Held(existing.first, existing.second)
         val gen = nextGeneration()
-        locks[uuid] = lock to gen
+        locks[treeId] = lock to gen
         return LeaseAcquireResult.Acquired(gen)
     }
 
-    override suspend fun refreshLock(uuid: ProjectUuid, lock: LeaseLock, expected: Generation): LeaseRefreshResult {
-        val existing = locks[uuid] ?: return LeaseRefreshResult.Stale
+    override suspend fun refreshLock(treeId: TrackedTreeId, kind: TrackedTreeKind, lock: LeaseLock, expected: Generation): LeaseRefreshResult {
+        val existing = locks[treeId] ?: return LeaseRefreshResult.Stale
         if (existing.second != expected) return LeaseRefreshResult.Stale
         val gen = nextGeneration()
-        locks[uuid] = lock to gen
+        locks[treeId] = lock to gen
         return LeaseRefreshResult.Refreshed(gen)
     }
 
-    override suspend fun releaseLock(uuid: ProjectUuid, expected: Generation) {
-        val existing = locks[uuid] ?: return
-        if (existing.second == expected) locks.remove(uuid)
+    override suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation) {
+        val existing = locks[treeId] ?: return
+        if (existing.second == expected) locks.remove(treeId)
     }
 }

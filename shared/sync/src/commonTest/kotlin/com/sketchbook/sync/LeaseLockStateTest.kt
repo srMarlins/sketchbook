@@ -19,7 +19,7 @@ class LeaseLockStateTest {
     @Test
     fun acquiresLockWhenFree() = runTest {
         val cloud = FakeCloudBackend()
-        val lease = LeaseLockState(cloud, uuid, "host-a", "DesktopA", FixedClock(now))
+        val lease = LeaseLockState(cloud, uuid, "host-a", "DesktopA", clock = FixedClock(now))
         val state = lease.acquire(backgroundScope)
         assertTrue(state is LockState.Owned, "expected Owned, got $state")
         lease.release()
@@ -30,9 +30,9 @@ class LeaseLockStateTest {
         val cloud = FakeCloudBackend()
         cloud.forceLock(
             uuid,
-            LeaseLock("host-b", "MacStudio", now, now + 15.minutes),
+            LeaseLock(ownerHostId = "host-b", ownerHostName = "MacStudio", acquiredAt = now, expiresAt = now + 15.minutes),
         )
-        val lease = LeaseLockState(cloud, uuid, "host-a", "DesktopA", FixedClock(now))
+        val lease = LeaseLockState(cloud, uuid, "host-a", "DesktopA", clock = FixedClock(now))
         val state = lease.acquire(backgroundScope)
         assertTrue(state is LockState.HeldByOther, "expected HeldByOther, got $state")
         assertEquals("MacStudio", state.held.ownerHostName)
@@ -55,7 +55,7 @@ class LeaseLockStateTest {
         assertTrue(state is LockState.Owned)
 
         // Steal the lock by overwriting the underlying entry; the next refresh sees a stale gen.
-        cloud.forceLock(uuid, LeaseLock("host-b", "MacStudio", now, now + 10.minutes))
+        cloud.forceLock(uuid, LeaseLock(ownerHostId = "host-b", ownerHostName = "MacStudio", acquiredAt = now, expiresAt = now + 10.minutes))
 
         // Advance virtual time so the heartbeat coroutine fires inside backgroundScope.
         testScheduler.advanceTimeBy(70_000)

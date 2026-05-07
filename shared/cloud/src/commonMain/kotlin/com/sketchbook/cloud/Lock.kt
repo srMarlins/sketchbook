@@ -1,14 +1,21 @@
 package com.sketchbook.cloud
 
+import com.sketchbook.core.UserId
 import kotlinx.serialization.Serializable
 import kotlin.time.Instant
 
 /**
- * Lease lock primitives. Stored in cloud as `locks/<project_uuid>.lock` JSON. CAS via the
- * provider's conditional-write header (`x-goog-if-generation-match` on GCS).
+ * Lease lock primitives. Stored in cloud as `trees/<kind>/<tree_id>/lock` JSON (post-migration)
+ * / `locks/<project_uuid>.lock` (legacy v=1). CAS via the provider's conditional-write header
+ * (`x-goog-if-generation-match` on GCS).
+ *
+ * [ownerUserId] is forward-compat for v1.2 multi-user. v1 always sets it to [UserId.DEFAULT];
+ * v1.2 fills in real ids. Already on the wire so the ACL semantics are stable across the v1 →
+ * v1.2 transition.
  */
 @Serializable
 data class LeaseLock(
+    val ownerUserId: UserId = UserId.DEFAULT,
     val ownerHostId: String,
     val ownerHostName: String,
     val acquiredAt: Instant,

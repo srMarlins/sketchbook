@@ -2,9 +2,10 @@ package com.sketchbook.cloud
 
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
-import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.TrackedTreeId
+import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
@@ -251,13 +252,17 @@ class DirectGcsBackend(
         return drainToTempFile(response.bodyAsChannel(), prefix = "sketchbook-blob-")
     }
 
-    override suspend fun readManifest(uuid: ProjectUuid, rev: SnapshotRev): Manifest {
+    override suspend fun readManifest(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        rev: SnapshotRev,
+    ): Manifest {
         // Mainline manifests are listed; the on-disk path includes timestamp+host so we have to
         // resolve via list. Most callers invoke this only after listManifests; PR-9 callers use
         // the ref directly.
-        val refs = listManifests(uuid, sinceRev = SnapshotRev(rev.value - 1))
+        val refs = listManifests(treeId, kind, sinceRev = SnapshotRev(rev.value - 1))
         val target = refs.firstOrNull { it.rev == rev.value }
-            ?: throw SketchbookError.NotFound("no manifest at uuid=$uuid rev=${rev.value}")
+            ?: throw SketchbookError.NotFound("no manifest at tree=${treeId.value} rev=${rev.value}")
         val response = http.get(objectUrl(target.path)) {
             authHeader()
             parameter("alt", "media")
@@ -266,8 +271,12 @@ class DirectGcsBackend(
         return json.decodeFromString(Manifest.serializer(), response.bodyAsText())
     }
 
-    override suspend fun listManifests(uuid: ProjectUuid, sinceRev: SnapshotRev?): List<ManifestRef> {
-        val prefix = "$tenantPrefix/manifests/${uuid.value}/"
+    override suspend fun listManifests(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        sinceRev: SnapshotRev?,
+    ): List<ManifestRef> {
+        val prefix = manifestsPrefix(treeId, kind)
         val response = http.get(listUrl()) {
             authHeader()
             parameter("prefix", prefix)
@@ -281,7 +290,8 @@ class DirectGcsBackend(
     }
 
     override suspend fun appendManifestHead(
-        uuid: ProjectUuid,
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
         expectedHead: Generation?,
         manifest: Manifest,
     ): Result<Generation> {
@@ -289,8 +299,8 @@ class DirectGcsBackend(
         // the HEAD pointer (CAS). v1 PR-6 stores the HEAD as the manifest itself at a stable
         // path; the JSON file is overwritten on each new rev. PR-9 may add a separate atomic
         // pointer file.
-        val timestamped = manifestPath(uuid, manifest.rev.value, manifest.timestamp.toString(), manifest.hostId)
-        val headPath = headPath(uuid)
+        val timestamped = manifestPath(treeId, kind, manifest.rev.value, manifest.timestamp.toString(), manifest.hostId)
+        val headPath = headPath(treeId, kind)
         val body = json.encodeToString(Manifest.serializer(), manifest).toByteArray(Charsets.UTF_8)
 
         // Timestamped object — must not exist (rev is unique).
@@ -327,14 +337,18 @@ class DirectGcsBackend(
             }
 
             HttpStatusCode.PreconditionFailed ->
-                Result.failure(SketchbookError.Conflict("HEAD generation mismatch on uuid=$uuid"))
+                Result.failure(SketchbookError.Conflict("HEAD generation mismatch on tree=${treeId.value}"))
 
             else -> Result.failure(remoteFailure(resp, "PUT $headPath"))
         }
     }
 
-    override suspend fun acquireLock(uuid: ProjectUuid, lock: LeaseLock): LeaseAcquireResult {
-        val path = lockPath(uuid)
+    override suspend fun acquireLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        lock: LeaseLock,
+    ): LeaseAcquireResult {
+        val path = lockPath(treeId, kind)
         val body = json.encodeToString(LeaseLock.serializer(), lock).toByteArray(Charsets.UTF_8)
         val resp = http.post(uploadUrl()) {
             authHeader()
@@ -367,11 +381,12 @@ class DirectGcsBackend(
     }
 
     override suspend fun refreshLock(
-        uuid: ProjectUuid,
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
         lock: LeaseLock,
         expected: Generation,
     ): LeaseRefreshResult {
-        val path = lockPath(uuid)
+        val path = lockPath(treeId, kind)
         val body = json.encodeToString(LeaseLock.serializer(), lock).toByteArray(Charsets.UTF_8)
         val resp = http.post(uploadUrl()) {
             authHeader()
@@ -394,8 +409,8 @@ class DirectGcsBackend(
         }
     }
 
-    override suspend fun releaseLock(uuid: ProjectUuid, expected: Generation) {
-        val path = lockPath(uuid)
+    override suspend fun releaseLock(treeId: TrackedTreeId, kind: TrackedTreeKind, expected: Generation) {
+        val path = lockPath(treeId, kind)
         val resp = http.delete(objectUrl(path)) {
             authHeader()
             headers { append("x-goog-if-generation-match", expected.raw) }
@@ -425,11 +440,33 @@ class DirectGcsBackend(
         }
     }
 
-    private fun manifestPath(uuid: ProjectUuid, rev: Long, timestamp: String, host: String): String = "$tenantPrefix/manifests/${uuid.value}/${rev.toString().padStart(8, '0')}-${timestamp.replace(':', '-')}-$host.json"
+    /**
+     * v=1 path layout retained until the migrator (commit 10) relocates manifests under
+     * `trees/<kind>/<tree_id>/`. Until then, [TrackedTreeKind.Project] callers pass the
+     * project UUID as the tree-id string, so the path resolves to the legacy layout.
+     */
+    private fun manifestsPrefix(treeId: TrackedTreeId, kind: TrackedTreeKind): String = when (kind) {
+        TrackedTreeKind.Project -> "$tenantPrefix/manifests/${treeId.value}/"
+        else -> "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/manifests/"
+    }
 
-    private fun headPath(uuid: ProjectUuid): String = "$tenantPrefix/manifests/${uuid.value}/HEAD"
+    private fun manifestPath(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        rev: Long,
+        timestamp: String,
+        host: String,
+    ): String {
+        val tail = "${rev.toString().padStart(8, '0')}-${timestamp.replace(':', '-')}-$host.json"
+        return manifestsPrefix(treeId, kind) + tail
+    }
 
-    private fun lockPath(uuid: ProjectUuid): String = "$tenantPrefix/locks/${uuid.value}.lock"
+    private fun headPath(treeId: TrackedTreeId, kind: TrackedTreeKind): String = manifestsPrefix(treeId, kind) + "HEAD"
+
+    private fun lockPath(treeId: TrackedTreeId, kind: TrackedTreeKind): String = when (kind) {
+        TrackedTreeKind.Project -> "$tenantPrefix/locks/${treeId.value}.lock"
+        else -> "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/lock"
+    }
 
     private fun JsonElement.toManifestRef(prefix: String): ManifestRef? {
         val obj = this.jsonObject
