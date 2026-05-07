@@ -10,9 +10,6 @@ kotlin {
             implementation(project(":shared:core"))
             implementation(project(":shared:catalog"))
             implementation(libs.kotlinx.coroutines.core)
-            // `api` because Settings exposes kotlinx.datetime.Instant (firstRunCompletedAt)
-            // — consumers must have the type on their compile classpath.
-            api(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines.extensions)

@@ -14,7 +14,7 @@ import kotlin.time.Clock
 internal class FakeSettingsRepository(
     initial: Settings = Settings(
         libraryRoots = emptyList(),
-        cloudConfigured = false,
+
         selfContainedProjects = emptySet(),
     ),
     /**
@@ -56,7 +56,6 @@ internal class FakeSettingsRepository(
         return Result.success(Unit)
     }
 
-    override suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit> = Result.success(Unit)
     override suspend fun setCloudBucket(bucket: String?): Result<Unit> = Result.success(Unit)
     override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit> = Result.success(Unit)
     override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> = Result.success(Unit)

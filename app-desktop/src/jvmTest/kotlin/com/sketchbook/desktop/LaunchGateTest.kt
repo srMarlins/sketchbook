@@ -49,7 +49,6 @@ class LaunchGateTest {
         private val flow = MutableStateFlow(
             Settings(
                 libraryRoots = emptyList(),
-                cloudConfigured = false,
                 selfContainedProjects = emptySet(),
                 cacheSettings = BlobCacheSettings.Default,
                 firstRunCompletedAt = firstRunCompletedAt,
@@ -59,7 +58,6 @@ class LaunchGateTest {
         override fun observe(): Flow<Settings> = flow
         override suspend fun upsertRoot(root: LibraryRoot) = Result.success(Unit)
         override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
-        override suspend fun setCloudCredential(serviceAccountJson: String?) = Result.success(Unit)
         override suspend fun setCloudBucket(bucket: String?) = Result.success(Unit)
         override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean) = Result.success(Unit)
         override suspend fun setCacheSettings(settings: BlobCacheSettings) = Result.success(Unit)
@@ -78,7 +76,6 @@ class LaunchGateTest {
         private val flow = MutableStateFlow(
             Settings(
                 libraryRoots = emptyList(),
-                cloudConfigured = false,
                 selfContainedProjects = emptySet(),
                 cacheSettings = BlobCacheSettings.Default,
                 firstRunCompletedAt = firstRunCompletedAt,
@@ -92,7 +89,6 @@ class LaunchGateTest {
         override fun observe(): Flow<Settings> = flow
         override suspend fun upsertRoot(root: LibraryRoot) = Result.success(Unit)
         override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
-        override suspend fun setCloudCredential(serviceAccountJson: String?) = Result.success(Unit)
         override suspend fun setCloudBucket(bucket: String?) = Result.success(Unit)
         override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean) = Result.success(Unit)
         override suspend fun setCacheSettings(settings: BlobCacheSettings) = Result.success(Unit)

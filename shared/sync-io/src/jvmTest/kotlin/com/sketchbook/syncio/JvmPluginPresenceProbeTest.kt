@@ -346,7 +346,7 @@ class JvmPluginPresenceProbeTest {
         private val flow = MutableStateFlow(
             Settings(
                 libraryRoots = emptyList(),
-                cloudConfigured = false,
+        
                 selfContainedProjects = emptySet(),
                 pluginFolders = pluginFolders,
             ),
@@ -354,7 +354,6 @@ class JvmPluginPresenceProbeTest {
         override fun observe(): Flow<Settings> = flow
         override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> = Result.success(Unit)
         override suspend fun removeRoot(root: LibraryRoot): Result<Unit> = Result.success(Unit)
-        override suspend fun setCloudCredential(serviceAccountJson: String?): Result<Unit> = Result.success(Unit)
         override suspend fun setCloudBucket(bucket: String?): Result<Unit> = Result.success(Unit)
         override suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit> = Result.success(Unit)
         override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> = Result.success(Unit)
