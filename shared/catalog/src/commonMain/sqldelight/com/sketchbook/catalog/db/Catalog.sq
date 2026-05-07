@@ -774,6 +774,21 @@ CREATE TABLE tree_journal (
 );
 CREATE INDEX tree_journal_by_tree ON tree_journal(tree_id, timestamp DESC);
 
+-- Plugin references discovered in materialized User Library trees. Parallel to
+-- `project_plugins`. Drives the bootstrap checklist's coverage of templates + default racks
+-- + Defaults/*.als — anything that lives in the User Library and references plugins by name.
+-- Populated by UserLibraryPluginScanner (commit 12) after each materialize event.
+CREATE TABLE user_library_plugins (
+    tree_id        TEXT NOT NULL,
+    rel_path       TEXT NOT NULL,
+    plugin_name    TEXT NOT NULL,
+    plugin_type    TEXT NOT NULL,
+    is_installed   INTEGER NOT NULL DEFAULT 0,
+    last_seen_at   INTEGER NOT NULL,
+    PRIMARY KEY (tree_id, rel_path, plugin_name, plugin_type)
+);
+CREATE INDEX user_library_plugins_by_name ON user_library_plugins(plugin_name, plugin_type);
+
 -- Tree registry cache CRUD.
 upsertTreeRegistryEntry:
 INSERT INTO tree_registry_cache(tree_id, tree_kind, scope_key, display_name, owner_user_id, updated_at)
@@ -832,3 +847,32 @@ SELECT last_insert_rowid();
 selectTreeJournal:
 SELECT * FROM tree_journal WHERE tree_id = :tree_id
 ORDER BY timestamp DESC, id DESC LIMIT :limit_;
+
+-- User Library plugins (commit 12). Upsert keyed on (tree_id, rel_path, plugin_name,
+-- plugin_type) so re-scans replace stale rows in place. The presence-probe later flips
+-- is_installed in bulk via updateUserLibraryPluginInstalled.
+upsertUserLibraryPlugin:
+INSERT INTO user_library_plugins(tree_id, rel_path, plugin_name, plugin_type, is_installed, last_seen_at)
+VALUES (:tree_id, :rel_path, :plugin_name, :plugin_type, :is_installed, :last_seen_at)
+ON CONFLICT(tree_id, rel_path, plugin_name, plugin_type) DO UPDATE SET
+    is_installed = excluded.is_installed,
+    last_seen_at = excluded.last_seen_at;
+
+deleteUserLibraryPluginsForTreeRel:
+DELETE FROM user_library_plugins
+ WHERE tree_id = :tree_id AND rel_path = :rel_path;
+
+selectUserLibraryPluginsForTree:
+SELECT tree_id, rel_path, plugin_name, plugin_type, is_installed, last_seen_at
+  FROM user_library_plugins
+ WHERE tree_id = :tree_id;
+
+selectUserLibraryPluginsByName:
+SELECT tree_id, rel_path, plugin_name, plugin_type, is_installed, last_seen_at
+  FROM user_library_plugins
+ WHERE plugin_name = :plugin_name AND plugin_type = :plugin_type;
+
+updateUserLibraryPluginInstalled:
+UPDATE user_library_plugins
+   SET is_installed = :is_installed
+ WHERE plugin_name = :plugin_name AND plugin_type = :plugin_type;
