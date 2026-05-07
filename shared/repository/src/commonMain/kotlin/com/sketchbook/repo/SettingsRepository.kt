@@ -25,7 +25,15 @@ interface SettingsRepository {
     suspend fun setSelfContained(uuid: ProjectUuid, value: Boolean): Result<Unit>
 
     suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit>
+
+    suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit>
+
+    suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit>
+
+    suspend fun setPluginFolders(folders: List<String>): Result<Unit>
 }
+
+enum class OnboardingPromptKind { Samples }
 
 data class Settings(
     val libraryRoots: List<LibraryRoot>,
@@ -33,6 +41,25 @@ data class Settings(
     val cacheSettings: BlobCacheSettings = BlobCacheSettings.Default,
     /** GCS bucket name for uploads. Null when unconfigured. */
     val cloudBucket: String? = null,
+    /** Wall-clock instant the user finished onboarding (or skipped to defaults). Null until then. */
+    val firstRunCompletedAt: kotlin.time.Instant? = null,
+    /** Sticky flags for soft re-prompt banners on Home after onboarding completes. */
+    val onboardingSkipped: OnboardingSkipFlags = OnboardingSkipFlags(),
+    /**
+     * User-configurable plugin install directories. Empty = use platform defaults
+     * (the JVM probe falls back to `defaultInstalledDirs()` when this list is empty).
+     */
+    val pluginFolders: List<String> = emptyList(),
+)
+
+/**
+ * Sticky flags driving soft re-prompt banners on Home after onboarding completes — e.g. if the
+ * user skipped picking a samples root, surface a dismissible nudge until they either configure
+ * one or dismiss the prompt.
+ */
+data class OnboardingSkipFlags(
+    val samplesSkipped: Boolean = false,
+    val samplesPromptDismissed: Boolean = false,
 )
 
 /**

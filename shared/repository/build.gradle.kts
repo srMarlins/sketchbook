@@ -10,6 +10,7 @@ kotlin {
             implementation(project(":shared:core"))
             implementation(project(":shared:catalog"))
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines.extensions)
