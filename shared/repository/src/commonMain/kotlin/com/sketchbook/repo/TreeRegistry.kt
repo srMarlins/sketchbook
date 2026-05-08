@@ -184,8 +184,7 @@ class CloudTreeRegistry(
     // UserScope subgraph once #130 lands.
     private val ownerUserId: UserId,
 ) : TreeRegistry {
-    private fun cloud(): CloudBackend =
-        cloudProvider() ?: throw IllegalStateException("cloud not configured (no signed-in user / bucket)")
+    private fun cloud(): CloudBackend = cloudProvider() ?: throw IllegalStateException("cloud not configured (no signed-in user / bucket)")
 
     override suspend fun fetch(): TreeRegistrySnapshot {
         val read = cloud().readDoc(TreeRegistry.REGISTRY_KEY)

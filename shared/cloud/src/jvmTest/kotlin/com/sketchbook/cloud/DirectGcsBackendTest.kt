@@ -175,7 +175,9 @@ class DirectGcsBackendTest {
                             respond("", HttpStatusCode.NoContent)
                         }
 
-                        else -> error("unexpected method ${request.method}")
+                        else -> {
+                            error("unexpected method ${request.method}")
+                        }
                     }
                 }
             val result =

@@ -155,8 +155,7 @@ class CloudMachineProfileStore(
     private val clock: Clock,
     private val ioDispatcher: CoroutineDispatcher,
 ) : MachineProfileStore {
-    private fun cloud(): CloudBackend =
-        cloudProvider() ?: throw IllegalStateException("cloud not configured (no signed-in user / bucket)")
+    private fun cloud(): CloudBackend = cloudProvider() ?: throw IllegalStateException("cloud not configured (no signed-in user / bucket)")
 
     override suspend fun publishHostSlice(
         hostId: String,

@@ -338,8 +338,13 @@ class SnapshotPipeline(
                     return saved.copy(mergeConflicts = outcome.conflicts)
                 }
 
-                is MergeAttempt.Retry -> current = outcome.merged
-                is MergeAttempt.Fail -> failure = outcome.progress
+                is MergeAttempt.Retry -> {
+                    current = outcome.merged
+                }
+
+                is MergeAttempt.Fail -> {
+                    failure = outcome.progress
+                }
             }
         }
         return failure ?: SnapshotProgress.Failed(

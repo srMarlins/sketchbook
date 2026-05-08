@@ -114,10 +114,13 @@ private fun pickWinnerWithConflict(
     val pickedSide =
         when {
             cmp > 0 -> MergeConflict.Side.Local
+
             cmp < 0 -> MergeConflict.Side.Remote
+
             // Identical mtime: deterministic tie-break by host id lexicographic. Both machines
             // computing the same merge from the same inputs land on the same manifest.
             localHost <= remoteHost -> MergeConflict.Side.Local
+
             else -> MergeConflict.Side.Remote
         }
     val winner = if (pickedSide == MergeConflict.Side.Local) local else remote

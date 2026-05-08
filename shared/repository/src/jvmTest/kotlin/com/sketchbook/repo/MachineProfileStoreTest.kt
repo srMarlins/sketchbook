@@ -1,6 +1,5 @@
 package com.sketchbook.repo
 
-
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.cloud.BlobScope
@@ -48,7 +47,8 @@ class MachineProfileStoreTest {
             seedUserLibraryPlugin(handle.catalog, name = "Diva", type = "vst3", installed = true)
 
             val cloud = FakeProfileCloud()
-            val store = CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
+            val store =
+                CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
             val slice = store.publishHostSlice("macstudio", "Mac Studio", os = Os.Mac)
 
@@ -115,7 +115,8 @@ class MachineProfileStoreTest {
                         ).encodeToByteArray(),
             )
 
-            val store = CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
+            val store =
+                CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
             val unioned = store.composeUnion()
 
             assertEquals(2, unioned.perHost.size)
@@ -136,7 +137,8 @@ class MachineProfileStoreTest {
             seedHostSlice(cloud, hostId = "mac")
             seedHostSlice(cloud, hostId = "win")
             seedHostSlice(cloud, hostId = "linux")
-            val store = CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
+            val store =
+                CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
             val unioned = store.composeUnion()
 
@@ -156,7 +158,8 @@ class MachineProfileStoreTest {
             // clobbers; with CAS the loser retries against the winner's generation.
             val handle = CatalogDb.openInMemory()
             val cloud = ConcurrencyTrackingCloud()
-            val store = CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
+            val store =
+                CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
             store.publishHostSlice("macstudio", "Mac Studio", os = Os.Mac)
 
@@ -169,7 +172,8 @@ class MachineProfileStoreTest {
             val handle = CatalogDb.openInMemory()
             // Inject one CAS conflict on machines.json so registerMachine has to retry.
             val cloud = FakeProfileCloud(machinesConflicts = 1)
-            val store = CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
+            val store =
+                CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
             // Throws on irrecoverable failure; reaching the next line means the retry succeeded.
             store.registerMachine(
@@ -192,7 +196,8 @@ class MachineProfileStoreTest {
         runTest {
             val handle = CatalogDb.openInMemory()
             val cloud = FakeProfileCloud()
-            val store = CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
+            val store =
+                CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
             store.registerMachine(
                 MachineEntry("macstudio", "Mac Studio", Os.Mac, now, "0.4.0"),

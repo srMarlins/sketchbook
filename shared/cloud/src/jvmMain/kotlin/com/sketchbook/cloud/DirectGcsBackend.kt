@@ -399,7 +399,9 @@ class DirectGcsBackend(
                 Result.failure(SketchbookError.Conflict("HEAD generation mismatch on tree=${treeId.value}"))
             }
 
-            else -> Result.failure(remoteFailure(headResp, "PUT $headPath"))
+            else -> {
+                Result.failure(remoteFailure(headResp, "PUT $headPath"))
+            }
         }
     }
 

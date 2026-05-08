@@ -1,6 +1,5 @@
 package com.sketchbook.repo
 
-
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend

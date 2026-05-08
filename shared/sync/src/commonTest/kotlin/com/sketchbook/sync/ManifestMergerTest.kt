@@ -65,7 +65,8 @@ class ManifestMergerTest {
                 parent = SnapshotRev(1),
             )
 
-        val outcome = mergeManifests(local, remote, clock); val merged = outcome.manifest
+        val outcome = mergeManifests(local, remote, clock)
+        val merged = outcome.manifest
 
         assertEquals(setOf("a", "b"), merged.files.keys)
         assertEquals(SnapshotRev(3), merged.rev)
@@ -89,7 +90,8 @@ class ManifestMergerTest {
                 mapOf("x" to ManifestFile(blob("bb"), 7, t2)),
             )
 
-        val outcome = mergeManifests(local, remote, clock); val merged = outcome.manifest
+        val outcome = mergeManifests(local, remote, clock)
+        val merged = outcome.manifest
         assertEquals(blob("bb"), merged.files["x"]!!.hash)
         assertEquals(7L, merged.files["x"]!!.size)
     }
@@ -109,7 +111,8 @@ class ManifestMergerTest {
                 "host-b",
                 mapOf("x" to ManifestFile(blob("bb"), 7, t1)),
             )
-        val outcome = mergeManifests(local, remote, clock); val merged = outcome.manifest
+        val outcome = mergeManifests(local, remote, clock)
+        val merged = outcome.manifest
         assertEquals(blob("aa"), merged.files["x"]!!.hash)
     }
 
@@ -128,7 +131,8 @@ class ManifestMergerTest {
                 "host-b",
                 mapOf("x" to ManifestFile(hash = blob("bb"), size = 7, mtime = t1)),
             )
-        val outcome = mergeManifests(local, remote, clock); val merged = outcome.manifest
+        val outcome = mergeManifests(local, remote, clock)
+        val merged = outcome.manifest
         assertTrue(merged.files["x"]!!.deleted)
         // Tombstones excluded from stats.
         assertEquals(0, merged.stats.fileCount)
@@ -154,7 +158,8 @@ class ManifestMergerTest {
                     "c" to ManifestFile(blob("cc"), 30, t1),
                 ),
             )
-        val outcome = mergeManifests(local, remote, clock); val merged = outcome.manifest
+        val outcome = mergeManifests(local, remote, clock)
+        val merged = outcome.manifest
         assertEquals(3, merged.stats.fileCount)
         assertEquals(60L, merged.stats.totalBytes)
     }
