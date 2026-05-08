@@ -47,6 +47,25 @@ class UserLibraryPluginScannerTest {
         return UserLibraryPluginScanner(catalog, testParser, FixedClock(now))
     }
 
+    /**
+     * Seed [treeId] into `tree_registry_cache` so the FK on `user_library_plugins.tree_id`
+     * (added by 11.sqm) is satisfied when the scanner inserts plugin rows. Mirrors what the
+     * migrator + TreeRegistry would do in production before any UL scan runs.
+     */
+    private fun seedTree(catalog: com.sketchbook.catalog.db.Catalog) {
+        catalog.catalogQueries.upsertTreeRegistryEntry(
+            tree_id = treeId.value,
+            tree_kind = "user_library",
+            scope_key = "default",
+            display_name = "User Library",
+            owner_user_id = "DEFAULT",
+            collaborators_json = "[]",
+            created_at = now.toEpochMilliseconds(),
+            created_by_host = "test-host",
+            updated_at = now.toEpochMilliseconds(),
+        )
+    }
+
     @Test
     fun walksAlsAndAdgFilesUnderRoot() {
         touch("Templates/Live Set.als")
@@ -55,6 +74,7 @@ class UserLibraryPluginScannerTest {
         touch("Samples/k.wav") // skipped — not .als / .adg
 
         val handle = CatalogDb.openInMemory()
+        seedTree(handle.catalog)
         val plugins =
             mapOf(
                 "Templates/Live Set.als" to
@@ -83,6 +103,7 @@ class UserLibraryPluginScannerTest {
     fun reScanReplacesStalePlugins() {
         touch("Templates/Live Set.als")
         val handle = CatalogDb.openInMemory()
+        seedTree(handle.catalog)
 
         scanner(handle.catalog, mapOf("Templates/Live Set.als" to listOf(PluginRef("Serum", PluginFormat.Vst3, null))))
             .scan(treeId, ulRoot)
@@ -105,6 +126,7 @@ class UserLibraryPluginScannerTest {
         touch("Templates/A.als")
         touch("Templates/B.als")
         val handle = CatalogDb.openInMemory()
+        seedTree(handle.catalog)
         val s =
             scanner(
                 handle.catalog,
@@ -141,6 +163,7 @@ class UserLibraryPluginScannerTest {
         touch("Templates/Good.als")
         touch("Templates/Bad.als")
         val handle = CatalogDb.openInMemory()
+        seedTree(handle.catalog)
         val parser =
             UserLibraryPluginScanner.PluginRefParser { path ->
                 val rel = ulRoot.relativize(path).toString().replace('\\', '/')

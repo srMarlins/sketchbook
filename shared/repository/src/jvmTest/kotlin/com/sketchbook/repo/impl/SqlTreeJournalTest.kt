@@ -33,6 +33,20 @@ class SqlTreeJournalTest {
 
     private fun setup(): Pair<CatalogHandle, TreeJournal> {
         val handle = CatalogDb.openInMemory()
+        // Seed the parent registry row so the FKs added in 11.sqm are satisfied when the
+        // journal inserts into tree_snapshots / tree_journal / user_library_plugins. In
+        // production the migrator + TreeRegistry mint this row before any snapshot lands.
+        handle.catalog.catalogQueries.upsertTreeRegistryEntry(
+            tree_id = treeId.value,
+            tree_kind = kind.wireName,
+            scope_key = "default",
+            display_name = "User Library",
+            owner_user_id = "DEFAULT",
+            collaborators_json = "[]",
+            created_at = now.toEpochMilliseconds(),
+            created_by_host = "host-a",
+            updated_at = now.toEpochMilliseconds(),
+        )
         val journal =
             SqlTreeJournal(
                 catalog = handle.catalog,
@@ -191,8 +205,21 @@ class SqlTreeJournalTest {
     @Test
     fun observeRecentScopedToTreeId() =
         runTest {
-            val (_, journal) = setup()
+            val (handle, journal) = setup()
             val other = TrackedTreeId("tt-OTHER")
+            // Second tree needs its own registry-cache row so the FK passes when its
+            // snapshot lands.
+            handle.catalog.catalogQueries.upsertTreeRegistryEntry(
+                tree_id = other.value,
+                tree_kind = kind.wireName,
+                scope_key = "other",
+                display_name = "Other",
+                owner_user_id = "DEFAULT",
+                collaborators_json = "[]",
+                created_at = now.toEpochMilliseconds(),
+                created_by_host = "host-a",
+                updated_at = now.toEpochMilliseconds(),
+            )
 
             journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "p/1.json").getOrThrow()
             journal

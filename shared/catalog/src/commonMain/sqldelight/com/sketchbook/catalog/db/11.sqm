@@ -1,0 +1,108 @@
+-- v10 → v11: tighten the tree_registry_cache mirror per PR #125 review (R-66/R-67/R-68/R-69
+-- in docs/plans/2026-05-07-pr125-review-response.md).
+--
+-- Three structural fixes:
+--   1. Add `created_at` + `created_by_host` columns so a cache hit produces the same
+--      TreeRegistryEntry as a fresh cloud-doc fetch (10.sqm shipped without these and
+--      `lookup()` was synthesizing `createdAt = updated_at` and `createdByHost = ""`).
+--   2. Tighten `scope_key` to NOT NULL — every registered tree carries one, and SQL's NULL
+--      semantics break `selectTreeRegistryByKindScope` (NULL != NULL).
+--   3. Add `REFERENCES tree_registry_cache(tree_id) ON DELETE CASCADE` to the dependent
+--      tree_* tables so removing a tree drops its sync state, snapshots, journal entries,
+--      and UL plugin rows in lockstep. PRAGMA foreign_keys=ON is set per-connection by
+--      CatalogDb so the FK is actually enforced (not just documentation).
+--
+-- The tables introduced in 10.sqm are empty in production today (the migrator that populates
+-- them ships in this same release branch), but the recreate-and-copy idiom preserves any
+-- partial-state rows from local-dev runs.
+
+-- Step 1: rebuild tree_registry_cache. Adds created_at + created_by_host (NOT NULL DEFAULT
+-- so existing rows survive); promotes scope_key from nullable to NOT NULL DEFAULT '' (which
+-- collapses any stray NULLs to the empty string the queries already expect).
+CREATE TABLE tree_registry_cache_new (
+    tree_id            TEXT PRIMARY KEY,
+    tree_kind          TEXT NOT NULL,
+    scope_key          TEXT NOT NULL DEFAULT '',
+    display_name       TEXT,
+    owner_user_id      TEXT NOT NULL,
+    collaborators_json TEXT NOT NULL DEFAULT '[]',
+    created_at         INTEGER NOT NULL DEFAULT 0,
+    created_by_host    TEXT NOT NULL DEFAULT '',
+    updated_at         INTEGER NOT NULL
+);
+INSERT INTO tree_registry_cache_new(
+    tree_id, tree_kind, scope_key, display_name, owner_user_id,
+    collaborators_json, created_at, created_by_host, updated_at
+)
+SELECT
+    tree_id, tree_kind, COALESCE(scope_key, ''), display_name, owner_user_id,
+    collaborators_json, 0, '', updated_at
+FROM tree_registry_cache;
+DROP TABLE tree_registry_cache;
+ALTER TABLE tree_registry_cache_new RENAME TO tree_registry_cache;
+CREATE INDEX tree_registry_by_kind ON tree_registry_cache(tree_kind, scope_key);
+
+-- Step 2: rebuild tree_sync_state with FK + ON DELETE CASCADE.
+CREATE TABLE tree_sync_state_new (
+    tree_id        TEXT NOT NULL REFERENCES tree_registry_cache(tree_id) ON DELETE CASCADE,
+    tree_kind      TEXT NOT NULL,
+    local_rev      INTEGER NOT NULL DEFAULT 0,
+    cloud_head_rev INTEGER,
+    dirty          INTEGER NOT NULL DEFAULT 0,
+    updated_at     INTEGER NOT NULL,
+    PRIMARY KEY (tree_id)
+);
+INSERT INTO tree_sync_state_new SELECT * FROM tree_sync_state;
+DROP TABLE tree_sync_state;
+ALTER TABLE tree_sync_state_new RENAME TO tree_sync_state;
+
+-- Step 3: rebuild tree_snapshots with FK + ON DELETE CASCADE.
+CREATE TABLE tree_snapshots_new (
+    tree_id          TEXT NOT NULL REFERENCES tree_registry_cache(tree_id) ON DELETE CASCADE,
+    rev              INTEGER NOT NULL,
+    parent_rev       INTEGER,
+    timestamp        INTEGER NOT NULL,
+    host_id          TEXT NOT NULL,
+    snapshot_kind    TEXT NOT NULL,
+    label            TEXT,
+    file_count       INTEGER NOT NULL,
+    total_bytes      INTEGER NOT NULL,
+    new_bytes        INTEGER NOT NULL,
+    manifest_path    TEXT NOT NULL,
+    PRIMARY KEY (tree_id, rev)
+);
+INSERT INTO tree_snapshots_new SELECT * FROM tree_snapshots;
+DROP TABLE tree_snapshots;
+ALTER TABLE tree_snapshots_new RENAME TO tree_snapshots;
+CREATE INDEX tree_snapshots_by_kind ON tree_snapshots(tree_id, snapshot_kind, rev DESC);
+
+-- Step 4: rebuild tree_journal with FK + ON DELETE CASCADE.
+CREATE TABLE tree_journal_new (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    tree_id         TEXT NOT NULL REFERENCES tree_registry_cache(tree_id) ON DELETE CASCADE,
+    tree_kind       TEXT NOT NULL,
+    timestamp       INTEGER NOT NULL,
+    host_id         TEXT NOT NULL,
+    event_kind      TEXT NOT NULL,
+    payload_json    TEXT NOT NULL,
+    rev             INTEGER
+);
+INSERT INTO tree_journal_new SELECT * FROM tree_journal;
+DROP TABLE tree_journal;
+ALTER TABLE tree_journal_new RENAME TO tree_journal;
+CREATE INDEX tree_journal_by_tree ON tree_journal(tree_id, timestamp DESC);
+
+-- Step 5: rebuild user_library_plugins with FK + ON DELETE CASCADE.
+CREATE TABLE user_library_plugins_new (
+    tree_id        TEXT NOT NULL REFERENCES tree_registry_cache(tree_id) ON DELETE CASCADE,
+    rel_path       TEXT NOT NULL,
+    plugin_name    TEXT NOT NULL,
+    plugin_type    TEXT NOT NULL,
+    is_installed   INTEGER NOT NULL DEFAULT 0,
+    last_seen_at   INTEGER NOT NULL,
+    PRIMARY KEY (tree_id, rel_path, plugin_name, plugin_type)
+);
+INSERT INTO user_library_plugins_new SELECT * FROM user_library_plugins;
+DROP TABLE user_library_plugins;
+ALTER TABLE user_library_plugins_new RENAME TO user_library_plugins;
+CREATE INDEX user_library_plugins_by_name ON user_library_plugins(plugin_name, plugin_type);

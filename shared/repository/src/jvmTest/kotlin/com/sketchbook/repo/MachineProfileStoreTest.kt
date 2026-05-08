@@ -220,6 +220,23 @@ class MachineProfileStoreTest {
         type: String,
         installed: Boolean,
     ) {
+        // Ensure the parent tree_registry_cache row exists once per test — required by the
+        // FK that 11.sqm added to user_library_plugins.tree_id. Idempotent: every UL row in
+        // these tests uses the same tt-ul-test parent.
+        if (!ulParentSeeded) {
+            catalog.catalogQueries.upsertTreeRegistryEntry(
+                tree_id = "tt-ul-test",
+                tree_kind = "user_library",
+                scope_key = "default",
+                display_name = "User Library",
+                owner_user_id = "DEFAULT",
+                collaborators_json = "[]",
+                created_at = 0L,
+                created_by_host = "test-host",
+                updated_at = 0L,
+            )
+            ulParentSeeded = true
+        }
         catalog.catalogQueries.upsertUserLibraryPlugin(
             tree_id = "tt-ul-test",
             rel_path = "Templates/Live Set.als",
@@ -229,6 +246,8 @@ class MachineProfileStoreTest {
             last_seen_at = 0L,
         )
     }
+
+    private var ulParentSeeded = false
 }
 
 private class FixedClock2(

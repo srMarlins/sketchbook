@@ -139,8 +139,12 @@ internal data class TreeRegistryDoc(
 class CloudTreeRegistry(
     private val cloud: CloudBackend,
     private val catalog: Catalog,
-    private val clock: Clock = Clock.System,
-    private val ownerUserId: UserId = UserId.DEFAULT,
+    private val clock: Clock,
+    // Default user-id for a freshly-created registry doc (when no entries exist yet). Real
+    // per-user identity flows in via [register]'s `ownerUserId` argument; this is only used to
+    // stamp the wire-format `owner_user_id` field on the empty-doc case. Will move into a
+    // UserScope subgraph once #130 lands.
+    private val ownerUserId: UserId,
 ) : TreeRegistry {
     override suspend fun fetch(): TreeRegistrySnapshot {
         val read = cloud.readDoc(TreeRegistry.REGISTRY_KEY)
@@ -175,12 +179,12 @@ class CloudTreeRegistry(
         return TreeRegistryEntry(
             treeId = TrackedTreeId(row.tree_id),
             kind = TrackedTreeKind.fromWire(row.tree_kind),
-            scopeKey = row.scope_key.orEmpty(),
+            scopeKey = row.scope_key,
             displayName = row.display_name.orEmpty(),
             ownerUserId = UserId(row.owner_user_id),
             collaborators = collaborators,
-            createdAt = Instant.fromEpochMilliseconds(row.updated_at),
-            createdByHost = "",
+            createdAt = Instant.fromEpochMilliseconds(row.created_at),
+            createdByHost = row.created_by_host,
         )
     }
 
@@ -299,6 +303,12 @@ class CloudTreeRegistry(
     private fun refreshCache(entries: List<TreeRegistryEntry>) {
         val now = clock.now().toEpochMilliseconds()
         catalog.transaction {
+            // Drop phantom entries: trees that used to be in the cloud doc but aren't anymore
+            // (collab revoked, tree deleted upstream, etc.). Without this, lookup() returns
+            // ghosts that pass permission checks for resources the user no longer owns. The
+            // FK on dependent tree_* tables cascades.
+            val keep = entries.map { it.treeId.value }
+            catalog.catalogQueries.deleteTreeRegistryEntriesNotIn(keep)
             for (e in entries) {
                 val collaboratorsJson =
                     JSON.encodeToString(CollaboratorListSerializer, e.collaborators)
@@ -309,6 +319,8 @@ class CloudTreeRegistry(
                     display_name = e.displayName,
                     owner_user_id = e.ownerUserId.value,
                     collaborators_json = collaboratorsJson,
+                    created_at = e.createdAt.toEpochMilliseconds(),
+                    created_by_host = e.createdByHost,
                     updated_at = now,
                 )
             }

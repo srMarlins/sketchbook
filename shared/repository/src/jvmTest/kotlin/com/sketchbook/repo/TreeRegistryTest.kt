@@ -163,6 +163,87 @@ class TreeRegistryTest {
         assertTrue(registry.canWrite(entry, UserId("carol")))
         assertTrue(registry.canRead(entry, UserId("bob")))
     }
+
+    @Test
+    fun lookupRoundTripsCreatedAtAndCreatedByHost() =
+        runTest {
+            val handle = CatalogDb.openInMemory()
+            val cloud = FakeDocCloud()
+            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+
+            val createdByHost = "studio-mac"
+            val written =
+                registry
+                    .register(
+                        kind = TrackedTreeKind.Project,
+                        scopeKey = "p1",
+                        displayName = "lofi",
+                        treeId = TrackedTreeId("tt-x"),
+                        createdByHost = createdByHost,
+                    ).getOrThrow()
+
+            val looked = registry.lookup(TrackedTreeKind.Project, "p1")
+            assertNotNull(looked)
+            // Cache hit must produce the same identity fields a fresh fetch would.
+            assertEquals(written.createdAt, looked.createdAt)
+            assertEquals(written.createdByHost, looked.createdByHost)
+            assertEquals(createdByHost, looked.createdByHost)
+            assertEquals(now, looked.createdAt)
+        }
+
+    @Test
+    fun refreshCacheDropsPhantomEntries() =
+        runTest {
+            val handle = CatalogDb.openInMemory()
+            val cloud = FakeDocCloud()
+            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+
+            // Register two entries; both land in the cache.
+            registry
+                .register(
+                    kind = TrackedTreeKind.Project,
+                    scopeKey = "p-stale",
+                    displayName = "stale",
+                    treeId = TrackedTreeId("tt-stale"),
+                    createdByHost = "host-a",
+                ).getOrThrow()
+            registry
+                .register(
+                    kind = TrackedTreeKind.Project,
+                    scopeKey = "p-keep",
+                    displayName = "keep",
+                    treeId = TrackedTreeId("tt-keep"),
+                    createdByHost = "host-a",
+                ).getOrThrow()
+
+            // Simulate "tt-stale removed upstream": rewrite the cloud doc to only contain tt-keep.
+            val keepOnlyDoc =
+                """
+                {
+                  "v": 1,
+                  "owner_user_id": "${UserId.DEFAULT.value}",
+                  "trees": [
+                    {
+                      "tree_id": "tt-keep",
+                      "kind": "project",
+                      "scope_key": "p-keep",
+                      "display_name": "keep",
+                      "owner_user_id": "${UserId.DEFAULT.value}",
+                      "collaborators": [],
+                      "created_at": "$now",
+                      "created_by_host": "host-a"
+                    }
+                  ]
+                }
+                """.trimIndent().toByteArray()
+            cloud.overwriteDoc(TreeRegistry.REGISTRY_KEY, keepOnlyDoc)
+
+            registry.fetch()
+
+            // Phantom entry no longer resolves; the surviving one still does.
+            assertNull(registry.lookup(TrackedTreeKind.Project, "p-stale"))
+            assertNotNull(registry.lookup(TrackedTreeKind.Project, "p-keep"))
+        }
 }
 
 private class FixedClock(
@@ -267,4 +348,16 @@ private class FakeDocCloud(
         docs
             .filter { it.key.path.startsWith(prefix.value) }
             .map { CloudDocRef(it.key, it.value.second) }
+
+    /**
+     * Test helper: replace the doc at [key] with [bytes] and bump the generation. Used to
+     * simulate an upstream rewrite (collab revoked, tree deleted) so the next fetch returns
+     * a smaller entry set than the cache currently mirrors.
+     */
+    fun overwriteDoc(
+        key: CloudDocKey,
+        bytes: ByteArray,
+    ) {
+        docs[key] = bytes to Generation((nextGen++).toString())
+    }
 }

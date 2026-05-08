@@ -158,6 +158,11 @@ object CatalogDb {
                         // tree_* tables.
                         !tableExists(driver, "tree_sync_state") -> 9L
 
+                        // before 11.sqm — created_at column on tree_registry_cache added by 11.sqm.
+                        // A DB at v10 has tree_sync_state but no created_at column on the registry
+                        // cache; returning 10L runs 11.sqm's recreate-and-copy.
+                        !columnExists(driver, "tree_registry_cache", "created_at") -> 10L
+
                         // Pre-tracking DBs that already have all denorm columns + tree tables present
                         // are at the latest structural version. Return target so we don't re-run any
                         // migrations (their ALTER/CREATE statements would fail on existing objects).

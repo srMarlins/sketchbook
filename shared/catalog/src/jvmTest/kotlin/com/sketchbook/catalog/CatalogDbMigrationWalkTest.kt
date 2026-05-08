@@ -83,6 +83,29 @@ class CatalogDbMigrationWalkTest {
 
             // 9.sqm: journal_entries.project_path (8.sqm only backfills, no schema change)
             assertTrue(columnExists(driver, "journal_entries", "project_path"), "9.sqm did not add project_path")
+
+            // 10.sqm: tree_* tables for the backend-generalization design.
+            assertTrue(tableExists(driver, "tree_registry_cache"), "10.sqm did not create tree_registry_cache")
+            assertTrue(tableExists(driver, "tree_sync_state"), "10.sqm did not create tree_sync_state")
+            assertTrue(tableExists(driver, "tree_snapshots"), "10.sqm did not create tree_snapshots")
+            assertTrue(tableExists(driver, "tree_journal"), "10.sqm did not create tree_journal")
+            assertTrue(tableExists(driver, "user_library_plugins"), "10.sqm did not create user_library_plugins")
+
+            // 11.sqm: tree_registry_cache gains created_at + created_by_host columns; scope_key
+            // becomes NOT NULL; dependent tree_* tables gain FK ON DELETE CASCADE.
+            assertTrue(
+                columnExists(driver, "tree_registry_cache", "created_at"),
+                "11.sqm did not add tree_registry_cache.created_at",
+            )
+            assertTrue(
+                columnExists(driver, "tree_registry_cache", "created_by_host"),
+                "11.sqm did not add tree_registry_cache.created_by_host",
+            )
+            assertEquals(
+                NOT_NULL_TRUE,
+                columnNotNull(driver, "tree_registry_cache", "scope_key"),
+                "11.sqm did not promote scope_key to NOT NULL",
+            )
         } finally {
             driver.close()
         }
@@ -279,6 +302,39 @@ class CatalogDbMigrationWalkTest {
             parameters = 0,
         )
         return found
+    }
+
+    /**
+     * SQLite `PRAGMA table_info` returns 1 in the `notnull` column for NOT NULL fields.
+     * Returns `1` if the column is NOT NULL, `0` if nullable, or `null` if the column is
+     * missing. Used to verify 11.sqm tightened `scope_key` to NOT NULL.
+     */
+    private fun columnNotNull(
+        driver: SqlDriver,
+        table: String,
+        column: String,
+    ): Long? {
+        var notNull: Long? = null
+        driver.executeQuery(
+            identifier = null,
+            sql = "PRAGMA table_info($table)",
+            mapper = { c: SqlCursor ->
+                while (c.next().value) {
+                    // table_info columns: cid, name, type, notnull, dflt_value, pk
+                    if (c.getString(1) == column) {
+                        notNull = c.getLong(3)
+                        break
+                    }
+                }
+                QueryResult.Unit
+            },
+            parameters = 0,
+        )
+        return notNull
+    }
+
+    private companion object {
+        const val NOT_NULL_TRUE: Long = 1L
     }
 
     private fun indexExists(

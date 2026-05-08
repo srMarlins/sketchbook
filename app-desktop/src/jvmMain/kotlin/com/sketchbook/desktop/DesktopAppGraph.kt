@@ -123,6 +123,25 @@ interface DesktopAppGraph : ViewModelGraph {
     @SingleIn(AppScope::class)
     fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
 
+    /**
+     * Wall clock. Injected via Metro so tests can swap it for a deterministic
+     * [kotlin.time.Clock] without touching `Clock.System` at construction sites. Mirrors the
+     * dispatcher convention.
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideClock(): kotlin.time.Clock = kotlin.time.Clock.System
+
+    /**
+     * Owner [com.sketchbook.core.UserId] used as the empty-doc default when a fresh registry
+     * is minted. Real per-user identity flows in via [com.sketchbook.repo.TreeRegistry.register]'s
+     * `ownerUserId` argument; this binding will move into a `UserScope` subgraph keyed on the
+     * authed user once #130 lands. Until then, this stays as the v1 single-user constant.
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideOwnerUserId(): com.sketchbook.core.UserId = com.sketchbook.core.UserId.DEFAULT
+
     @Provides
     @SingleIn(AppScope::class)
     fun provideCatalogHandle(): CatalogHandle = CatalogDb.openOnDisk(catalogDbPath())

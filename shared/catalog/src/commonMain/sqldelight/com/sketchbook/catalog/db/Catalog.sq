@@ -741,8 +741,29 @@ DELETE FROM journal_entries WHERE id = :id;
 -- (UserLibrary, future kinds) get parallel tables here.
 -- ============================================================================
 
+-- Cache mirror of the cloud `<tenant>/registry.json` doc. v11 (PR #125 review): adds
+-- `created_at` + `created_by_host` so a cache hit produces the same TreeRegistryEntry as a
+-- fresh cloud-doc fetch; tightens `scope_key` to NOT NULL since every registered tree carries
+-- one and SQL NULL semantics break the (tree_kind, scope_key) lookup.
+CREATE TABLE tree_registry_cache (
+    tree_id            TEXT PRIMARY KEY,
+    tree_kind          TEXT NOT NULL,
+    scope_key          TEXT NOT NULL DEFAULT '',
+    display_name       TEXT,
+    owner_user_id      TEXT NOT NULL,
+    collaborators_json TEXT NOT NULL DEFAULT '[]',
+    created_at         INTEGER NOT NULL DEFAULT 0,
+    created_by_host    TEXT NOT NULL DEFAULT '',
+    updated_at         INTEGER NOT NULL
+);
+CREATE INDEX tree_registry_by_kind ON tree_registry_cache(tree_kind, scope_key);
+
+-- Sync-state, snapshot history, journal, and UL-plugin tables hang off tree_registry_cache.
+-- The FK is ON DELETE CASCADE so a tree removed from the cloud (and dropped from the cache by
+-- refreshCache's stale-row delete) takes its dependent rows with it. PRAGMA foreign_keys=ON
+-- is set per-connection so the cascade is enforced.
 CREATE TABLE tree_sync_state (
-    tree_id        TEXT NOT NULL,
+    tree_id        TEXT NOT NULL REFERENCES tree_registry_cache(tree_id) ON DELETE CASCADE,
     tree_kind      TEXT NOT NULL,
     local_rev      INTEGER NOT NULL DEFAULT 0,
     cloud_head_rev INTEGER,
@@ -751,19 +772,8 @@ CREATE TABLE tree_sync_state (
     PRIMARY KEY (tree_id)
 );
 
-CREATE TABLE tree_registry_cache (
-    tree_id           TEXT PRIMARY KEY,
-    tree_kind         TEXT NOT NULL,
-    scope_key         TEXT,
-    display_name      TEXT,
-    owner_user_id     TEXT NOT NULL,
-    collaborators_json TEXT NOT NULL DEFAULT '[]',
-    updated_at        INTEGER NOT NULL
-);
-CREATE INDEX tree_registry_by_kind ON tree_registry_cache(tree_kind, scope_key);
-
 CREATE TABLE tree_snapshots (
-    tree_id          TEXT NOT NULL,
+    tree_id          TEXT NOT NULL REFERENCES tree_registry_cache(tree_id) ON DELETE CASCADE,
     rev              INTEGER NOT NULL,
     parent_rev       INTEGER,
     timestamp        INTEGER NOT NULL,
@@ -780,7 +790,7 @@ CREATE INDEX tree_snapshots_by_kind ON tree_snapshots(tree_id, snapshot_kind, re
 
 CREATE TABLE tree_journal (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    tree_id         TEXT NOT NULL,
+    tree_id         TEXT NOT NULL REFERENCES tree_registry_cache(tree_id) ON DELETE CASCADE,
     tree_kind       TEXT NOT NULL,
     timestamp       INTEGER NOT NULL,
     host_id         TEXT NOT NULL,
@@ -795,7 +805,7 @@ CREATE INDEX tree_journal_by_tree ON tree_journal(tree_id, timestamp DESC);
 -- + Defaults/*.als — anything that lives in the User Library and references plugins by name.
 -- Populated by UserLibraryPluginScanner (commit 12) after each materialize event.
 CREATE TABLE user_library_plugins (
-    tree_id        TEXT NOT NULL,
+    tree_id        TEXT NOT NULL REFERENCES tree_registry_cache(tree_id) ON DELETE CASCADE,
     rel_path       TEXT NOT NULL,
     plugin_name    TEXT NOT NULL,
     plugin_type    TEXT NOT NULL,
@@ -807,14 +817,16 @@ CREATE INDEX user_library_plugins_by_name ON user_library_plugins(plugin_name, p
 
 -- Tree registry cache CRUD.
 upsertTreeRegistryEntry:
-INSERT INTO tree_registry_cache(tree_id, tree_kind, scope_key, display_name, owner_user_id, collaborators_json, updated_at)
-VALUES (:tree_id, :tree_kind, :scope_key, :display_name, :owner_user_id, :collaborators_json, :updated_at)
+INSERT INTO tree_registry_cache(tree_id, tree_kind, scope_key, display_name, owner_user_id, collaborators_json, created_at, created_by_host, updated_at)
+VALUES (:tree_id, :tree_kind, :scope_key, :display_name, :owner_user_id, :collaborators_json, :created_at, :created_by_host, :updated_at)
 ON CONFLICT(tree_id) DO UPDATE SET
     tree_kind = excluded.tree_kind,
     scope_key = excluded.scope_key,
     display_name = excluded.display_name,
     owner_user_id = excluded.owner_user_id,
     collaborators_json = excluded.collaborators_json,
+    created_at = excluded.created_at,
+    created_by_host = excluded.created_by_host,
     updated_at = excluded.updated_at;
 
 selectTreeRegistryAll:
@@ -828,6 +840,12 @@ SELECT * FROM tree_registry_cache WHERE tree_kind = :tree_kind AND scope_key = :
 
 deleteTreeRegistryEntry:
 DELETE FROM tree_registry_cache WHERE tree_id = :tree_id;
+
+-- Drop every cache row whose tree_id is NOT in the supplied list. Called by
+-- TreeRegistry.refreshCache so a tree removed from the cloud (collab revoked, tree deleted)
+-- no longer haunts permission checks. The FK on the dependent tree_* tables cascades.
+deleteTreeRegistryEntriesNotIn:
+DELETE FROM tree_registry_cache WHERE tree_id NOT IN ?;
 
 -- Tree sync state CRUD.
 upsertTreeSyncState:
