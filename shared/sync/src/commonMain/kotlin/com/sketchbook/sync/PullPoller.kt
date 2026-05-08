@@ -65,6 +65,10 @@ class PullPoller(
         startAfter: SnapshotRev?,
     ): Flow<Snapshot> =
         flow {
+            // Forward-compat: a newer binary may have registered a tree of a kind this
+            // binary doesn't recognize. Drop the subscription cleanly rather than crashing
+            // mid-poll; the registry refresh on the next launch will pick up native support.
+            if (kind is TrackedTreeKind.Unknown) return@flow
             var sinceRev: SnapshotRev? = startAfter
             while (true) {
                 // try/catch (CancellationException) instead of runCatching: poll lambdas execute

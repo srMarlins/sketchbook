@@ -46,7 +46,11 @@ class SnapshotPipeline(
             val uuid = input.uuid
             val treeId = input.treeId
             val kind = input.kind
-            val policy = KindPolicy.forKind(kind)
+            val policy =
+                KindPolicy.forKind(kind) ?: run {
+                    emit(SnapshotProgress.Failed(uuid, "no policy for kind '${kind.wireName}'"))
+                    return@flow
+                }
             val parentRev = input.lastKnownManifest?.rev
             val parentFiles = input.lastKnownManifest?.files ?: emptyMap()
             val parentExpectedHead = input.expectedHeadGeneration

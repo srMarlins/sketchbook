@@ -46,15 +46,15 @@ data class KindPolicy(
             )
 
         /**
-         * Resolve a kind to its policy. [TrackedTreeKind.Unknown] (newer-binary entries) has no
-         * known policy and throws — callers should filter unknown kinds out of pipeline work
-         * upstream rather than rely on a default.
+         * Resolve a kind to its policy. [TrackedTreeKind.Unknown] (newer-binary entries this
+         * binary doesn't recognize) returns `null` so callers can drop the tree from pipeline
+         * work without crashing — forward-compat with kinds that ship in a future release.
          */
-        fun forKind(kind: TrackedTreeKind): KindPolicy =
+        fun forKind(kind: TrackedTreeKind): KindPolicy? =
             when (kind) {
                 is TrackedTreeKind.Project -> Project
                 is TrackedTreeKind.UserLibrary -> UserLibrary
-                is TrackedTreeKind.Unknown -> error("No KindPolicy for unknown kind '${kind.wireName}'")
+                is TrackedTreeKind.Unknown -> null
             }
     }
 }
