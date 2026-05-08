@@ -757,6 +757,11 @@ CREATE TABLE tree_registry_cache (
     updated_at         INTEGER NOT NULL
 );
 CREATE INDEX tree_registry_by_kind ON tree_registry_cache(tree_kind, scope_key);
+-- Defensive UNIQUE: the natural lookup key is (tree_kind, scope_key) but the table's
+-- PRIMARY KEY is on tree_id. Without this, a malformed registry doc producing two rows with
+-- the same (kind, scope_key) but different tree_ids would survive `upsertTreeRegistryEntry`
+-- and `lookup` would return whichever sorted first. Catches drift loudly during dev.
+CREATE UNIQUE INDEX tree_registry_cache_kind_scope_uniq ON tree_registry_cache(tree_kind, scope_key);
 
 -- Sync-state, snapshot history, journal, and UL-plugin tables hang off tree_registry_cache.
 -- The FK is ON DELETE CASCADE so a tree removed from the cloud (and dropped from the cache by
@@ -799,6 +804,10 @@ CREATE TABLE tree_journal (
     rev             INTEGER
 );
 CREATE INDEX tree_journal_by_tree ON tree_journal(tree_id, timestamp DESC);
+-- Covering index for `selectTreeJournal`'s `ORDER BY timestamp DESC, id DESC` — without
+-- this the secondary id-DESC sort is a separate step over the rowid lookup path. Wider
+-- index drops the sort entirely on a tree with thousands of journal rows.
+CREATE INDEX tree_journal_by_tree_full ON tree_journal(tree_id, timestamp DESC, id DESC);
 
 -- Plugin references discovered in materialized User Library trees. Parallel to
 -- `project_plugins`. Drives the bootstrap checklist's coverage of templates + default racks

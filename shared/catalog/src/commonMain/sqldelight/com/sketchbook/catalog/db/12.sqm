@@ -1,0 +1,20 @@
+-- v11 → v12: tighten tree_registry_cache uniqueness + add tree_journal covering index.
+--
+-- 1. UNIQUE(tree_kind, scope_key) on tree_registry_cache. The natural lookup is by
+--    (kind, scope_key) but the existing PRIMARY KEY is on tree_id alone, so a malformed
+--    registry doc producing two rows with the same (kind, scope_key) but different tree_id
+--    would survive `upsertTreeRegistryEntry` and `lookup` would return whichever row sorted
+--    first. Enforcing uniqueness at the schema level catches drift loudly during dev
+--    instead of silently fanning out into the queries.
+--
+-- 2. Add `tree_journal_by_tree_full(tree_id, timestamp DESC, id DESC)`. The existing
+--    `tree_journal_by_tree(tree_id, timestamp DESC)` covers the WHERE clause but leaves the
+--    secondary `ORDER BY id DESC` as a sort step. For a tree with thousands of journal
+--    rows this fills the rowid lookup path; the wider covering index drops the sort
+--    entirely.
+
+CREATE UNIQUE INDEX IF NOT EXISTS tree_registry_cache_kind_scope_uniq
+    ON tree_registry_cache(tree_kind, scope_key);
+
+CREATE INDEX IF NOT EXISTS tree_journal_by_tree_full
+    ON tree_journal(tree_id, timestamp DESC, id DESC);

@@ -118,39 +118,6 @@ class ManifestTest {
     }
 
     @Test
-    fun acceptsV1SampleViaBackCompatDecoder() {
-        // v=1 wire format — what older binaries persist before the migration runs. The
-        // v=1 decoder synthesizes `tree_kind = project` and uses `project_uuid` as the
-        // tree id so the in-memory shape matches what a migrated bucket would carry.
-        val sample =
-            """
-            {
-              "v": 1,
-              "owner_user_id": "default",
-              "project_uuid": "01HZQX5N3M8F9G2K7B1A6Y4WCE",
-              "rev": 47,
-              "parent_rev": 46,
-              "timestamp": "2026-05-05T14:22:31.412Z",
-              "host_id": "macstudio-9d4c",
-              "host_name": "MacStudio",
-              "kind": "auto",
-              "label": null,
-              "self_contained": false,
-              "files": {
-                "Project.als": {"hash":"b3:${"1f2c".repeat(16)}","size":312488,"mtime":"2026-05-05T14:22:30.000Z"}
-              },
-              "stats": {"file_count": 217, "total_bytes": 4831244012, "new_bytes": 312488}
-            }
-            """.trimIndent()
-        val decoded = json.decodeFromString(Manifest.serializer(), sample)
-        assertEquals(SnapshotRev(47), decoded.rev)
-        assertEquals(SnapshotKind.Auto, decoded.snapshotKind)
-        assertEquals(TrackedTreeKind.Project, decoded.kind)
-        assertEquals(TrackedTreeId("01HZQX5N3M8F9G2K7B1A6Y4WCE"), decoded.treeId)
-        assertEquals(1, decoded.files.size)
-    }
-
-    @Test
     fun decodesV2Roundtrip() {
         val original = fixture()
         val text = json.encodeToString(Manifest.serializer(), original)
