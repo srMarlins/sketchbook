@@ -177,11 +177,11 @@ class PreferencesSettingsRepository(
             Result.success(Unit)
         }
 
-    override suspend fun markCloudMigrationComplete(): Result<Unit> =
+    override suspend fun markRegistrySeeded(): Result<Unit> =
         withContext(ioDispatcher) {
-            node.putBoolean(KEY_CLOUD_MIGRATION_COMPLETE, true)
+            node.putBoolean(KEY_REGISTRY_SEEDED, true)
             node.flush()
-            state.value = state.value.copy(cloudMigrationComplete = true)
+            state.value = state.value.copy(registrySeeded = true)
             Result.success(Unit)
         }
 
@@ -242,7 +242,7 @@ class PreferencesSettingsRepository(
                 samplesPromptDismissed = node.getBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, false),
             )
         val pluginFolders = readPluginFolders()
-        val cloudMigrationComplete = node.getBoolean(KEY_CLOUD_MIGRATION_COMPLETE, false)
+        val registrySeeded = node.getBoolean(KEY_REGISTRY_SEEDED, false)
         val userLibraryRoot = node.get(KEY_USER_LIBRARY_ROOT, null)?.takeIf { it.isNotBlank() }
         val userLibrarySyncEnabled = node.getBoolean(KEY_USER_LIBRARY_SYNC_ENABLED, false)
         return Settings(
@@ -253,7 +253,7 @@ class PreferencesSettingsRepository(
             firstRunCompletedAt = firstRunCompletedAt,
             onboardingSkipped = onboardingSkipped,
             pluginFolders = pluginFolders,
-            cloudMigrationComplete = cloudMigrationComplete,
+            registrySeeded = registrySeeded,
             userLibraryRoot = userLibraryRoot,
             userLibrarySyncEnabled = userLibrarySyncEnabled,
         )
@@ -387,7 +387,7 @@ class PreferencesSettingsRepository(
         const val KEY_ONBOARDING_SAMPLES_SKIPPED = "onboarding_samples_skipped_v1"
         const val KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED = "onboarding_samples_prompt_dismissed_v1"
         const val KEY_PLUGIN_FOLDERS = "plugin_folders_v1"
-        const val KEY_CLOUD_MIGRATION_COMPLETE = "cloud_migration_complete_v1"
+        const val KEY_REGISTRY_SEEDED = "registry_seeded_v1"
         const val KEY_USER_LIBRARY_ROOT = "user_library_root_v1"
         const val KEY_USER_LIBRARY_SYNC_ENABLED = "user_library_sync_enabled_v1"
 

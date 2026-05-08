@@ -1,4 +1,4 @@
-package com.sketchbook.migration
+package com.sketchbook.desktop.bootstrap
 
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.db.Catalog
@@ -20,170 +20,126 @@ import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
 import com.sketchbook.repo.BlobCacheSettings
+import com.sketchbook.repo.CloudMachineProfileStore
 import com.sketchbook.repo.CloudTreeRegistry
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.OnboardingPromptKind
 import com.sketchbook.repo.OnboardingSkipFlags
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
-import com.sketchbook.repo.TreeRegistry
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.RawSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
 
-class CloudMigratorTest {
+/**
+ * BootstrapData replaces the deleted v=1→v=2 migrator. The tests pin its three load-bearing
+ * invariants:
+ *
+ *  1. First launch (`registrySeeded = false`) seeds the registry with one entry per local
+ *     project + the User Library tree, then flips the settings flag.
+ *  2. Subsequent launches (`registrySeeded = true`) skip the registerAll round-trip and only
+ *     refresh the local cache via fetch().
+ *  3. Errors propagate as `Result.failure(...)` carrying the underlying [Throwable]; the
+ *     settings flag stays unchanged so the next launch retries.
+ */
+class BootstrapDataTest {
     private val now = Instant.parse("2026-05-07T12:00:00Z")
     private val clock = FixedClock(now)
-    private val hostId = "macstudio"
+    private val hostId = HostId("studio-mac")
 
     @Test
-    fun statusReturnsUpToDateWhenSettingsAlreadyComplete() =
-        runTest {
-            val handle = CatalogDb.openInMemory()
-            val cloud = FakeMigratorCloud()
-            val settings =
-                FakeSettings(
-                    initial = Settings(libraryRoots = emptyList(), selfContainedProjects = emptySet(), cloudMigrationComplete = true),
-                )
-            val migrator = newMigrator(cloud, handle.catalog, settings)
-            assertEquals(MigrationStatus.UpToDate, migrator.status())
-        }
-
-    @Test
-    fun statusReportsLegacyManifestsAndProjects() =
+    fun seedRegistryRegistersProjectsAndUserLibraryOnFirstLaunch() =
         runTest {
             val handle = CatalogDb.openInMemory()
             seedProject(handle.catalog, uuid = "p-1", name = "Sketch A")
             seedProject(handle.catalog, uuid = "p-2", name = "Sketch B")
-            val cloud = FakeMigratorCloud()
-            cloud.seedLegacyManifest("p-1", "00000001-host-ts.json")
-            cloud.seedLegacyManifest("p-1", "00000002-host-ts.json")
-            cloud.seedLegacyManifest("p-2", "00000001-host-ts.json")
+            val cloud = FakeBootstrapCloud()
             val settings = FakeSettings()
-            val migrator = newMigrator(cloud, handle.catalog, settings)
+            val data = newBootstrapData(handle.catalog, cloud, settings)
 
-            val status = migrator.status()
-            assertTrue(status is MigrationStatus.Pending)
-            val report = (status as MigrationStatus.Pending).report
-            assertEquals(3, report.manifestsPending)
-            assertEquals(2, report.projectTreesPending)
-            assertTrue(report.userLibraryPending)
+            val entries = data.seedRegistry().getOrThrow()
+
+            // Project rows + UL = 3 entries.
+            val byKey = entries.associateBy { it.kind to it.scopeKey }
+            assertTrue((TrackedTreeKind.Project to "p-1") in byKey, "missing p-1 entry")
+            assertTrue((TrackedTreeKind.Project to "p-2") in byKey, "missing p-2 entry")
+            assertTrue((TrackedTreeKind.UserLibrary to "default") in byKey, "missing UL entry")
+            // UL tree-id is host-prefixed.
+            assertEquals(
+                TrackedTreeId("tt-ul-${hostId.value}"),
+                byKey.getValue(TrackedTreeKind.UserLibrary to "default").treeId,
+            )
+            // Flag flipped → next launch is a no-op.
+            assertTrue(settings.observe().first().registrySeeded)
         }
 
     @Test
-    fun migrateRelocatesManifestsAndRegistersUserLibrary() =
+    fun seedRegistryIsNoOpWhenAlreadySeeded() =
         runTest {
             val handle = CatalogDb.openInMemory()
             seedProject(handle.catalog, uuid = "p-1", name = "Sketch A")
-            val cloud = FakeMigratorCloud()
-            cloud.seedLegacyManifest("p-1", "00000001-host-ts.json")
-            cloud.seedLegacyManifest("p-1", "00000002-host-ts.json")
-            val settings = FakeSettings()
-            val migrator = newMigrator(cloud, handle.catalog, settings)
+            val cloud = FakeBootstrapCloud()
+            val settings =
+                FakeSettings(
+                    initial =
+                        Settings(
+                            libraryRoots = emptyList(),
+                            selfContainedProjects = emptySet(),
+                            cacheSettings = BlobCacheSettings.Default,
+                            registrySeeded = true,
+                        ),
+                )
+            val data = newBootstrapData(handle.catalog, cloud, settings)
 
-            val events = migrator.migrate().toList()
+            // First call seeds nothing (no writes to the cloud); second call also no-op.
+            data.seedRegistry().getOrThrow()
+            data.seedRegistry().getOrThrow()
 
-            // Terminal event is Done.
-            val done = events.last()
-            assertTrue(done is MigrationProgress.Done)
-            done as MigrationProgress.Done
-
-            // Both manifests landed at the v=2 destination.
-            val v2P1 = MigrationLayout.v2ManifestPrefix(TrackedTreeId("p-1"), TrackedTreeKind.Project)
-            assertNotNull(cloud.readDoc(CloudDocKey(v2P1 + "00000001-host-ts.json")))
-            assertNotNull(cloud.readDoc(CloudDocKey(v2P1 + "00000002-host-ts.json")))
-
-            // Registry now contains the project + UserLibrary.
-            val kinds = done.registry.map { it.kind }
-            assertTrue(TrackedTreeKind.Project in kinds)
-            assertTrue(TrackedTreeKind.UserLibrary in kinds)
-
-            // Settings flag flipped.
-            assertTrue(settings.observe().first().cloudMigrationComplete)
+            // Cloud doc never created — fetch returns empty.
+            assertEquals(0, cloud.writeCallsTo(REGISTRY_KEY))
+            assertTrue(settings.observe().first().registrySeeded)
         }
 
     @Test
-    fun migrateIsIdempotentOnPartiallyMigratedBucket() =
+    fun seedRegistryFailureKeepsFlagUnsetSoNextLaunchRetries() =
         runTest {
             val handle = CatalogDb.openInMemory()
             seedProject(handle.catalog, uuid = "p-1", name = "Sketch A")
-            val cloud = FakeMigratorCloud()
-            // Pre-populate the destination as if a prior run already moved it.
-            val v2P1 = MigrationLayout.v2ManifestPrefix(TrackedTreeId("p-1"), TrackedTreeKind.Project)
-            cloud.writeDoc(CloudDocKey(v2P1 + "00000001-host-ts.json"), expected = Generation.ZERO, bytes = "v2-bytes".encodeToByteArray())
-            // Plus a stale legacy copy still present (idempotency: skip on conflict, don't fail).
-            cloud.seedLegacyManifest("p-1", "00000001-host-ts.json")
-
+            val cloud = FakeBootstrapCloud(failOnRegistryWrite = true)
             val settings = FakeSettings()
-            val migrator = newMigrator(cloud, handle.catalog, settings)
-            val events = migrator.migrate().toList()
+            val data = newBootstrapData(handle.catalog, cloud, settings)
 
-            assertTrue(events.last() is MigrationProgress.Done)
-            // Destination keeps the original v=2 bytes (write-with-must-not-exist failed → skipped).
-            val read = cloud.readDoc(CloudDocKey(v2P1 + "00000001-host-ts.json"))!!
-            assertEquals("v2-bytes", read.bytes.decodeToString())
+            val result = data.seedRegistry()
+
+            assertTrue(result.isFailure)
+            // Flag still false → subsequent launches will retry the seed.
+            assertEquals(false, settings.observe().first().registrySeeded)
         }
 
-    @Test
-    fun migrateMarksCompleteEvenWithNoLegacyManifests() =
-        runTest {
-            // Fresh user, empty bucket: migrator still seeds the registry + UL entry and
-            // marks the settings flag so subsequent launches don't re-prompt.
-            val handle = CatalogDb.openInMemory()
-            val cloud = FakeMigratorCloud()
-            val settings = FakeSettings()
-            val migrator = newMigrator(cloud, handle.catalog, settings)
-
-            val events = migrator.migrate().toList()
-
-            assertTrue(events.last() is MigrationProgress.Done)
-            assertTrue(settings.observe().first().cloudMigrationComplete)
-        }
-
-    @Test
-    fun migrateRegistersUserLibraryOnlyOnceAcrossReruns() =
-        runTest {
-            val handle = CatalogDb.openInMemory()
-            val cloud = FakeMigratorCloud()
-            val settings = FakeSettings()
-            val migrator = newMigrator(cloud, handle.catalog, settings)
-
-            migrator.migrate().toList()
-
-            // Reset migration_complete flag (simulates the migrator running again — e.g. dev reset).
-            settings.update { it.copy(cloudMigrationComplete = false) }
-            val events = migrator.migrate().toList()
-
-            val done = events.last() as MigrationProgress.Done
-            val ulEntries = done.registry.filter { it.kind == TrackedTreeKind.UserLibrary }
-            assertEquals(1, ulEntries.size)
-        }
-
-    // ---- helpers --------------------------------------------------------------------------------
-
-    private fun newMigrator(
-        cloud: CloudBackend,
+    private fun newBootstrapData(
         catalog: Catalog,
+        cloud: CloudBackend,
         settings: SettingsRepository,
-    ): CloudMigrator {
-        val registry: TreeRegistry = CloudTreeRegistry(cloud, catalog, clock, UserId.DEFAULT)
-        return JvmCloudMigrator(
-            cloud = cloud,
-            catalog = catalog,
+    ): BootstrapData {
+        val registry = CloudTreeRegistry(cloud, catalog, clock, UserId.DEFAULT)
+        val profile = CloudMachineProfileStore(cloud, catalog, clock)
+        return BootstrapData(
             registry = registry,
+            profile = profile,
             settings = settings,
+            catalog = catalog,
             ownerUserId = UserId.DEFAULT,
             hostId = hostId,
+            ioDispatcher = Dispatchers.Unconfined,
+            clock = clock,
         )
     }
 
@@ -226,6 +182,10 @@ class CloudMigratorTest {
             )
         }
     }
+
+    private companion object {
+        val REGISTRY_KEY: CloudDocKey = CloudDocKey("registry.json")
+    }
 }
 
 private class FixedClock(
@@ -235,8 +195,9 @@ private class FixedClock(
 }
 
 /**
- * Minimal in-memory [SettingsRepository] for the migrator tests. Lets the test seed an
- * initial Settings and assert the migrator's `markCloudMigrationComplete` side-effect.
+ * In-memory [SettingsRepository] for bootstrap tests. Lets the test seed an initial Settings
+ * (e.g. `registrySeeded = true` for the no-op case) and assert the
+ * `markRegistrySeeded` side-effect.
  */
 private class FakeSettings(
     initial: Settings =
@@ -247,10 +208,6 @@ private class FakeSettings(
         ),
 ) : SettingsRepository {
     private val state = MutableStateFlow(initial)
-
-    fun update(transform: (Settings) -> Settings) {
-        state.value = transform(state.value)
-    }
 
     override fun observe(): Flow<Settings> = state
 
@@ -275,27 +232,25 @@ private class FakeSettings(
 
     override suspend fun resetFirstRun(): Result<Unit> = Result.success(Unit)
 
-    override suspend fun markCloudMigrationComplete(): Result<Unit> {
-        state.value = state.value.copy(cloudMigrationComplete = true)
+    override suspend fun markRegistrySeeded(): Result<Unit> {
+        state.value = state.value.copy(registrySeeded = true)
         return Result.success(Unit)
     }
 }
 
 /**
- * Minimal CloudBackend that only stores documents — manifests are written + read via the
- * doc API, which is exactly the surface the migrator uses.
+ * Minimal CloudBackend covering only the CloudDoc surface BootstrapData needs (registry +
+ * machine roster + plugin manifests). Tracks per-key write counts so tests can assert the
+ * "no-op when seeded" path performed zero writes to the registry doc.
  */
-private class FakeMigratorCloud : CloudBackend {
+private class FakeBootstrapCloud(
+    private val failOnRegistryWrite: Boolean = false,
+) : CloudBackend {
     private val docs = mutableMapOf<CloudDocKey, Pair<ByteArray, Generation>>()
+    private val writeCounts = mutableMapOf<CloudDocKey, Int>()
     private var nextGen = 1L
 
-    fun seedLegacyManifest(
-        uuid: String,
-        fileName: String,
-    ) {
-        val key = CloudDocKey("manifests/$uuid/$fileName")
-        docs[key] = "legacy-bytes".encodeToByteArray() to Generation((nextGen++).toString())
-    }
+    fun writeCallsTo(key: CloudDocKey): Int = writeCounts[key] ?: 0
 
     override suspend fun headBlob(
         hash: BlobHash,
@@ -362,12 +317,18 @@ private class FakeMigratorCloud : CloudBackend {
         expected: Generation?,
         bytes: ByteArray,
     ): Result<Generation> {
+        writeCounts[key] = (writeCounts[key] ?: 0) + 1
+        if (failOnRegistryWrite && key.path == "registry.json") {
+            return Result.failure(
+                SketchbookError.RemoteFailure(status = 500, body = null, message = "boom"),
+            )
+        }
         val current = docs[key]
         if (expected != null) {
             if (expected == Generation.ZERO) {
-                if (current != null) return Result.failure(SketchbookError.Conflict("exists at ${key.path}"))
+                if (current != null) return Result.failure(SketchbookError.Conflict("exists"))
             } else if (current == null || current.second != expected) {
-                return Result.failure(SketchbookError.Conflict("gen mismatch at ${key.path}"))
+                return Result.failure(SketchbookError.Conflict("gen mismatch"))
             }
         }
         val gen = Generation((nextGen++).toString())
@@ -376,7 +337,7 @@ private class FakeMigratorCloud : CloudBackend {
     }
 
     override suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef> =
-        docs.keys
-            .filter { it.path.startsWith(prefix.value) }
-            .map { CloudDocRef(it, docs[it]!!.second) }
+        docs
+            .filter { it.key.path.startsWith(prefix.value) }
+            .map { CloudDocRef(it.key, it.value.second) }
 }

@@ -18,6 +18,7 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.desktop.auth.DesktopAuthSession
 import com.sketchbook.desktop.auth.PrefsIdentityStore
+import com.sketchbook.desktop.bootstrap.HostId
 import com.sketchbook.desktop.repo.LeasedLockRepository
 import com.sketchbook.desktop.repo.PreferencesSettingsRepository
 import com.sketchbook.desktop.repo.SwappableSyncQueue
@@ -141,6 +142,16 @@ interface DesktopAppGraph : ViewModelGraph {
     @Provides
     @SingleIn(AppScope::class)
     fun provideOwnerUserId(): com.sketchbook.core.UserId = com.sketchbook.core.UserId.DEFAULT
+
+    /**
+     * Stable host identifier surfaced to the cloud (registry `created_by_host`, machines
+     * roster, plugin manifest slice). Wrapped in [com.sketchbook.desktop.bootstrap.HostId]
+     * so Metro can bind it as a distinct type rather than colliding with other String
+     * bindings.
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideHostId(): HostId = HostId(hostIdentity().id)
 
     @Provides
     @SingleIn(AppScope::class)

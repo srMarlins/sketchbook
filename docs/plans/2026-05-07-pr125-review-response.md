@@ -2,7 +2,17 @@
 
 **PR:** [feat: backend generalization (TrackedTree + CloudDoc) #125](https://github.com/srMarlins/sketchbook/pull/125)
 **Branch:** `feat/backend-generalization-v2`
-**Status:** 8 comments already addressed by `0245895`. ~70 open. This doc enumerates each, picks an approach, and orders the work into a small number of focused commits.
+**Status:** 8 comments already addressed by `0245895`. Original plan was 8 commits; **revised to 6** after the migrator-isn't-needed pivot below.
+
+> **2026-05-07 pivot — drop the migrator entirely.** Sketchbook hasn't shipped to production. There are no users with `<tenant>/manifests/<uuid>/...` (v=1) data in their buckets. The migrator existed to relocate v=1 → v=2; with zero v=1 data, the relocate path is dead code. Reviewer R-1 already noted that `DirectGcsBackend.manifestsPrefix` reads from the legacy path for `Project` while the migrator writes to v=2 — i.e. the migrator was already a no-op for the only kind that had any data. Action:
+>
+> - **Delete** `JvmCloudMigrator`, `CloudMigrator`, `MigrationCoordinator`, `MigrationDialog`, `MigrationProgress` / `MigrationStatus` / `MigrationReport`, the migration module's tests, the `<tenant>/manifests/...` legacy path branch, and `MigrationLayout`. ~1,000 lines net deleted.
+> - **Unify** all kinds on the v=2 path layout in `DirectGcsBackend` (`<tenant>/trees/<kind>/<tree_id>/...`).
+> - **Move** registry-seeding into `BootstrapData.seedRegistry()`: silent one-shot per-machine, gated by `Settings.cloudMigrationComplete` (renamed to `Settings.registrySeeded` for honesty).
+>
+> This collapses commits 3 + 4 + 7 into a single **commit 3 ("delete migrator, unify paths, move bootstrap")**. Commits 5/6/8 renumber to 4/5/6.
+
+This doc enumerates each comment, picks an approach, and orders the work into the revised 6-commit plan.
 
 ---
 
@@ -43,28 +53,22 @@ Each item below carries a stable id (R-N) used in the commit plan in §3. Severi
 | **R-10** | 🟢 | `DirectGcsBackend.kt:237` | Resumable chunk's `412 → true` is dead code (412 only on session init). | Delete the branch; throw via the `else`. |
 | **R-11** | 🟢 | `Manifest.projectUuid` extension | Throws on non-project kinds. | Add `projectUuidOrNull` companion. Defer to a follow-up if any caller needs it; otherwise leave the kdoc nudge. **Skip** — no caller motivates it now. |
 
-### 1.2 Migration (JvmCloudMigrator + MigrationCoordinator + MigrationDialog)
+### 1.2 Migration code — DELETED in commit 3
 
-| id | sev | location | issue | approach |
-|---|---|---|---|---|
-| **R-12** | 🔴 | `JvmCloudMigrator.kt:148-183` | (a) `var failure: String?` shared across `async` workers without synchronization — JVM data race. (b) Static `chunked` sharding ≠ work-stealing — 8 slow items in one shard pin the whole migration. (c) Failure detected per chunk-iteration, not per task — late workers continue post-failure. | **Rewrite using `Semaphore.withPermit` per item + structured-concurrency fail-fast.** First failure throws → `coroutineScope` cancels siblings; no shared `failure` var; idiomatic Kotlin. ([Shreyas Patil — Semaphore-bounded coroutines](https://blog.shreyaspatil.dev/leveraging-the-semaphore-concept-in-coroutines-to-limit-the-parallelism)) Use `MutableStateFlow<Int>` (or `kotlinx.atomicfu`) for the progress counter — KMP-friendly per repo policy in CLAUDE.md. |
-| **R-13** | 🟠 | `JvmCloudMigrator.kt:185-187` | `runCatching { listDocs(...) }.getOrElse { emptyList() }` swallows transient errors → `status()` returns `UpToDate` and migration silently skips. | Let exceptions propagate. Switch from `runCatching` to `try/catch (CancellationException) { throw }`. Surface in `status()` either by throwing or by adding a third `MigrationStatus.UnknownDueToError`. **Throw** — caller already needs to handle exceptions. |
-| **R-14** | 🟠 | `JvmCloudMigrator.kt:190-194` (`readIdentities`) and `:58` (`status`) | Blocking SqlDelight `executeAsList()` inside `suspend fun status()`. `status()` doesn't `flowOn(ioDispatcher)` like `migrate()` does. | Wrap in `withContext(ioDispatcher) { ... }`. Consistent with `SqlTreeJournal`. |
-| **R-15** | 🟠 | `JvmCloudMigrator.kt:54-56` | Default values for `ownerUserId`, `hostId`, `ioDispatcher` mean a forgetful caller bakes `UserId.DEFAULT` / `"unknown-host"` / hardcoded `Dispatchers.IO` into cloud writes. CLAUDE.md explicitly forbids hardcoded dispatcher defaults. | **Drop the defaults.** All three become required constructor params; the desktop wiring (`DesktopAppGraph`) is the single call site. |
-| **R-16** | 🟡 | `JvmCloudMigrator.kt` (`status` + `migrate`) | Both call `listLegacyManifests()` + `readIdentities()` — two full GCS list operations per migration. | Cache `status()` result on the coordinator and pass into `migrate()`. Coordinator already calls `status()` first; just plumb the cached value through. |
-| **R-17** | 🟡 | `JvmCloudMigrator.kt:176-177` | `done.incrementAndGet()` then `progress.send(...)` is not atomic — workers can publish out of order, progress visually jumps backwards. | Send `max(reported, current)` — or accept it. Cosmetic. **Smallest fix:** wrap incr+send in a small `Mutex`-or-channel-of-1; or simply send via the `MutableStateFlow<Int>` from R-12 which conflates and never goes backwards. |
-| **R-18** | 🟡 | `JvmCloudMigrator.kt:200-214` | `USER_LIBRARY_TREE_ID_PREFIX = "tt-ul-"` host-prefixing creates v1.2 migration debt; comment is misleading. | Reword the comment to acknowledge that idempotency on `(kind, scope_key="default")` already converges across hosts at first registry-read, and link to the v1.2 follow-up. No code change. |
-| **R-19** | 🟡 | `JvmCloudMigrator.migrate()` | No outer timeout — pathologically slow GCS hangs the migration dialog forever. | Wrap top-level `channelFlow` body in `withTimeout(MIGRATION_TIMEOUT)` with a sane default (15min for the typical "hundreds of manifests" account). Failure surfaces as `MigrationProgress.Failed`. |
-| **R-20** | 🟡 | `JvmCloudMigrator.kt:137` | `MigrationProgress.Failed(reason: String)` loses the `Throwable`. | Change to `Failed(val cause: Throwable, val reason: String = cause.message ?: "...")`. Dialog renders `reason`; tests can assert on `cause::class`. |
-| **R-21** | 🟡 | `MigrationCoordinator.onEvent` | Terminal states (`Done`, `Failed`) can resurrect to `Running` if a stray event arrives. Probe + dismiss race overwrite each other (read-then-write on `_state`). | Refactor with `_state.update { current -> if (current is State.Done \|\| current is State.Failed) current else ... }`. ([MutableStateFlow.update vs .value](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-mutable-state-flow/) — atomicity matters.) |
-| **R-22** | 🟠 | `MigrationCoordinator.events()` | Returns the cold flow from `migrator.migrate()` raw. (a) Multi-collection restarts migration. (b) No `.catch {}` — exceptions kill the collector and freeze state. (c) Coordinator owns no scope. | (a) `shareIn(coordinatorScope, SharingStarted.Lazily, replay = 1)` — single shared running migration, late subscribers get the last event. ([shareIn docs](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/share-in.html)) (b) `.catch { emit(MigrationProgress.Failed(...)) }` so all failure paths funnel through `onEvent`. (c) Inject `@SingleIn(AppScope::class)` `CoroutineScope` (the app-scope one used elsewhere). |
-| **R-23** | 🟡 | `MigrationCoordinator.probe()` | Returns `Boolean` *and* mutates state; not idempotent. | Make it `suspend fun probe(): Unit` and let callers observe `state`. Cache: short-circuit to current state if not `Idle`. |
-| **R-24** | 🟢 | `MigrationDialog.kt` `events()` collection | Comment in coordinator says caller wires `events().collect { onEvent(it) }`, but no caller in this PR does. | Move the `LaunchedEffect(coordinator) { coordinator.events().collect { coordinator.onEvent(it) } }` into `MigrationDialog` itself so the dialog is self-wiring. With R-22's `shareIn`, multi-collection is safe. |
-| **R-25** | 🟡 | `MigrationDialog.kt:36, 50, 74` | `onConfirm` is overloaded for "start" (Pending) and "retry" (Failed) — coordinator can't differentiate. | Split into `onStart` and `onRetry`; `onRetry` calls `coordinator.reset()` + `events()` re-subscribe. |
-| **R-26** | 🟢 | `MigrationDialog.kt:149` | `Spacer(Modifier.width(0.dp))` — dead. | Delete. |
-| **R-27** | 🟢 | `MigrationDialog.kt:53` (`RunningDialog`) | `onDismissRequest = { /* not dismissable */ }` doesn't actually prevent ESC dismissal on Compose Desktop. | Use [`DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)`](https://kotlinlang.org/api/compose-multiplatform/material3/androidx.compose.material3/-alert-dialog.html). Add a kdoc on the parent caller noting the dialog must always be shown when state is Running. |
-| **R-28** | 🟢 | `MigrationDialog.kt:59` | Magic `0.5f` for "I don't know how many" relocations. | Use the no-arg `LinearProgressIndicator()` (indeterminate). |
-| **R-29** | 🟡 | `MigrationDialog.kt` (FailedDialog retry) | Retry button calls `onConfirm` but coordinator stays `Failed` until next event arrives — visual glitch. | With R-23 / R-25 split, retry dispatches `coordinator.reset()` synchronously which transitions to `Idle`, then collection resumes. |
+**Pivot 2026-05-07:** the migrator system is dead code (no v=1 users) and gets deleted. Most issues below resolve by deletion; concerns that touch real engineering (DI, dispatcher injection, idempotent bootstrap) move into `BootstrapData.seedRegistry()`.
+
+| id | sev | original concern | resolution |
+|---|---|---|---|
+| **R-12** | 🔴 | `relocateInParallel` data race + fake parallelism + late-failure | **N/A — code deleted.** |
+| **R-13** | 🟠 | `runCatching` swallows in `listLegacyManifests` | **N/A — code deleted.** |
+| **R-14** | 🟠 | Blocking SqlDelight in `status()` | **Carries to BootstrapData:** `seedRegistry()` reads `selectAllProjectIdentitiesWithName()` and must `withContext(ioDispatcher)`. |
+| **R-15** | 🟠 | Bad defaults on `JvmCloudMigrator` ctor | **Carries to BootstrapData:** ditto — required `hostId`, `ioDispatcher` injected via DI, no defaults. |
+| **R-16** | 🟡 | `status` + `migrate` duplicate cloud calls | **N/A — only one bootstrap path now.** |
+| **R-17** | 🟡 | Atomic increment+send progress | **N/A — no progress UI.** |
+| **R-18** | 🟡 | UL tree-id host-prefix comment | **Carries to BootstrapData:** the seed mints `tt-ul-<hostId>`; comment links [#131](https://github.com/srMarlins/sketchbook/issues/131). |
+| **R-19** | 🟡 | No outer timeout | **N/A — registry-seed is one round-trip via `registerAll`.** |
+| **R-20** | 🟡 | `Failed` loses cause | **N/A — `MigrationProgress` deleted.** `BootstrapData.seedRegistry()` returns `Result<...>` carrying the real `Throwable`. |
+| **R-21–R-29** | 🟠/🟡/🟢 | All MigrationCoordinator + MigrationDialog issues | **N/A — both files deleted.** |
 
 ### 1.3 BootstrapData
 
@@ -164,112 +168,94 @@ Three patterns recur enough that the right answer is a focused follow-up rather 
 
 ## 3. Sequenced commit plan
 
-Eight commits, in this order. Each is rebase-friendly and can be reviewed independently. Rationale below each.
+Six commits. Each is rebase-friendly and can be reviewed independently. Status: **commits 1 & 2 landed**; commits 3-6 pending.
 
-### Commit 1 — durability: order CAS HEAD before timestamped + paginate list
+### Commit 1 — durability: order CAS HEAD before timestamped + paginate list ✅ (`046ce48`)
 
 **Files:** `DirectGcsBackend.kt`, `DirectGcsBackendTest.kt`
 **Closes:** R-1, R-2, R-10
-- Swap order in `appendManifestHead`: HEAD CAS first; on success then PUT the timestamped (`x-goog-if-generation-match: 0`).
-- Add a regression test using `FakeCloudBackend` that simulates a CAS conflict and verifies no orphan timestamped object is created.
-- Add `pageToken` looping to `listManifests` and `listDocs` (both call `listUrl()` — abstract into a `listAll(prefix: String)` helper).
-- Delete dead `412 → true` chunk branch.
+- Swapped order in `appendManifestHead`: HEAD CAS first; timestamped only on HEAD success.
+- Added regression test confirming no orphan timestamped object on CAS conflict.
+- Added `pageToken` looping via shared `listAllItems(prefix)` helper.
+- Deleted dead `412 → true` chunk branch.
 
-**Verification:** `./gradlew :shared:cloud:jvmTest`. New test `appendManifestHead_doesNotLeaveOrphan_onCASConflict`.
+### Commit 2 — schema v11: registry-cache columns + FK cascades + scope_key NOT NULL ✅ (`3766e01`)
 
-### Commit 2 — schema v11: cache columns + FKs + scope_key NOT NULL + delete-stale
-
-**Files:** `11.sqm` (new), `Catalog.sq`, `TreeRegistry.kt`, `TreeRegistryTest.kt`
+**Files:** `11.sqm` (new), `Catalog.sq`, `CatalogDb.kt`, `TreeRegistry.kt`, `DesktopAppGraph.kt`, multiple test files
 **Closes:** R-66, R-67, R-68, R-69, R-71 (partial)
-- New migration `11.sqm`: `ALTER TABLE` adds `created_at INTEGER NOT NULL DEFAULT 0`, `created_by_host TEXT NOT NULL DEFAULT ''`, `scope_key TEXT NOT NULL DEFAULT ''`. (SQLite ALTER doesn't support adding FK constraints to existing tables, so the FK additions go via the recreate-and-copy idiom — the tables are still small.)
-- New query `deleteTreeRegistryEntriesNotIn(tree_ids)`.
-- `refreshCache`: combine upsert + delete in a single `transaction`.
-- `lookup`: read the new columns.
-- Drop `clock`, `ownerUserId` defaults from `CloudTreeRegistry` constructor; update `DesktopAppGraph` / tests to pass them explicitly.
-- Test: a tree removed from cloud is dropped from `tree_registry_cache` on the next `fetch()`.
+- New `11.sqm` with recreate-and-copy idiom: adds `created_at` + `created_by_host` columns, promotes `scope_key` to NOT NULL, adds `REFERENCES tree_registry_cache(tree_id) ON DELETE CASCADE` to dependent tree_* tables.
+- New `deleteTreeRegistryEntriesNotIn` query.
+- `refreshCache` combines upsert + stale-row delete in one transaction.
+- Dropped `clock = Clock.System` and `ownerUserId = UserId.DEFAULT` defaults on `CloudTreeRegistry`; added `@Provides` bindings in `DesktopAppGraph`.
+- New tests: `lookupRoundTripsCreatedAtAndCreatedByHost`, `refreshCacheDropsPhantomEntries`, `CatalogDbMigrationWalkTest` v11 assertions.
 
-**Verification:** `MigrationWalkTest` (10→11 walk), `TreeRegistryTest` updates.
+### Commit 3 — delete migrator system, unify cloud paths on v=2, move bootstrap into BootstrapData
 
-### Commit 3 — Migrator correctness: drop defaults, propagate errors, semaphore-bounded relocate
+> **Pivot 2026-05-07.** The pre-shipped product has zero v=1 users; the migrator's relocate path is dead code. Deleting the whole migration system simplifies the codebase substantially and resolves R-12–R-29 by elimination.
 
-**Files:** `JvmCloudMigrator.kt`, `JvmCloudMigratorTest.kt`, `MigrationCoordinator.kt`, `MigrationDialog.kt`, `DesktopAppGraph.kt`
-**Closes:** R-12, R-13, R-14, R-15, R-16, R-17, R-19, R-20
-- Drop `ioDispatcher`, `ownerUserId`, `hostId` defaults; require all three.
-- `status()` → `withContext(ioDispatcher) { readIdentities() ... }`.
-- `listLegacyManifests` → `try/catch(CancellationException)` propagation; throw on real errors.
-- Coordinator caches `status()` result and passes a `MigrationStatus.Pending` into `events()` so the inner `migrate()` doesn't re-list.
-- `relocateInParallel` rewrite: `Semaphore(RELOCATE_CONCURRENCY)` + `legacy.map { item -> async { sem.withPermit { ... } } }.awaitAll()`. First failure throws → siblings cancel via structured concurrency. Progress via `MutableStateFlow<Int>` (always-monotonic conflate).
-- `MigrationProgress.Failed(val cause: Throwable, val reason: String)`; dialog renders `reason`.
-- Wrap `migrate()` body in `withTimeout(15.minutes)`.
+**Files (delete):**
+- `shared/migration/` — entire module: `CloudMigrator.kt`, `JvmCloudMigrator.kt`, `MigrationLayout`, `CloudMigratorTest.kt`, `build.gradle.kts` references in `settings.gradle.kts` + dependent modules.
+- `app-desktop/.../migration/MigrationCoordinator.kt`, `app-desktop/.../ui/migration/MigrationDialog.kt`, `MigrationCoordinatorTest.kt`.
 
-**Verification:** existing `CloudMigratorTest.idempotency` + new `relocateFailsFastOnFirstError`, `relocateRespectsConcurrencyBound` (using a `slow` cloud backend that delays each `writeDoc`).
+**Files (modify):**
+- `shared/cloud/.../DirectGcsBackend.kt`: drop the `when (kind) { Project -> "manifests/${treeId}/" else -> "trees/${kind}/${treeId}/manifests/" }` split in `manifestsPrefix`. Same for `lockPath`. All kinds use `<tenant>/trees/<kind>/<tree_id>/...`. (Project trees have no real cloud data yet, so this is a free re-layout.)
+- `shared/repository/.../SettingsRepository.kt` + `app-desktop/.../PreferencesSettingsRepository.kt`: rename `Settings.cloudMigrationComplete` → `Settings.registrySeeded`. Same persisted key (no migration), updated kdoc that no longer lies about `--reset-first-run` (closes R-82).
+- `app-desktop/.../bootstrap/BootstrapData.kt`: drop `@Suppress("UNUSED_PARAMETER") cloud` factory shim (closes R-30); add `seedRegistry()` that:
+  - Returns `Result<List<TreeRegistryEntry>>` early-success when `Settings.registrySeeded == true`;
+  - Reads `selectAllProjectIdentitiesWithName()` inside `withContext(ioDispatcher)` (closes R-14);
+  - Builds `RegisterSpec` list (project entries + UL entry with `tt-ul-<hostId>` minted id; comment links #131 — closes R-18);
+  - Calls `registry.registerAll(specs)`;
+  - On success, calls `settings.markRegistrySeeded()`.
+- All public `BootstrapData` methods return `Result<T>` for consistency (closes R-31).
+- `@SingleIn(AppScope::class) @ContributesBinding(AppScope::class) @Inject` on `BootstrapData` so it's Metro-bound (closes R-33).
+- Constructor takes `ioDispatcher: CoroutineDispatcher`, `hostId: String`, `clock: Clock` (no defaults — closes R-15 carry-over).
+- Update `DesktopAppGraph`: drop `MigrationCoordinator` accessor; add `BootstrapData`/`hostId` provides as needed.
+- Fix kdoc wiring example to compile (closes R-32).
+- New `BootstrapDataTest` covering: idempotent on re-launch when `registrySeeded`, seeds projects + UL on first run, errors propagate as `Result.failure(...)`.
 
-### Commit 4 — MigrationCoordinator: scope, terminal-stickiness, atomic state, shared events flow
+**Verification:** `./gradlew :shared:cloud:jvmTest :shared:repository:jvmTest :app-desktop:jvmTest :tests:integration:jvmTest`. Manual: spin up the desktop app twice — first launch seeds, second is a no-op.
 
-**Files:** `MigrationCoordinator.kt`, `MigrationCoordinatorTest.kt`, `MigrationDialog.kt`, `DesktopAppGraph.kt`
-**Closes:** R-21, R-22, R-23, R-24, R-25, R-29
-- `MigrationCoordinator` becomes `@SingleIn(AppScope::class) @Inject`, takes an app-scope `CoroutineScope`.
-- `events()` returns `migrator.migrate().catch { emit(Failed(it, ...)) }.shareIn(scope, SharingStarted.Lazily, replay = 1)`.
-- `onEvent` uses `_state.update { current -> ... }`; terminal states sticky.
-- `probe()` returns `Unit`; idempotent if state is not `Idle`.
-- `reset()` returns to `Idle` (called by retry).
-- `MigrationDialog` owns the `LaunchedEffect(coordinator) { coordinator.events().collect(coordinator::onEvent) }`.
-- `MigrationDialog` callbacks split into `onStart` / `onRetry`.
-- Use `DialogProperties(dismissOnBackPress=false, dismissOnClickOutside=false)` on `RunningDialog`. Indeterminate `LinearProgressIndicator()` for "unknown total".
-- Delete `Spacer(width=0.dp)`.
+**Estimated diff:** ~1,000 lines deleted, ~250 lines added.
 
-**Verification:** existing `MigrationCoordinatorTest` + new tests for terminal-stickiness, multi-collection of `events()`, retry resets state.
-
-### Commit 5 — MachineProfileStore: bind, IO dispatch, parallel reads, jittered backoff, kill the import hack
+### Commit 4 — MachineProfileStore: bind, IO dispatch, parallel reads, jittered backoff
 
 **Files:** `MachineProfileStore.kt`, `MachineProfileStoreTest.kt`, `DesktopAppGraph.kt`
 **Closes:** R-56, R-57, R-58, R-59, R-60, R-61, R-62, R-63, R-64, R-70
 - `@SingleIn(AppScope::class) @ContributesBinding(AppScope::class) @Inject` on `CloudMachineProfileStore`. Constructor: `cloud`, `catalog`, `clock`, `ioDispatcher`. No defaults.
 - `composeHostSlice` → `withContext(ioDispatcher) { ... }`.
-- `composeUnion`: parallel `coroutineScope { refs.map { async { cloud.readDoc(it.key) } }.awaitAll() }`; replace `runCatching{}.getOrNull()` with safe try/catch + journal-event-on-failure (deferred — see R-78 — but at minimum log via Kermit).
-- `publishHostSlice`: drop the read; write unconditionally.
+- `composeUnion`: parallel `coroutineScope { refs.map { async { cloud.readDoc(it.key) } }.awaitAll() }`; replace `runCatching{}.getOrNull()` with safe try/catch (deferred — see R-78 — but at minimum log via Kermit).
+- `publishHostSlice`: drop the read; write unconditionally per the kdoc.
 - `registerMachine`: `repeat(MAX) { attempt -> ... delay(backoff(attempt)) }` with jitter.
 - Delete `ListSerializerKeepImport`.
-- `data class PluginKey(val name: String, val format: String)` (typed format deferred to R-65 follow-up).
+- `data class PluginKey(val name: String, val format: String)` (typed format deferred to #129).
 - `@Immutable` on `HostPluginManifest`, `HostPluginEntry`, `MachineEntry`, `UnionedPluginManifest`.
 
-**Verification:** new test `composeUnion_parallelizes_reads` (counts concurrent reads via a tracking fake), `publishHostSlice_does_not_read_first`.
+**Verification:** new test `composeUnion_parallelizes_reads`, `publishHostSlice_does_not_read_first`, `registerMachine_backoff_jitters`.
 
-### Commit 6 — PluginChecklistViewModel: bind + state hoist + atomic state + injected probe + error UI
+### Commit 5 — PluginChecklistViewModel + Screen: bind, hoist, atomic state, injected probe
 
 **Files:** `PluginChecklistViewModel.kt`, `PluginChecklistScreen.kt`, `PluginChecklistRoute.kt` (new), `PluginChecklistViewModelTest.kt`, `SetupNav.kt`, `DesktopAppGraph.kt`
-**Closes:** R-34, R-35, R-36, R-37, R-38, R-39, R-40, R-41, R-42, R-43, R-44, R-45, R-46, R-47, R-48, R-49, R-50, R-52, R-53, R-54, R-55
+**Closes:** R-34–R-50, R-52–R-55
 - VM: `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject`. Inject `PluginPresenceProbe` (fun interface; impl in `app-desktop` wrapping `JvmPluginPresenceProbe`).
 - `reprobe()` takes no args; runs the injected probe.
-- All mutators via `_state.update { ... }`. Mutex stays for refresh+reprobe coalescing (mutex is right when an entire transactional block needs to be serialized; `update {}` is right for single-field flips).
+- All mutators via `_state.update { ... }`; mutex retained for refresh+reprobe transactional coalescing.
 - Add `loadFailed: String?` and `isInitialLoad: Boolean` to `PluginChecklistUiState`.
 - Wrap `viewModelScope.launch` bodies in `try/catch (CancellationException) { throw } catch`.
-- `OsProvider.Default` (renamed) caches the OS string in a `lazy`.
+- `OsProvider.Default` (renamed) caches OS string in `lazy`.
 - Apply OS filter to `alreadyInstalled`. Promote `formatRunsOn` to public on `SetupNav`.
 - Filter `recentlyInstalled` against latest `installedKeys` before append.
 - Drop the `dismiss()` no-op; route handles persistence directly.
-- Screen: split into stateless `PluginChecklistScreen(state, onReprobe, onDismiss, modifier)` + `PluginChecklistRoute()` that does `metroViewModel<VM>()`. `LazyColumn` keys + weight + `enabled`. `collectAsStateWithLifecycle()`. Headline uses OS string. Use ui-shared wrappers. `derivedStateOf` for `total`.
+- Screen: split into stateless `PluginChecklistScreen(state, onReprobe, onDismiss, modifier)` + `PluginChecklistRoute()` doing `metroViewModel<VM>()`. `LazyColumn` keys + weight + `enabled`. `collectAsStateWithLifecycle()`. Headline uses OS string. ui-shared wrappers. `derivedStateOf` for `total`.
 
-**Verification:** existing tests stay; new tests for `reprobe_filtersOsAtPending_AND_alreadyInstalled`, `loadFailedSurfacesOnException`, `recentlyInstalledRebuiltOnReprobe`.
+**Verification:** new tests for `reprobe_filtersOsAtPending_AND_alreadyInstalled`, `loadFailedSurfacesOnException`, `recentlyInstalledRebuiltOnReprobe`.
 
-### Commit 7 — BootstrapData: bind, drop dead param, consistent return shape, fix kdoc
+### Commit 6 — small fixes + docs
 
-**Files:** `BootstrapData.kt`, `BootstrapDataTest.kt` (new if missing), `DesktopAppGraph.kt`
-**Closes:** R-30, R-31, R-32, R-33
-- `@SingleIn(AppScope::class) @ContributesBinding(AppScope::class) @Inject`.
-- Drop the `cloud: CloudBackend` factory param; remove the factory in favor of direct ctor injection.
-- Make every method return `Result<...>` (or all of them throw — pick `Result<...>` for consistency with `MachineProfileStore`).
-- Fix the kdoc wiring example to match the constructor.
-
-### Commit 8 — small fixes + docs (squash candidate)
-
-**Files:** `ManifestMerger.kt`, `Lock.kt`, `DirectGcsBackend.kt`, `SettingsRepository.kt`, `CloudDocKey.kt`, `JvmCloudMigrator.kt` (comment), `SqlTreeJournal.kt` (snapshot kind throw), `UserLibraryWorkingTree.kt`, `UserLibraryPluginScanner.kt`, `MachineProfileStoreTest.kt`
-**Closes:** R-6, R-7, R-8, R-9, R-18, R-26-R-28 (already in commit 4), R-42 (already in commit 6), R-74, R-75, R-76, R-77, R-82, R-83
+**Files:** `ManifestMerger.kt`, `Lock.kt`, `CloudDocKey.kt`, `SqlTreeJournal.kt`, `UserLibraryWorkingTree.kt`, `UserLibraryPluginScanner.kt`
+**Closes:** R-6, R-7, R-8, R-9, R-74, R-75, R-76, R-77, R-83
 - ManifestMerger: drop `mergerHost`, replace bang-bang with `require`, kdoc note on `parentRev` decorative.
-- `LeaseLock.heartbeatSeq` removed (or bumped on refresh — pick remove since no consumer).
-- `Settings.cloudMigrationComplete` doc fix: drop "cleared by --reset-first-run" claim.
+- `LeaseLock.heartbeatSeq` removed (no consumer).
 - `CloudDocKey.Prefix`: same `require(!startsWith("/")) + require(!contains(".."))` invariants as `CloudDocKey`.
-- `JvmCloudMigrator.USER_LIBRARY_TREE_ID_PREFIX` comment rewrite.
 - `SqlTreeJournal`: polymorphic default fallback `Unknown` variant + regression test reading a synthetic `type=__future__` payload. `parseSnapshotKind` throws on unknown.
 - `UserLibraryWorkingTree`: drop `FOLLOW_LINKS` OR add `visitFileFailed { _, _: FileSystemLoopException -> SKIP_SUBTREE }`. `UserLibraryPluginScanner.scan` `runCatching` → `try/catch (CancellationException)`.
 - Replace `BasicFileAttributes::class.java` with the imported-type idiom.
@@ -293,14 +279,12 @@ Eight commits, in this order. Each is rebase-friendly and can be reviewed indepe
 
 | Commit | Unit | Integration | Manual |
 |---|---|---|---|
-| 1 | New `appendManifestHead_doesNotLeaveOrphan_onCASConflict`; pagination via `FakeCloudBackend` returning multiple pages | `SyncRoundTripTest` | n/a |
-| 2 | `MigrationWalkTest` 10→11 | `TreeRegistryTest` `cache_drops_phantom_entries` | n/a |
-| 3 | `relocateFailsFastOnFirstError`, `relocateRespectsConcurrencyBound`, `statusIsCachedAcrossMigrate` | `CloudMigratorTest` idempotency | desktop bootstrap with a faked GCS — ensure dialog completes |
-| 4 | `terminalStateSticky`, `eventsCanBeCollectedTwice`, `retryReturnsToIdle` | n/a | manual: trigger migration, hit retry button after fake failure |
-| 5 | `composeUnion_parallelizes_reads`, `publishHostSlice_does_not_read_first`, `registerMachine_backoff_jitters` | n/a | n/a |
-| 6 | `reprobe_filtersOs`, `loadFailedSurfacesOnException`, `recentlyInstalledRebuiltOnReprobe`, screenshot of stateless screen with `loadFailed` set | n/a | manual: open Settings → Plugin checklist; trigger an exception via fake store |
-| 7 | bootstrap test asserting all calls return Result | n/a | n/a |
-| 8 | `unknownEventDecodesAsUnknown`, `parseSnapshotKindThrowsOnUnknown`, `userLibraryWalkSurvivesSymlinkLoop` | n/a | n/a |
+| 1 ✅ | `appendManifestHead_doesNotLeaveOrphan_onCASConflict`; multi-page pagination | `SyncRoundTripTest` | n/a |
+| 2 ✅ | `CatalogDbMigrationWalkTest` 10→11; `lookupRoundTripsCreatedAtAndCreatedByHost`; `refreshCacheDropsPhantomEntries` | n/a | n/a |
+| 3 | `BootstrapDataTest`: idempotent on `registrySeeded`, seeds projects + UL on first run, errors propagate | `:tests:integration:jvmTest` (no migration UX to break) | desktop launch twice — first seeds, second no-op |
+| 4 | `composeUnion_parallelizes_reads`, `publishHostSlice_does_not_read_first`, `registerMachine_backoff_jitters` | n/a | n/a |
+| 5 | `reprobe_filtersOs`, `loadFailedSurfacesOnException`, `recentlyInstalledRebuiltOnReprobe`, stateless-screen screenshot with `loadFailed` | n/a | open Settings → Plugin checklist; trigger fake-store exception |
+| 6 | `unknownEventDecodesAsUnknown`, `parseSnapshotKindThrowsOnUnknown`, `userLibraryWalkSurvivesSymlinkLoop` | n/a | n/a |
 
 Final check before pushing: `./gradlew jvmTest spotlessCheck detekt build`.
 
@@ -308,13 +292,11 @@ Final check before pushing: `./gradlew jvmTest spotlessCheck detekt build`.
 
 ## 6. Estimated diff size
 
-- Commit 1: ~150 lines added/modified (cloud backend + test)
-- Commit 2: ~120 lines (schema + queries + cache logic + test)
-- Commit 3: ~200 lines (migrator rewrite + tests)
-- Commit 4: ~150 lines (coordinator + dialog + tests)
-- Commit 5: ~180 lines (store + tests)
-- Commit 6: ~250 lines (VM + screen split + route + tests)
-- Commit 7: ~80 lines
-- Commit 8: ~150 lines
+- Commit 1 ✅: +145 / -58 lines (`046ce48`)
+- Commit 2 ✅: +403 / -23 lines (`3766e01`)
+- Commit 3 (delete migrator + unify paths + bootstrap): **~1,000 lines deleted**, ~250 added (net deletion)
+- Commit 4 (MachineProfileStore): ~180 lines
+- Commit 5 (PluginChecklist): ~250 lines
+- Commit 6 (polish): ~150 lines
 
-Total ~1,300 lines net change against a 7.8K-line PR — under 20% of the original PR's surface, which is right for "address review feedback" rather than "rewrite the world."
+Net result: the PR shrinks rather than grows. The original 7.8K-line PR drops by ~750 lines after commit 3's deletions, then adds back ~580 lines across commits 4–6. End state: a smaller, simpler diff than the version under review.

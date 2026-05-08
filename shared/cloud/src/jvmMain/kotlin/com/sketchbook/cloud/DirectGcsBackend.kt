@@ -581,18 +581,17 @@ class DirectGcsBackend(
     }
 
     /**
-     * v=1 path layout retained until the migrator (commit 10) relocates manifests under
-     * `trees/<kind>/<tree_id>/`. Until then, [TrackedTreeKind.Project] callers pass the
-     * project UUID as the tree-id string, so the path resolves to the legacy layout.
+     * Unified manifest-path layout: every kind lives under
+     * `<tenant>/trees/<kind>/<tree_id>/manifests/`. The earlier branch that special-cased
+     * [TrackedTreeKind.Project] under `<tenant>/manifests/<uuid>/` has been removed —
+     * Sketchbook never shipped to production, so there is no legacy v=1 data anywhere that
+     * the codebase needs to be back-compat with. For new project trees, the tree-id is the
+     * project UUID itself (kept for blob-key continuity).
      */
     private fun manifestsPrefix(
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
-    ): String =
-        when (kind) {
-            TrackedTreeKind.Project -> "$tenantPrefix/manifests/${treeId.value}/"
-            else -> "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/manifests/"
-        }
+    ): String = "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/manifests/"
 
     private fun manifestPath(
         treeId: TrackedTreeId,
@@ -613,11 +612,7 @@ class DirectGcsBackend(
     private fun lockPath(
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
-    ): String =
-        when (kind) {
-            TrackedTreeKind.Project -> "$tenantPrefix/locks/${treeId.value}.lock"
-            else -> "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/lock"
-        }
+    ): String = "$tenantPrefix/trees/${kind.wireName}/${treeId.value}/lock"
 
     private fun docPath(key: CloudDocKey): String = "$tenantPrefix/${key.path}"
 

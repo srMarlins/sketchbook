@@ -186,14 +186,15 @@ class DirectGcsBackendTest {
     @Test
     fun listManifestsFollowsPageTokenAcrossMultiplePages() =
         runTest {
+            val prefix = "users/test/trees/project/proj/manifests"
             val pageOne =
                 """
                 {
                   "kind": "storage#objects",
                   "nextPageToken": "TOKEN-2",
                   "items": [
-                    { "name": "users/test/manifests/proj/00000001-2026-05-05T12-00-00Z-mac.json", "generation": "10" },
-                    { "name": "users/test/manifests/proj/00000002-2026-05-05T12-00-01Z-mac.json", "generation": "11" }
+                    { "name": "$prefix/00000001-2026-05-05T12-00-00Z-mac.json", "generation": "10" },
+                    { "name": "$prefix/00000002-2026-05-05T12-00-01Z-mac.json", "generation": "11" }
                   ]
                 }
                 """.trimIndent()
@@ -202,7 +203,7 @@ class DirectGcsBackendTest {
                 {
                   "kind": "storage#objects",
                   "items": [
-                    { "name": "users/test/manifests/proj/00000003-2026-05-05T12-00-02Z-mac.json", "generation": "12" }
+                    { "name": "$prefix/00000003-2026-05-05T12-00-02Z-mac.json", "generation": "12" }
                   ]
                 }
                 """.trimIndent()

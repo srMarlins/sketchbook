@@ -1,7 +1,0 @@
-<?xml version="1.0" ?>
-<SmellBaseline>
-  <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>LoopWithTooManyJumpStatements:JvmCloudMigrator.kt:JvmCloudMigrator$for</ID>
-  </CurrentIssues>
-</SmellBaseline>

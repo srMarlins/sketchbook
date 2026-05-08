@@ -50,14 +50,16 @@ interface SettingsRepository {
     suspend fun setPluginFolders(folders: List<String>): Result<Unit>
 
     /**
-     * Marks the cloud-storage migration ([com.sketchbook.repo.Settings.cloudMigrationComplete])
-     * as done so subsequent launches skip the migrator. Called once by the migrator itself
-     * after it has relocated all v=1 manifests to the v=2 layout and built the registry.
+     * Marks the cloud-side registry as seeded
+     * ([com.sketchbook.repo.Settings.registrySeeded]) so subsequent launches skip the bootstrap
+     * step. Called once by [com.sketchbook.desktop.bootstrap.BootstrapData.seedRegistry] after
+     * it has registered every project + the User Library tree in the cloud's
+     * `<tenant>/registry.json` doc.
      *
      * Default impl is a no-op so legacy test fakes keep compiling; real impls
      * ([com.sketchbook.desktop.repo.PreferencesSettingsRepository]) persist the flag.
      */
-    suspend fun markCloudMigrationComplete(): Result<Unit> = Result.success(Unit)
+    suspend fun markRegistrySeeded(): Result<Unit> = Result.success(Unit)
 
     /**
      * Sets the per-host User Library root path. Null = use OS default
@@ -95,11 +97,13 @@ data class Settings(
      */
     val pluginFolders: List<String> = emptyList(),
     /**
-     * True once the cloud-storage migration (commit 10) has run on this machine. Defaults
-     * to false so a fresh install on a populated bucket detects v=1 paths and prompts the
-     * user. The migrator flips it true on completion; cleared by `--reset-first-run`.
+     * True once the cloud-side tree registry has been seeded for this machine — i.e.
+     * `BootstrapData.seedRegistry()` has registered every local project + the UL entry into
+     * the cloud's `<tenant>/registry.json`. Defaults to false on a fresh install so the next
+     * launch performs the seeding silently in the bootstrap path. Not cleared by
+     * `--reset-first-run` (only the onboarding gate is reset).
      */
-    val cloudMigrationComplete: Boolean = false,
+    val registrySeeded: Boolean = false,
     /**
      * Per-host User Library root override. Null = use the OS-default path. Set when the
      * user picks a non-standard location during onboarding.

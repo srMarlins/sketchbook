@@ -110,9 +110,9 @@ internal data class MachinesDoc(
 
 /**
  * Constructed at the call site (the desktop bootstrap wiring) once a [CloudBackend] is
- * available. Not DI-bound at AppScope because the cloud handle is per-user via
- * `SwappableSyncQueue` — same reason [com.sketchbook.migration.JvmCloudMigrator] is hand-
- * constructed.
+ * available. Not DI-bound at AppScope today because the cloud handle is per-user via
+ * `SwappableSyncQueue`; promoted to a `UserScope` binding once
+ * https://github.com/srMarlins/sketchbook/issues/130 lands.
  */
 class CloudMachineProfileStore(
     private val cloud: CloudBackend,

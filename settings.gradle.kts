@@ -35,7 +35,6 @@ include(
     ":shared:cloud",
     ":shared:sync-io",
     ":shared:repository",
-    ":shared:migration",
     ":shared:actions",
     ":shared:auth",
     ":shared:sync",
