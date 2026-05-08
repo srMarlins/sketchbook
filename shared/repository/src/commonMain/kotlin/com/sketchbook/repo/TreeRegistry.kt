@@ -286,6 +286,13 @@ class CloudTreeRegistry(
     // names a distinct outcome — flattening is worse than the rule violation.
     override suspend fun registerAll(specs: List<RegisterSpec>): RegisterOutcome<List<TreeRegistryEntry>> {
         if (specs.isEmpty()) return RegisterOutcome.Ok(emptyList())
+        // The registry doc carries a single `owner_user_id` for the whole user. Specs with
+        // mismatched owners would have silently inherited the first spec's owner and written
+        // it into the doc — surface the misuse loudly.
+        val owners = specs.map { it.ownerUserId }.toSet()
+        require(owners.size == 1) {
+            "registerAll specs must share an ownerUserId; got ${owners.map { it.value }}"
+        }
         repeat(TreeRegistry.REGISTER_MAX_RETRIES) {
             val current =
                 try {
@@ -327,6 +334,8 @@ class CloudTreeRegistry(
             }
             val merged = byKey.values.toList()
             val owner = specs.first().ownerUserId
+            // Single-owner invariant enforced above — `specs.first().ownerUserId` is the
+            // shared value, not a silent pick.
             val doc = TreeRegistryDoc(ownerUserId = owner, trees = merged)
             val expected = current.generation ?: Generation.ZERO
             val bytes = JSON.encodeToString(TreeRegistryDoc.serializer(), doc).encodeToByteArray()

@@ -122,11 +122,24 @@ interface CloudBackend {
     suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef>
 }
 
-/** Result of a [CloudBackend.readDoc] call. */
+/**
+ * Result of a [CloudBackend.readDoc] call. `equals` / `hashCode` use structural equality on
+ * [bytes] (not reference equality) so test fixtures that compare reads round-trip cleanly.
+ */
 class CloudDocRead(
     val bytes: ByteArray,
     val generation: Generation,
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is CloudDocRead) return false
+        return generation == other.generation && bytes.contentEquals(other.bytes)
+    }
+
+    override fun hashCode(): Int = 31 * bytes.contentHashCode() + generation.hashCode()
+
+    override fun toString(): String = "CloudDocRead(bytes=[${bytes.size} bytes], generation=$generation)"
+}
 
 /** Pointer to a [CloudDoc] returned by [CloudBackend.listDocs]. */
 data class CloudDocRef(
