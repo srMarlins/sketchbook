@@ -18,7 +18,6 @@ import com.sketchbook.repo.TreeSnapshotRow
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -50,98 +49,84 @@ class SqlTreeJournal(
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
         manifestPath: String,
-    ): Result<TreeJournalEntry> =
+    ): TreeJournalEntry =
         withContext(ioDispatcher) {
-            try {
-                val event =
-                    TreeJournalEvent.Snapshot(
-                        rev = manifest.rev.value,
-                        parentRev = manifest.parentRev?.value,
-                        fileCount = manifest.stats.fileCount,
-                        totalBytes = manifest.stats.totalBytes,
-                        newBytes = manifest.stats.newBytes,
-                        manifestPath = manifestPath,
-                    )
-                val sequence =
-                    catalog.transactionWithResult<Long?> {
-                        // Idempotent on (tree_id, rev): if the snapshot row already exists,
-                        // skip both writes so a re-subscribe doesn't double-up the journal.
-                        // O(1) PK lookup — selectTreeSnapshots would re-read the whole tree's
-                        // history every poll tick.
-                        val existing =
-                            catalog.catalogQueries
-                                .selectTreeSnapshotByRev(
-                                    tree_id = treeId.value,
-                                    rev = manifest.rev.value,
-                                ).executeAsOneOrNull() != null
-                        if (existing) {
-                            null
-                        } else {
-                            catalog.catalogQueries.insertTreeSnapshot(
-                                tree_id = treeId.value,
-                                rev = manifest.rev.value,
-                                parent_rev = manifest.parentRev?.value,
-                                timestamp = manifest.timestamp.toEpochMilliseconds(),
-                                host_id = manifest.hostId,
-                                snapshot_kind = manifest.snapshotKind.dbName(),
-                                label = manifest.label,
-                                file_count = manifest.stats.fileCount.toLong(),
-                                total_bytes = manifest.stats.totalBytes,
-                                new_bytes = manifest.stats.newBytes,
-                                manifest_path = manifestPath,
-                            )
-                            catalog.catalogQueries.insertTreeJournalEntry(
-                                tree_id = treeId.value,
-                                tree_kind = kind.wireName,
-                                timestamp = manifest.timestamp.toEpochMilliseconds(),
-                                host_id = manifest.hostId,
-                                event_kind = event.typeKey,
-                                payload_json = json.encodeToString(EventSerializer, event),
-                                rev = manifest.rev.value,
-                            )
-                            catalog.catalogQueries.lastTreeJournalId().executeAsOne()
-                        }
-                    }
-                Result.success(
-                    TreeJournalEntry(
-                        treeId = treeId,
-                        kind = kind,
-                        timestamp = manifest.timestamp,
-                        hostId = manifest.hostId,
-                        event = event,
-                        rev = manifest.rev,
-                        sequence = sequence,
-                    ),
+            val event =
+                TreeJournalEvent.Snapshot(
+                    rev = manifest.rev.value,
+                    parentRev = manifest.parentRev?.value,
+                    fileCount = manifest.stats.fileCount,
+                    totalBytes = manifest.stats.totalBytes,
+                    newBytes = manifest.stats.newBytes,
+                    manifestPath = manifestPath,
                 )
-            } catch (c: CancellationException) {
-                throw c
-            } catch (t: Throwable) {
-                Result.failure(t)
-            }
-        }
-
-    override suspend fun appendEvent(entry: TreeJournalEntry): Result<TreeJournalEntry> =
-        withContext(ioDispatcher) {
-            try {
-                val sequence =
-                    catalog.transactionWithResult<Long> {
+            val sequence =
+                catalog.transactionWithResult<Long?> {
+                    // Idempotent on (tree_id, rev): if the snapshot row already exists,
+                    // skip both writes so a re-subscribe doesn't double-up the journal.
+                    // O(1) PK lookup — selectTreeSnapshots would re-read the whole tree's
+                    // history every poll tick.
+                    val existing =
+                        catalog.catalogQueries
+                            .selectTreeSnapshotByRev(
+                                tree_id = treeId.value,
+                                rev = manifest.rev.value,
+                            ).executeAsOneOrNull() != null
+                    if (existing) {
+                        null
+                    } else {
+                        catalog.catalogQueries.insertTreeSnapshot(
+                            tree_id = treeId.value,
+                            rev = manifest.rev.value,
+                            parent_rev = manifest.parentRev?.value,
+                            timestamp = manifest.timestamp.toEpochMilliseconds(),
+                            host_id = manifest.hostId,
+                            snapshot_kind = manifest.snapshotKind.dbName(),
+                            label = manifest.label,
+                            file_count = manifest.stats.fileCount.toLong(),
+                            total_bytes = manifest.stats.totalBytes,
+                            new_bytes = manifest.stats.newBytes,
+                            manifest_path = manifestPath,
+                        )
                         catalog.catalogQueries.insertTreeJournalEntry(
-                            tree_id = entry.treeId.value,
-                            tree_kind = entry.kind.wireName,
-                            timestamp = entry.timestamp.toEpochMilliseconds(),
-                            host_id = entry.hostId,
-                            event_kind = entry.event.typeKey,
-                            payload_json = json.encodeToString(EventSerializer, entry.event),
-                            rev = entry.rev?.value,
+                            tree_id = treeId.value,
+                            tree_kind = kind.wireName,
+                            timestamp = manifest.timestamp.toEpochMilliseconds(),
+                            host_id = manifest.hostId,
+                            event_kind = event.typeKey,
+                            payload_json = json.encodeToString(EventSerializer, event),
+                            rev = manifest.rev.value,
                         )
                         catalog.catalogQueries.lastTreeJournalId().executeAsOne()
                     }
-                Result.success(entry.copy(sequence = sequence))
-            } catch (c: CancellationException) {
-                throw c
-            } catch (t: Throwable) {
-                Result.failure(t)
-            }
+                }
+            TreeJournalEntry(
+                treeId = treeId,
+                kind = kind,
+                timestamp = manifest.timestamp,
+                hostId = manifest.hostId,
+                event = event,
+                rev = manifest.rev,
+                sequence = sequence,
+            )
+        }
+
+    override suspend fun appendEvent(entry: TreeJournalEntry): TreeJournalEntry =
+        withContext(ioDispatcher) {
+            val sequence =
+                catalog.transactionWithResult<Long> {
+                    catalog.catalogQueries.insertTreeJournalEntry(
+                        tree_id = entry.treeId.value,
+                        tree_kind = entry.kind.wireName,
+                        timestamp = entry.timestamp.toEpochMilliseconds(),
+                        host_id = entry.hostId,
+                        event_kind = entry.event.typeKey,
+                        payload_json = json.encodeToString(EventSerializer, entry.event),
+                        rev = entry.rev?.value,
+                    )
+                    catalog.catalogQueries.lastTreeJournalId().executeAsOne()
+                }
+            entry.copy(sequence = sequence)
         }
 
     override fun observeRecent(

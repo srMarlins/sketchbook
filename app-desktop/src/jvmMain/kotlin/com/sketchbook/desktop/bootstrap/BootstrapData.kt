@@ -10,13 +10,13 @@ import com.sketchbook.repo.HostPluginManifest
 import com.sketchbook.repo.MachineEntry
 import com.sketchbook.repo.MachineProfileStore
 import com.sketchbook.repo.RegisterSpec
+import com.sketchbook.repo.getOrThrow
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.TreeRegistry
 import com.sketchbook.repo.TreeRegistryEntry
 import com.sketchbook.repo.TreeRegistrySnapshot
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -39,7 +39,7 @@ import kotlin.time.Clock
  * tasks.pullRegistry()
  * tasks.publishHostPluginManifest(hostId, hostName, os)
  * tasks.registerMachine(hostId, hostName, os, binaryVersion)
- * if (tasks.userLibrarySyncEnabled().getOrDefault(false)) materialize(...)
+ * if (tasks.userLibrarySyncEnabled()) materialize(...)
  * ```
  *
  * Tests construct this with fakes and assert that each step calls the right repository
@@ -72,74 +72,77 @@ class BootstrapData(
      * Reads `selectAllProjectIdentitiesWithName()` inside `withContext(ioDispatcher)` so a
      * caller on the UI dispatcher doesn't block on JDBC.
      */
-    suspend fun seedRegistry(): Result<List<TreeRegistryEntry>> {
+    suspend fun seedRegistry(): List<TreeRegistryEntry> {
         val current = settings.observe().first()
         if (current.registrySeeded) {
             // Already seeded on this machine. Pull the cloud doc to refresh the local cache
             // and hand callers the entries they would have gotten from a fresh seed.
-            return runOrFailure { registry.fetch().entries }
+            return registry.fetch().entries
         }
-        return runOrFailure {
-            val identities =
-                withContext(ioDispatcher) {
-                    catalog.catalogQueries
-                        .selectAllProjectIdentitiesWithName()
-                        .executeAsList()
-                        .map { ProjectIdentity(uuid = it.uuid, name = it.name) }
-                }
-            val specs =
-                identities.map { identity ->
-                    RegisterSpec(
-                        kind = TrackedTreeKind.Project,
-                        scopeKey = identity.uuid,
-                        displayName = identity.name,
-                        treeId = TrackedTreeId(identity.uuid),
-                        ownerUserId = ownerUserId,
-                        createdByHost = hostId.value,
-                    )
-                } +
-                    RegisterSpec(
-                        kind = TrackedTreeKind.UserLibrary,
-                        scopeKey = USER_LIBRARY_SCOPE_KEY,
-                        displayName = USER_LIBRARY_DISPLAY_NAME,
-                        // Host-prefixed mint: each host's first launch produces a distinct
-                        // tree-id, but registerAll's idempotency on `(kind, scope_key)` means
-                        // the second host sees the first one's id and reuses it. Convergence
-                        // across hosts that ran offline is tracked in
-                        // https://github.com/srMarlins/sketchbook/issues/131.
-                        treeId = TrackedTreeId(USER_LIBRARY_TREE_ID_PREFIX + hostId.value),
-                        ownerUserId = ownerUserId,
-                        createdByHost = hostId.value,
-                    )
-            val entries = registry.registerAll(specs).getOrThrow()
-            settings.markRegistrySeeded()
-            entries
-        }
+        val identities =
+            withContext(ioDispatcher) {
+                catalog.catalogQueries
+                    .selectAllProjectIdentitiesWithName()
+                    .executeAsList()
+                    .map { ProjectIdentity(uuid = it.uuid, name = it.name) }
+            }
+        val specs =
+            identities.map { identity ->
+                RegisterSpec(
+                    kind = TrackedTreeKind.Project,
+                    scopeKey = identity.uuid,
+                    displayName = identity.name,
+                    treeId = TrackedTreeId(identity.uuid),
+                    ownerUserId = ownerUserId,
+                    createdByHost = hostId.value,
+                )
+            } +
+                RegisterSpec(
+                    kind = TrackedTreeKind.UserLibrary,
+                    scopeKey = USER_LIBRARY_SCOPE_KEY,
+                    displayName = USER_LIBRARY_DISPLAY_NAME,
+                    // Host-prefixed mint: each host's first launch produces a distinct
+                    // tree-id, but registerAll's idempotency on `(kind, scope_key)` means
+                    // the second host sees the first one's id and reuses it. v1.2 sync
+                    // convergence is unnecessary while no v1 has shipped — see closed issue
+                    // #131.
+                    treeId = TrackedTreeId(USER_LIBRARY_TREE_ID_PREFIX + hostId.value),
+                    ownerUserId = ownerUserId,
+                    createdByHost = hostId.value,
+                )
+        val entries = registry.registerAll(specs).getOrThrow()
+        settings.markRegistrySeeded()
+        return entries
     }
 
     /**
      * Pull `<tenant>/registry.json` and update the local cache. Returns the snapshot for
      * callers that need to walk the entries (e.g. spawning a per-project pull poller).
+     * Throws on cloud / decode failure.
      */
-    suspend fun pullRegistry(): Result<TreeRegistrySnapshot> = runOrFailure { registry.fetch() }
+    suspend fun pullRegistry(): TreeRegistrySnapshot = registry.fetch()
 
     /**
      * Publish this host's plugin slice. Idempotent; called both at startup and after
-     * `JvmPluginPresenceProbe` re-runs so the cloud view stays in sync.
+     * `JvmPluginPresenceProbe` re-runs so the cloud view stays in sync. Throws on cloud /
+     * encode failure.
      */
     suspend fun publishHostPluginManifest(
         hostId: String,
         hostName: String,
         os: Os,
-    ): Result<HostPluginManifest> = profile.publishHostSlice(hostId, hostName, os)
+    ): HostPluginManifest = profile.publishHostSlice(hostId, hostName, os)
 
-    /** Register / refresh this host in `<tenant>/profile/machines.json`. */
+    /**
+     * Register / refresh this host in `<tenant>/profile/machines.json`. Throws on
+     * `SketchbookError.Conflict` (CAS exhaustion) or other cloud failures.
+     */
     suspend fun registerMachine(
         hostId: String,
         hostName: String,
         os: Os,
         binaryVersion: String,
-    ): Result<Unit> =
+    ) {
         profile.registerMachine(
             MachineEntry(
                 hostId = hostId,
@@ -149,14 +152,10 @@ class BootstrapData(
                 binaryVersion = binaryVersion,
             ),
         )
+    }
 
-    /**
-     * Whether User Library sync is enabled on this host. Wrapped as `Result` for uniformity
-     * with the other bootstrap calls; the underlying flow read does not throw under normal
-     * conditions, but the contract stays consistent so callers can `awaitAll` over a
-     * homogeneous shape.
-     */
-    suspend fun userLibrarySyncEnabled(): Result<Boolean> = runOrFailure { settings.observe().first().userLibrarySyncEnabled }
+    /** Whether User Library sync is enabled on this host. */
+    suspend fun userLibrarySyncEnabled(): Boolean = settings.observe().first().userLibrarySyncEnabled
 
     private data class ProjectIdentity(
         val uuid: String,
@@ -180,17 +179,3 @@ value class HostId(
     val value: String,
 )
 
-/**
- * Run [block] and wrap any thrown [Throwable] in a [Result.failure]. Re-throws
- * [CancellationException] so structured concurrency keeps working — the
- * `runCatching`-at-suspend-boundary anti-pattern is documented in CLAUDE.md and audited in
- * https://github.com/srMarlins/sketchbook/issues/132.
- */
-private inline fun <T> runOrFailure(block: () -> T): Result<T> =
-    try {
-        Result.success(block())
-    } catch (c: CancellationException) {
-        throw c
-    } catch (t: Throwable) {
-        Result.failure(t)
-    }

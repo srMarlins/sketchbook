@@ -49,7 +49,7 @@ class MachineProfileStoreTest {
             val cloud = FakeProfileCloud()
             val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
-            val slice = store.publishHostSlice("macstudio", "Mac Studio", os = Os.Mac).getOrThrow()
+            val slice = store.publishHostSlice("macstudio", "Mac Studio", os = Os.Mac)
 
             // Three distinct (name, format): Serum, FabFilter, Diva. Serum's installed flag
             // should be true (project_plugins reported it installed; UL row didn't, but OR wins).
@@ -157,7 +157,7 @@ class MachineProfileStoreTest {
             val cloud = ConcurrencyTrackingCloud()
             val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
-            store.publishHostSlice("macstudio", "Mac Studio", os = Os.Mac).getOrThrow()
+            store.publishHostSlice("macstudio", "Mac Studio", os = Os.Mac)
 
             assertEquals(0, cloud.readCallCount, "publishHostSlice should not read before writing")
         }
@@ -170,18 +170,17 @@ class MachineProfileStoreTest {
             val cloud = FakeProfileCloud(machinesConflicts = 1)
             val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
-            val result =
-                store.registerMachine(
-                    MachineEntry(
-                        hostId = "macstudio",
-                        hostName = "Mac Studio",
-                        os = Os.Mac,
-                        lastSeenAt = now,
-                        binaryVersion = "0.4.0",
-                    ),
-                )
+            // Throws on irrecoverable failure; reaching the next line means the retry succeeded.
+            store.registerMachine(
+                MachineEntry(
+                    hostId = "macstudio",
+                    hostName = "Mac Studio",
+                    os = Os.Mac,
+                    lastSeenAt = now,
+                    binaryVersion = "0.4.0",
+                ),
+            )
 
-            assertTrue(result.isSuccess, "expected success after retry, got: ${result.exceptionOrNull()}")
             val machines = store.listMachines()
             assertEquals(1, machines.size)
             assertEquals("macstudio", machines.single().hostId)
@@ -194,14 +193,12 @@ class MachineProfileStoreTest {
             val cloud = FakeProfileCloud()
             val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
-            store
-                .registerMachine(
-                    MachineEntry("macstudio", "Mac Studio", Os.Mac, now, "0.4.0"),
-                ).getOrThrow()
-            store
-                .registerMachine(
-                    MachineEntry("macstudio", "Mac Studio (renamed)", Os.Mac, now, "0.5.0"),
-                ).getOrThrow()
+            store.registerMachine(
+                MachineEntry("macstudio", "Mac Studio", Os.Mac, now, "0.4.0"),
+            )
+            store.registerMachine(
+                MachineEntry("macstudio", "Mac Studio (renamed)", Os.Mac, now, "0.5.0"),
+            )
 
             val machines = store.listMachines()
             assertEquals(1, machines.size)

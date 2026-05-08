@@ -56,8 +56,11 @@ interface TreeRegistry {
 
     /**
      * Register a new tree. CAS retries on registry-doc conflict (another machine added a tree
-     * concurrently): re-read, re-mutate, re-write, up to [REGISTER_MAX_RETRIES] times. Returns
-     * the entry as written.
+     * concurrently): re-read, re-mutate, re-write, up to [REGISTER_MAX_RETRIES] times.
+     * Returns a [RegisterOutcome] so callers can pattern-match on [RegisterOutcome.Conflict]
+     * (CAS retries exhausted — a meaningful domain signal) vs [RegisterOutcome.Failed] (other
+     * I/O / decode errors). Cancellation propagates as `CancellationException`; structured
+     * concurrency keeps working without callers having to unwrap a `Result.failure`.
      */
     suspend fun register(
         kind: TrackedTreeKind,
@@ -66,7 +69,7 @@ interface TreeRegistry {
         treeId: TrackedTreeId,
         ownerUserId: UserId = UserId.DEFAULT,
         createdByHost: String,
-    ): Result<TreeRegistryEntry>
+    ): RegisterOutcome<TreeRegistryEntry>
 
     /**
      * Bulk-register multiple trees in a single registry-doc round-trip. The migrator (commit
@@ -76,9 +79,9 @@ interface TreeRegistry {
      * Idempotent: entries whose `(kind, scopeKey)` already exist in the registry are
      * preserved unchanged; new entries are appended. CAS-retries on registry-doc conflict
      * up to [REGISTER_MAX_RETRIES]. Returns the resulting entries (existing + newly written)
-     * in input order.
+     * in input order via [RegisterOutcome].
      */
-    suspend fun registerAll(specs: List<RegisterSpec>): Result<List<TreeRegistryEntry>>
+    suspend fun registerAll(specs: List<RegisterSpec>): RegisterOutcome<List<TreeRegistryEntry>>
 
     /** True if [userId] can read [entry]. v1: always the owner; v1.2: + collaborators with any role. */
     fun canRead(
@@ -103,6 +106,37 @@ data class TreeRegistrySnapshot(
     val entries: List<TreeRegistryEntry>,
     val generation: Generation?,
 )
+
+/**
+ * Outcome of a [TreeRegistry.register] / [TreeRegistry.registerAll] call. Replaces
+ * `kotlin.Result<T>` per #128 because the [Conflict] case is a meaningful domain signal
+ * (CAS retries exhausted — caller can decide between bubbling, retrying with a longer
+ * window, or surfacing to the user) that's distinct from arbitrary [Failed] I/O errors.
+ *
+ * Cancellation propagates as `CancellationException` from the suspend call; this type is
+ * only used to model success + the two recoverable failure modes.
+ */
+sealed interface RegisterOutcome<out T> {
+    data class Ok<T>(
+        val value: T,
+    ) : RegisterOutcome<T>
+
+    /** Registry-doc CAS retries exhausted. Caller may retry the whole call later. */
+    data object Conflict : RegisterOutcome<Nothing>
+
+    /** Non-conflict error (network, decode, malformed input). */
+    data class Failed(
+        val cause: Throwable,
+    ) : RegisterOutcome<Nothing>
+}
+
+/** Convenience: throw on Conflict / Failed for callers that have no per-failure-mode recovery. */
+fun <T> RegisterOutcome<T>.getOrThrow(): T =
+    when (this) {
+        is RegisterOutcome.Ok -> value
+        RegisterOutcome.Conflict -> throw SketchbookError.Conflict("registry CAS retries exhausted")
+        is RegisterOutcome.Failed -> throw cause
+    }
 
 /** Argument shape for [TreeRegistry.registerAll]. */
 data class RegisterSpec(
@@ -202,14 +236,19 @@ class CloudTreeRegistry(
         treeId: TrackedTreeId,
         ownerUserId: UserId,
         createdByHost: String,
-    ): Result<TreeRegistryEntry> {
-        var attempt = 0
-        while (attempt < TreeRegistry.REGISTER_MAX_RETRIES) {
-            attempt += 1
-            val current = fetch()
+    ): RegisterOutcome<TreeRegistryEntry> {
+        repeat(TreeRegistry.REGISTER_MAX_RETRIES) {
+            val current =
+                try {
+                    fetch()
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (t: Throwable) {
+                    return RegisterOutcome.Failed(t)
+                }
             // Idempotency: same (kind, scopeKey) → return existing.
             current.entries.firstOrNull { it.kind == kind && it.scopeKey == scopeKey }?.let {
-                return Result.success(it)
+                return RegisterOutcome.Ok(it)
             }
             val newEntry =
                 TreeRegistryEntry(
@@ -224,25 +263,30 @@ class CloudTreeRegistry(
             val doc = TreeRegistryDoc(ownerUserId = ownerUserId, trees = current.entries + newEntry)
             val expected = current.generation ?: Generation.ZERO
             val bytes = JSON.encodeToString(TreeRegistryDoc.serializer(), doc).encodeToByteArray()
-            val result = cloud.writeDoc(TreeRegistry.REGISTRY_KEY, expected, bytes)
-            result
+            val writeResult = cloud.writeDoc(TreeRegistry.REGISTRY_KEY, expected, bytes)
+            writeResult
                 .onSuccess {
                     refreshCache(doc.trees)
-                    return Result.success(newEntry)
+                    return RegisterOutcome.Ok(newEntry)
                 }.onFailure { err ->
-                    if (err !is SketchbookError.Conflict) return Result.failure(err)
+                    if (err !is SketchbookError.Conflict) return RegisterOutcome.Failed(err)
                     // Retry on CAS conflict.
                 }
         }
-        return Result.failure(SketchbookError.Conflict("registry CAS retries exhausted"))
+        return RegisterOutcome.Conflict
     }
 
-    override suspend fun registerAll(specs: List<RegisterSpec>): Result<List<TreeRegistryEntry>> {
-        if (specs.isEmpty()) return Result.success(emptyList())
-        var attempt = 0
-        while (attempt < TreeRegistry.REGISTER_MAX_RETRIES) {
-            attempt += 1
-            val current = fetch()
+    override suspend fun registerAll(specs: List<RegisterSpec>): RegisterOutcome<List<TreeRegistryEntry>> {
+        if (specs.isEmpty()) return RegisterOutcome.Ok(emptyList())
+        repeat(TreeRegistry.REGISTER_MAX_RETRIES) {
+            val current =
+                try {
+                    fetch()
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (t: Throwable) {
+                    return RegisterOutcome.Failed(t)
+                }
             val byKey = current.entries.associateBy { it.kind to it.scopeKey }.toMutableMap()
             val results = mutableListOf<TreeRegistryEntry>()
             var added = false
@@ -271,24 +315,24 @@ class CloudTreeRegistry(
                 // Nothing to write — every spec already had an entry; refresh cache so
                 // observers see a consistent view and return.
                 refreshCache(current.entries)
-                return Result.success(results)
+                return RegisterOutcome.Ok(results)
             }
             val merged = byKey.values.toList()
             val owner = specs.first().ownerUserId
             val doc = TreeRegistryDoc(ownerUserId = owner, trees = merged)
             val expected = current.generation ?: Generation.ZERO
             val bytes = JSON.encodeToString(TreeRegistryDoc.serializer(), doc).encodeToByteArray()
-            val result = cloud.writeDoc(TreeRegistry.REGISTRY_KEY, expected, bytes)
-            result
+            val writeResult = cloud.writeDoc(TreeRegistry.REGISTRY_KEY, expected, bytes)
+            writeResult
                 .onSuccess {
                     refreshCache(merged)
-                    return Result.success(results)
+                    return RegisterOutcome.Ok(results)
                 }.onFailure { err ->
-                    if (err !is SketchbookError.Conflict) return Result.failure(err)
+                    if (err !is SketchbookError.Conflict) return RegisterOutcome.Failed(err)
                     // CAS conflict: re-read and retry.
                 }
         }
-        return Result.failure(SketchbookError.Conflict("registry CAS retries exhausted"))
+        return RegisterOutcome.Conflict
     }
 
     override fun canRead(

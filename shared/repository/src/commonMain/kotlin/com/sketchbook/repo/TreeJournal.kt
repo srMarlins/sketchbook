@@ -30,17 +30,21 @@ interface TreeJournal {
      * Persist a newly observed manifest: insert into `tree_snapshots` (idempotent on
      * `(tree_id, rev)`) and append a [TreeJournalEvent.Snapshot] event. Called by the pull
      * poller for non-project kinds. [manifestPath] is the cloud key of the manifest as
-     * returned by `CloudBackend.listManifests`.
+     * returned by `CloudBackend.listManifests`. Throws on encode / SQL failure;
+     * `CancellationException` propagates.
      */
     suspend fun recordSnapshot(
         manifest: Manifest,
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
         manifestPath: String,
-    ): Result<TreeJournalEntry>
+    ): TreeJournalEntry
 
-    /** Append an event without writing a snapshot row. */
-    suspend fun appendEvent(entry: TreeJournalEntry): Result<TreeJournalEntry>
+    /**
+     * Append an event without writing a snapshot row. Throws on encode / SQL failure;
+     * `CancellationException` propagates.
+     */
+    suspend fun appendEvent(entry: TreeJournalEntry): TreeJournalEntry
 
     /** Live tail of journal events for [treeId], newest first, capped at [limit]. */
     fun observeRecent(

@@ -291,11 +291,11 @@ private class ImmutableStubProfileStore(
         hostId: String,
         hostName: String,
         os: Os,
-    ): Result<HostPluginManifest> = Result.success(emptyManifest(hostId, hostName, os))
+    ): HostPluginManifest = emptyManifest(hostId, hostName, os)
 
     override suspend fun composeUnion(): UnionedPluginManifest = union
 
-    override suspend fun registerMachine(entry: MachineEntry): Result<Unit> = Result.success(Unit)
+    override suspend fun registerMachine(entry: MachineEntry) {}
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }
@@ -310,14 +310,14 @@ private class MutableStubProfileStore(
         hostId: String,
         hostName: String,
         os: Os,
-    ): Result<HostPluginManifest> {
+    ): HostPluginManifest {
         publishCount += 1
-        return Result.success(emptyManifest(hostId, hostName, os))
+        return emptyManifest(hostId, hostName, os)
     }
 
     override suspend fun composeUnion(): UnionedPluginManifest = union
 
-    override suspend fun registerMachine(entry: MachineEntry): Result<Unit> = Result.success(Unit)
+    override suspend fun registerMachine(entry: MachineEntry) {}
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }
@@ -329,11 +329,13 @@ private class ThrowingProfileStore(
         hostId: String,
         hostName: String,
         os: Os,
-    ): Result<HostPluginManifest> = Result.failure(cause)
+    ): HostPluginManifest = throw cause
 
     override suspend fun composeUnion(): UnionedPluginManifest = throw cause
 
-    override suspend fun registerMachine(entry: MachineEntry): Result<Unit> = Result.failure(cause)
+    override suspend fun registerMachine(entry: MachineEntry) {
+        throw cause
+    }
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }
@@ -348,7 +350,7 @@ private class FlakyProfileStore(
         hostId: String,
         hostName: String,
         os: Os,
-    ): Result<HostPluginManifest> = Result.success(emptyManifest(hostId, hostName, os))
+    ): HostPluginManifest = emptyManifest(hostId, hostName, os)
 
     override suspend fun composeUnion(): UnionedPluginManifest =
         if (firstCall) {
@@ -358,7 +360,7 @@ private class FlakyProfileStore(
             successUnion
         }
 
-    override suspend fun registerMachine(entry: MachineEntry): Result<Unit> = Result.success(Unit)
+    override suspend fun registerMachine(entry: MachineEntry) {}
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }

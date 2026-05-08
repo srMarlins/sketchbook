@@ -46,13 +46,14 @@ interface MachineProfileStore {
     /**
      * Build this host's slice of the plugin manifest from the local catalog and write it to
      * `<tenant>/profile/plugin_manifest_<host_id>.json`. Idempotent — every call overwrites
-     * the prior slice for this host.
+     * the prior slice for this host. Throws on cloud / encode failure;
+     * `CancellationException` propagates.
      */
     suspend fun publishHostSlice(
         hostId: String,
         hostName: String,
         os: Os,
-    ): Result<HostPluginManifest>
+    ): HostPluginManifest
 
     /**
      * List every host's slice and union them. Used by the plugin checklist screen
@@ -62,9 +63,11 @@ interface MachineProfileStore {
 
     /**
      * Add this host to `<tenant>/profile/machines.json` (read-merge-CAS). On registration
-     * conflicts, retries up to [REGISTER_MAX_RETRIES] before bailing.
+     * conflicts, retries up to [REGISTER_MAX_RETRIES] before bailing. Throws
+     * [SketchbookError.Conflict] when retries are exhausted, or the underlying cloud error
+     * for non-conflict failures; `CancellationException` propagates.
      */
-    suspend fun registerMachine(entry: MachineEntry): Result<Unit>
+    suspend fun registerMachine(entry: MachineEntry)
 
     /** Read the machines roster — used to drive the "Windows is still on v=1" banner. */
     suspend fun listMachines(): List<MachineEntry>
@@ -143,7 +146,7 @@ class CloudMachineProfileStore(
         hostId: String,
         hostName: String,
         os: Os,
-    ): Result<HostPluginManifest> {
+    ): HostPluginManifest {
         val plugins = composeHostSlice()
         val manifest =
             HostPluginManifest(
@@ -159,12 +162,13 @@ class CloudMachineProfileStore(
         // saves a round-trip per call; the previous "read then write with expected = existing
         // generation" was a half-CAS that failed silently on a same-host race rather than
         // actually protecting anything.
-        return cloud
+        cloud
             .writeDoc(
                 key = MachineProfileStore.pluginManifestKey(hostId),
                 expected = null,
                 bytes = bytes,
-            ).map { manifest }
+            ).getOrThrow()
+        return manifest
     }
 
     override suspend fun composeUnion(): UnionedPluginManifest {
@@ -211,7 +215,7 @@ class CloudMachineProfileStore(
         }
     }
 
-    override suspend fun registerMachine(entry: MachineEntry): Result<Unit> {
+    override suspend fun registerMachine(entry: MachineEntry) {
         repeat(MachineProfileStore.REGISTER_MAX_RETRIES) { attempt ->
             val current = cloud.readDoc(MachineProfileStore.MACHINES_KEY)
             val doc =
@@ -226,9 +230,9 @@ class CloudMachineProfileStore(
             val bytes = JSON.encodeToString(MachinesDoc.serializer(), doc).encodeToByteArray()
             val result = cloud.writeDoc(MachineProfileStore.MACHINES_KEY, expected, bytes)
             result
-                .onSuccess { return Result.success(Unit) }
+                .onSuccess { return }
                 .onFailure { err ->
-                    if (err !is SketchbookError.Conflict) return Result.failure(err)
+                    if (err !is SketchbookError.Conflict) throw err
                     // CAS conflict: jittered exponential backoff before re-reading. Without
                     // this, a herd of machines waking together (mass software-update day) hot-
                     // loops on contention and starves out the cluster. Caps at attempt index 5
@@ -236,7 +240,7 @@ class CloudMachineProfileStore(
                     delay(backoffDelayMillis(attempt))
                 }
         }
-        return Result.failure(SketchbookError.Conflict("machines.json CAS retries exhausted"))
+        throw SketchbookError.Conflict("machines.json CAS retries exhausted")
     }
 
     override suspend fun listMachines(): List<MachineEntry> {
