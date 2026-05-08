@@ -13,7 +13,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlin.random.Random
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -34,6 +36,12 @@ class PullPoller(
     private val snapshots: SnapshotRepository,
     private val treeJournal: TreeJournal? = null,
     private val pollInterval: Duration = 30.seconds,
+    /**
+     * Cap for empty-result interval doubling. An idle tree backs off polling exponentially
+     * up to this ceiling so projects with no active writers don't burn GCS Class A ops on
+     * a 30s cadence forever. Reset to [pollInterval] on the next non-empty list.
+     */
+    private val maxIdlePollInterval: Duration = 5.minutes,
 ) {
     /**
      * Long-running flow that emits each new [Snapshot] as it lands. Cancelling the collector
@@ -70,6 +78,7 @@ class PullPoller(
             // mid-poll; the registry refresh on the next launch will pick up native support.
             if (kind is TrackedTreeKind.Unknown) return@flow
             var sinceRev: SnapshotRev? = startAfter
+            var currentInterval: Duration = pollInterval
             while (true) {
                 // try/catch (CancellationException) instead of runCatching: poll lambdas execute
                 // suspend cloud calls, and runCatching would silently catch coroutine cancellation
@@ -134,7 +143,20 @@ class PullPoller(
                     sinceRev = rev
                     emit(snapshot)
                 }
-                delay(pollInterval)
+                // Empty-list backoff: idle trees double the interval up to the cap so a
+                // project with no active writers doesn't burn GCS Class A ops every 30s
+                // forever. Any non-empty list resets to the configured floor. Each cycle
+                // also gets ±25% jitter to break herd patterns when many trees are
+                // subscribed concurrently.
+                currentInterval =
+                    if (sorted.isEmpty()) {
+                        (currentInterval * 2).coerceAtMost(maxIdlePollInterval)
+                    } else {
+                        pollInterval
+                    }
+                val jitterMs = (currentInterval.inWholeMilliseconds / 4)
+                val jittered = currentInterval.inWholeMilliseconds + Random.nextLong(-jitterMs, jitterMs + 1)
+                delay(jittered.coerceAtLeast(0))
             }
         }
 }

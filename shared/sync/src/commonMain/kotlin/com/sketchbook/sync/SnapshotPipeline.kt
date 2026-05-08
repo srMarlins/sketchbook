@@ -17,8 +17,10 @@ import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -323,6 +325,11 @@ class SnapshotPipeline(
         var failure: SnapshotProgress? = null
         var attempt = 0
         while (attempt < MERGE_MAX_RETRIES && failure == null) {
+            // Jittered exponential backoff between attempts: two hosts both losing their CAS
+            // re-list and re-merge in tight lockstep without it, starving each other on a
+            // saturated link. First attempt has no delay (we just lost the CAS, list is
+            // already needed); subsequent attempts back off.
+            if (attempt > 0) delay(mergeBackoffMillis(attempt))
             attempt += 1
             val outcome = mergeAttempt(uuid, treeId, kind, current, originalParentRev)
             when (outcome) {
@@ -393,7 +400,23 @@ class SnapshotPipeline(
     }
 
     private companion object {
-        const val MERGE_MAX_RETRIES: Int = 3
+        const val MERGE_MAX_RETRIES: Int = 8
+
+        /**
+         * Backoff for [resolveMerge]'s CAS-loop. Doubles per attempt up to ~1.6s ceiling
+         * with up to 50ms jitter to break herd patterns when two hosts both re-list after
+         * losing CAS. Pattern follows
+         * https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/.
+         */
+        private fun mergeBackoffMillis(attempt: Int): Long {
+            val capped = attempt.coerceAtMost(MERGE_BACKOFF_MAX_SHIFT)
+            val base = MERGE_BACKOFF_BASE_MS shl capped
+            return base + Random.nextLong(0, MERGE_BACKOFF_JITTER_MS)
+        }
+
+        private const val MERGE_BACKOFF_BASE_MS: Long = 50L
+        private const val MERGE_BACKOFF_JITTER_MS: Long = 50L
+        private const val MERGE_BACKOFF_MAX_SHIFT: Int = 5
     }
 }
 
