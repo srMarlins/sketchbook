@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.serializer
 import kotlin.time.Instant
 
@@ -186,12 +188,23 @@ class SqlTreeJournal(
         )
 
     private companion object {
-        // Forward-compat: an older binary should ignore an unknown event variant rather than
-        // crash when reading the journal — mirrors SqlJournalRepository's lenient stance.
+        /**
+         * Forward-compat: an older binary should ignore an unknown event variant rather than
+         * crash when reading the journal. `ignoreUnknownKeys` only skips unknown *fields* — to
+         * survive an unknown polymorphic discriminator we register a default deserializer that
+         * routes those rows to [TreeJournalEvent.Unknown]. Mirrors [SqlJournalRepository]'s
+         * lenient stance.
+         */
         val DefaultJson: Json =
             Json {
                 ignoreUnknownKeys = true
                 classDiscriminator = "type"
+                serializersModule =
+                    SerializersModule {
+                        polymorphic(TreeJournalEvent::class) {
+                            defaultDeserializer { TreeJournalEvent.Unknown.serializer() }
+                        }
+                    }
             }
 
         val EventSerializer = serializer<TreeJournalEvent>()
@@ -205,10 +218,17 @@ private fun SnapshotKind.dbName(): String =
         SnapshotKind.Branch -> "branch"
     }
 
+/**
+ * Strict parse. The previous "fall back to [SnapshotKind.Auto]" behaviour silently corrupted the
+ * timeline view when SQLite returned an unknown enum string — flipped a `Named` snapshot to look
+ * `Auto` in the UI. Throwing here turns a corrupted catalog row into a loud failure (the row
+ * never reached `dbName()` to begin with, so this only fires when the catalog was hand-edited or
+ * a future schema introduced a kind this build doesn't know about).
+ */
 private fun parseSnapshotKind(raw: String): SnapshotKind =
     when (raw) {
         "auto" -> SnapshotKind.Auto
         "named" -> SnapshotKind.Named
         "branch" -> SnapshotKind.Branch
-        else -> SnapshotKind.Auto
+        else -> error("unknown snapshot_kind '$raw' in tree_snapshots row")
     }

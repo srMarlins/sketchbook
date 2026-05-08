@@ -304,7 +304,7 @@ class SnapshotPipeline(
             }.getOrElse { e ->
                 return MergeAttempt.Fail(SnapshotProgress.Failed(uuid, "merge: read winning manifest failed: ${e.message}"))
             }
-        val merged = mergeManifests(local = current, remote = winning, hostId = hostId, clock = clock)
+        val merged = mergeManifests(local = current, remote = winning, clock = clock)
         val result = cloud.appendManifestHead(treeId, kind, latest.generation, merged)
         if (result.isSuccess) {
             return MergeAttempt.Done(SnapshotProgress.Saved(uuid, merged.rev, SnapshotKind.Auto, branchLabel = null))

@@ -239,6 +239,36 @@ class SqlTreeJournalTest {
         }
 
     @Test
+    fun unknownEventDiscriminatorDecodesAsUnknown() =
+        runTest {
+            // Simulate an older binary reading a journal row written by a newer client that
+            // emitted an event variant ("future_event") this build doesn't know about. The
+            // polymorphic default-deserializer registered on DefaultJson should route the row
+            // to TreeJournalEvent.Unknown rather than throwing SerializationException and
+            // taking the journal flow down.
+            val (handle, journal) = setup()
+            handle.catalog.catalogQueries.insertTreeJournalEntry(
+                tree_id = treeId.value,
+                tree_kind = kind.wireName,
+                timestamp = now.toEpochMilliseconds(),
+                host_id = "host-a",
+                event_kind = "future_event",
+                payload_json = """{"type":"future_event","newField":"x","payload":[1,2,3]}""",
+                rev = 99L,
+            )
+
+            journal.observeRecent(treeId, limit = 10).test {
+                val rows = awaitItem()
+                assertEquals(1, rows.size)
+                assertTrue(
+                    rows[0].event is TreeJournalEvent.Unknown,
+                    "expected Unknown sentinel for unrecognized type discriminator, got ${rows[0].event::class.simpleName}",
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
     fun manifestFieldsAreCopiedIntoSnapshotRow() =
         runTest {
             val (_, journal) = setup()

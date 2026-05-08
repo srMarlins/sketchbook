@@ -60,7 +60,7 @@ class LeaseLockState(
             when (val result = cloud.acquireLock(treeId, kind, lock)) {
                 is LeaseAcquireResult.Acquired -> {
                     heartbeatJob?.cancel()
-                    heartbeatJob = scope.launch { heartbeatLoop(result.generation, lock.heartbeatSeq) }
+                    heartbeatJob = scope.launch { heartbeatLoop(result.generation) }
                     LockState.Owned(lock, result.generation)
                 }
 
@@ -72,16 +72,11 @@ class LeaseLockState(
         return outcome
     }
 
-    private suspend fun heartbeatLoop(
-        initialGeneration: Generation,
-        initialSeq: Long,
-    ) {
+    private suspend fun heartbeatLoop(initialGeneration: Generation) {
         var generation = initialGeneration
-        var seq = initialSeq
         while (true) {
             delay(heartbeatInterval)
             val now = clock.now()
-            seq += 1
             val refreshed =
                 LeaseLock(
                     ownerUserId = ownerUserId,
@@ -89,7 +84,6 @@ class LeaseLockState(
                     ownerHostName = hostName,
                     acquiredAt = (state.value as? LockState.Owned)?.lock?.acquiredAt ?: now,
                     expiresAt = now + ttl,
-                    heartbeatSeq = seq,
                 )
             when (val r = cloud.refreshLock(treeId, kind, refreshed, generation)) {
                 is LeaseRefreshResult.Refreshed -> {

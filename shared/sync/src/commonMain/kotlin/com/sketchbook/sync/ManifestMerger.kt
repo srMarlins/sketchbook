@@ -12,12 +12,15 @@ import kotlin.time.Clock
  *
  * Strategy:
  * - File set = union of relpaths across [local] and [remote] (tombstones included).
- * - Per relpath conflict: later `mtime` wins. Tie-break by [hostId] lexicographic so the merge
- *   is deterministic across both machines (each side computes the same merged manifest from the
- *   same inputs).
- * - `rev = max(local.rev, remote.rev) + 1`; `parentRev = remote.rev` (the manifest that beat us
- *   in CAS); kind set to [SnapshotKind.Auto]. The merged manifest is the *next* rev we'll attempt
- *   to CAS-write.
+ * - Per relpath conflict: later `mtime` wins. Tie-break by [Manifest.hostId] lexicographic so the
+ *   merge is deterministic across both machines (each side computes the same merged manifest from
+ *   the same inputs) — the merging host's id is *not* an input here, by design.
+ * - `rev = max(local.rev, remote.rev) + 1`; kind set to [SnapshotKind.Auto]. The merged manifest is
+ *   the *next* rev we'll attempt to CAS-write.
+ * - `parentRev = remote.rev` is **decorative under Merge mode**: it records the manifest that beat
+ *   us in CAS, not a true DAG ancestor. A chain of merges only remembers the most recent "loser"
+ *   side. Real ancestry is a v1.2 timeline concern; consumers should treat `parentRev` as a hint,
+ *   not authoritative lineage.
  * - Stats recomputed from the merged file map. Tombstones are excluded from `file_count` /
  *   `total_bytes`; `new_bytes` is carried from [local] since that reflects bytes this host
  *   actually uploaded — remote's bytes were already in the cloud.
@@ -29,7 +32,6 @@ import kotlin.time.Clock
 fun mergeManifests(
     local: Manifest,
     remote: Manifest,
-    hostId: String,
     clock: Clock,
 ): Manifest {
     val mergedFiles = LinkedHashMap<String, ManifestFile>()
@@ -37,7 +39,7 @@ fun mergeManifests(
     for (rel in rels) {
         val l = local.files[rel]
         val r = remote.files[rel]
-        mergedFiles[rel] = pickWinner(l, r, local.hostId, remote.hostId, hostId)
+        mergedFiles[rel] = pickWinner(l, r, local.hostId, remote.hostId)
     }
 
     val live = mergedFiles.values.filterNot { it.deleted }
@@ -64,8 +66,10 @@ private fun pickWinner(
     remote: ManifestFile?,
     localHost: String,
     remoteHost: String,
-    @Suppress("UNUSED_PARAMETER") mergerHost: String,
 ): ManifestFile {
+    require(local != null || remote != null) {
+        "pickWinner called with both sides null — relpath should have been excluded from the union"
+    }
     if (local == null) return remote!!
     if (remote == null) return local
     val cmp = local.mtime.compareTo(remote.mtime)

@@ -20,7 +20,6 @@ data class LeaseLock(
     val ownerHostName: String,
     val acquiredAt: Instant,
     val expiresAt: Instant,
-    val heartbeatSeq: Long = 0,
 )
 
 sealed interface LeaseAcquireResult {

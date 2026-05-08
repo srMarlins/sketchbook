@@ -162,4 +162,22 @@ sealed interface TreeJournalEvent {
             const val TYPE_KEY: String = "conflict"
         }
     }
+
+    /**
+     * Sentinel for events serialized by a newer binary using a discriminator this build doesn't
+     * recognize. Reached via the polymorphic default-deserializer registered on the journal's
+     * [Json]: `Json.ignoreUnknownKeys = true` only skips unknown *fields*, not unknown *types*, so
+     * without this fallback an older binary would throw [kotlinx.serialization.SerializationException]
+     * the moment it reads a journal row written by a newer client.
+     *
+     * Surfaces in the UI as a generic "future event" row; consumers should match on the known
+     * variants and fall through to ignore [Unknown].
+     */
+    @Serializable
+    @SerialName("__unknown")
+    data object Unknown : TreeJournalEvent {
+        override val typeKey: String get() = TYPE_KEY
+
+        const val TYPE_KEY: String = "__unknown"
+    }
 }

@@ -21,13 +21,18 @@ value class CloudDocKey(
         require(!path.contains("..")) { "CloudDocKey path must not contain '..', got '$path'" }
     }
 
-    /** Path prefix for `listDocs` — matches all keys whose [path] starts with [value]. */
+    /**
+     * Path prefix for `listDocs` — matches all keys whose [path] starts with [value]. An empty
+     * value is allowed (matches everything in the tenant); only the absolute / parent-traversal
+     * shapes are rejected so `listDocs` can't be tricked into walking outside the tenant prefix.
+     */
     @JvmInline
     value class Prefix(
         val value: String,
     ) {
         init {
             require(!value.startsWith("/")) { "CloudDocKey.Prefix must be relative, got '$value'" }
+            require(!value.contains("..")) { "CloudDocKey.Prefix must not contain '..', got '$value'" }
         }
     }
 }

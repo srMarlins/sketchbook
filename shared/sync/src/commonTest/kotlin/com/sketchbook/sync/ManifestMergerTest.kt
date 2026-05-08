@@ -20,7 +20,6 @@ class ManifestMergerTest {
     private val t0 = Instant.parse("2026-05-07T00:00:00Z")
     private val t1 = Instant.parse("2026-05-07T00:01:00Z")
     private val t2 = Instant.parse("2026-05-07T00:02:00Z")
-    private val mergerHost = "host-c"
     private val clock = FixedClock(Instant.parse("2026-05-07T00:03:00Z"))
 
     private fun blob(suffix: String): BlobHash = BlobHash("b3:" + suffix.padEnd(BlobHash.DIGEST_HEX_LEN, '0'))
@@ -66,7 +65,7 @@ class ManifestMergerTest {
                 parent = SnapshotRev(1),
             )
 
-        val merged = mergeManifests(local, remote, mergerHost, clock)
+        val merged = mergeManifests(local, remote, clock)
 
         assertEquals(setOf("a", "b"), merged.files.keys)
         assertEquals(SnapshotRev(3), merged.rev)
@@ -90,7 +89,7 @@ class ManifestMergerTest {
                 mapOf("x" to ManifestFile(blob("bb"), 7, t2)),
             )
 
-        val merged = mergeManifests(local, remote, mergerHost, clock)
+        val merged = mergeManifests(local, remote, clock)
         assertEquals(blob("bb"), merged.files["x"]!!.hash)
         assertEquals(7L, merged.files["x"]!!.size)
     }
@@ -110,7 +109,7 @@ class ManifestMergerTest {
                 "host-b",
                 mapOf("x" to ManifestFile(blob("bb"), 7, t1)),
             )
-        val merged = mergeManifests(local, remote, mergerHost, clock)
+        val merged = mergeManifests(local, remote, clock)
         assertEquals(blob("aa"), merged.files["x"]!!.hash)
     }
 
@@ -129,7 +128,7 @@ class ManifestMergerTest {
                 "host-b",
                 mapOf("x" to ManifestFile(hash = blob("bb"), size = 7, mtime = t1)),
             )
-        val merged = mergeManifests(local, remote, mergerHost, clock)
+        val merged = mergeManifests(local, remote, clock)
         assertTrue(merged.files["x"]!!.deleted)
         // Tombstones excluded from stats.
         assertEquals(0, merged.stats.fileCount)
@@ -155,7 +154,7 @@ class ManifestMergerTest {
                     "c" to ManifestFile(blob("cc"), 30, t1),
                 ),
             )
-        val merged = mergeManifests(local, remote, mergerHost, clock)
+        val merged = mergeManifests(local, remote, clock)
         assertEquals(3, merged.stats.fileCount)
         assertEquals(60L, merged.stats.totalBytes)
     }
@@ -164,7 +163,7 @@ class ManifestMergerTest {
     fun newRevIsMaxPlusOne() {
         val local = mf(5, "host-a", emptyMap())
         val remote = mf(8, "host-b", emptyMap())
-        val merged = mergeManifests(local, remote, mergerHost, clock)
+        val merged = mergeManifests(local, remote, clock)
         assertEquals(SnapshotRev(9), merged.rev)
         assertEquals(SnapshotRev(8), merged.parentRev)
     }

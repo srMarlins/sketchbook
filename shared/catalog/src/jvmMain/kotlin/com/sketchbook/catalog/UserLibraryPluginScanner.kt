@@ -5,7 +5,7 @@ import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.PluginFormat
 import com.sketchbook.core.PluginRef
 import com.sketchbook.core.TrackedTreeId
-import java.nio.file.FileVisitOption
+import kotlinx.coroutines.CancellationException
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.isRegularFile
@@ -49,8 +49,11 @@ class UserLibraryPluginScanner(
             return ScanResult(scannedRelpaths = emptyList(), pluginCount = 0)
         }
         val now = clock.now().toEpochMilliseconds()
+        // Don't follow symlinks — UL setups commonly link out to other plugin install dirs (or to
+        // network shares); we want the user-content surface only, and we also don't want
+        // FileSystemLoopException to take down the scan if the user has a cycle.
         val files: List<Path> =
-            Files.walk(root, FileVisitOption.FOLLOW_LINKS).use { stream ->
+            Files.walk(root).use { stream ->
                 stream
                     .asSequence()
                     .filter { it.isRegularFile() }
@@ -71,7 +74,18 @@ class UserLibraryPluginScanner(
                     tree_id = treeId.value,
                     rel_path = rel,
                 )
-                val plugins = runCatching { parser.parsePlugins(file) }.getOrElse { emptyList() }
+                // A bad ALS/ADG should drop *its* plugins, not the rest of the scan. We treat
+                // parser failures as "this file has no extractable plugins" rather than aborting.
+                // CancellationException is rethrown so the parent scope can still cancel mid-scan
+                // — runCatching used to swallow it. Audit tracked in #132.
+                val plugins =
+                    try {
+                        parser.parsePlugins(file)
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (_: Throwable) {
+                        emptyList()
+                    }
                 for (plugin in plugins) {
                     catalog.catalogQueries.upsertUserLibraryPlugin(
                         tree_id = treeId.value,
