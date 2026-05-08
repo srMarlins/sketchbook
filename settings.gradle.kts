@@ -52,6 +52,10 @@ include(
     ":app-mcp",
     ":tests:architecture",
     ":tests:integration",
+    // Phase 0 spike for the Firebase migration. Throwaway module — delete with the
+    // whole `spikes/firebase-poc/` directory once findings are appended to
+    // docs/plans/2026-05-08-firebase-migration-design.md.
+    ":spikes:firebase-poc",
 )
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
