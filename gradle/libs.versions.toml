@@ -52,6 +52,12 @@ javakeyring = "1.0.4"
 # with a vendored JNI wrapper if profiling shows the hash phase as a bottleneck.
 blake3 = "1.3"
 
+# JWT / JWKS verification (security-commitment #1: verify Google ID token signature
+# client-side before the Identity Toolkit exchange). Nimbus is the de-facto Java standard;
+# rolling our own RS256 verification is a known footgun (algorithm confusion, missing
+# claim validation, time-skew handling).
+nimbus-jose-jwt = "10.0.2"
+
 # Testing
 kotest = "6.1.11"
 turbine = "1.2.1"
@@ -122,6 +128,9 @@ blake3 = { module = "io.github.rctcwyvrn:blake3", version.ref = "blake3" }
 
 # OS keychain (JVM)
 javakeyring = { module = "com.github.javakeyring:java-keyring", version.ref = "javakeyring" }
+
+# JWT / JWKS verification (security-commitment #1)
+nimbus-jose-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbus-jose-jwt" }
 
 # UI
 material3-adaptive = { module = "org.jetbrains.compose.material3.adaptive:adaptive", version.ref = "material3-adaptive" }

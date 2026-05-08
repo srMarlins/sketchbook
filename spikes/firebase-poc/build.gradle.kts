@@ -35,4 +35,11 @@ dependencies {
     implementation(libs.ktor.client.cio)
 
     implementation(libs.kermit)
+
+    // JWKS / JWT signature verification (security-commitment #1).
+    implementation(libs.nimbus.jose.jwt)
+
+    testImplementation(kotlin("test-junit"))
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.ktor.client.mock)
 }

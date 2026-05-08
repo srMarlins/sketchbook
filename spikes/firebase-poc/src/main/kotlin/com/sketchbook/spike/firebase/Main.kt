@@ -1,22 +1,30 @@
 /*
  * Phase 0 spike entry point.
  *
- * Each `probe*` function answers one question from
- * docs/plans/2026-05-08-firebase-migration-design.md "Phase 0: Spike + plan":
+ * Usage (from repo root):
+ *   ./gradlew :spikes:firebase-poc:run --args="<probe> [args...]"
  *
- *   1. Pattern A's FirebasePlatform token hook gates Firestore listener RPCs
- *   2. Listener offline-reconnect behaviour is acceptable
- *   3. Firebase Storage REST works with Firebase ID token bearer
- *   4. JWKS verification of Google ID token in OAuth flow
- *   5. Library version conflicts vs our pinned coroutines/serialization/ktor
+ * Probes (see Probes.kt for details):
+ *   listener-sanity <email> <password>
+ *     Validates Firestore listeners work on JVM via gitlive at all. Requires:
+ *       - Firebase Console → Authentication → Sign-in method → enable Email/Password
+ *       - Create a test user under Authentication → Users
  *
- * Run with `./gradlew :spikes:firebase-poc:run` once env is configured (see
- * README in this module — TODO).
+ *   exchange-google-token <google-id-token>
+ *     Validates Identity Toolkit REST exchange + JWKS verification. Get a Google ID
+ *     token from https://developers.google.com/oauthplayground/ (configure with our
+ *     OAuth Client ID + scopes "openid email profile") for a one-shot test.
+ *
+ *   storage-rest <firebase-id-token>
+ *     Validates Storage REST PUT works with a Firebase ID token bearer. Pipe the
+ *     output of `exchange-google-token` here.
  */
 package com.sketchbook.spike.firebase
 
+import kotlinx.coroutines.runBlocking
+
 fun main(args: Array<String>) {
-    println("firebase-poc spike — see Main.kt for which probe to run")
-    println("args: ${args.joinToString()}")
-    // Probe wiring lands in subsequent commits.
+    runBlocking {
+        runProbe(args.toList())
+    }
 }
