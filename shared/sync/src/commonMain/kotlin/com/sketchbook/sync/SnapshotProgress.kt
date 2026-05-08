@@ -44,6 +44,13 @@ sealed interface SnapshotProgress {
         val rev: SnapshotRev,
         val kind: SnapshotKind,
         val branchLabel: String? = null,
+        /**
+         * Per-relpath data-loss reports from [ConflictMode.Merge] resolution. Empty for
+         * BranchFork mode and for clean Merge runs (no two-sided collisions on distinct
+         * bytes). The UI / journal should surface non-empty entries so the user knows their
+         * delta was discarded.
+         */
+        val mergeConflicts: List<MergeConflict> = emptyList(),
     ) : SnapshotProgress
 
     data class Failed(

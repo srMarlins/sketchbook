@@ -326,7 +326,11 @@ class SnapshotPipeline(
             attempt += 1
             val outcome = mergeAttempt(uuid, treeId, kind, current, originalParentRev)
             when (outcome) {
-                is MergeAttempt.Done -> return outcome.progress
+                is MergeAttempt.Done -> {
+                    val saved = outcome.progress as? SnapshotProgress.Saved ?: return outcome.progress
+                    return saved.copy(mergeConflicts = outcome.conflicts)
+                }
+
                 is MergeAttempt.Retry -> current = outcome.merged
                 is MergeAttempt.Fail -> failure = outcome.progress
             }
@@ -356,10 +360,14 @@ class SnapshotPipeline(
             } catch (e: Throwable) {
                 return MergeAttempt.Fail(SnapshotProgress.Failed(uuid, "merge: read winning manifest failed: ${e.message}"))
             }
-        val merged = mergeManifests(local = current, remote = winning, clock = clock)
+        val outcome = mergeManifests(local = current, remote = winning, clock = clock)
+        val merged = outcome.manifest
         val result = cloud.appendManifestHead(treeId, kind, latest.generation, merged)
         if (result.isSuccess) {
-            return MergeAttempt.Done(SnapshotProgress.Saved(uuid, merged.rev, SnapshotKind.Auto, branchLabel = null))
+            return MergeAttempt.Done(
+                progress = SnapshotProgress.Saved(uuid, merged.rev, SnapshotKind.Auto, branchLabel = null),
+                conflicts = outcome.conflicts,
+            )
         }
         val err = result.exceptionOrNull()
         return if (err is SketchbookError.Conflict) {
@@ -372,6 +380,7 @@ class SnapshotPipeline(
     private sealed interface MergeAttempt {
         data class Done(
             val progress: SnapshotProgress,
+            val conflicts: List<MergeConflict>,
         ) : MergeAttempt
 
         data class Retry(

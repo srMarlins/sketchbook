@@ -65,7 +65,7 @@ class ManifestMergerTest {
                 parent = SnapshotRev(1),
             )
 
-        val merged = mergeManifests(local, remote, clock)
+        val outcome = mergeManifests(local, remote, clock); val merged = outcome.manifest
 
         assertEquals(setOf("a", "b"), merged.files.keys)
         assertEquals(SnapshotRev(3), merged.rev)
@@ -89,7 +89,7 @@ class ManifestMergerTest {
                 mapOf("x" to ManifestFile(blob("bb"), 7, t2)),
             )
 
-        val merged = mergeManifests(local, remote, clock)
+        val outcome = mergeManifests(local, remote, clock); val merged = outcome.manifest
         assertEquals(blob("bb"), merged.files["x"]!!.hash)
         assertEquals(7L, merged.files["x"]!!.size)
     }
@@ -109,7 +109,7 @@ class ManifestMergerTest {
                 "host-b",
                 mapOf("x" to ManifestFile(blob("bb"), 7, t1)),
             )
-        val merged = mergeManifests(local, remote, clock)
+        val outcome = mergeManifests(local, remote, clock); val merged = outcome.manifest
         assertEquals(blob("aa"), merged.files["x"]!!.hash)
     }
 
@@ -128,7 +128,7 @@ class ManifestMergerTest {
                 "host-b",
                 mapOf("x" to ManifestFile(hash = blob("bb"), size = 7, mtime = t1)),
             )
-        val merged = mergeManifests(local, remote, clock)
+        val outcome = mergeManifests(local, remote, clock); val merged = outcome.manifest
         assertTrue(merged.files["x"]!!.deleted)
         // Tombstones excluded from stats.
         assertEquals(0, merged.stats.fileCount)
@@ -154,7 +154,7 @@ class ManifestMergerTest {
                     "c" to ManifestFile(blob("cc"), 30, t1),
                 ),
             )
-        val merged = mergeManifests(local, remote, clock)
+        val outcome = mergeManifests(local, remote, clock); val merged = outcome.manifest
         assertEquals(3, merged.stats.fileCount)
         assertEquals(60L, merged.stats.totalBytes)
     }
@@ -163,8 +163,55 @@ class ManifestMergerTest {
     fun newRevIsMaxPlusOne() {
         val local = mf(5, "host-a", emptyMap())
         val remote = mf(8, "host-b", emptyMap())
-        val merged = mergeManifests(local, remote, clock)
+        val outcome = mergeManifests(local, remote, clock)
+        val merged = outcome.manifest
         assertEquals(SnapshotRev(9), merged.rev)
         assertEquals(SnapshotRev(8), merged.parentRev)
+    }
+
+    @Test
+    fun samePathDifferentBytesProducesConflict() {
+        // Both hosts wrote different bytes at "x" with the same mtime. LWW host-id
+        // tie-break picks host-a; host-b's bytes are silently discarded. Surface that as a
+        // MergeConflict so the journal can flag the data loss.
+        val local =
+            mf(
+                2,
+                "host-a",
+                mapOf("x" to ManifestFile(blob("aa"), 5, t1)),
+            )
+        val remote =
+            mf(
+                2,
+                "host-b",
+                mapOf("x" to ManifestFile(blob("bb"), 7, t1)),
+            )
+        val outcome = mergeManifests(local, remote, clock)
+        assertEquals(1, outcome.conflicts.size)
+        val c = outcome.conflicts.single()
+        assertEquals("x", c.relpath)
+        assertEquals(blob("aa"), c.localHash)
+        assertEquals(blob("bb"), c.remoteHash)
+        assertEquals(MergeConflict.Side.Local, c.pickedSide)
+    }
+
+    @Test
+    fun samePathSameBytesIsNotConflict() {
+        // Both hosts ended up with identical bytes (e.g., re-imported the same file). LWW
+        // still picks one, but the loser's bytes match the winner's — no data loss.
+        val local =
+            mf(
+                2,
+                "host-a",
+                mapOf("x" to ManifestFile(blob("aa"), 5, t1)),
+            )
+        val remote =
+            mf(
+                2,
+                "host-b",
+                mapOf("x" to ManifestFile(blob("aa"), 5, t1)),
+            )
+        val outcome = mergeManifests(local, remote, clock)
+        assertTrue(outcome.conflicts.isEmpty(), "expected no conflicts, got ${outcome.conflicts}")
     }
 }
