@@ -146,24 +146,36 @@ class DirectGcsBackendTest {
         }
 
     /**
-     * Regression: HEAD CAS conflict must short-circuit before the timestamped object is
-     * written, otherwise every losing CAS leaves an orphan `<rev:08d>-...json` in the bucket
-     * and `readManifest(rev=N)` becomes non-deterministic between winners and losers.
+     * Regression: HEAD CAS conflict must clean up the timestamped body this writer just put
+     * down, so two racing writers don't leave both bodies in `manifests/` listing at the
+     * same rev. Body-first ordering: timestamped goes first (so a HEAD CAS that succeeds is
+     * always backed by a confirmed body); a HEAD CAS-loser then DELETEs its own orphan.
      */
     @Test
-    fun appendManifestHeadCASMismatchDoesNotWriteOrphanTimestamped() =
+    fun appendManifestHeadCASMismatchDeletesOrphanTimestamped() =
         runTest {
             val manifest = manifestFixture()
             val seenWrites = mutableListOf<String>()
+            val seenDeletes = mutableListOf<String>()
             val backend =
                 makeBackend { request ->
-                    val name = request.url.parameters["name"].orEmpty()
-                    seenWrites += name
-                    val isHeadWrite = name.endsWith("/HEAD")
-                    if (isHeadWrite) {
-                        respond("", HttpStatusCode.PreconditionFailed)
-                    } else {
-                        respond("", HttpStatusCode.OK)
+                    when (request.method) {
+                        HttpMethod.Post -> {
+                            val name = request.url.parameters["name"].orEmpty()
+                            seenWrites += name
+                            if (name.endsWith("/HEAD")) {
+                                respond("", HttpStatusCode.PreconditionFailed)
+                            } else {
+                                respond("", HttpStatusCode.OK, headersOf("x-goog-generation", "10"))
+                            }
+                        }
+
+                        HttpMethod.Delete -> {
+                            seenDeletes += request.url.encodedPath
+                            respond("", HttpStatusCode.NoContent)
+                        }
+
+                        else -> error("unexpected method ${request.method}")
                     }
                 }
             val result =
@@ -174,8 +186,12 @@ class DirectGcsBackendTest {
                     manifest = manifest,
                 )
             assertTrue(result.isFailure)
-            assertEquals(1, seenWrites.size, "expected only the HEAD write attempt, saw $seenWrites")
-            assertTrue(seenWrites.single().endsWith("/HEAD"), "expected only HEAD attempt, saw ${seenWrites.single()}")
+            val err = result.exceptionOrNull()
+            assertTrue(err is com.sketchbook.core.SketchbookError.Conflict, "expected Conflict, got $err")
+            assertEquals(2, seenWrites.size, "expected timestamped + HEAD writes, saw $seenWrites")
+            assertTrue(!seenWrites.first().endsWith("/HEAD"), "expected timestamped first, saw ${seenWrites.first()}")
+            assertTrue(seenWrites.last().endsWith("/HEAD"), "expected HEAD second, saw ${seenWrites.last()}")
+            assertEquals(1, seenDeletes.size, "expected orphan cleanup DELETE, saw $seenDeletes")
         }
 
     /**

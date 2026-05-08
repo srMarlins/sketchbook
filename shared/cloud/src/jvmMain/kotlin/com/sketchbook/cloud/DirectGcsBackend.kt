@@ -317,8 +317,8 @@ class DirectGcsBackend(
     }
 
     @Suppress("ReturnCount")
-    // Two writes (HEAD pointer then timestamped body), each with three terminal outcomes
-    // (success, CAS conflict, other failure). Collapsing the early-returns would force a
+    // Two writes (timestamped body, then HEAD pointer CAS). Each has terminal outcomes for
+    // success / CAS conflict / other failure. Collapsing the early-returns would force a
     // sentinel-then-dispatch dance that's harder to read than the linear two-step.
     override suspend fun appendManifestHead(
         treeId: TrackedTreeId,
@@ -326,18 +326,20 @@ class DirectGcsBackend(
         expectedHead: Generation?,
         manifest: Manifest,
     ): Result<Generation> {
-        // Two writes, ordered HEAD-first so a CAS-loser never leaves an orphan timestamped
-        // object behind. The timestamped copy is the historical artifact (`<rev:08d>-...json`)
-        // — if the HEAD CAS fails, no timestamped object should share that rev prefix, or
-        // `readManifest` (which lists by rev and picks `firstOrNull`) becomes
-        // non-deterministic between the winner and a stale loser.
+        // Order: timestamped body first, then CAS HEAD pointer. The previous HEAD-first
+        // ordering produced a corruption window where a successful HEAD update followed by a
+        // failed body write left HEAD pointing at a manifest object that didn't exist —
+        // `readManifest` would 404 on the latest rev. The current ordering inverts that: a
+        // body write that succeeds without a HEAD update is harmless (HEAD still points at
+        // the prior manifest, and the orphan body lives at this host's unique
+        // `<rev:08d>-<timestamp>-<host>.json` path; a CAS-loser cleans up its own orphan
+        // below). A HEAD CAS that succeeds is preceded by a confirmed body write, so HEAD
+        // never points at a missing object.
         val timestamped = manifestPath(treeId, kind, manifest.rev.value, manifest.timestamp.toString(), manifest.hostId)
         val headPath = headPath(treeId, kind)
 
-        // R-3 (#127): HEAD is a small pointer (~100 bytes) instead of a full duplicate of the
-        // manifest body. For a manifest with thousands of file entries the previous "write the
-        // body twice" doubled every snapshot's write cost. The pointer references the
-        // historical timestamped object that holds the actual bytes.
+        // R-3 (#127): HEAD is a small pointer (~100 bytes) referencing the historical
+        // timestamped object that holds the actual bytes.
         val pointer =
             ManifestHeadPointer(
                 rev = manifest.rev.value,
@@ -346,37 +348,9 @@ class DirectGcsBackend(
         val pointerBody = json.encodeToString(ManifestHeadPointer.serializer(), pointer).toByteArray(Charsets.UTF_8)
         val timestampedBody = json.encodeToString(Manifest.serializer(), manifest).toByteArray(Charsets.UTF_8)
 
-        // HEAD pointer — CAS via expectedHead. Must succeed before we PUT the timestamped copy.
-        val headResp =
-            http.post(uploadUrl()) {
-                authHeader()
-                parameter("uploadType", "media")
-                parameter("name", headPath)
-                if (expectedHead != null) {
-                    headers { append("x-goog-if-generation-match", expectedHead.raw) }
-                }
-                contentType(ContentType.Application.Json)
-                setBody(pointerBody)
-            }
-        val headGen =
-            when (headResp.status) {
-                HttpStatusCode.OK -> {
-                    headResp.headers["x-goog-generation"]
-                        ?: return Result.failure(SketchbookError.IntegrityError("missing x-goog-generation on HEAD write"))
-                }
-
-                HttpStatusCode.PreconditionFailed -> {
-                    return Result.failure(SketchbookError.Conflict("HEAD generation mismatch on tree=${treeId.value}"))
-                }
-
-                else -> {
-                    return Result.failure(remoteFailure(headResp, "PUT $headPath"))
-                }
-            }
-
-        // Timestamped object — must not exist (rev is unique). Idempotent on retry: a 412 here
-        // means another caller already wrote the same rev, which is fine since the bytes are
-        // identical. Any other failure is fatal (HEAD already advanced; we'd lose history).
+        // Timestamped body — must not exist (path includes hostId+timestamp so this only
+        // collides on a literal retry of the same call). 412 is treated as success so retry
+        // is idempotent.
         val timestampedResp =
             http.post(uploadUrl()) {
                 authHeader()
@@ -389,7 +363,44 @@ class DirectGcsBackend(
         if (timestampedResp.status != HttpStatusCode.OK && timestampedResp.status != HttpStatusCode.PreconditionFailed) {
             return Result.failure(remoteFailure(timestampedResp, "PUT $timestamped"))
         }
-        return Result.success(Generation(headGen))
+
+        // HEAD pointer — CAS via expectedHead.
+        val headResp =
+            http.post(uploadUrl()) {
+                authHeader()
+                parameter("uploadType", "media")
+                parameter("name", headPath)
+                if (expectedHead != null) {
+                    headers { append("x-goog-if-generation-match", expectedHead.raw) }
+                }
+                contentType(ContentType.Application.Json)
+                setBody(pointerBody)
+            }
+        return when (headResp.status) {
+            HttpStatusCode.OK -> {
+                val gen =
+                    headResp.headers["x-goog-generation"]
+                        ?: return Result.failure(SketchbookError.IntegrityError("missing x-goog-generation on HEAD write"))
+                Result.success(Generation(gen))
+            }
+
+            HttpStatusCode.PreconditionFailed -> {
+                // CAS-loser cleanup: best-effort delete of our timestamped orphan so two
+                // racing writers don't leave both bodies in `manifests/` listing at the same
+                // rev. Failure is non-fatal — we already lost the CAS — but the listing
+                // semantics are cleaner without the orphan.
+                try {
+                    http.delete(objectUrl(timestamped)) { authHeader() }
+                } catch (c: kotlinx.coroutines.CancellationException) {
+                    throw c
+                } catch (_: Throwable) {
+                    // Orphan stays. Non-fatal.
+                }
+                Result.failure(SketchbookError.Conflict("HEAD generation mismatch on tree=${treeId.value}"))
+            }
+
+            else -> Result.failure(remoteFailure(headResp, "PUT $headPath"))
+        }
     }
 
     override suspend fun acquireLock(
