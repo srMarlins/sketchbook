@@ -2,7 +2,7 @@
 
 **PR:** [feat: backend generalization (TrackedTree + CloudDoc) #125](https://github.com/srMarlins/sketchbook/pull/125)
 **Branch:** `feat/backend-generalization-v2`
-**Status:** 8 comments already addressed by `0245895`. Original plan was 8 commits; **revised to 6** after the migrator-isn't-needed pivot below.
+**Status:** All six commits landed on `feat/backend-generalization-v2` (`046ce48` → `260c1b3`). Six initial gemini-bot comments were addressed by `0245895` before this plan was written. Original plan was 8 commits; **revised to 6** after the migrator-isn't-needed pivot below.
 
 > **2026-05-07 pivot — drop the migrator entirely.** Sketchbook hasn't shipped to production. There are no users with `<tenant>/manifests/<uuid>/...` (v=1) data in their buckets. The migrator existed to relocate v=1 → v=2; with zero v=1 data, the relocate path is dead code. Reviewer R-1 already noted that `DirectGcsBackend.manifestsPrefix` reads from the legacy path for `Project` while the migrator writes to v=2 — i.e. the migrator was already a no-op for the only kind that had any data. Action:
 >
@@ -189,7 +189,7 @@ Six commits. Each is rebase-friendly and can be reviewed independently. Status: 
 - Dropped `clock = Clock.System` and `ownerUserId = UserId.DEFAULT` defaults on `CloudTreeRegistry`; added `@Provides` bindings in `DesktopAppGraph`.
 - New tests: `lookupRoundTripsCreatedAtAndCreatedByHost`, `refreshCacheDropsPhantomEntries`, `CatalogDbMigrationWalkTest` v11 assertions.
 
-### Commit 3 — delete migrator system, unify cloud paths on v=2, move bootstrap into BootstrapData
+### Commit 3 — delete migrator system, unify cloud paths on v=2, move bootstrap into BootstrapData ✅ (`7069890`)
 
 > **Pivot 2026-05-07.** The pre-shipped product has zero v=1 users; the migrator's relocate path is dead code. Deleting the whole migration system simplifies the codebase substantially and resolves R-12–R-29 by elimination.
 
@@ -217,7 +217,7 @@ Six commits. Each is rebase-friendly and can be reviewed independently. Status: 
 
 **Estimated diff:** ~1,000 lines deleted, ~250 lines added.
 
-### Commit 4 — MachineProfileStore: bind, IO dispatch, parallel reads, jittered backoff
+### Commit 4 — MachineProfileStore: bind, IO dispatch, parallel reads, jittered backoff ✅ (`6d5d24b`)
 
 **Files:** `MachineProfileStore.kt`, `MachineProfileStoreTest.kt`, `DesktopAppGraph.kt`
 **Closes:** R-56, R-57, R-58, R-59, R-60, R-61, R-62, R-63, R-64, R-70
@@ -232,7 +232,7 @@ Six commits. Each is rebase-friendly and can be reviewed independently. Status: 
 
 **Verification:** new test `composeUnion_parallelizes_reads`, `publishHostSlice_does_not_read_first`, `registerMachine_backoff_jitters`.
 
-### Commit 5 — PluginChecklistViewModel + Screen: bind, hoist, atomic state, injected probe
+### Commit 5 — PluginChecklistViewModel + Screen: bind, hoist, atomic state, injected probe ✅ (`86c7b7d`)
 
 **Files:** `PluginChecklistViewModel.kt`, `PluginChecklistScreen.kt`, `PluginChecklistRoute.kt` (new), `PluginChecklistViewModelTest.kt`, `SetupNav.kt`, `DesktopAppGraph.kt`
 **Closes:** R-34–R-50, R-52–R-55
@@ -249,7 +249,7 @@ Six commits. Each is rebase-friendly and can be reviewed independently. Status: 
 
 **Verification:** new tests for `reprobe_filtersOsAtPending_AND_alreadyInstalled`, `loadFailedSurfacesOnException`, `recentlyInstalledRebuiltOnReprobe`.
 
-### Commit 6 — small fixes + docs
+### Commit 6 — small fixes + docs ✅ (`260c1b3`)
 
 **Files:** `ManifestMerger.kt`, `Lock.kt`, `CloudDocKey.kt`, `SqlTreeJournal.kt`, `UserLibraryWorkingTree.kt`, `UserLibraryPluginScanner.kt`
 **Closes:** R-6, R-7, R-8, R-9, R-74, R-75, R-76, R-77, R-83
