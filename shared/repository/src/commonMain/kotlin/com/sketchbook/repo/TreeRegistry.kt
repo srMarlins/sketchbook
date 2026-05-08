@@ -14,6 +14,7 @@ import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -172,10 +173,16 @@ class CloudTreeRegistry(
         // cached entry get the same answer they'd get against a freshly-fetched cloud doc.
         // Malformed JSON (shouldn't happen in practice) falls back to empty rather than
         // throwing — losing collaborators is a permission tightening, not a correctness break.
+        // Try/catch instead of `runCatching` per CLAUDE.md: runCatching at suspend boundaries
+        // catches `CancellationException` and breaks structured concurrency.
         val collaborators =
-            runCatching {
+            try {
                 JSON.decodeFromString(CollaboratorListSerializer, row.collaborators_json)
-            }.getOrDefault(emptyList())
+            } catch (c: CancellationException) {
+                throw c
+            } catch (_: Throwable) {
+                emptyList()
+            }
         return TreeRegistryEntry(
             treeId = TrackedTreeId(row.tree_id),
             kind = TrackedTreeKind.fromWire(row.tree_kind),

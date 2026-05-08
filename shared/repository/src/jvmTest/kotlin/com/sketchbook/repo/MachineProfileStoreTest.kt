@@ -18,6 +18,9 @@ import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.RawSource
 import kotlinx.serialization.json.Json
@@ -42,7 +45,7 @@ class MachineProfileStoreTest {
             seedUserLibraryPlugin(handle.catalog, name = "Diva", type = "vst3", installed = true)
 
             val cloud = FakeProfileCloud()
-            val store = CloudMachineProfileStore(cloud, handle.catalog, clock)
+            val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
             val slice = store.publishHostSlice("macstudio", "Mac Studio", os = "darwin").getOrThrow()
 
@@ -109,7 +112,7 @@ class MachineProfileStoreTest {
                         ).encodeToByteArray(),
             )
 
-            val store = CloudMachineProfileStore(cloud, handle.catalog, clock)
+            val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
             val unioned = store.composeUnion()
 
             assertEquals(2, unioned.perHost.size)
@@ -119,12 +122,51 @@ class MachineProfileStoreTest {
         }
 
     @Test
+    fun composeUnionReadsHostSlicesInParallel() =
+        runTest {
+            // Seed three host slices and have the cloud-fake track concurrent in-flight reads.
+            // The pre-rewrite implementation called `readDoc` sequentially per host, so the
+            // high-water mark would be 1; the rewrite uses async + awaitAll, so it should hit
+            // the full N (=3) concurrent read.
+            val handle = CatalogDb.openInMemory()
+            val cloud = ConcurrencyTrackingCloud()
+            seedHostSlice(cloud, hostId = "mac")
+            seedHostSlice(cloud, hostId = "win")
+            seedHostSlice(cloud, hostId = "linux")
+            val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
+
+            val unioned = store.composeUnion()
+
+            assertEquals(3, unioned.perHost.size)
+            assertEquals(
+                3,
+                cloud.maxInFlightReads,
+                "expected 3 concurrent reads (one per host slice), got ${cloud.maxInFlightReads}",
+            )
+        }
+
+    @Test
+    fun publishHostSliceDoesNotReadFirst() =
+        runTest {
+            // The pre-rewrite version did a "read for generation, then write with expected =
+            // existing.generation" half-CAS that bought nothing — the kdoc says per-host
+            // writes don't conflict. Verify the read is gone.
+            val handle = CatalogDb.openInMemory()
+            val cloud = ConcurrencyTrackingCloud()
+            val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
+
+            store.publishHostSlice("macstudio", "Mac Studio", os = "darwin").getOrThrow()
+
+            assertEquals(0, cloud.readCallCount, "publishHostSlice should not read before writing")
+        }
+
+    @Test
     fun registerMachineRetriesOnCasConflict() =
         runTest {
             val handle = CatalogDb.openInMemory()
             // Inject one CAS conflict on machines.json so registerMachine has to retry.
             val cloud = FakeProfileCloud(machinesConflicts = 1)
-            val store = CloudMachineProfileStore(cloud, handle.catalog, clock)
+            val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
             val result =
                 store.registerMachine(
@@ -148,7 +190,7 @@ class MachineProfileStoreTest {
         runTest {
             val handle = CatalogDb.openInMemory()
             val cloud = FakeProfileCloud()
-            val store = CloudMachineProfileStore(cloud, handle.catalog, clock)
+            val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
             store
                 .registerMachine(
@@ -248,6 +290,31 @@ class MachineProfileStoreTest {
     }
 
     private var ulParentSeeded = false
+
+    private suspend fun seedHostSlice(
+        cloud: CloudBackend,
+        hostId: String,
+    ) {
+        val json =
+            Json {
+                encodeDefaults = true
+                ignoreUnknownKeys = true
+                prettyPrint = false
+            }
+        val bytes =
+            json
+                .encodeToString(
+                    HostPluginManifest.serializer(),
+                    HostPluginManifest(
+                        hostId = hostId,
+                        hostName = hostId,
+                        os = "darwin",
+                        computedAt = now,
+                        plugins = listOf(HostPluginEntry("Serum", "vst3", installed = true)),
+                    ),
+                ).encodeToByteArray()
+        cloud.writeDoc(MachineProfileStore.pluginManifestKey(hostId), expected = Generation.ZERO, bytes = bytes)
+    }
 }
 
 private class FixedClock2(
@@ -336,6 +403,125 @@ private class FakeProfileCloud(
             docs[key] = bytes to gen
             return Result.failure(SketchbookError.Conflict("test-injected"))
         }
+        val current = docs[key]
+        if (expected != null) {
+            if (expected == Generation.ZERO) {
+                if (current != null) return Result.failure(SketchbookError.Conflict("exists"))
+            } else if (current == null || current.second != expected) {
+                return Result.failure(SketchbookError.Conflict("gen mismatch"))
+            }
+        }
+        val gen = Generation((nextGen++).toString())
+        docs[key] = bytes to gen
+        return Result.success(gen)
+    }
+
+    override suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef> =
+        docs.keys
+            .filter { it.path.startsWith(prefix.value) }
+            .map { CloudDocRef(it, docs[it]!!.second) }
+}
+
+/**
+ * Cloud fake that tracks the high-water mark of concurrent `readDoc` calls and total
+ * `writeDoc` reads. Used to pin two invariants for `MachineProfileStore`:
+ *
+ * 1. `composeUnion` reads host slices in parallel — without parallelism, `maxInFlightReads`
+ *    would be 1 even for N hosts.
+ * 2. `publishHostSlice` performs zero `readDoc` calls — the previous half-CAS read-then-write
+ *    was wasted I/O.
+ *
+ * Each `readDoc` sleeps briefly so overlapping calls actually overlap under `runTest`'s
+ * virtual time; without the delay, the unconfined dispatcher would serialize them and the
+ * high-water mark would be 1 even with a correct implementation.
+ */
+private class ConcurrencyTrackingCloud : CloudBackend {
+    private val docs = mutableMapOf<CloudDocKey, Pair<ByteArray, Generation>>()
+    private var nextGen = 1L
+    private val mutex = Mutex()
+    private var inFlightReads = 0
+    var maxInFlightReads = 0
+        private set
+    var readCallCount = 0
+        private set
+
+    override suspend fun headBlob(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): Boolean = false
+
+    override suspend fun putBlob(
+        hash: BlobHash,
+        source: RawSource,
+        size: Long,
+        scope: BlobScope,
+    ) {}
+
+    override suspend fun getBlob(
+        hash: BlobHash,
+        scope: BlobScope,
+    ): RawSource = error("n/a")
+
+    override suspend fun readManifest(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        rev: SnapshotRev,
+    ): Manifest = error("n/a")
+
+    override suspend fun listManifests(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        sinceRev: SnapshotRev?,
+    ): List<ManifestRef> = emptyList()
+
+    override suspend fun appendManifestHead(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        expectedHead: Generation?,
+        manifest: Manifest,
+    ): Result<Generation> = Result.failure(SketchbookError.Conflict("n/a"))
+
+    override suspend fun acquireLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        lock: LeaseLock,
+    ): LeaseAcquireResult = LeaseAcquireResult.Acquired(Generation("1"))
+
+    override suspend fun refreshLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        lock: LeaseLock,
+        expected: Generation,
+    ): LeaseRefreshResult = LeaseRefreshResult.Refreshed(Generation("1"))
+
+    override suspend fun releaseLock(
+        treeId: TrackedTreeId,
+        kind: TrackedTreeKind,
+        expected: Generation,
+    ) {}
+
+    override suspend fun readDoc(key: CloudDocKey): CloudDocRead? {
+        mutex.withLock {
+            readCallCount += 1
+            inFlightReads += 1
+            if (inFlightReads > maxInFlightReads) maxInFlightReads = inFlightReads
+        }
+        try {
+            // Pause long enough for sibling launches to also enter the readDoc body before
+            // any of them returns. 5 ms covers the scheduler's launch overhead.
+            delay(5)
+            val d = docs[key] ?: return null
+            return CloudDocRead(d.first, d.second)
+        } finally {
+            mutex.withLock { inFlightReads -= 1 }
+        }
+    }
+
+    override suspend fun writeDoc(
+        key: CloudDocKey,
+        expected: Generation?,
+        bytes: ByteArray,
+    ): Result<Generation> {
         val current = docs[key]
         if (expected != null) {
             if (expected == Generation.ZERO) {

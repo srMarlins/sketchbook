@@ -130,7 +130,7 @@ class BootstrapDataTest {
         settings: SettingsRepository,
     ): BootstrapData {
         val registry = CloudTreeRegistry(cloud, catalog, clock, UserId.DEFAULT)
-        val profile = CloudMachineProfileStore(cloud, catalog, clock)
+        val profile = CloudMachineProfileStore(cloud, catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
         return BootstrapData(
             registry = registry,
             profile = profile,

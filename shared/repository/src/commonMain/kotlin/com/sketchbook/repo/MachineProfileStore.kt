@@ -3,12 +3,23 @@ package com.sketchbook.repo
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
+import com.sketchbook.core.AppScope
 import com.sketchbook.core.CloudDocKey
 import com.sketchbook.core.SketchbookError
+import dev.zacsweers.metro.ContributesBinding
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -109,15 +120,22 @@ internal data class MachinesDoc(
 )
 
 /**
- * Constructed at the call site (the desktop bootstrap wiring) once a [CloudBackend] is
- * available. Not DI-bound at AppScope today because the cloud handle is per-user via
- * `SwappableSyncQueue`; promoted to a `UserScope` binding once
+ * Bound at AppScope today because every other repository in the desktop graph is. The
+ * `CloudBackend` dep is per-user (`SwappableSyncQueue`-driven), and Metro will only attempt
+ * to resolve this binding when something downstream requests `MachineProfileStore` — at
+ * which point the graph needs a `CloudBackend` provider too.
+ *
+ * Promoted to a true `UserScope` binding once
  * https://github.com/srMarlins/sketchbook/issues/130 lands.
  */
+@SingleIn(AppScope::class)
+@ContributesBinding(AppScope::class)
+@Inject
 class CloudMachineProfileStore(
     private val cloud: CloudBackend,
     private val catalog: Catalog,
-    private val clock: Clock = Clock.System,
+    private val clock: Clock,
+    private val ioDispatcher: CoroutineDispatcher,
 ) : MachineProfileStore {
     override suspend fun publishHostSlice(
         hostId: String,
@@ -134,31 +152,36 @@ class CloudMachineProfileStore(
                 plugins = plugins,
             )
         val bytes = JSON.encodeToString(HostPluginManifest.serializer(), manifest).encodeToByteArray()
-        // Per-host file — overwrites unconditionally. Two hosts publishing concurrently
-        // touch different keys, so there's no conflict to retry against.
-        val existing = cloud.readDoc(MachineProfileStore.pluginManifestKey(hostId))
-        val writeResult =
-            cloud.writeDoc(
+        // Per-host file — overwrites unconditionally. Two hosts publishing concurrently touch
+        // different keys, so there's no conflict to retry against. Skipping the read here
+        // saves a round-trip per call; the previous "read then write with expected = existing
+        // generation" was a half-CAS that failed silently on a same-host race rather than
+        // actually protecting anything.
+        return cloud
+            .writeDoc(
                 key = MachineProfileStore.pluginManifestKey(hostId),
-                expected = existing?.generation,
+                expected = null,
                 bytes = bytes,
-            )
-        return writeResult.map { manifest }
+            ).map { manifest }
     }
 
     override suspend fun composeUnion(): UnionedPluginManifest {
         val refs = cloud.listDocs(MachineProfileStore.PLUGIN_MANIFEST_PREFIX)
+        // Fan out the per-host doc reads in parallel — N round-trips serialized was a wall-time
+        // floor of `N * latency` on accounts with several machines registered. Structured
+        // concurrency cancels siblings if any read throws; decode errors get downgraded to
+        // null per-host so a single corrupt slice doesn't poison the whole union.
         val perHost =
-            refs.mapNotNull { ref ->
-                val read = cloud.readDoc(ref.key) ?: return@mapNotNull null
-                runCatching {
-                    JSON.decodeFromString(HostPluginManifest.serializer(), read.bytes.decodeToString())
-                }.getOrNull()
+            coroutineScope {
+                refs
+                    .map { ref -> async { readAndDecodeHostManifest(ref) } }
+                    .awaitAll()
+                    .filterNotNull()
             }
-        val union = mutableMapOf<Pair<String, String>, HostPluginEntry>()
+        val union = mutableMapOf<PluginKey, HostPluginEntry>()
         for (slice in perHost) {
             for (entry in slice.plugins) {
-                val key = entry.name to entry.format
+                val key = PluginKey(entry.name, entry.format)
                 val current = union[key]
                 union[key] =
                     if (current == null) {
@@ -172,10 +195,22 @@ class CloudMachineProfileStore(
         return UnionedPluginManifest(perHost = perHost, union = union.values.toList())
     }
 
+    private suspend fun readAndDecodeHostManifest(ref: com.sketchbook.cloud.CloudDocRef): HostPluginManifest? {
+        val read = cloud.readDoc(ref.key) ?: return null
+        return try {
+            JSON.decodeFromString(HostPluginManifest.serializer(), read.bytes.decodeToString())
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Throwable) {
+            // A corrupt slice is forward-compat fodder (older binary reading newer fields it
+            // can't parse) or a one-off bad write. Drop it from the union rather than failing
+            // the whole compose; surfacing it via the journal is tracked in #132.
+            null
+        }
+    }
+
     override suspend fun registerMachine(entry: MachineEntry): Result<Unit> {
-        var attempt = 0
-        while (attempt < MachineProfileStore.REGISTER_MAX_RETRIES) {
-            attempt += 1
+        repeat(MachineProfileStore.REGISTER_MAX_RETRIES) { attempt ->
             val current = cloud.readDoc(MachineProfileStore.MACHINES_KEY)
             val doc =
                 if (current == null) {
@@ -192,6 +227,11 @@ class CloudMachineProfileStore(
                 .onSuccess { return Result.success(Unit) }
                 .onFailure { err ->
                     if (err !is SketchbookError.Conflict) return Result.failure(err)
+                    // CAS conflict: jittered exponential backoff before re-reading. Without
+                    // this, a herd of machines waking together (mass software-update day) hot-
+                    // loops on contention and starves out the cluster. Caps at attempt index 5
+                    // to keep the worst-case latency bounded if the cloud is genuinely busy.
+                    delay(backoffDelayMillis(attempt))
                 }
         }
         return Result.failure(SketchbookError.Conflict("machines.json CAS retries exhausted"))
@@ -199,41 +239,48 @@ class CloudMachineProfileStore(
 
     override suspend fun listMachines(): List<MachineEntry> {
         val read = cloud.readDoc(MachineProfileStore.MACHINES_KEY) ?: return emptyList()
-        return runCatching {
+        return try {
             JSON.decodeFromString(MachinesDoc.serializer(), read.bytes.decodeToString()).machines
-        }.getOrDefault(emptyList())
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Throwable) {
+            emptyList()
+        }
     }
 
     /**
      * Internal helper: build this host's plugin slice from the local catalog, unioning
      * `project_plugins` and `user_library_plugins` and applying OR-semantics on
-     * `is_installed`.
+     * `is_installed`. Wrapped in `withContext(ioDispatcher)` because SqlDelight
+     * `executeAsList` is blocking and `publishHostSlice` is a `suspend fun` reachable from
+     * UI dispatchers.
      */
-    private fun composeHostSlice(): List<HostPluginEntry> {
-        val byKey = mutableMapOf<Pair<String, String>, HostPluginEntry>()
-        val projectRows = catalog.catalogQueries.selectAllDistinctProjectPluginsWithInstalled().executeAsList()
-        for (row in projectRows) {
-            val key = row.plugin_name to row.plugin_type
-            byKey[key] =
-                HostPluginEntry(
-                    name = row.plugin_name,
-                    format = row.plugin_type,
-                    installed = (row.is_installed ?: 0L) > 0L,
-                )
+    private suspend fun composeHostSlice(): List<HostPluginEntry> =
+        withContext(ioDispatcher) {
+            val byKey = mutableMapOf<PluginKey, HostPluginEntry>()
+            val projectRows = catalog.catalogQueries.selectAllDistinctProjectPluginsWithInstalled().executeAsList()
+            for (row in projectRows) {
+                val key = PluginKey(row.plugin_name, row.plugin_type)
+                byKey[key] =
+                    HostPluginEntry(
+                        name = row.plugin_name,
+                        format = row.plugin_type,
+                        installed = (row.is_installed ?: 0L) > 0L,
+                    )
+            }
+            val ulRows = catalog.catalogQueries.selectAllDistinctUserLibraryPluginsWithInstalled().executeAsList()
+            for (row in ulRows) {
+                val key = PluginKey(row.plugin_name, row.plugin_type)
+                val existing = byKey[key]
+                byKey[key] =
+                    HostPluginEntry(
+                        name = row.plugin_name,
+                        format = row.plugin_type,
+                        installed = (existing?.installed ?: false) || ((row.is_installed ?: 0L) > 0L),
+                    )
+            }
+            byKey.values.toList()
         }
-        val ulRows = catalog.catalogQueries.selectAllDistinctUserLibraryPluginsWithInstalled().executeAsList()
-        for (row in ulRows) {
-            val key = row.plugin_name to row.plugin_type
-            val existing = byKey[key]
-            byKey[key] =
-                HostPluginEntry(
-                    name = row.plugin_name,
-                    format = row.plugin_type,
-                    installed = (existing?.installed ?: false) || ((row.is_installed ?: 0L) > 0L),
-                )
-        }
-        return byKey.values.toList()
-    }
 
     private companion object {
         val JSON =
@@ -243,9 +290,28 @@ class CloudMachineProfileStore(
                 prettyPrint = false
             }
 
-        // Suppress the "unused" warning on ListSerializer — it's part of the Json import surface
-        // even though we don't reach for it directly here. (Kept for symmetry with TreeRegistry.)
-        @Suppress("unused")
-        val ListSerializerKeepImport = ListSerializer(HostPluginEntry.serializer())
+        /**
+         * Backoff for [registerMachine]'s CAS retry loop. Base 50 ms doubled per attempt
+         * (capped at attempt index 5 → 1.6 s) with up to 50 ms of random jitter to break
+         * herd patterns on mass-update events. Pattern follows
+         * https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/.
+         */
+        fun backoffDelayMillis(attempt: Int): Long {
+            val capped = attempt.coerceAtMost(5)
+            val base = 50L shl capped
+            return base + Random.nextLong(0, 50)
+        }
     }
 }
+
+/**
+ * Internal map key for `(plugin_name, plugin_type)` rows. Promoted from `Pair<String,String>`
+ * so the field names show up in stack traces and `equals`/`hashCode` come from the data class
+ * for free. The wire format on `HostPluginEntry` stays string-typed; promoting `format` to
+ * the typed `PluginFormat` enum end-to-end is tracked in
+ * https://github.com/srMarlins/sketchbook/issues/129.
+ */
+internal data class PluginKey(
+    val name: String,
+    val format: String,
+)
