@@ -2,27 +2,7 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ArgumentListWrapping:SqlRepairRepositoryAlsRewriteTest.kt:SqlRepairRepositoryAlsRewriteTest$(ByteArrayInputStream(gzipped))</ID>
-    <ID>ArgumentListWrapping:SqlRepairRepositoryAlsRewriteTest.kt:SqlRepairRepositoryAlsRewriteTest$(Charsets.UTF_8)</ID>
-    <ID>ArgumentListWrapping:SqlRepairRepositoryAlsRewriteTest.kt:SqlRepairRepositoryAlsRewriteTest$(gzipped)</ID>
-    <ID>ArgumentListWrapping:SqlRepairRepositoryMacPathTest.kt:SqlRepairRepositoryMacPathTest$(ByteArrayInputStream(gzipped))</ID>
-    <ID>ArgumentListWrapping:SqlRepairRepositoryMacPathTest.kt:SqlRepairRepositoryMacPathTest$(Charsets.UTF_8)</ID>
-    <ID>ArgumentListWrapping:SqlRepairRepositoryMacPathTest.kt:SqlRepairRepositoryMacPathTest$(gzipped)</ID>
-    <ID>ClassSignature:SqlRepairRepositoryMacPathTest.kt:SqlRepairRepositoryMacPathTest$RecordingPatchService : AlsPatchService</ID>
-    <ID>FunctionLiteral:SqlRepairRepositoryAlsRewriteTest.kt:SqlRepairRepositoryAlsRewriteTest$&lt;anonymous&gt;</ID>
-    <ID>FunctionLiteral:SqlRepairRepositoryMacPathTest.kt:SqlRepairRepositoryMacPathTest$&lt;anonymous&gt;</ID>
-    <ID>FunctionSignature:SqlProjectRepositoryTest.kt:SqlProjectRepositoryTest$private fun seed: Long</ID>
-    <ID>FunctionSignature:SqlRepairRepositoryAlsRewriteTest.kt:SqlRepairRepositoryAlsRewriteTest$private fun seedProjectWithMissingSample: ProjectId</ID>
-    <ID>FunctionSignature:SqlRepairRepositoryAlsRewriteTest.kt:SqlRepairRepositoryAlsRewriteTest$private fun setup: Triple&lt;Catalog, InMemoryJournalRepository, SqlRepairRepository&gt;</ID>
-    <ID>FunctionSignature:SqlRepairRepositoryAlsRewriteTest.kt:SqlRepairRepositoryAlsRewriteTest$private fun ungzipToString: String</ID>
-    <ID>FunctionSignature:SqlRepairRepositoryMacPathTest.kt:SqlRepairRepositoryMacPathTest$private fun setup: Triple&lt;Catalog, InMemoryJournalRepository, SqlRepairRepository&gt;</ID>
-    <ID>FunctionSignature:SqlRepairRepositoryMacPathTest.kt:SqlRepairRepositoryMacPathTest$private fun ungzipToString: String</ID>
-    <ID>MaxLineLength:SqlProjectRepositoryTest.kt:SqlProjectRepositoryTest$private</ID>
-    <ID>MaxLineLength:SqlRepairRepositoryAlsRewriteTest.kt:SqlRepairRepositoryAlsRewriteTest$private fun ungzipToString: String</ID>
-    <ID>MaxLineLength:SqlRepairRepositoryMacPathTest.kt:SqlRepairRepositoryMacPathTest$private fun ungzipToString: String</ID>
-    <ID>NoUnusedImports:SqlJournalRepositoryTest.kt:com.sketchbook.repo.impl.SqlJournalRepositoryTest.kt</ID>
-    <ID>NoUnusedImports:SqlProjectRepositoryTest.kt:com.sketchbook.repo.SqlProjectRepositoryTest.kt</ID>
-    <ID>Wrapping:SqlRepairRepositoryAlsRewriteTest.kt:SqlRepairRepositoryAlsRewriteTest$it.readBytes().toString(Charsets.UTF_8)</ID>
-    <ID>Wrapping:SqlRepairRepositoryMacPathTest.kt:SqlRepairRepositoryMacPathTest$it.readBytes().toString(Charsets.UTF_8)</ID>
+    <ID>EmptyFunctionBlock:MachineProfileStoreTest.kt:FakeProfileCloud${}</ID>
+    <ID>EmptyFunctionBlock:TreeRegistryTest.kt:FakeDocCloud${}</ID>
   </CurrentIssues>
 </SmellBaseline>

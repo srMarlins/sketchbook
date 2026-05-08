@@ -18,8 +18,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
@@ -41,8 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * Reads at the destination path use `expected = Generation.ZERO` (must-not-exist) so a
  * partially-migrated bucket completes the rest on re-run rather than overwriting work the
  * other host has already done.
- */
-/**
+ *
  * Constructed at the call site (the desktop migration coordinator) once a
  * [CloudBackend] is available — there's no app-scoped CloudBackend binding because the
  * cloud handle is per-user / per-cred-rotation via `SwappableSyncQueue`.
@@ -194,7 +193,10 @@ class JvmCloudMigrator(
             .executeAsList()
             .map { ProjectIdentityRow(uuid = it.uuid, name = it.name) }
 
-    private data class ProjectIdentityRow(val uuid: String, val name: String)
+    private data class ProjectIdentityRow(
+        val uuid: String,
+        val name: String,
+    )
 
     private companion object {
         const val USER_LIBRARY_SCOPE_KEY: String = "default"
@@ -224,5 +226,8 @@ class JvmCloudMigrator(
         }
     }
 
-    private data class ParsedLegacy(val projectUuid: String, val fileName: String)
+    private data class ParsedLegacy(
+        val projectUuid: String,
+        val fileName: String,
+    )
 }

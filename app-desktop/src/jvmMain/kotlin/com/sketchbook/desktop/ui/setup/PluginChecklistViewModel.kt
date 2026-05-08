@@ -5,11 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.sketchbook.repo.HostPluginEntry
 import com.sketchbook.repo.MachineProfileStore
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * State holder for [PluginChecklistScreen]. Reads from [MachineProfileStore.composeUnion],
@@ -26,8 +26,7 @@ import kotlinx.coroutines.launch
  * invocation lives in app-desktop's plugin-presence wiring. We model the state transition
  * here so the VM tests pin the move-from-pending-to-recentlyInstalled rule without
  * dragging the probe machinery into the test.
- */
-/**
+ *
  * Manually constructed in the desktop bootstrap wiring once a [MachineProfileStore] is
  * available — same reason as [com.sketchbook.migration.JvmCloudMigrator] / the store
  * itself: cloud handle is per-user, not AppScope.
@@ -136,7 +135,11 @@ class PluginChecklistViewModel(
         companion object {
             val System: OsProvider =
                 OsProvider {
-                    val raw = java.lang.System.getProperty("os.name")?.lowercase().orEmpty()
+                    val raw =
+                        java.lang.System
+                            .getProperty("os.name")
+                            ?.lowercase()
+                            .orEmpty()
                     when {
                         raw.contains("mac") || raw.contains("darwin") -> "darwin"
                         raw.contains("win") -> "windows"

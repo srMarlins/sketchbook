@@ -35,9 +35,10 @@ fun PluginChecklistScreen(
     viewModel: PluginChecklistViewModel,
     onReprobe: () -> Unit,
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = modifier.padding(16.dp)) {
         Text("Set up this Mac", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         val total = state.pending.size + state.recentlyInstalled.size + state.alreadyInstalled.size

@@ -15,10 +15,17 @@
     <ID>FunctionNaming:InboxScreen.kt:@Composable private fun HistoryColumn</ID>
     <ID>FunctionNaming:InboxScreen.kt:@Composable private fun IssuesColumn</ID>
     <ID>FunctionNaming:InboxScreen.kt:@Composable private fun SuggestedColumn</ID>
+    <ID>FunctionNaming:MigrationDialog.kt:@Composable fun MigrationDialog</ID>
+    <ID>FunctionNaming:MigrationDialog.kt:@Composable private fun FailedDialog</ID>
+    <ID>FunctionNaming:MigrationDialog.kt:@Composable private fun PendingDialog</ID>
+    <ID>FunctionNaming:MigrationDialog.kt:@Composable private fun RunningDialog</ID>
     <ID>FunctionNaming:MissingPluginsChip.kt:@Composable fun MissingPluginsChip</ID>
     <ID>FunctionNaming:MissingPluginsChip.kt:@Composable private fun MissingPluginRowView</ID>
     <ID>FunctionNaming:MissingPluginsChip.kt:@Composable private fun MissingPluginsPopup</ID>
     <ID>FunctionNaming:OnboardingPromptBanner.kt:@Composable fun OnboardingPromptBanner</ID>
+    <ID>FunctionNaming:PluginChecklistScreen.kt:@Composable fun PluginChecklistScreen</ID>
+    <ID>FunctionNaming:PluginChecklistScreen.kt:@Composable private fun PluginRowItem</ID>
+    <ID>FunctionNaming:PluginChecklistScreen.kt:@Composable private fun SectionHeader</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable fun RootContent</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailHistorySection</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun DetailHistoryTab</ID>
