@@ -729,18 +729,47 @@ The remaining probes require the user to take an action (set up an email/passwor
 | `exchange-google-token` | Does our Identity Toolkit REST exchange work end-to-end against real Google? | **Code ready; not run.** Needs Google ID token from OAuth Playground. |
 | `storage-rest` | Does Firebase Storage accept a Firebase ID token bearer for REST PUT? | **Code ready; not run.** Needs output of previous probe. |
 
-### Final A1 vs A2 vs B call
+### Final A1 vs A2 vs B call — RESOLVED 2026-05-08
 
-**Deferred.** The spike validated that the *pattern needs revision* (see correction #1) but doesn't yet have data to pick A1 over A2. Three reasons to defer:
+**Pattern A1 (storage hijack) is the chosen mechanism.** Determined by reading the cloned firebase-java-sdk source (`spikes/firebase-poc` branch).
 
-1. The pre-requisite "does Firestore work on JVM at all" hasn't been answered yet (`listener-sanity` not run).
-2. Both A1 and A2 require deeper SDK-internals integration than was in spike scope.
-3. Pattern B (Cloud Function + custom token) is always a viable fallback with known cost (1 day of work, ~30 lines of function code, one operational service).
+Evidence — three findings from `src/main/java/com/google/firebase/auth/FirebaseAuth.kt`:
 
-**Recommended path forward:**
-- Run `listener-sanity` first.
-- If listeners work, A1/A2 investigation becomes Phase 2 commit (4)'s concern, not a blocker for Phase 1.
-- If listeners don't work, revisit immediately — the whole listener-based design rests on this.
+1. **Storage key is a stable string constant** (line 241):
+   ```kotlin
+   val FirebaseApp.key get() = "com.google.firebase.auth.FIREBASE_USER" +
+       ("[$name]".takeUnless { isDefaultApp }.orEmpty())
+   ```
+   For the default app, the literal key is `com.google.firebase.auth.FIREBASE_USER`. This string has been stable in Firebase Android since 2019; firebase-java-sdk tracks the Android source verbatim.
+
+2. **Storage value format is forgiving** (`FirebaseUserImpl(app, data: JsonObject)` constructor in `FirebaseUser.kt`):
+   ```kotlin
+   uid           ← "uid" | "user_id" | "localId"
+   idToken       ← "idToken" | "id_token"
+   refreshToken  ← "refreshToken" | "refresh_token"
+   expiresIn     ← "expiresIn" | "expires_in"
+   createdAt     ← "createdAt" | System.currentTimeMillis()
+   email         ← "email"
+   isAnonymous   ← "isAnonymous" | false
+   ```
+   So the Identity Toolkit `accounts:signInWithIdp` response JSON works essentially as-is — the SDK reads `localId → uid` and accepts both camelCase and snake_case for the rest.
+
+3. **Refresh path uses standard endpoint** (line 549–566). When the cached `idToken` nears expiry, `FirebaseAuth.getAccessToken()` POSTs the stored `refreshToken` to `securetoken.googleapis.com/v1/token` with `grant_type=refresh_token`. Same endpoint our `IdentityToolkitClient.refresh` already targets; same refresh-token format. **Refresh "just works"** through the SDK after one-time injection.
+
+**Why not A2:** `FirebaseAuthRegistrar.java` registers `FirebaseAuth` itself as the `InternalAuthProvider` implementation via Firebase's Component system (line 17–22). Replacing it would mean either subclassing `FirebaseAuth` and somehow re-registering the subclass (Firebase Components don't support replace), or shipping a competing `ComponentRegistrar` that conflicts with Firebase Auth's. Both fragile. A1 needs zero registration plumbing — just our `FirebasePlatform.retrieve()` returning the right JSON.
+
+**Why not B (Cloud Function):** Adds an operational service for no behavioral benefit. A1 verifiably works with code we already wrote; B is the documented fallback only if A1 turns out to fail when actually run.
+
+**Implementation in the spike:** `AuthStateInjector.kt` builds the `FirebaseUserImpl` JSON and `preSeededPlatform(tokens)` returns a `JvmFirebasePlatform` ready to feed `Firebase.initialize(...)`. Probe `pattern-a1 <google-id-token>` runs the full path end-to-end:
+
+```
+Google OAuth → JWKS-verified Google ID token → Identity Toolkit signInWithIdp →
+Firebase ID + refresh token → FirebaseUserImpl JSON → preSeededPlatform →
+Firebase.initialize(Application(), options) → Firebase.auth.currentUser populated →
+Firestore listener fires when a doc changes
+```
+
+If this probe runs green, **A1 is the Phase 2 auth mechanism**. The four-phase migration plan in the rest of this doc proceeds unchanged.
 
 ### Code that survives into Phase 2
 

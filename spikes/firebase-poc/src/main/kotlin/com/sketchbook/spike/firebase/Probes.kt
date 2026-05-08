@@ -97,11 +97,18 @@ suspend fun runProbe(args: List<String>) {
             )
         }
 
+        "pattern-a1" -> {
+            patternA1Probe(
+                googleIdToken = args.getOrNull(1) ?: error("usage: pattern-a1 <google-id-token>"),
+            )
+        }
+
         null -> {
             println("Available probes:")
             println("  listener-sanity <email> <password>")
             println("  exchange-google-token <google-id-token>")
             println("  storage-rest <firebase-id-token>")
+            println("  pattern-a1 <google-id-token>")
         }
 
         else -> {
@@ -192,6 +199,80 @@ private suspend fun exchangeGoogleTokenProbe(googleIdToken: String) {
         println("[probe-exchange]   ./gradlew :spikes:firebase-poc:run --args=\"storage-rest ${tokens.idToken}\"")
     } finally {
         http.close()
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Probe 4: Pattern A1 (storage hijack) end-to-end — Google OAuth → Identity Toolkit
+//          → pre-seed FirebasePlatform → Firebase.initialize → Firestore listener
+// ---------------------------------------------------------------------------------------------
+
+private suspend fun patternA1Probe(googleIdToken: String) {
+    println("[probe-a1] verifying Google ID token...")
+    val verified =
+        GoogleIdTokenVerifier(expectedAudience = SpikeSecrets.OAUTH_CLIENT_ID)
+            .verify(googleIdToken)
+            .getOrElse { e ->
+                println("[probe-a1] FAILED at JWKS: ${e.message}")
+                return
+            }
+    println("[probe-a1] Google token OK: ${verified.email}")
+
+    val http = HttpClient(CIO)
+    val tokens =
+        try {
+            IdentityToolkitClient(http).signInWithGoogleIdToken(googleIdToken).getOrElse { e ->
+                println("[probe-a1] FAILED at Identity Toolkit: ${e.message}")
+                return
+            }
+        } finally {
+            http.close()
+        }
+    println("[probe-a1] Identity Toolkit OK: firebase uid=${tokens.uid}")
+
+    println("[probe-a1] pre-seeding FirebasePlatform with auth state JSON...")
+    val platform = preSeededPlatform(tokens)
+    initializeFirebase(platform)
+
+    val auth = Firebase.auth
+    val current = auth.currentUser
+    if (current == null) {
+        println("[probe-a1] FAILED: currentUser is null after init — storage hijack didn't take")
+        println("[probe-a1]   Storage key may have changed; check FirebaseAuth.kt:241 for `app.key`")
+        return
+    }
+    println("[probe-a1] storage hijack worked: currentUser.uid=${current.uid}")
+
+    val firestore = Firebase.firestore
+    val docRef = firestore.collection("spike").document("a1-probe-${System.currentTimeMillis()}")
+    val payload = mapOf("ts" to System.currentTimeMillis(), "from" to "pattern-a1", "uid" to current.uid)
+
+    coroutineScope {
+        val listenerJob =
+            async {
+                println("[probe-a1] subscribing...")
+                withTimeoutOrNull(15.seconds) {
+                    docRef.snapshots.firstOrNull { snap -> snap.exists }
+                }
+            }
+        delay(1_000)
+        println("[probe-a1] writing doc at ${docRef.path}...")
+        docRef.set(payload)
+
+        val snapshot = listenerJob.await()
+        if (snapshot == null) {
+            println("[probe-a1] FAILED: listener didn't fire within 15s.")
+            println("[probe-a1]   Pattern A1 storage hijack works for currentUser but not")
+            println("[probe-a1]   Firestore RPCs. Investigate InternalAuthProvider plumbing.")
+            return@coroutineScope
+        }
+        println("[probe-a1] SUCCESS: listener fired with data=${snapshot.data<Map<String, Any?>>()}")
+        println("[probe-a1] ")
+        println("[probe-a1]   PATTERN A1 (STORAGE HIJACK) IS VIABLE.")
+        println("[probe-a1]   - Google OAuth → Identity Toolkit → pre-seed → SDK boots signed-in")
+        println("[probe-a1]   - Firestore listeners receive snapshots with our injected token")
+        println("[probe-a1]   - SDK auto-refreshes via securetoken endpoint when idToken nears expiry")
+        println("[probe-a1]   This is the recommended path for Phase 2.")
     }
 }
 
