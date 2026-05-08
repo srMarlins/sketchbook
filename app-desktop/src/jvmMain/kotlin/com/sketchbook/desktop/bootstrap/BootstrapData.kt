@@ -101,12 +101,11 @@ class BootstrapData(
                     kind = TrackedTreeKind.UserLibrary,
                     scopeKey = USER_LIBRARY_SCOPE_KEY,
                     displayName = USER_LIBRARY_DISPLAY_NAME,
-                    // Host-prefixed mint: each host's first launch produces a distinct
-                    // tree-id, but registerAll's idempotency on `(kind, scope_key)` means
-                    // the second host sees the first one's id and reuses it. v1.2 sync
-                    // convergence is unnecessary while no v1 has shipped — see closed issue
-                    // #131.
-                    treeId = TrackedTreeId(USER_LIBRARY_TREE_ID_PREFIX + hostId.value),
+                    // One UL tree per user, shared across hosts. registerAll's idempotency
+                    // on `(kind, scope_key)` means the second host sees the first one's
+                    // tree-id and reuses it; both hosts publish into the same tree and the
+                    // Merge conflict mode resolves divergence.
+                    treeId = TrackedTreeId(USER_LIBRARY_TREE_ID),
                     ownerUserId = ownerUserId,
                     createdByHost = hostId.value,
                 )
@@ -165,7 +164,7 @@ class BootstrapData(
     private companion object {
         const val USER_LIBRARY_SCOPE_KEY: String = "default"
         const val USER_LIBRARY_DISPLAY_NAME: String = "Ableton User Library"
-        const val USER_LIBRARY_TREE_ID_PREFIX: String = "tt-ul-"
+        const val USER_LIBRARY_TREE_ID: String = "tt-ul-default"
     }
 }
 

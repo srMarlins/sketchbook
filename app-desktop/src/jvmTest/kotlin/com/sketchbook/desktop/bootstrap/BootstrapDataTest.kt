@@ -74,9 +74,10 @@ class BootstrapDataTest {
             assertTrue((TrackedTreeKind.Project to "p-1") in byKey, "missing p-1 entry")
             assertTrue((TrackedTreeKind.Project to "p-2") in byKey, "missing p-2 entry")
             assertTrue((TrackedTreeKind.UserLibrary to "default") in byKey, "missing UL entry")
-            // UL tree-id is host-prefixed.
+            // UL is one shared tree per user, not host-prefixed; both hosts converge on
+            // the same tree-id via registerAll's `(kind, scope_key)` idempotency.
             assertEquals(
-                TrackedTreeId("tt-ul-${hostId.value}"),
+                TrackedTreeId("tt-ul-default"),
                 byKey.getValue(TrackedTreeKind.UserLibrary to "default").treeId,
             )
             // Flag flipped → next launch is a no-op.
