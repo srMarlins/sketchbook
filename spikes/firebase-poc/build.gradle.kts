@@ -30,6 +30,11 @@ dependencies {
     implementation(libs.gitlive.firebase.firestore)
 
     implementation(libs.kotlinx.coroutines.core)
+    // gitlive's auth post-sign-in path uses Dispatchers.Main to notify listeners
+    // (FirebaseAuth.kt:330–333). On Android the Play Services SDK registers it; on JVM
+    // we have to bring our own. Swing dispatcher works for both Compose Desktop apps
+    // (which run on Swing/AWT) and pure CLI use cases.
+    implementation(libs.kotlinx.coroutines.swing)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)

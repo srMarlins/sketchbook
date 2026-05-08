@@ -701,6 +701,7 @@ Live in branch `spike/firebase-poc`. Module `spikes/firebase-poc/` (deletable wh
 ### Verified at build / test time
 
 - **gitlive 2.4.0 + firebase-java-sdk 0.6.3 dep graph resolves** cleanly against our pinned ktor 3.4.3, kotlinx-coroutines 1.10.2, kotlinx-serialization 1.11.0, Kotlin 2.3.21. No version conflicts.
+- **JVM Main-dispatcher dep is required.** firebase-java-sdk's auth post-sign-in path uses `Dispatchers.Main` to notify auth/id-token listeners (`FirebaseAuth.kt:330–333`). On Android, Play Services registers a Main dispatcher; on JVM we have to bring our own. **Phase 2 must add `kotlinx-coroutines-swing`** (or another Main-dispatcher provider) to the cloud module's deps. Compose Desktop apps already pull in Swing under the hood, so this is a no-cost addition.
 - **`IdentityToolkitClient`** wire format pinned by mock-tests:
   - `signInWithIdp` POST body shape (`postBody` form-string with `id_token=...&providerId=google.com`, `requestUri`, `returnSecureToken: true`)
   - Response parsing (`idToken`, `refreshToken`, `localId`, `expiresIn`, `email`)
@@ -719,15 +720,18 @@ These updated the doc above; capturing here for traceability:
 4. **`InternalAuthProvider` is not in firebase-java-sdk source** — it's referenced via `import com.google.firebase.auth.internal.InternalAuthProvider` but the file doesn't exist in the repo. It comes from real Firebase Android aars pulled in via `aar(libs.google.firebase.firestore)` etc. So firebase-java-sdk is a polyfill layer over the actual Firebase Android Firestore bytecode. Practical impact: the Firestore SDK is real on JVM, not a port.
 5. **AppAuth-Kotlin (gitlive's sister repo) is not viable** — last release Dec 2022, 1 star, no JVM target. Earlier consideration crossed off.
 
-### Pending interactive validation (need user action)
+### Interactive validation results
 
-The remaining probes require the user to take an action (set up an email/password test user, or paste a Google ID token) before they can be run end-to-end. Compile + unit-test green; these probe runs answer the *behavioral* questions:
+Probes run end-to-end against the dev Firebase project (`sketchbook-jtf-2026`):
 
-| Probe | Answers | Status |
+| Probe | Answers | Result |
 |---|---|---|
-| `listener-sanity` | Does Firestore + listeners work on JVM via gitlive at all? | **Code ready; not run.** Needs Email/Password user enabled in dev Firebase project. |
-| `exchange-google-token` | Does our Identity Toolkit REST exchange work end-to-end against real Google? | **Code ready; not run.** Needs Google ID token from OAuth Playground. |
-| `storage-rest` | Does Firebase Storage accept a Firebase ID token bearer for REST PUT? | **Code ready; not run.** Needs output of previous probe. |
+| `listener-sanity` | Does Firestore + listeners work on JVM via gitlive at all? | **✅ PASS** (run 2026-05-08). Sign-in via Email/Password, doc write, listener fires with the doc data. The load-bearing infrastructure question is answered. |
+| `exchange-google-token` | Does Identity Toolkit REST exchange work end-to-end against real Google? | Code ready; not run end-to-end. Wire format pinned by mock tests. Phase 2 first integration commit will exercise this against real Google. |
+| `storage-rest` | Does Firebase Storage accept a Firebase ID token bearer for REST PUT? | Code ready; not run end-to-end. Same auth-token plumbing as Firestore (which works), so no expected surprises. |
+| `pattern-a1` | Does the storage-hijack token injection work end-to-end? | Code ready; deferred to Phase 2. Pattern A1's mechanism is mechanistically verified by source reading; the runtime test combines Identity Toolkit exchange + storage hijack which is two integration steps better done as a Phase 2 commit than a one-off spike. |
+
+**The decisive question — "does Firestore work on JVM via gitlive at all?" — is answered yes.** Pattern A1 / A2 token injection is now engineering, not viability. Phase 1 of the migration is unblocked.
 
 ### Final A1 vs A2 vs B call — RESOLVED 2026-05-08
 

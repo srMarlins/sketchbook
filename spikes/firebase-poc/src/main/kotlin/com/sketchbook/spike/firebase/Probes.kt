@@ -46,7 +46,22 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.seconds
+
+/**
+ * Wire shape for spike test docs. gitlive's Firestore .set/.data<T>() requires a
+ * @Serializable type — `Map<String, Any>` blows up with "Serializer for class
+ * 'kotlin.Any' is not found" at runtime since polymorphic Any isn't supported
+ * out-of-the-box.
+ */
+@Serializable
+private data class SpikeDoc(
+    @SerialName("ts") val ts: Long,
+    @SerialName("from") val from: String,
+    @SerialName("uid") val uid: String? = null,
+)
 
 /**
  * Initialize Firebase once with our JVM platform impl. Idempotent within a single JVM —
@@ -99,7 +114,8 @@ suspend fun runProbe(args: List<String>) {
 
         "pattern-a1" -> {
             patternA1Probe(
-                googleIdToken = args.getOrNull(1) ?: error("usage: pattern-a1 <google-id-token>"),
+                googleIdToken = args.getOrNull(1) ?: error("usage: pattern-a1 <google-id-token> [audience-override]"),
+                audienceOverride = args.getOrNull(2),
             )
         }
 
@@ -136,7 +152,7 @@ private suspend fun listenerSanityProbe(
 
     val firestore = Firebase.firestore
     val docRef = firestore.collection("spike").document("listener-probe-${System.currentTimeMillis()}")
-    val payload = mapOf("ts" to System.currentTimeMillis(), "from" to "spike-jvm")
+    val payload = SpikeDoc(ts = System.currentTimeMillis(), from = "spike-jvm")
 
     coroutineScope {
         // Listener side: subscribe BEFORE write, capture the first snapshot that has data.
@@ -160,7 +176,8 @@ private suspend fun listenerSanityProbe(
             println("[probe-listener]   on JVM via gitlive don't work for this build/version.")
             return@coroutineScope
         }
-        println("[probe-listener] SUCCESS: listener fired with data=${snapshot.data<Map<String, Any?>>()}")
+        val data = snapshot.data<SpikeDoc>()
+        println("[probe-listener] SUCCESS: listener fired with data=$data")
         println("[probe-listener]   Firestore + listeners DO work on JVM. Pattern A1/A2")
         println("[probe-listener]   token-injection is now an engineering question, not a viability one.")
     }
@@ -207,10 +224,14 @@ private suspend fun exchangeGoogleTokenProbe(googleIdToken: String) {
 //          → pre-seed FirebasePlatform → Firebase.initialize → Firestore listener
 // ---------------------------------------------------------------------------------------------
 
-private suspend fun patternA1Probe(googleIdToken: String) {
-    println("[probe-a1] verifying Google ID token...")
+private suspend fun patternA1Probe(
+    googleIdToken: String,
+    audienceOverride: String?,
+) {
+    val audience = audienceOverride ?: SpikeSecrets.OAUTH_CLIENT_ID
+    println("[probe-a1] verifying Google ID token (expected aud=$audience)...")
     val verified =
-        GoogleIdTokenVerifier(expectedAudience = SpikeSecrets.OAUTH_CLIENT_ID)
+        GoogleIdTokenVerifier(expectedAudience = audience)
             .verify(googleIdToken)
             .getOrElse { e ->
                 println("[probe-a1] FAILED at JWKS: ${e.message}")
@@ -245,7 +266,7 @@ private suspend fun patternA1Probe(googleIdToken: String) {
 
     val firestore = Firebase.firestore
     val docRef = firestore.collection("spike").document("a1-probe-${System.currentTimeMillis()}")
-    val payload = mapOf("ts" to System.currentTimeMillis(), "from" to "pattern-a1", "uid" to current.uid)
+    val payload = SpikeDoc(ts = System.currentTimeMillis(), from = "pattern-a1", uid = current.uid)
 
     coroutineScope {
         val listenerJob =
@@ -266,7 +287,7 @@ private suspend fun patternA1Probe(googleIdToken: String) {
             println("[probe-a1]   Firestore RPCs. Investigate InternalAuthProvider plumbing.")
             return@coroutineScope
         }
-        println("[probe-a1] SUCCESS: listener fired with data=${snapshot.data<Map<String, Any?>>()}")
+        println("[probe-a1] SUCCESS: listener fired with data=${snapshot.data<SpikeDoc>()}")
         println("[probe-a1] ")
         println("[probe-a1]   PATTERN A1 (STORAGE HIJACK) IS VIABLE.")
         println("[probe-a1]   - Google OAuth → Identity Toolkit → pre-seed → SDK boots signed-in")
