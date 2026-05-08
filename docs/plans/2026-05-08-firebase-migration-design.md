@@ -143,14 +143,49 @@ Document for future-us: B's added complexity pays off when any of these become t
 3. **Existing backend.** If Sketchbook is already running services for other reasons, "add another endpoint" is cheap.
 4. **Identity Toolkit response shape changes.** Hasn't happened in years; included for completeness.
 
-### Pattern A's load-bearing assumption
+### Pattern A's load-bearing assumption — REVISED during Phase 0 spike
 
-A relies on gitlive's `FirebasePlatform` token hook on JVM gating the **Firestore listener RPC**'s auth header. If the hook is too narrow (only used for non-listener calls, for instance), Firestore would reject listener subscriptions and A fails.
+**Original assumption (wrong, from this doc's first draft):** gitlive's `FirebasePlatform` would expose a token-provider hook that Firestore listener RPCs go through, letting us inject a Firebase ID token we obtained from Identity Toolkit REST.
 
-This is the single most important question for the Phase 0 spike. Two outcomes:
+**What spike research found:** `FirebasePlatform` (in `com.google.firebase` of `firebase-java-sdk`) is just:
 
-- **Hook works** → ship Pattern A. Best of both worlds.
-- **Hook doesn't work** → fall back to Pattern B. The `AuthSession` port stays the same; only the implementation behind it changes. Adds a Cloud Function and ~1 day of work, no architectural redo.
+```kotlin
+abstract class FirebasePlatform {
+    abstract fun store(key: String, value: String)    // key-value storage
+    abstract fun retrieve(key: String): String?
+    abstract fun clear(key: String)
+    abstract fun log(msg: String)
+    open fun getDatabasePath(name: String): File
+}
+```
+
+No token hook. It's a storage abstraction the SDK uses to persist its own state. Pattern A in the form first described doesn't exist as an API.
+
+**Two surviving mechanisms** for getting our externally-obtained Firebase ID token into the SDK without using `signInWithCredential` (which is `TODO()` on JVM):
+
+**A1 — Storage hijack.** Implement `FirebasePlatform.retrieve(key)` to return tokens we obtained from the Identity Toolkit REST exchange, pretending the SDK had stored them earlier. The SDK reads back its "previously persisted" auth state and acts signed-in. Fragile: storage key names + value formats are private SDK contracts; a gitlive minor bump could change them silently.
+
+**A2 — `InternalAuthProvider` replacement.** `FirebaseAuth` implements an internal interface (`com.google.firebase.auth.internal.InternalAuthProvider`); Firestore calls `getAccessToken()` on it for every RPC to obtain the bearer. If we register our own implementation against the `FirebaseApp`, we control what token gets used. Internal extension point, but a stabler contract than impersonating storage keys.
+
+The spike validates **A2 first** (cleaner). If A2 fails, falls back to A1. If both fail, falls back to **Pattern B** (Cloud Function + custom token via `signInWithCustomToken` — the only path that's verified-working public API on JVM, at the cost of running a backend).
+
+Three outcomes:
+
+- **A2 works** → ship Pattern A2. Best path.
+- **A1 works (A2 doesn't)** → ship A1, pin gitlive version exactly, add an integration test that flags storage-key changes on SDK upgrades.
+- **Neither works** → ship Pattern B with the documented one-day Cloud Function addition.
+
+### Pre-A1/A2 sanity check
+
+Before validating either A1 or A2, the spike validates a more fundamental question:
+
+> Does Firestore + listeners work on JVM via gitlive at all?
+
+Because the answer is non-obvious. firebase-java-sdk is "alpha" and the code that runs on JVM is the real Firebase Android Firestore .aar polyfilled with stub Android classes. If the polyfill is incomplete (e.g., gRPC/HTTP-2 paths assume Android-specific networking), listeners might not fire on JVM regardless of auth strategy.
+
+The spike answers this **first** using `signInWithEmailAndPassword` (verified-implemented in firebase-java-sdk source — line 459 of `FirebaseAuth.kt`). One test user in the dev Firebase project, one toggle to enable Email/Password auth temporarily. This validates listener-on-JVM independent of the Pattern A details.
+
+If listeners work under email/password, A1/A2 are solvable engineering with multiple paths. If listeners *don't* work under any auth method on JVM, we know we're in Pattern C territory or worse — back to direct REST.
 
 ### Pattern C (skip SDK entirely) — dismissed
 
@@ -658,6 +693,65 @@ Before Phase 4 (cleanup) closes:
 - ☐ Admin-SDK-import build lint in place (security-commitment #6).
 - ☐ `docs/architecture/cloud.md` written.
 - ☐ All `CloudBackend` / `CloudDoc*` / `DirectGcsBackend` symbols removed from the codebase.
+
+## Phase 0 spike results (2026-05-08)
+
+Live in branch `spike/firebase-poc`. Module `spikes/firebase-poc/` (deletable when Phase 1 ships).
+
+### Verified at build / test time
+
+- **gitlive 2.4.0 + firebase-java-sdk 0.6.3 dep graph resolves** cleanly against our pinned ktor 3.4.3, kotlinx-coroutines 1.10.2, kotlinx-serialization 1.11.0, Kotlin 2.3.21. No version conflicts.
+- **`IdentityToolkitClient`** wire format pinned by mock-tests:
+  - `signInWithIdp` POST body shape (`postBody` form-string with `id_token=...&providerId=google.com`, `requestUri`, `returnSecureToken: true`)
+  - Response parsing (`idToken`, `refreshToken`, `localId`, `expiresIn`, `email`)
+  - `securetoken.googleapis.com/v1/token` refresh path with form-encoded body
+  - Error envelope decoding (`error.code` + `error.message`)
+- **`GoogleIdTokenVerifier`** compiles and unit-test-runs against Nimbus JOSE+JWT 10.0.2 with our claim-check logic.
+- **`Firebase.initialize(Application(), options)`** init pattern works on JVM via firebase-java-sdk's polyfilled `android.app.Application` shim — same as gitlive's own internal tests.
+
+### Discovered during spike research (corrections to the design doc)
+
+These updated the doc above; capturing here for traceability:
+
+1. **`FirebasePlatform` is not a token hook** — only `store/retrieve/clear/log/getDatabasePath`. The original Pattern A description was wrong. Revised to **A1 (storage hijack)** and **A2 (`InternalAuthProvider` replacement)**.
+2. **`signInWithCredential` is `TODO()` in firebase-java-sdk on JVM** — verified by curl on `FirebaseAuth.kt` line 815. Same for `applyActionCode`, `confirmPasswordReset`, `fetchSignInMethodsForEmail`, `sendPasswordResetEmail`, `sendSignInLinkToEmail`, `signInWithEmailLink`, `verifyPasswordResetCode`, `updateCurrentUser`, `setLanguageCode`, `isSignInWithEmailLink`, `checkActionCode`. The wrapper file in gitlive's `firebase-auth/jvmMain/auth.kt` looks complete — it delegates to these stubs at runtime.
+3. **What works on JVM (verified-implemented HTTP):** `signInAnonymously` (line 352), `signInWithCustomToken` (363), `signInWithEmailAndPassword` (459), `getAccessToken` refresh, auth state listeners, emulator support.
+4. **`InternalAuthProvider` is not in firebase-java-sdk source** — it's referenced via `import com.google.firebase.auth.internal.InternalAuthProvider` but the file doesn't exist in the repo. It comes from real Firebase Android aars pulled in via `aar(libs.google.firebase.firestore)` etc. So firebase-java-sdk is a polyfill layer over the actual Firebase Android Firestore bytecode. Practical impact: the Firestore SDK is real on JVM, not a port.
+5. **AppAuth-Kotlin (gitlive's sister repo) is not viable** — last release Dec 2022, 1 star, no JVM target. Earlier consideration crossed off.
+
+### Pending interactive validation (need user action)
+
+The remaining probes require the user to take an action (set up an email/password test user, or paste a Google ID token) before they can be run end-to-end. Compile + unit-test green; these probe runs answer the *behavioral* questions:
+
+| Probe | Answers | Status |
+|---|---|---|
+| `listener-sanity` | Does Firestore + listeners work on JVM via gitlive at all? | **Code ready; not run.** Needs Email/Password user enabled in dev Firebase project. |
+| `exchange-google-token` | Does our Identity Toolkit REST exchange work end-to-end against real Google? | **Code ready; not run.** Needs Google ID token from OAuth Playground. |
+| `storage-rest` | Does Firebase Storage accept a Firebase ID token bearer for REST PUT? | **Code ready; not run.** Needs output of previous probe. |
+
+### Final A1 vs A2 vs B call
+
+**Deferred.** The spike validated that the *pattern needs revision* (see correction #1) but doesn't yet have data to pick A1 over A2. Three reasons to defer:
+
+1. The pre-requisite "does Firestore work on JVM at all" hasn't been answered yet (`listener-sanity` not run).
+2. Both A1 and A2 require deeper SDK-internals integration than was in spike scope.
+3. Pattern B (Cloud Function + custom token) is always a viable fallback with known cost (1 day of work, ~30 lines of function code, one operational service).
+
+**Recommended path forward:**
+- Run `listener-sanity` first.
+- If listeners work, A1/A2 investigation becomes Phase 2 commit (4)'s concern, not a blocker for Phase 1.
+- If listeners don't work, revisit immediately — the whole listener-based design rests on this.
+
+### Code that survives into Phase 2
+
+Designed to lift cleanly into `shared/auth` and `shared/cloud/metadata` when Phase 2 starts:
+
+- `IdentityToolkitClient` → `shared/auth/.../FirebaseIdpExchange`
+- `GoogleIdTokenVerifier` → `shared/auth/.../GoogleIdTokenVerifier` (security-commitment #1)
+- `JvmFirebasePlatform` → `shared/cloud/.../JvmFirebasePlatform` (with file-backed storage instead of the spike's in-memory map)
+- `FirebaseConfig` shape → keep (move values to a built-in `firebase.config.json` resource that the build embeds)
+
+The probe orchestration code in `Probes.kt` and `Main.kt` is throwaway.
 
 ## Out of scope (deliberate non-goals — do not expand this PR series)
 
