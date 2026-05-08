@@ -43,7 +43,7 @@ enum class Stage(
         fun parseOrNull(raw: String?): Stage? =
             when (raw) {
                 null -> null
-                else -> values().firstOrNull { it.name == raw }
+                else -> entries.firstOrNull { it.name == raw }
             }
     }
 }

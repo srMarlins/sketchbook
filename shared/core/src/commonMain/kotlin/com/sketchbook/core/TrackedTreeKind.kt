@@ -2,7 +2,8 @@ package com.sketchbook.core
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
@@ -43,7 +44,8 @@ sealed interface TrackedTreeKind {
 }
 
 internal object TrackedTreeKindSerializer : KSerializer<TrackedTreeKind> {
-    override val descriptor: SerialDescriptor = String.serializer().descriptor
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("TrackedTreeKind", PrimitiveKind.STRING)
 
     override fun serialize(
         encoder: Encoder,
