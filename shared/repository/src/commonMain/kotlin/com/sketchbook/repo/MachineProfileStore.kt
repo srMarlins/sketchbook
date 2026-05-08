@@ -173,18 +173,24 @@ class CloudMachineProfileStore(
                 plugins = plugins,
             )
         val bytes = JSON.encodeToString(HostPluginManifest.serializer(), manifest).encodeToByteArray()
-        // Per-host file — overwrites unconditionally. Two hosts publishing concurrently touch
-        // different keys, so there's no conflict to retry against. Skipping the read here
-        // saves a round-trip per call; the previous "read then write with expected = existing
-        // generation" was a half-CAS that failed silently on a same-host race rather than
-        // actually protecting anything.
-        cloud()
-            .writeDoc(
-                key = MachineProfileStore.pluginManifestKey(hostId),
-                expected = null,
-                bytes = bytes,
-            ).getOrThrow()
-        return manifest
+        val key = MachineProfileStore.pluginManifestKey(hostId)
+        val backend = cloud()
+        // CAS with retry. Two hosts can't conflict (different keys), but the same host
+        // running two processes (CLI mcp + desktop) can. The CAS picks one writer
+        // deterministically; on conflict we re-read (don't recompose — the catalog source is
+        // shared between processes so a re-read converges) and retry. Three attempts is
+        // plenty for a contention window of two cooperating processes.
+        repeat(PUBLISH_HOST_SLICE_RETRIES) {
+            val current = backend.readDoc(key)
+            val expected = current?.generation
+            val result = backend.writeDoc(key = key, expected = expected, bytes = bytes)
+            result
+                .onSuccess { return manifest }
+                .onFailure { err ->
+                    if (err !is SketchbookError.Conflict) throw err
+                }
+        }
+        throw SketchbookError.Conflict("plugin_manifest_$hostId.json CAS retries exhausted")
     }
 
     override suspend fun composeUnion(): UnionedPluginManifest {
@@ -336,6 +342,8 @@ class CloudMachineProfileStore(
         private const val BACKOFF_BASE_MS: Long = 50L
         private const val BACKOFF_JITTER_MS: Long = 50L
         private const val BACKOFF_MAX_SHIFT: Int = 5
+
+        private const val PUBLISH_HOST_SLICE_RETRIES: Int = 3
     }
 }
 

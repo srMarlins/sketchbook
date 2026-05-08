@@ -149,18 +149,18 @@ class MachineProfileStoreTest {
         }
 
     @Test
-    fun publishHostSliceDoesNotReadFirst() =
+    fun publishHostSliceUsesCASToProtectAgainstSameHostRace() =
         runTest {
-            // The pre-rewrite version did a "read for generation, then write with expected =
-            // existing.generation" half-CAS that bought nothing — the kdoc says per-host
-            // writes don't conflict. Verify the read is gone.
+            // Two cooperating processes on the same host (CLI mcp + desktop) write to the
+            // same plugin_manifest_<hostId>.json key. Without CAS the last writer silently
+            // clobbers; with CAS the loser retries against the winner's generation.
             val handle = CatalogDb.openInMemory()
             val cloud = ConcurrencyTrackingCloud()
             val store = CloudMachineProfileStore(CloudBackendProvider { cloud }, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
             store.publishHostSlice("macstudio", "Mac Studio", os = Os.Mac)
 
-            assertEquals(0, cloud.readCallCount, "publishHostSlice should not read before writing")
+            assertEquals(1, cloud.readCallCount, "publishHostSlice should read once for CAS generation")
         }
 
     @Test
