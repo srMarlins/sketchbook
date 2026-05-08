@@ -190,6 +190,39 @@ class SnapshotPipeline(
                     )
 
                 // 5) CAS HEAD. Conflict resolution dispatches on KindPolicy.conflictMode.
+                //
+                // Lease fence: between `acquireLock` and here, the user (or peer host) may
+                // have force-taken our lease. The HEAD CAS itself only checks the manifest's
+                // expectedHead; without a separate lease check, a writer with a force-taken
+                // lease could still land its HEAD swap. Refresh the lease right before the
+                // CAS — if it's no longer ours, bail with a clear failure rather than
+                // racing past the takeover.
+                if (leaseGen != null) {
+                    val leaseInstant = clock.now()
+                    val refreshed =
+                        LeaseLock(
+                            ownerUserId = ownerUserId,
+                            ownerHostId = hostId,
+                            ownerHostName = hostName,
+                            acquiredAt = leaseInstant,
+                            expiresAt = leaseInstant + leaseTtl,
+                        )
+                    when (val r = cloud.refreshLock(treeId, kind, refreshed, leaseGen)) {
+                        is com.sketchbook.cloud.LeaseRefreshResult.Refreshed -> {
+                            leaseGen = r.generation
+                        }
+
+                        com.sketchbook.cloud.LeaseRefreshResult.Stale -> {
+                            // Force-taken by someone else; we no longer own the lease and
+                            // must not advance HEAD. Drop our lease tracking so the finally
+                            // block's release call doesn't try to delete a generation we no
+                            // longer own.
+                            leaseGen = null
+                            emit(SnapshotProgress.Failed(uuid, "lease lost mid-pipeline; aborted before HEAD CAS"))
+                            return@flow
+                        }
+                    }
+                }
                 val casResult = cloud.appendManifestHead(treeId, kind, parentExpectedHead, auto)
                 val saved =
                     casResult.fold(
