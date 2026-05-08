@@ -391,6 +391,21 @@ SELECT sample_path FROM project_samples WHERE project_id = :project_id;
 selectAllDistinctPlugins:
 SELECT DISTINCT plugin_name, plugin_type FROM project_plugins;
 
+-- Commit 13: distinct (name, type, is_installed) tuples for composing the host's plugin
+-- manifest slice. MAX(is_installed) so a plugin used in many projects shows as "installed"
+-- even if a stale row marks it not-yet-probed for one specific project.
+selectAllDistinctProjectPluginsWithInstalled:
+SELECT plugin_name, plugin_type, MAX(is_installed) AS is_installed
+  FROM project_plugins
+ GROUP BY plugin_name, plugin_type;
+
+-- Mirror for the user_library_plugins table (commit 12). Same composition rule — any
+-- "installed" sighting wins for the host slice.
+selectAllDistinctUserLibraryPluginsWithInstalled:
+SELECT plugin_name, plugin_type, MAX(is_installed) AS is_installed
+  FROM user_library_plugins
+ GROUP BY plugin_name, plugin_type;
+
 -- PR-T: bulk flip the `is_installed` flag for every row matching a (name, type) pair. The probe
 -- calls this twice per pair (once per outcome) so the UPDATE is idempotent — running the probe
 -- a second time over the same disk produces no net change. Indexed on (plugin_name) so the
