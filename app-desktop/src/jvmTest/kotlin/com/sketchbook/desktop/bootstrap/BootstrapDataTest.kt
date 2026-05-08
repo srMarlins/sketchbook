@@ -20,6 +20,7 @@ import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
 import com.sketchbook.repo.BlobCacheSettings
+import com.sketchbook.repo.CloudBackendProvider
 import com.sketchbook.repo.CloudMachineProfileStore
 import com.sketchbook.repo.CloudTreeRegistry
 import com.sketchbook.repo.LibraryRoot
@@ -135,8 +136,8 @@ class BootstrapDataTest {
         cloud: CloudBackend,
         settings: SettingsRepository,
     ): BootstrapData {
-        val registry = CloudTreeRegistry(cloud, catalog, clock, UserId.DEFAULT)
-        val profile = CloudMachineProfileStore(cloud, catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
+        val registry = CloudTreeRegistry(CloudBackendProvider { cloud }, catalog, clock, UserId.DEFAULT)
+        val profile = CloudMachineProfileStore(CloudBackendProvider { cloud }, catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
         return BootstrapData(
             registry = registry,
             profile = profile,

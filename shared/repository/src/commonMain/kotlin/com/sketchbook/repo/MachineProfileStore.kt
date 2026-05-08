@@ -125,10 +125,23 @@ internal data class MachinesDoc(
 )
 
 /**
- * Bound at AppScope today because every other repository in the desktop graph is. The
- * `CloudBackend` dep is per-user (`SwappableSyncQueue`-driven), and Metro will only attempt
- * to resolve this binding when something downstream requests `MachineProfileStore` — at
- * which point the graph needs a `CloudBackend` provider too.
+ * Per-user [CloudBackend] lookup. AppScope-bound stores take this rather than
+ * [CloudBackend] directly so the singleton doesn't pin a stale backend after
+ * sign-out / sign-in. Implementations resolve the current backend on each call
+ * (typically reading from `UserGraphHolder.userGraph.value`); they return `null`
+ * when no user is signed in. A `fun interface` rather than `() -> CloudBackend?`
+ * because Metro treats parameter-less function types as provider types and
+ * disallows them as unique graph bindings.
+ */
+fun interface CloudBackendProvider {
+    operator fun invoke(): CloudBackend?
+}
+
+/**
+ * Bound at AppScope but the `CloudBackend` dep is per-user (`UserGraphHolder`-driven), so
+ * the binding is a [CloudBackendProvider] resolved on each call rather than the backend
+ * itself. Without that, Metro would cache whichever backend was current at first
+ * resolution and never refresh after sign-out / sign-in.
  *
  * Promoted to a true `UserScope` binding once
  * https://github.com/srMarlins/sketchbook/issues/130 lands.
@@ -137,11 +150,14 @@ internal data class MachinesDoc(
 @ContributesBinding(AppScope::class)
 @Inject
 class CloudMachineProfileStore(
-    private val cloud: CloudBackend,
+    private val cloudProvider: CloudBackendProvider,
     private val catalog: Catalog,
     private val clock: Clock,
     private val ioDispatcher: CoroutineDispatcher,
 ) : MachineProfileStore {
+    private fun cloud(): CloudBackend =
+        cloudProvider() ?: throw IllegalStateException("cloud not configured (no signed-in user / bucket)")
+
     override suspend fun publishHostSlice(
         hostId: String,
         hostName: String,
@@ -162,7 +178,7 @@ class CloudMachineProfileStore(
         // saves a round-trip per call; the previous "read then write with expected = existing
         // generation" was a half-CAS that failed silently on a same-host race rather than
         // actually protecting anything.
-        cloud
+        cloud()
             .writeDoc(
                 key = MachineProfileStore.pluginManifestKey(hostId),
                 expected = null,
@@ -172,7 +188,8 @@ class CloudMachineProfileStore(
     }
 
     override suspend fun composeUnion(): UnionedPluginManifest {
-        val refs = cloud.listDocs(MachineProfileStore.PLUGIN_MANIFEST_PREFIX)
+        val backend = cloud()
+        val refs = backend.listDocs(MachineProfileStore.PLUGIN_MANIFEST_PREFIX)
         // Fan out the per-host doc reads in parallel — N round-trips serialized was a wall-time
         // floor of `N * latency` on accounts with several machines registered. Structured
         // concurrency cancels siblings if any read throws; decode errors get downgraded to
@@ -180,7 +197,7 @@ class CloudMachineProfileStore(
         val perHost =
             coroutineScope {
                 refs
-                    .map { ref -> async { readAndDecodeHostManifest(ref) } }
+                    .map { ref -> async { readAndDecodeHostManifest(backend, ref) } }
                     .awaitAll()
                     .filterNotNull()
             }
@@ -201,8 +218,11 @@ class CloudMachineProfileStore(
         return UnionedPluginManifest(perHost = perHost, union = union.values.toList())
     }
 
-    private suspend fun readAndDecodeHostManifest(ref: com.sketchbook.cloud.CloudDocRef): HostPluginManifest? {
-        val read = cloud.readDoc(ref.key) ?: return null
+    private suspend fun readAndDecodeHostManifest(
+        backend: CloudBackend,
+        ref: com.sketchbook.cloud.CloudDocRef,
+    ): HostPluginManifest? {
+        val read = backend.readDoc(ref.key) ?: return null
         return try {
             JSON.decodeFromString(HostPluginManifest.serializer(), read.bytes.decodeToString())
         } catch (c: CancellationException) {
@@ -216,8 +236,9 @@ class CloudMachineProfileStore(
     }
 
     override suspend fun registerMachine(entry: MachineEntry) {
+        val backend = cloud()
         repeat(MachineProfileStore.REGISTER_MAX_RETRIES) { attempt ->
-            val current = cloud.readDoc(MachineProfileStore.MACHINES_KEY)
+            val current = backend.readDoc(MachineProfileStore.MACHINES_KEY)
             val doc =
                 if (current == null) {
                     MachinesDoc(machines = listOf(entry))
@@ -228,7 +249,7 @@ class CloudMachineProfileStore(
                 }
             val expected = current?.generation ?: Generation.ZERO
             val bytes = JSON.encodeToString(MachinesDoc.serializer(), doc).encodeToByteArray()
-            val result = cloud.writeDoc(MachineProfileStore.MACHINES_KEY, expected, bytes)
+            val result = backend.writeDoc(MachineProfileStore.MACHINES_KEY, expected, bytes)
             result
                 .onSuccess { return }
                 .onFailure { err ->
@@ -244,7 +265,7 @@ class CloudMachineProfileStore(
     }
 
     override suspend fun listMachines(): List<MachineEntry> {
-        val read = cloud.readDoc(MachineProfileStore.MACHINES_KEY) ?: return emptyList()
+        val read = cloud().readDoc(MachineProfileStore.MACHINES_KEY) ?: return emptyList()
         return try {
             JSON.decodeFromString(MachinesDoc.serializer(), read.bytes.decodeToString()).machines
         } catch (c: CancellationException) {

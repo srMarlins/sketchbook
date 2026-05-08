@@ -1,5 +1,6 @@
 package com.sketchbook.repo
 
+
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
@@ -38,7 +39,7 @@ class TreeRegistryTest {
         runTest {
             val handle = CatalogDb.openInMemory()
             val cloud = FakeDocCloud()
-            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+            val registry = CloudTreeRegistry(CloudBackendProvider { cloud }, handle.catalog, clock, UserId.DEFAULT)
             val snapshot = registry.fetch()
             assertEquals(emptyList(), snapshot.entries)
             assertNull(snapshot.generation)
@@ -49,7 +50,7 @@ class TreeRegistryTest {
         runTest {
             val handle = CatalogDb.openInMemory()
             val cloud = FakeDocCloud()
-            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+            val registry = CloudTreeRegistry(CloudBackendProvider { cloud }, handle.catalog, clock, UserId.DEFAULT)
 
             val entry =
                 registry
@@ -76,7 +77,7 @@ class TreeRegistryTest {
         runTest {
             val handle = CatalogDb.openInMemory()
             val cloud = FakeDocCloud()
-            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+            val registry = CloudTreeRegistry(CloudBackendProvider { cloud }, handle.catalog, clock, UserId.DEFAULT)
 
             val first =
                 registry
@@ -106,7 +107,7 @@ class TreeRegistryTest {
         runTest {
             val handle = CatalogDb.openInMemory()
             val cloud = FakeDocCloud(injectConflictsOnFirstWrite = 2)
-            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+            val registry = CloudTreeRegistry(CloudBackendProvider { cloud }, handle.catalog, clock, UserId.DEFAULT)
             val entry =
                 registry
                     .register(
@@ -123,7 +124,7 @@ class TreeRegistryTest {
     fun canReadOwnerOnlyByDefault() {
         val handle = CatalogDb.openInMemory()
         val cloud = FakeDocCloud()
-        val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+        val registry = CloudTreeRegistry(CloudBackendProvider { cloud }, handle.catalog, clock, UserId.DEFAULT)
         val entry =
             TreeRegistryEntry(
                 treeId = TrackedTreeId("t"),
@@ -142,7 +143,7 @@ class TreeRegistryTest {
     fun canWriteRespectsCollaboratorRole() {
         val handle = CatalogDb.openInMemory()
         val cloud = FakeDocCloud()
-        val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+        val registry = CloudTreeRegistry(CloudBackendProvider { cloud }, handle.catalog, clock, UserId.DEFAULT)
         val entry =
             TreeRegistryEntry(
                 treeId = TrackedTreeId("t"),
@@ -169,7 +170,7 @@ class TreeRegistryTest {
         runTest {
             val handle = CatalogDb.openInMemory()
             val cloud = FakeDocCloud()
-            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+            val registry = CloudTreeRegistry(CloudBackendProvider { cloud }, handle.catalog, clock, UserId.DEFAULT)
 
             val createdByHost = "studio-mac"
             val written =
@@ -196,7 +197,7 @@ class TreeRegistryTest {
         runTest {
             val handle = CatalogDb.openInMemory()
             val cloud = FakeDocCloud()
-            val registry = CloudTreeRegistry(cloud, handle.catalog, clock, UserId.DEFAULT)
+            val registry = CloudTreeRegistry(CloudBackendProvider { cloud }, handle.catalog, clock, UserId.DEFAULT)
 
             // Register two entries; both land in the cache.
             registry

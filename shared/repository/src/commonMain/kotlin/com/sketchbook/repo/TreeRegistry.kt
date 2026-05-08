@@ -172,7 +172,10 @@ internal data class TreeRegistryDoc(
 @ContributesBinding(AppScope::class)
 @Inject
 class CloudTreeRegistry(
-    private val cloud: CloudBackend,
+    // Per-user lookup, not the backend itself. The AppScope binding caches this store as a
+    // singleton; without the indirection it would also cache whichever CloudBackend was
+    // current at first resolution, never refreshing after sign-out / sign-in.
+    private val cloudProvider: CloudBackendProvider,
     private val catalog: Catalog,
     private val clock: Clock,
     // Default user-id for a freshly-created registry doc (when no entries exist yet). Real
@@ -181,8 +184,11 @@ class CloudTreeRegistry(
     // UserScope subgraph once #130 lands.
     private val ownerUserId: UserId,
 ) : TreeRegistry {
+    private fun cloud(): CloudBackend =
+        cloudProvider() ?: throw IllegalStateException("cloud not configured (no signed-in user / bucket)")
+
     override suspend fun fetch(): TreeRegistrySnapshot {
-        val read = cloud.readDoc(TreeRegistry.REGISTRY_KEY)
+        val read = cloud().readDoc(TreeRegistry.REGISTRY_KEY)
         val (entries, gen) =
             if (read == null) {
                 emptyList<TreeRegistryEntry>() to null
@@ -267,7 +273,7 @@ class CloudTreeRegistry(
             val doc = TreeRegistryDoc(ownerUserId = ownerUserId, trees = current.entries + newEntry)
             val expected = current.generation ?: Generation.ZERO
             val bytes = JSON.encodeToString(TreeRegistryDoc.serializer(), doc).encodeToByteArray()
-            val writeResult = cloud.writeDoc(TreeRegistry.REGISTRY_KEY, expected, bytes)
+            val writeResult = cloud().writeDoc(TreeRegistry.REGISTRY_KEY, expected, bytes)
             writeResult
                 .onSuccess {
                     refreshCache(doc.trees)
@@ -339,7 +345,7 @@ class CloudTreeRegistry(
             val doc = TreeRegistryDoc(ownerUserId = owner, trees = merged)
             val expected = current.generation ?: Generation.ZERO
             val bytes = JSON.encodeToString(TreeRegistryDoc.serializer(), doc).encodeToByteArray()
-            val writeResult = cloud.writeDoc(TreeRegistry.REGISTRY_KEY, expected, bytes)
+            val writeResult = cloud().writeDoc(TreeRegistry.REGISTRY_KEY, expected, bytes)
             writeResult
                 .onSuccess {
                     refreshCache(merged)

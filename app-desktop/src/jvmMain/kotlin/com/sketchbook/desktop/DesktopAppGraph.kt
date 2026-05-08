@@ -13,6 +13,7 @@ import com.sketchbook.catalog.JvmSampleScanner
 import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.catalog.db.Catalog
+import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
@@ -149,6 +150,17 @@ interface DesktopAppGraph : ViewModelGraph {
     @Provides
     @SingleIn(AppScope::class)
     fun provideOwnerUserId(): com.sketchbook.core.UserId = com.sketchbook.core.UserId.DEFAULT
+
+    /**
+     * Per-user CloudBackend lookup. AppScope-bound stores (CloudTreeRegistry,
+     * CloudMachineProfileStore) take this instead of CloudBackend directly so the singleton
+     * store doesn't pin a stale backend after sign-out / sign-in. Reads UserGraphHolder
+     * fresh on each call; returns null when no user is signed in.
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideCloudBackendProvider(holder: UserGraphHolder): com.sketchbook.repo.CloudBackendProvider =
+        com.sketchbook.repo.CloudBackendProvider { holder.userGraph.value?.cloudBackend }
 
     /**
      * Stable host identifier surfaced to the cloud (registry `created_by_host`, machines
