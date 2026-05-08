@@ -91,7 +91,7 @@ class UserLibraryPluginScanner(
                         tree_id = treeId.value,
                         rel_path = rel,
                         plugin_name = plugin.name,
-                        plugin_type = plugin.format.dbName(),
+                        plugin_type = plugin.format.wireName,
                         is_installed = 0L,
                         last_seen_at = now,
                     )
@@ -145,12 +145,3 @@ class UserLibraryPluginScanner(
         }
     }
 }
-
-private fun PluginFormat.dbName(): String =
-    when (this) {
-        PluginFormat.Vst2 -> "vst"
-        PluginFormat.Vst3 -> "vst3"
-        PluginFormat.Au -> "au"
-        PluginFormat.AbletonNative -> "ableton"
-        PluginFormat.Unknown -> "unknown"
-    }

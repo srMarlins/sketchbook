@@ -35,6 +35,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.io.RawSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -65,7 +66,7 @@ class BootstrapDataTest {
             val settings = FakeSettings()
             val data = newBootstrapData(handle.catalog, cloud, settings)
 
-            val entries = data.seedRegistry().getOrThrow()
+            val entries = data.seedRegistry()
 
             // Project rows + UL = 3 entries.
             val byKey = entries.associateBy { it.kind to it.scopeKey }
@@ -100,8 +101,8 @@ class BootstrapDataTest {
             val data = newBootstrapData(handle.catalog, cloud, settings)
 
             // First call seeds nothing (no writes to the cloud); second call also no-op.
-            data.seedRegistry().getOrThrow()
-            data.seedRegistry().getOrThrow()
+            data.seedRegistry()
+            data.seedRegistry()
 
             // Cloud doc never created — fetch returns empty.
             assertEquals(0, cloud.writeCallsTo(REGISTRY_KEY))
@@ -117,9 +118,14 @@ class BootstrapDataTest {
             val settings = FakeSettings()
             val data = newBootstrapData(handle.catalog, cloud, settings)
 
-            val result = data.seedRegistry()
-
-            assertTrue(result.isFailure)
+            // seedRegistry now throws on irrecoverable failure (per #128).
+            var thrown: Throwable? = null
+            try {
+                data.seedRegistry()
+            } catch (t: Throwable) {
+                thrown = t
+            }
+            assertNotNull(thrown, "expected seedRegistry to throw when registry write fails")
             // Flag still false → subsequent launches will retry the seed.
             assertEquals(false, settings.observe().first().registrySeeded)
         }
@@ -262,7 +268,7 @@ private class FakeBootstrapCloud(
         source: RawSource,
         size: Long,
         scope: BlobScope,
-    ) {}
+    ) = Unit
 
     override suspend fun getBlob(
         hash: BlobHash,
@@ -305,7 +311,7 @@ private class FakeBootstrapCloud(
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
         expected: Generation,
-    ) {}
+    ) = Unit
 
     override suspend fun readDoc(key: CloudDocKey): CloudDocRead? {
         val d = docs[key] ?: return null

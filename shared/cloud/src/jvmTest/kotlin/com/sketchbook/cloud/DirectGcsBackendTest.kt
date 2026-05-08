@@ -254,6 +254,104 @@ class DirectGcsBackendTest {
             assertEquals(Generation("100"), result.getOrNull())
         }
 
+    /**
+     * Regression for #127 / R-3: HEAD must be a small pointer (~100 bytes), not a duplicate of
+     * the full manifest body. Capture the bytes both writes send and assert the HEAD payload
+     * decodes as a [ManifestHeadPointer] referencing the timestamped object — and is much
+     * shorter than the full manifest.
+     */
+    @Test
+    fun appendManifestHeadWritesPointerNotFullManifestBody() =
+        runTest {
+            val manifest = manifestFixture()
+            val capturedBodies = mutableMapOf<String, ByteArray>()
+            val backend =
+                makeBackend { request ->
+                    val name = request.url.parameters["name"].orEmpty()
+                    val body = request.body.toByteArray()
+                    capturedBodies[name] = body
+                    respond("", HttpStatusCode.OK, headersOf("x-goog-generation", "10"))
+                }
+            backend.appendManifestHead(
+                treeId = manifest.treeId,
+                kind = TrackedTreeKind.Project,
+                expectedHead = Generation.ZERO,
+                manifest = manifest,
+            )
+
+            val headEntry = capturedBodies.entries.single { it.key.endsWith("/HEAD") }
+            val timestampedEntry = capturedBodies.entries.single { !it.key.endsWith("/HEAD") }
+
+            // HEAD body must decode as the v=3 pointer.
+            val pointer =
+                ManifestHeadPointer.decodeOrNull(
+                    json =
+                        kotlinx.serialization.json.Json {
+                            encodeDefaults = true
+                            ignoreUnknownKeys = true
+                        },
+                    bytes = headEntry.value,
+                )
+            assertTrue(pointer != null, "HEAD body did not decode as pointer: ${headEntry.value.decodeToString()}")
+            assertEquals(manifest.rev.value, pointer.rev)
+            assertEquals(timestampedEntry.key, pointer.manifestPath)
+            // Tiny pointer (a couple hundred bytes max) vs the full manifest blob.
+            assertTrue(
+                headEntry.value.size < timestampedEntry.value.size,
+                "expected HEAD pointer to be smaller than timestamped manifest: " +
+                    "${headEntry.value.size} vs ${timestampedEntry.value.size}",
+            )
+        }
+
+    /**
+     * Back-compat: a v=2 HEAD body (the full Manifest doc, no `manifest_path` field) must NOT
+     * decode as a [ManifestHeadPointer]. Readers can use this null result to fall back to
+     * decoding as Manifest.
+     */
+    @Test
+    fun manifestHeadPointerDecodeOrNullReturnsNullForLegacyV2Manifest() {
+        val manifest = manifestFixture()
+        val v2HeadBody =
+            kotlinx.serialization.json.Json
+                .encodeToString(Manifest.serializer(), manifest)
+                .toByteArray()
+        val pointer =
+            ManifestHeadPointer.decodeOrNull(
+                json =
+                    kotlinx.serialization.json.Json {
+                        encodeDefaults = true
+                        ignoreUnknownKeys = true
+                    },
+                bytes = v2HeadBody,
+            )
+        // The Manifest schema doesn't have a `manifest_path` field; the pointer decoder must
+        // recognize this and return null so the caller falls back to Manifest decoding.
+        assertEquals(null, pointer)
+    }
+
+    /**
+     * Version gate: a pointer-shaped body with a `v` other than the current
+     * [ManifestHeadPointer.HEAD_POINTER_VERSION] must decode to null. Belt-and-suspenders
+     * against future-shape leakage when [ignoreUnknownKeys] is on — the caller can then choose
+     * between fallback decoding or surfacing the version mismatch.
+     */
+    @Test
+    fun manifestHeadPointerDecodeOrNullReturnsNullForUnsupportedVersion() {
+        val unsupportedPointerJson =
+            """{"v":4,"rev":7,"manifest_path":"trees/project/x/manifests/00000007-ts-host.json"}"""
+                .toByteArray()
+        val pointer =
+            ManifestHeadPointer.decodeOrNull(
+                json =
+                    kotlinx.serialization.json.Json {
+                        encodeDefaults = true
+                        ignoreUnknownKeys = true
+                    },
+                bytes = unsupportedPointerJson,
+            )
+        assertEquals(null, pointer)
+    }
+
     @Test
     fun acquireLockHandlesHeldCase() =
         runTest {

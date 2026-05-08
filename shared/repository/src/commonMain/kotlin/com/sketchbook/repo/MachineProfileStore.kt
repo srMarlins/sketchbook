@@ -5,6 +5,8 @@ import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.CloudDocKey
+import com.sketchbook.core.Os
+import com.sketchbook.core.PluginFormat
 import com.sketchbook.core.SketchbookError
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -44,13 +46,14 @@ interface MachineProfileStore {
     /**
      * Build this host's slice of the plugin manifest from the local catalog and write it to
      * `<tenant>/profile/plugin_manifest_<host_id>.json`. Idempotent — every call overwrites
-     * the prior slice for this host.
+     * the prior slice for this host. Throws on cloud / encode failure;
+     * `CancellationException` propagates.
      */
     suspend fun publishHostSlice(
         hostId: String,
         hostName: String,
-        os: String,
-    ): Result<HostPluginManifest>
+        os: Os,
+    ): HostPluginManifest
 
     /**
      * List every host's slice and union them. Used by the plugin checklist screen
@@ -60,9 +63,11 @@ interface MachineProfileStore {
 
     /**
      * Add this host to `<tenant>/profile/machines.json` (read-merge-CAS). On registration
-     * conflicts, retries up to [REGISTER_MAX_RETRIES] before bailing.
+     * conflicts, retries up to [REGISTER_MAX_RETRIES] before bailing. Throws
+     * [SketchbookError.Conflict] when retries are exhausted, or the underlying cloud error
+     * for non-conflict failures; `CancellationException` propagates.
      */
-    suspend fun registerMachine(entry: MachineEntry): Result<Unit>
+    suspend fun registerMachine(entry: MachineEntry)
 
     /** Read the machines roster — used to drive the "Windows is still on v=1" banner. */
     suspend fun listMachines(): List<MachineEntry>
@@ -82,7 +87,7 @@ data class HostPluginManifest(
     @SerialName("v") val version: Int = 1,
     @SerialName("host_id") val hostId: String,
     @SerialName("host_name") val hostName: String,
-    @SerialName("os") val os: String,
+    @SerialName("os") val os: Os,
     @SerialName("computed_at") val computedAt: Instant,
     @SerialName("plugins") val plugins: List<HostPluginEntry>,
 )
@@ -90,7 +95,7 @@ data class HostPluginManifest(
 @Serializable
 data class HostPluginEntry(
     @SerialName("name") val name: String,
-    @SerialName("format") val format: String,
+    @SerialName("format") val format: PluginFormat,
     @SerialName("installed") val installed: Boolean,
 )
 
@@ -108,7 +113,7 @@ data class UnionedPluginManifest(
 data class MachineEntry(
     @SerialName("host_id") val hostId: String,
     @SerialName("host_name") val hostName: String,
-    @SerialName("os") val os: String,
+    @SerialName("os") val os: Os,
     @SerialName("last_seen_at") val lastSeenAt: Instant,
     @SerialName("binary_version") val binaryVersion: String,
 )
@@ -140,8 +145,8 @@ class CloudMachineProfileStore(
     override suspend fun publishHostSlice(
         hostId: String,
         hostName: String,
-        os: String,
-    ): Result<HostPluginManifest> {
+        os: Os,
+    ): HostPluginManifest {
         val plugins = composeHostSlice()
         val manifest =
             HostPluginManifest(
@@ -157,12 +162,13 @@ class CloudMachineProfileStore(
         // saves a round-trip per call; the previous "read then write with expected = existing
         // generation" was a half-CAS that failed silently on a same-host race rather than
         // actually protecting anything.
-        return cloud
+        cloud
             .writeDoc(
                 key = MachineProfileStore.pluginManifestKey(hostId),
                 expected = null,
                 bytes = bytes,
-            ).map { manifest }
+            ).getOrThrow()
+        return manifest
     }
 
     override suspend fun composeUnion(): UnionedPluginManifest {
@@ -209,7 +215,7 @@ class CloudMachineProfileStore(
         }
     }
 
-    override suspend fun registerMachine(entry: MachineEntry): Result<Unit> {
+    override suspend fun registerMachine(entry: MachineEntry) {
         repeat(MachineProfileStore.REGISTER_MAX_RETRIES) { attempt ->
             val current = cloud.readDoc(MachineProfileStore.MACHINES_KEY)
             val doc =
@@ -224,9 +230,9 @@ class CloudMachineProfileStore(
             val bytes = JSON.encodeToString(MachinesDoc.serializer(), doc).encodeToByteArray()
             val result = cloud.writeDoc(MachineProfileStore.MACHINES_KEY, expected, bytes)
             result
-                .onSuccess { return Result.success(Unit) }
+                .onSuccess { return }
                 .onFailure { err ->
-                    if (err !is SketchbookError.Conflict) return Result.failure(err)
+                    if (err !is SketchbookError.Conflict) throw err
                     // CAS conflict: jittered exponential backoff before re-reading. Without
                     // this, a herd of machines waking together (mass software-update day) hot-
                     // loops on contention and starves out the cluster. Caps at attempt index 5
@@ -234,7 +240,7 @@ class CloudMachineProfileStore(
                     delay(backoffDelayMillis(attempt))
                 }
         }
-        return Result.failure(SketchbookError.Conflict("machines.json CAS retries exhausted"))
+        throw SketchbookError.Conflict("machines.json CAS retries exhausted")
     }
 
     override suspend fun listMachines(): List<MachineEntry> {
@@ -260,22 +266,26 @@ class CloudMachineProfileStore(
             val byKey = mutableMapOf<PluginKey, HostPluginEntry>()
             val projectRows = catalog.catalogQueries.selectAllDistinctProjectPluginsWithInstalled().executeAsList()
             for (row in projectRows) {
-                val key = PluginKey(row.plugin_name, row.plugin_type)
+                // Map the SQL `plugin_type` text column to the typed PluginFormat enum at the
+                // boundary. Live's `"component"` alias for AU shows up here for legacy rows.
+                val format = PluginFormat.fromWireWithAliases(row.plugin_type)
+                val key = PluginKey(row.plugin_name, format)
                 byKey[key] =
                     HostPluginEntry(
                         name = row.plugin_name,
-                        format = row.plugin_type,
+                        format = format,
                         installed = (row.is_installed ?: 0L) > 0L,
                     )
             }
             val ulRows = catalog.catalogQueries.selectAllDistinctUserLibraryPluginsWithInstalled().executeAsList()
             for (row in ulRows) {
-                val key = PluginKey(row.plugin_name, row.plugin_type)
+                val format = PluginFormat.fromWireWithAliases(row.plugin_type)
+                val key = PluginKey(row.plugin_name, format)
                 val existing = byKey[key]
                 byKey[key] =
                     HostPluginEntry(
                         name = row.plugin_name,
-                        format = row.plugin_type,
+                        format = format,
                         installed = (existing?.installed ?: false) || ((row.is_installed ?: 0L) > 0L),
                     )
             }
@@ -291,27 +301,29 @@ class CloudMachineProfileStore(
             }
 
         /**
-         * Backoff for [registerMachine]'s CAS retry loop. Base 50 ms doubled per attempt
-         * (capped at attempt index 5 → 1.6 s) with up to 50 ms of random jitter to break
-         * herd patterns on mass-update events. Pattern follows
+         * Backoff for [registerMachine]'s CAS retry loop. [BACKOFF_BASE_MS] doubled per attempt
+         * (capped at [BACKOFF_MAX_SHIFT] → 1.6 s) with up to [BACKOFF_JITTER_MS] of random
+         * jitter to break herd patterns on mass-update events. Pattern follows
          * https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/.
          */
         fun backoffDelayMillis(attempt: Int): Long {
-            val capped = attempt.coerceAtMost(5)
-            val base = 50L shl capped
-            return base + Random.nextLong(0, 50)
+            val capped = attempt.coerceAtMost(BACKOFF_MAX_SHIFT)
+            val base = BACKOFF_BASE_MS shl capped
+            return base + Random.nextLong(0, BACKOFF_JITTER_MS)
         }
+
+        private const val BACKOFF_BASE_MS: Long = 50L
+        private const val BACKOFF_JITTER_MS: Long = 50L
+        private const val BACKOFF_MAX_SHIFT: Int = 5
     }
 }
 
 /**
- * Internal map key for `(plugin_name, plugin_type)` rows. Promoted from `Pair<String,String>`
+ * Internal map key for `(plugin_name, format)` rows. Promoted from `Pair<String,String>`
  * so the field names show up in stack traces and `equals`/`hashCode` come from the data class
- * for free. The wire format on `HostPluginEntry` stays string-typed; promoting `format` to
- * the typed `PluginFormat` enum end-to-end is tracked in
- * https://github.com/srMarlins/sketchbook/issues/129.
+ * for free.
  */
 internal data class PluginKey(
     val name: String,
-    val format: String,
+    val format: PluginFormat,
 )

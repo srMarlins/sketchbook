@@ -39,6 +39,9 @@ import kotlinx.io.Source
 import kotlinx.io.buffered
 import kotlinx.io.readAtMostTo
 import kotlinx.io.readByteArray
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -313,6 +316,10 @@ class DirectGcsBackend(
             .sortedBy { it.rev }
     }
 
+    @Suppress("ReturnCount")
+    // Two writes (HEAD pointer then timestamped body), each with three terminal outcomes
+    // (success, CAS conflict, other failure). Collapsing the early-returns would force a
+    // sentinel-then-dispatch dance that's harder to read than the linear two-step.
     override suspend fun appendManifestHead(
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
@@ -326,7 +333,18 @@ class DirectGcsBackend(
         // non-deterministic between the winner and a stale loser.
         val timestamped = manifestPath(treeId, kind, manifest.rev.value, manifest.timestamp.toString(), manifest.hostId)
         val headPath = headPath(treeId, kind)
-        val body = json.encodeToString(Manifest.serializer(), manifest).toByteArray(Charsets.UTF_8)
+
+        // R-3 (#127): HEAD is a small pointer (~100 bytes) instead of a full duplicate of the
+        // manifest body. For a manifest with thousands of file entries the previous "write the
+        // body twice" doubled every snapshot's write cost. The pointer references the
+        // historical timestamped object that holds the actual bytes.
+        val pointer =
+            ManifestHeadPointer(
+                rev = manifest.rev.value,
+                manifestPath = timestamped,
+            )
+        val pointerBody = json.encodeToString(ManifestHeadPointer.serializer(), pointer).toByteArray(Charsets.UTF_8)
+        val timestampedBody = json.encodeToString(Manifest.serializer(), manifest).toByteArray(Charsets.UTF_8)
 
         // HEAD pointer — CAS via expectedHead. Must succeed before we PUT the timestamped copy.
         val headResp =
@@ -338,7 +356,7 @@ class DirectGcsBackend(
                     headers { append("x-goog-if-generation-match", expectedHead.raw) }
                 }
                 contentType(ContentType.Application.Json)
-                setBody(body)
+                setBody(pointerBody)
             }
         val headGen =
             when (headResp.status) {
@@ -366,7 +384,7 @@ class DirectGcsBackend(
                 parameter("name", timestamped)
                 headers { append("x-goog-if-generation-match", "0") }
                 contentType(ContentType.Application.Json)
-                setBody(body)
+                setBody(timestampedBody)
             }
         if (timestampedResp.status != HttpStatusCode.OK && timestampedResp.status != HttpStatusCode.PreconditionFailed) {
             return Result.failure(remoteFailure(timestampedResp, "PUT $timestamped"))
@@ -654,6 +672,48 @@ internal val ManifestJson =
         ignoreUnknownKeys = true
         prettyPrint = false
     }
+
+/**
+ * Wire shape of `<tree-prefix>HEAD` from v=3 onward (#127 / R-3): a tiny pointer at the rev
+ * + manifest path of the latest snapshot. Replaces the previous "HEAD body == full Manifest
+ * body" duplicate, which doubled every snapshot's write cost on manifests with thousands of
+ * file entries.
+ *
+ * Back-compat: pre-v=3 HEAD bodies (which don't carry a `v` field) are still parseable as
+ * `Manifest`, since the Manifest schema has its own `v` field. A reader can detect the shape
+ * by attempting to decode the pointer first, then falling back to Manifest.
+ */
+@Serializable
+data class ManifestHeadPointer(
+    @SerialName("v") val version: Int = HEAD_POINTER_VERSION,
+    @SerialName("rev") val rev: Long,
+    @SerialName("manifest_path") val manifestPath: String,
+) {
+    companion object {
+        const val HEAD_POINTER_VERSION: Int = 3
+
+        /**
+         * Try to decode [bytes] as a v=3 [ManifestHeadPointer]. Returns `null` when the body
+         * doesn't have the pointer shape (i.e. legacy v=2 full-manifest HEAD), so the caller
+         * can fall back to `Manifest` decoding.
+         *
+         * The `v` field is checked explicitly: the [ManifestSerializer] dispatches on `v` for
+         * the same reason. Without the gate, a future v=4 pointer (or a partially-shaped
+         * legacy body that happens to satisfy the v=3 fields under `ignoreUnknownKeys = true`)
+         * could be misread as v=3.
+         */
+        fun decodeOrNull(
+            json: Json,
+            bytes: ByteArray,
+        ): ManifestHeadPointer? =
+            try {
+                val raw = json.decodeFromString(serializer(), bytes.decodeToString())
+                if (raw.version != HEAD_POINTER_VERSION || raw.manifestPath.isBlank()) null else raw
+            } catch (_: SerializationException) {
+                null
+            }
+    }
+}
 
 private val HttpStatusCode.isSuccess: Boolean get() = value in 200..299
 

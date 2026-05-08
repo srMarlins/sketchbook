@@ -97,32 +97,30 @@ class PullPollerTest {
             treeId: TrackedTreeId,
             kind: TrackedTreeKind,
             manifestPath: String,
-        ): Result<TreeJournalEntry> {
+        ): TreeJournalEntry {
             recordedSnapshots += Triple(treeId, kind, manifest)
-            return Result.success(
-                TreeJournalEntry(
-                    treeId = treeId,
-                    kind = kind,
-                    timestamp = manifest.timestamp,
-                    hostId = manifest.hostId,
-                    event =
-                        TreeJournalEvent.Snapshot(
-                            rev = manifest.rev.value,
-                            parentRev = manifest.parentRev?.value,
-                            fileCount = manifest.stats.fileCount,
-                            totalBytes = manifest.stats.totalBytes,
-                            newBytes = manifest.stats.newBytes,
-                            manifestPath = manifestPath,
-                        ),
-                    rev = manifest.rev,
-                    sequence = (recordedSnapshots.size).toLong(),
-                ),
+            return TreeJournalEntry(
+                treeId = treeId,
+                kind = kind,
+                timestamp = manifest.timestamp,
+                hostId = manifest.hostId,
+                event =
+                    TreeJournalEvent.Snapshot(
+                        rev = manifest.rev.value,
+                        parentRev = manifest.parentRev?.value,
+                        fileCount = manifest.stats.fileCount,
+                        totalBytes = manifest.stats.totalBytes,
+                        newBytes = manifest.stats.newBytes,
+                        manifestPath = manifestPath,
+                    ),
+                rev = manifest.rev,
+                sequence = (recordedSnapshots.size).toLong(),
             )
         }
 
-        override suspend fun appendEvent(entry: TreeJournalEntry): Result<TreeJournalEntry> {
+        override suspend fun appendEvent(entry: TreeJournalEntry): TreeJournalEntry {
             recordedEvents += entry
-            return Result.success(entry.copy(sequence = recordedEvents.size.toLong()))
+            return entry.copy(sequence = recordedEvents.size.toLong())
         }
 
         override fun observeRecent(

@@ -18,6 +18,32 @@ This file is for things you *can't* observe: war stories and don't-rules that ar
 
 State holders are KMP `ViewModel`s contributed with `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject` and acquired per screen with `metroViewModel<VM>()`. Full DI policy in `docs/architecture/dependency-injection.md`.
 
+## `runCatching` at suspend boundaries
+
+`runCatching` catches `Throwable`, including `kotlinx.coroutines.CancellationException`. When the lambda contains a suspend call, that swallows coroutine cancellation and breaks structured concurrency — the coroutine reports "success" (or a `Result.failure(CancellationException)`) and outer cancellation propagation stops there.
+
+**Don't:**
+
+```kotlin
+val r = runCatching { repository.foo() }.getOrElse { Result.failure(it) }   // foo() is suspend
+runCatching { cloud.releaseLock(...) }                                        // releaseLock is suspend
+```
+
+**Do:**
+
+```kotlin
+val r =
+    try {
+        repository.foo()
+    } catch (c: CancellationException) {
+        throw c
+    } catch (t: Throwable) {
+        Result.failure(t)
+    }
+```
+
+`runCatching` is fine when the lambda is pure synchronous I/O — `Files.deleteIfExists`, `Instant.parse`, `Files.size`, focusRequester ops, etc. Anything inside a `withContext { ... }` block or a `suspend fun` body that calls another suspend function needs the explicit re-throw.
+
 ## Cloud + release gotchas
 
 The flows live in `shared/cloud/` and `docs/runbooks/release.md`. The "you'd only know if you'd been bitten" rules:

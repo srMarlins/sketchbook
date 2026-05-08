@@ -1,5 +1,7 @@
 package com.sketchbook.desktop.bootstrap
 
+import com.sketchbook.core.Os
+import com.sketchbook.core.PluginFormat
 import com.sketchbook.desktop.ui.setup.HostSliceContext
 import com.sketchbook.desktop.ui.setup.OsProvider
 import com.sketchbook.desktop.ui.setup.PluginChecklistViewModel
@@ -39,7 +41,7 @@ class PluginChecklistViewModelTest {
     @Test
     fun emptyUnionYieldsEmptyState() =
         runTest(dispatcher) {
-            val vm = newViewModel(union = UnionedPluginManifest(emptyList(), emptyList()), os = "darwin")
+            val vm = newViewModel(union = UnionedPluginManifest(emptyList(), emptyList()), os = Os.Mac)
             assertEquals(0, vm.state.value.pending.size)
             assertEquals(0, vm.state.value.alreadyInstalled.size)
             // Initial-load flag clears once the first compose lands.
@@ -56,12 +58,12 @@ class PluginChecklistViewModelTest {
                             perHost = emptyList(),
                             union =
                                 listOf(
-                                    HostPluginEntry("Diva", "vst3", installed = false),
-                                    HostPluginEntry("Pro-Q 3", "au", installed = false),
-                                    HostPluginEntry("Old Dog", "vst", installed = false),
+                                    HostPluginEntry("Diva", PluginFormat.Vst3, installed = false),
+                                    HostPluginEntry("Pro-Q 3", PluginFormat.Au, installed = false),
+                                    HostPluginEntry("Old Dog", PluginFormat.Vst2, installed = false),
                                 ),
                         ),
-                    os = "windows",
+                    os = Os.Windows,
                 )
 
             // au excluded on windows; vst kept; vst3 kept.
@@ -82,11 +84,11 @@ class PluginChecklistViewModelTest {
                             perHost = emptyList(),
                             union =
                                 listOf(
-                                    HostPluginEntry("Serum", "vst3", installed = true),
-                                    HostPluginEntry("Diva", "vst3", installed = false),
+                                    HostPluginEntry("Serum", PluginFormat.Vst3, installed = true),
+                                    HostPluginEntry("Diva", PluginFormat.Vst3, installed = false),
                                 ),
                         ),
-                    os = "darwin",
+                    os = Os.Mac,
                 )
 
             assertEquals(
@@ -114,11 +116,11 @@ class PluginChecklistViewModelTest {
                             union =
                                 listOf(
                                     // Reports "installed somewhere" but format=au is Mac-only.
-                                    HostPluginEntry("ChannelEQ", "au", installed = true),
-                                    HostPluginEntry("Serum", "vst3", installed = true),
+                                    HostPluginEntry("ChannelEQ", PluginFormat.Au, installed = true),
+                                    HostPluginEntry("Serum", PluginFormat.Vst3, installed = true),
                                 ),
                         ),
-                    os = "windows",
+                    os = Os.Windows,
                 )
 
             assertEquals(
@@ -134,16 +136,16 @@ class PluginChecklistViewModelTest {
         runTest(dispatcher) {
             val store =
                 MutableStubProfileStore(
-                    union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", "vst3", false))),
+                    union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", PluginFormat.Vst3, false))),
                 )
-            val vm = newViewModel(store = store, probe = StubProbe(), os = "darwin")
+            val vm = newViewModel(store = store, probe = StubProbe(), os = Os.Mac)
             assertEquals(
                 listOf("Diva"),
                 vm.state.value.pending
                     .map { it.name },
             )
 
-            store.union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", "vst3", true)))
+            store.union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", PluginFormat.Vst3, true)))
             vm.reprobe()
 
             assertEquals(
@@ -167,12 +169,12 @@ class PluginChecklistViewModelTest {
             // than carry the stale "just installed" forever.
             val store =
                 MutableStubProfileStore(
-                    union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", "vst3", false))),
+                    union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", PluginFormat.Vst3, false))),
                 )
-            val vm = newViewModel(store = store, probe = StubProbe(), os = "darwin")
+            val vm = newViewModel(store = store, probe = StubProbe(), os = Os.Mac)
 
             // Round 1: install Diva.
-            store.union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", "vst3", true)))
+            store.union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", PluginFormat.Vst3, true)))
             vm.reprobe()
             assertEquals(
                 listOf("Diva"),
@@ -181,7 +183,7 @@ class PluginChecklistViewModelTest {
             )
 
             // Round 2: user uninstalled Diva again.
-            store.union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", "vst3", false)))
+            store.union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", PluginFormat.Vst3, false)))
             vm.reprobe()
             assertEquals(
                 emptyList(),
@@ -201,7 +203,7 @@ class PluginChecklistViewModelTest {
     fun composeUnionFailureSurfacesAsLoadFailed() =
         runTest(dispatcher) {
             val store = ThrowingProfileStore(IllegalStateException("network down"))
-            val vm = newViewModel(store = store, probe = StubProbe(), os = "darwin")
+            val vm = newViewModel(store = store, probe = StubProbe(), os = Os.Mac)
 
             // refresh ran in init; failure path should clear isInitialLoad and stamp the
             // loadFailed message.
@@ -219,9 +221,9 @@ class PluginChecklistViewModelTest {
             val probe = CountingProbe()
             val store =
                 MutableStubProfileStore(
-                    union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", "vst3", false))),
+                    union = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", PluginFormat.Vst3, false))),
                 )
-            val vm = newViewModel(store = store, probe = probe, os = "darwin")
+            val vm = newViewModel(store = store, probe = probe, os = Os.Mac)
 
             assertEquals(0, probe.callCount, "init should not run probe; only reprobe does")
 
@@ -236,9 +238,9 @@ class PluginChecklistViewModelTest {
             val store =
                 FlakyProfileStore(
                     initialFailure = IllegalStateException("boom"),
-                    successUnion = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", "vst3", false))),
+                    successUnion = UnionedPluginManifest(emptyList(), listOf(HostPluginEntry("Diva", PluginFormat.Vst3, false))),
                 )
-            val vm = newViewModel(store = store, probe = StubProbe(), os = "darwin")
+            val vm = newViewModel(store = store, probe = StubProbe(), os = Os.Mac)
             assertNotNull(vm.state.value.loadFailed)
 
             vm.reprobe()
@@ -253,7 +255,7 @@ class PluginChecklistViewModelTest {
     private fun newViewModel(
         store: MachineProfileStore,
         probe: PluginPresenceProbe = StubProbe(),
-        os: String,
+        os: Os,
     ): PluginChecklistViewModel =
         PluginChecklistViewModel(
             profileStore = store,
@@ -264,7 +266,7 @@ class PluginChecklistViewModelTest {
 
     private fun newViewModel(
         union: UnionedPluginManifest,
-        os: String,
+        os: Os,
     ): PluginChecklistViewModel = newViewModel(store = ImmutableStubProfileStore(union), probe = StubProbe(), os = os)
 }
 
@@ -288,12 +290,12 @@ private class ImmutableStubProfileStore(
     override suspend fun publishHostSlice(
         hostId: String,
         hostName: String,
-        os: String,
-    ): Result<HostPluginManifest> = Result.success(emptyManifest(hostId, hostName, os))
+        os: Os,
+    ): HostPluginManifest = emptyManifest(hostId, hostName, os)
 
     override suspend fun composeUnion(): UnionedPluginManifest = union
 
-    override suspend fun registerMachine(entry: MachineEntry): Result<Unit> = Result.success(Unit)
+    override suspend fun registerMachine(entry: MachineEntry) = Unit
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }
@@ -307,15 +309,15 @@ private class MutableStubProfileStore(
     override suspend fun publishHostSlice(
         hostId: String,
         hostName: String,
-        os: String,
-    ): Result<HostPluginManifest> {
+        os: Os,
+    ): HostPluginManifest {
         publishCount += 1
-        return Result.success(emptyManifest(hostId, hostName, os))
+        return emptyManifest(hostId, hostName, os)
     }
 
     override suspend fun composeUnion(): UnionedPluginManifest = union
 
-    override suspend fun registerMachine(entry: MachineEntry): Result<Unit> = Result.success(Unit)
+    override suspend fun registerMachine(entry: MachineEntry) = Unit
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }
@@ -326,12 +328,12 @@ private class ThrowingProfileStore(
     override suspend fun publishHostSlice(
         hostId: String,
         hostName: String,
-        os: String,
-    ): Result<HostPluginManifest> = Result.failure(cause)
+        os: Os,
+    ): HostPluginManifest = throw cause
 
     override suspend fun composeUnion(): UnionedPluginManifest = throw cause
 
-    override suspend fun registerMachine(entry: MachineEntry): Result<Unit> = Result.failure(cause)
+    override suspend fun registerMachine(entry: MachineEntry): Unit = throw cause
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }
@@ -345,8 +347,8 @@ private class FlakyProfileStore(
     override suspend fun publishHostSlice(
         hostId: String,
         hostName: String,
-        os: String,
-    ): Result<HostPluginManifest> = Result.success(emptyManifest(hostId, hostName, os))
+        os: Os,
+    ): HostPluginManifest = emptyManifest(hostId, hostName, os)
 
     override suspend fun composeUnion(): UnionedPluginManifest =
         if (firstCall) {
@@ -356,7 +358,7 @@ private class FlakyProfileStore(
             successUnion
         }
 
-    override suspend fun registerMachine(entry: MachineEntry): Result<Unit> = Result.success(Unit)
+    override suspend fun registerMachine(entry: MachineEntry) = Unit
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }
@@ -364,7 +366,7 @@ private class FlakyProfileStore(
 private fun emptyManifest(
     hostId: String,
     hostName: String,
-    os: String,
+    os: Os,
 ): HostPluginManifest =
     HostPluginManifest(
         hostId = hostId,

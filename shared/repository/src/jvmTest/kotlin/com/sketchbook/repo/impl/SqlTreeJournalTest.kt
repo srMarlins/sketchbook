@@ -85,9 +85,7 @@ class SqlTreeJournalTest {
             val (_, journal) = setup()
 
             val entry =
-                journal
-                    .recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "trees/user_library/$treeId/manifests/1.json")
-                    .getOrThrow()
+                journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "trees/user_library/$treeId/manifests/1.json")
 
             assertEquals(treeId, entry.treeId)
             assertEquals(kind, entry.kind)
@@ -118,10 +116,9 @@ class SqlTreeJournalTest {
         runTest {
             val (_, journal) = setup()
 
-            journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "p/1.json").getOrThrow()
+            journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "p/1.json")
             val second =
-                journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "p/1.json").getOrThrow()
-
+                journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "p/1.json")
             // Second call returns an entry without a sequence (no insert happened).
             assertNull(second.sequence)
 
@@ -140,10 +137,9 @@ class SqlTreeJournalTest {
         runTest {
             val (_, journal) = setup()
 
-            journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "p/1.json").getOrThrow()
-            journal.recordSnapshot(manifest(rev = 2), treeId, kind, manifestPath = "p/2.json").getOrThrow()
-            journal.recordSnapshot(manifest(rev = 3), treeId, kind, manifestPath = "p/3.json").getOrThrow()
-
+            journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "p/1.json")
+            journal.recordSnapshot(manifest(rev = 2), treeId, kind, manifestPath = "p/2.json")
+            journal.recordSnapshot(manifest(rev = 3), treeId, kind, manifestPath = "p/3.json")
             journal.observeSnapshots(treeId).test {
                 val rows = awaitItem()
                 assertEquals(listOf(SnapshotRev(3), SnapshotRev(2), SnapshotRev(1)), rows.map { it.rev })
@@ -173,7 +169,7 @@ class SqlTreeJournalTest {
                                 ),
                             rev = SnapshotRev(7),
                         ),
-                    ).getOrThrow()
+                    )
             assertNotNull(merge.sequence)
 
             val mat =
@@ -187,7 +183,7 @@ class SqlTreeJournalTest {
                             event = TreeJournalEvent.Materialize(rev = 7, filesWritten = 12, filesDeleted = 1),
                             rev = SnapshotRev(7),
                         ),
-                    ).getOrThrow()
+                    )
             assertNotNull(mat.sequence)
             // sequence is monotonic on the same connection.
             assertTrue(mat.sequence > merge.sequence)
@@ -221,15 +217,13 @@ class SqlTreeJournalTest {
                 updated_at = now.toEpochMilliseconds(),
             )
 
-            journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "p/1.json").getOrThrow()
-            journal
-                .recordSnapshot(
-                    manifest = manifest(rev = 1).copy(treeId = other),
-                    treeId = other,
-                    kind = kind,
-                    manifestPath = "p/o1.json",
-                ).getOrThrow()
-
+            journal.recordSnapshot(manifest(rev = 1), treeId, kind, manifestPath = "p/1.json")
+            journal.recordSnapshot(
+                manifest = manifest(rev = 1).copy(treeId = other),
+                treeId = other,
+                kind = kind,
+                manifestPath = "p/o1.json",
+            )
             journal.observeRecent(treeId, limit = 10).test {
                 val rows = awaitItem()
                 assertEquals(1, rows.size)
@@ -286,8 +280,7 @@ class SqlTreeJournalTest {
                 manifest(rev = 4, files = files)
                     .copy(label = "trial", stats = ManifestStats(fileCount = 1, totalBytes = 4096L, newBytes = 4096L))
 
-            journal.recordSnapshot(m, treeId, kind, manifestPath = "p/4.json").getOrThrow()
-
+            journal.recordSnapshot(m, treeId, kind, manifestPath = "p/4.json")
             journal.observeSnapshots(treeId).test {
                 val row = awaitItem().single()
                 assertEquals("trial", row.label)

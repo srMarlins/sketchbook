@@ -4,6 +4,7 @@ import com.sketchbook.core.UserId
 import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.submitForm
 import io.ktor.http.Parameters
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,14 +70,20 @@ class GoogleAuthSession(
         mutex.withLock {
             val rt = cachedRefreshToken
             if (rt != null) {
-                // Best-effort revoke. Never fail the call on revoke errors.
-                runCatching {
+                // Best-effort revoke. try/catch (CancellationException) instead of runCatching so
+                // sign-out coroutine cancellation propagates correctly. See CLAUDE.md
+                // "runCatching at suspend boundaries".
+                try {
                     withContext(Dispatchers.IO) {
                         httpClient.submitForm(
                             url = "https://oauth2.googleapis.com/revoke",
                             formParameters = Parameters.build { append("token", rt) },
                         )
                     }
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (_: Throwable) {
+                    // Best-effort: revoke failure doesn't block sign-out.
                 }
             }
             tokenStore.clear()

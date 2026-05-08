@@ -1,5 +1,7 @@
 package com.sketchbook.desktop.bootstrap
 
+import com.sketchbook.core.Os
+import com.sketchbook.core.PluginFormat
 import com.sketchbook.desktop.ui.setup.SetupNav
 import com.sketchbook.desktop.ui.setup.SetupRoute
 import com.sketchbook.desktop.ui.setup.SetupState
@@ -46,10 +48,10 @@ class SetupNavTest {
             SetupNav.filterPending(
                 union =
                     listOf(
-                        HostPluginEntry("Serum", "vst3", installed = true),
-                        HostPluginEntry("Diva", "vst3", installed = false),
+                        HostPluginEntry("Serum", PluginFormat.Vst3, installed = true),
+                        HostPluginEntry("Diva", PluginFormat.Vst3, installed = false),
                     ),
-                os = "darwin",
+                os = Os.Mac,
             )
         assertEquals(listOf("Diva"), pending.map { it.name })
     }
@@ -60,10 +62,10 @@ class SetupNavTest {
             SetupNav.filterPending(
                 union =
                     listOf(
-                        HostPluginEntry("FabFilter Pro-Q 3", "au", installed = false),
-                        HostPluginEntry("Diva", "vst3", installed = false),
+                        HostPluginEntry("FabFilter Pro-Q 3", PluginFormat.Au, installed = false),
+                        HostPluginEntry("Diva", PluginFormat.Vst3, installed = false),
                     ),
-                os = "windows",
+                os = Os.Windows,
             )
         // AU-only plugin filtered out on Windows; vst3 stays.
         assertEquals(listOf("Diva"), pending.map { it.name })
@@ -75,10 +77,10 @@ class SetupNavTest {
             SetupNav.filterPending(
                 union =
                     listOf(
-                        HostPluginEntry("Pro-Q 3", "au", installed = false),
-                        HostPluginEntry("Old Plugin", "vst", installed = false),
+                        HostPluginEntry("Pro-Q 3", PluginFormat.Au, installed = false),
+                        HostPluginEntry("Old Plugin", PluginFormat.Vst2, installed = false),
                     ),
-                os = "darwin",
+                os = Os.Mac,
             )
         // vst (vst2) only runs on Windows / Linux; au stays on darwin.
         assertEquals(listOf("Pro-Q 3"), pending.map { it.name })
@@ -90,11 +92,11 @@ class SetupNavTest {
             SetupNav.filterPending(
                 union =
                     listOf(
-                        HostPluginEntry("Wavetable", "ableton", installed = false),
-                        HostPluginEntry("Mystery", "unknown", installed = false),
-                        HostPluginEntry("Diva", "vst3", installed = false),
+                        HostPluginEntry("Wavetable", PluginFormat.AbletonNative, installed = false),
+                        HostPluginEntry("Mystery", PluginFormat.Unknown, installed = false),
+                        HostPluginEntry("Diva", PluginFormat.Vst3, installed = false),
                     ),
-                os = "darwin",
+                os = Os.Mac,
             )
         // Native devices and unknowns aren't user-installable; only Diva stays.
         assertEquals(listOf("Diva"), pending.map { it.name })

@@ -7,6 +7,7 @@ import io.ktor.client.request.forms.submitForm
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.Parameters
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,8 +41,15 @@ class OAuthClient(
     /** Test seam — production uses [java.awt.Desktop.browse]. */
     private val browserOpener: (String) -> Unit = ::openInSystemBrowser,
 ) : OAuthFlow {
-    override suspend fun signIn(): Result<OAuthTokens> =
-        runCatching {
+    @Suppress("ThrowsCount")
+    // Three throws are intentional: OAuthTimeout (callback never arrived), the rethrow of
+    // a callback-server failure surfaced via deferredCode, and the canonical
+    // CancellationException rethrow that keeps structured concurrency honest.
+    override suspend fun signIn(): Result<OAuthTokens> {
+        // try/catch (CancellationException) instead of runCatching: signIn awaits suspend
+        // operations (deferredCode.await, exchangeCodeForTokens). runCatching would silently
+        // swallow coroutine cancellation. See CLAUDE.md "runCatching at suspend boundaries".
+        return try {
             val verifier = randomVerifier()
             val challenge = sha256B64Url(verifier)
             val state = randomState()
@@ -60,11 +68,18 @@ class OAuthClient(
                     withTimeoutOrNull(callbackTimeout) { deferredCode.await() }
                         ?: throw OAuthTimeout()
                 val code = codeResult.getOrElse { throw it }
-                exchangeCodeForTokens(code = code, verifier = verifier, redirectUri = redirectUri)
+                Result.success(
+                    exchangeCodeForTokens(code = code, verifier = verifier, redirectUri = redirectUri),
+                )
             } finally {
                 server.stop(0)
             }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
+    }
 
     override suspend fun refresh(refreshToken: String): RefreshResult =
         withContext(Dispatchers.IO) {

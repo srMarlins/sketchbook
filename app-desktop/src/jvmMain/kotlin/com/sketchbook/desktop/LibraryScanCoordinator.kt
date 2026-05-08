@@ -8,6 +8,7 @@ import com.sketchbook.repo.PluginPresenceProbe
 import com.sketchbook.repo.SettingsRepository
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,18 +70,29 @@ class LibraryScanCoordinator(
         scope.launch {
             runScan(scanner, path, _progress)
             // Sample-corpus walk follows the project scan: fast, no progress UI, no parsing.
+            // try/catch (CancellationException) instead of runCatching so coroutine cancellation
+            // propagates correctly. See CLAUDE.md "runCatching at suspend boundaries".
             for (sampleRoot in sampleRoots) {
                 if (scannedSamples.add(sampleRoot)) {
-                    runCatching { sampleScanner.scan(sampleRoot) }
+                    try {
+                        sampleScanner.scan(sampleRoot)
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (_: Throwable) {
+                        // Best-effort: scan failure doesn't invalidate the project scan.
+                    }
                 }
             }
             // PR-T: once the parser has populated `project_plugins`, walk the platform-default
             // plugin install directories and flip `is_installed` per (name, type). Best-effort —
-            // a probe failure must not invalidate the (succeeded) project scan, so wrap in
-            // runCatching. The probe's own internal try/catch already swallows missing-dir errors;
-            // this outer layer guards against a SQL hiccup (extremely unlikely) so the user still
-            // sees their indexed projects.
-            runCatching { pluginPresenceProbe.probe() }
+            // a probe failure must not invalidate the (succeeded) project scan.
+            try {
+                pluginPresenceProbe.probe()
+            } catch (c: CancellationException) {
+                throw c
+            } catch (_: Throwable) {
+                // Best-effort: probe failure doesn't invalidate the project scan.
+            }
         }
     }
 
@@ -91,7 +103,13 @@ class LibraryScanCoordinator(
             if (root is LibraryRoot.UserSamples && root.path !in scannedSamples) {
                 scannedSamples += root.path
                 scope.launch {
-                    runCatching { sampleScanner.scan(root.path) }
+                    try {
+                        sampleScanner.scan(root.path)
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (_: Throwable) {
+                        // Best-effort: scan failure logged via scanner internals.
+                    }
                 }
             }
         }

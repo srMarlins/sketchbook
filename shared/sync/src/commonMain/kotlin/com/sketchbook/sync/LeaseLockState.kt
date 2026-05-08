@@ -9,6 +9,7 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -104,7 +105,15 @@ class LeaseLockState(
         heartbeatJob?.cancel()
         heartbeatJob = null
         if (current is LockState.Owned) {
-            runCatching { cloud.releaseLock(treeId, kind, current.generation) }
+            // Best-effort release. try/catch (CancellationException) instead of runCatching:
+            // releaseLock is suspend, so runCatching would swallow coroutine cancellation.
+            try {
+                cloud.releaseLock(treeId, kind, current.generation)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (_: Throwable) {
+                // Best-effort: ignore release failures.
+            }
         }
         _state.value = LockState.Idle
     }

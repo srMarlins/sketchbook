@@ -1,5 +1,9 @@
 package com.sketchbook.desktop.ui.setup
 
+import com.sketchbook.core.Os
+import com.sketchbook.core.PluginFormat
+import com.sketchbook.repo.HostPluginEntry
+
 /**
  * Post-auth setup-flow ordering. Determines which screen (if any) appears before the user
  * lands on the main app:
@@ -38,12 +42,12 @@ object SetupNav {
      * - Drop rows installed on this host (the union OR-merged across hosts; we want the
      *   *local* installed flag specifically).
      * - Filter out formats that can't run on this OS (`vst3` works everywhere; `au` only
-     *   on darwin; `vst` on Windows/Linux).
+     *   on Mac; `vst` on Windows/Linux).
      */
     fun filterPending(
-        union: List<com.sketchbook.repo.HostPluginEntry>,
-        os: String,
-    ): List<com.sketchbook.repo.HostPluginEntry> =
+        union: List<HostPluginEntry>,
+        os: Os,
+    ): List<HostPluginEntry> =
         union.filter { entry ->
             !entry.installed && formatRunsOn(entry.format, os)
         }
@@ -52,22 +56,37 @@ object SetupNav {
      * True iff a plugin in [format] runs on [os]. Public so the plugin checklist VM can OS-
      * filter the `alreadyInstalled` bucket as well as `pending` (a Mac-only AU listed
      * "installed" by the macOS host should not appear in the Windows host's view at all).
+     *
+     * Exhaustive over [PluginFormat] x [Os] — no `else` branch. Adding a new format or OS
+     * is a compile-time decision.
      */
     fun formatRunsOn(
-        format: String,
-        os: String,
+        format: PluginFormat,
+        os: Os,
     ): Boolean =
         when (format) {
-            "vst3" -> true
+            PluginFormat.Vst3 -> {
+                true
+            }
 
-            "au", "component" -> os == "darwin"
+            PluginFormat.Au -> {
+                when (os) {
+                    Os.Mac -> true
+                    Os.Windows, Os.Linux -> false
+                }
+            }
 
-            "vst" -> os == "windows" || os == "linux"
+            PluginFormat.Vst2 -> {
+                when (os) {
+                    Os.Windows, Os.Linux -> true
+                    Os.Mac -> false
+                }
+            }
 
-            // not user-installable.
-            "ableton", "unknown" -> false
-
-            else -> false
+            // Not user-installable — Live ships it, "Unknown" is a parse fallback.
+            PluginFormat.AbletonNative, PluginFormat.Unknown -> {
+                false
+            }
         }
 }
 
