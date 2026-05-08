@@ -47,6 +47,16 @@ class LeaseLockState(
 
     private var heartbeatJob: Job? = null
 
+    private companion object {
+        /**
+         * Clock-skew tolerance for [LeaseLock.isExpired] checks. Two hosts disagreeing by
+         * up to this much on wall-clock time will not flap the held/expired UI state. NTP
+         * drift on consumer machines can be tens of seconds; 60s is a comfortable bound
+         * without leaving a held lease appearing expired prematurely.
+         */
+        val LEASE_SKEW_TOLERANCE: Duration = kotlin.time.Duration.parse("60s")
+    }
+
     suspend fun acquire(scope: CoroutineScope): LockState {
         val now = clock.now()
         val lock =
@@ -66,7 +76,28 @@ class LeaseLockState(
                 }
 
                 is LeaseAcquireResult.Held -> {
-                    LockState.HeldByOther(result.held, result.generation)
+                    // Auto-takeover when the held lease has TTL-expired (with skew tolerance).
+                    // Without this, an unattended host that died mid-snapshot wedges the
+                    // project until a human force-takes; the original holder's lease can't
+                    // refresh (they're dead) but the cloud keeps treating it as held until a
+                    // peer overwrites via CAS.
+                    if (result.held.isExpired(now, LEASE_SKEW_TOLERANCE)) {
+                        when (val r = cloud.refreshLock(treeId, kind, lock, result.generation)) {
+                            is LeaseRefreshResult.Refreshed -> {
+                                heartbeatJob?.cancel()
+                                heartbeatJob = scope.launch { heartbeatLoop(r.generation) }
+                                LockState.Owned(lock, r.generation)
+                            }
+
+                            LeaseRefreshResult.Stale -> {
+                                // Race: someone else took the lease between our acquire and
+                                // refresh. Surface as held; UI offers force-take.
+                                LockState.HeldByOther(result.held, result.generation)
+                            }
+                        }
+                    } else {
+                        LockState.HeldByOther(result.held, result.generation)
+                    }
                 }
             }
         _state.value = outcome
@@ -136,5 +167,12 @@ sealed interface LockState {
     data object Lost : LockState
 }
 
-/** Helper used by the UI: "did this lock expire?" */
-fun LeaseLock.isExpired(now: Instant): Boolean = expiresAt <= now
+/**
+ * Helper used by the UI: "did this lock expire?". [skew] adds tolerance so two hosts with NTP
+ * drift don't flap the UI state — the lease is only considered expired once the local clock
+ * is past `expiresAt + skew`.
+ */
+fun LeaseLock.isExpired(
+    now: Instant,
+    skew: Duration = Duration.ZERO,
+): Boolean = expiresAt + skew <= now
