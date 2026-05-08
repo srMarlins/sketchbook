@@ -246,11 +246,16 @@ class SqlRepairRepository(
                                 mapping.map { (mac, posix) ->
                                     SampleRefEdit(oldPath = mac, newPath = posix, newOriginalCrc = 0L)
                                 }
-                            // patch() is suspend; rethrow CancellationException so structured concurrency
-                            // isn't silently swallowed if AlsPatcher ever becomes truly async.
-                            runCatching { patcher.patch(alsPath, edits) }
-                                .onFailure { if (it is CancellationException) throw it }
-                                .getOrElse { AlsPatchService.Outcome.Failed }
+                            // patcher.patch is suspend — try/catch (CancellationException) so a
+                            // user-cancelled repair propagates cleanly. See CLAUDE.md
+                            // "runCatching at suspend boundaries".
+                            try {
+                                patcher.patch(alsPath, edits)
+                            } catch (c: CancellationException) {
+                                throw c
+                            } catch (_: Throwable) {
+                                AlsPatchService.Outcome.Failed
+                            }
                         }
                     }
 
@@ -376,11 +381,16 @@ class SqlRepairRepository(
                     if (snapshotResult.isFailure) {
                         AlsPatchService.Outcome.Failed
                     } else {
-                        // patch() is suspend; rethrow CancellationException so structured concurrency
-                        // isn't silently swallowed if AlsPatcher ever becomes truly async.
-                        runCatching { patcher.patch(alsPath, listOf(edit)) }
-                            .onFailure { if (it is CancellationException) throw it }
-                            .getOrElse { AlsPatchService.Outcome.Failed }
+                        // patcher.patch is suspend — try/catch (CancellationException) so a
+                        // user-cancelled repair propagates cleanly. See CLAUDE.md
+                        // "runCatching at suspend boundaries".
+                        try {
+                            patcher.patch(alsPath, listOf(edit))
+                        } catch (c: CancellationException) {
+                            throw c
+                        } catch (_: Throwable) {
+                            AlsPatchService.Outcome.Failed
+                        }
                     }
 
                 catalog.transaction {
@@ -439,12 +449,17 @@ class SqlRepairRepository(
                         NO_UNDO_BYTES
                     } else {
                         val bytes = Files.readAllBytes(sidecar)
-                        // restore() is suspend; rethrow CancellationException so structured concurrency
-                        // isn't silently swallowed if AlsPatcher ever becomes truly async.
+                        // patcher.restore is suspend — try/catch (CancellationException) so a
+                        // user-cancelled undo propagates cleanly. See CLAUDE.md
+                        // "runCatching at suspend boundaries".
                         val outcome =
-                            runCatching { patcher.restore(alsPath, bytes) }
-                                .onFailure { if (it is CancellationException) throw it }
-                                .getOrElse { AlsPatchService.Outcome.Failed }
+                            try {
+                                patcher.restore(alsPath, bytes)
+                            } catch (c: CancellationException) {
+                                throw c
+                            } catch (_: Throwable) {
+                                AlsPatchService.Outcome.Failed
+                            }
                         // Best-effort cleanup; a leftover sidecar is benign (next apply overwrites it).
                         runCatching { Files.deleteIfExists(sidecar) }
                         outcome.name
@@ -481,7 +496,7 @@ class SqlRepairRepository(
 
     override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> =
         withContext(ioDispatcher) {
-            runCatching {
+            try {
                 // Mirror applyMacPathRepair: capture name + path together so the journal entry
                 // carries both denorm columns even if the project_id is orphaned by a concurrent
                 // rescan between this lookup and the journal append below.
@@ -504,9 +519,16 @@ class SqlRepairRepository(
                     outcomeName = NO_UNDO_BYTES
                 } else {
                     val bytes = Files.readAllBytes(sidecar)
+                    // patcher.restore is suspend — must rethrow CancellationException so the
+                    // outer try/catch's structured-concurrency path stays honest.
                     val outcome =
-                        runCatching { patcher.restore(alsPath, bytes) }
-                            .getOrElse { AlsPatchService.Outcome.Failed }
+                        try {
+                            patcher.restore(alsPath, bytes)
+                        } catch (c: CancellationException) {
+                            throw c
+                        } catch (_: Throwable) {
+                            AlsPatchService.Outcome.Failed
+                        }
                     runCatching { Files.deleteIfExists(sidecar) }
                     // Re-scan to confirm how many Mac-style paths the restore brought back —
                     // this is also what [applyMacPathRepair] reported as `mappingCount`, so the
@@ -540,7 +562,11 @@ class SqlRepairRepository(
                             ),
                     ),
                 )
-                Unit
+                Result.success(Unit)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Result.failure(t)
             }
         }
 

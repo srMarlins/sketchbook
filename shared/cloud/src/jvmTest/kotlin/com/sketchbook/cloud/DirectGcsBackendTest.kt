@@ -329,6 +329,29 @@ class DirectGcsBackendTest {
         assertEquals(null, pointer)
     }
 
+    /**
+     * Version gate: a pointer-shaped body with a `v` other than the current
+     * [ManifestHeadPointer.HEAD_POINTER_VERSION] must decode to null. Belt-and-suspenders
+     * against future-shape leakage when [ignoreUnknownKeys] is on — the caller can then choose
+     * between fallback decoding or surfacing the version mismatch.
+     */
+    @Test
+    fun manifestHeadPointerDecodeOrNullReturnsNullForUnsupportedVersion() {
+        val unsupportedPointerJson =
+            """{"v":4,"rev":7,"manifest_path":"trees/project/x/manifests/00000007-ts-host.json"}"""
+                .toByteArray()
+        val pointer =
+            ManifestHeadPointer.decodeOrNull(
+                json =
+                    kotlinx.serialization.json.Json {
+                        encodeDefaults = true
+                        ignoreUnknownKeys = true
+                    },
+                bytes = unsupportedPointerJson,
+            )
+        assertEquals(null, pointer)
+    }
+
     @Test
     fun acquireLockHandlesHeldCase() =
         runTest {

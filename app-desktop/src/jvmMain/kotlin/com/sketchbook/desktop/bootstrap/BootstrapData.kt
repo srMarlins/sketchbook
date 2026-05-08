@@ -10,11 +10,11 @@ import com.sketchbook.repo.HostPluginManifest
 import com.sketchbook.repo.MachineEntry
 import com.sketchbook.repo.MachineProfileStore
 import com.sketchbook.repo.RegisterSpec
-import com.sketchbook.repo.getOrThrow
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.TreeRegistry
 import com.sketchbook.repo.TreeRegistryEntry
 import com.sketchbook.repo.TreeRegistrySnapshot
+import com.sketchbook.repo.getOrThrow
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.coroutines.CoroutineDispatcher
@@ -178,4 +178,3 @@ class BootstrapData(
 value class HostId(
     val value: String,
 )
-

@@ -41,6 +41,7 @@ import kotlinx.io.readAtMostTo
 import kotlinx.io.readByteArray
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -315,6 +316,10 @@ class DirectGcsBackend(
             .sortedBy { it.rev }
     }
 
+    @Suppress("ReturnCount")
+    // Two writes (HEAD pointer then timestamped body), each with three terminal outcomes
+    // (success, CAS conflict, other failure). Collapsing the early-returns would force a
+    // sentinel-then-dispatch dance that's harder to read than the linear two-step.
     override suspend fun appendManifestHead(
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
@@ -691,6 +696,11 @@ data class ManifestHeadPointer(
          * Try to decode [bytes] as a v=3 [ManifestHeadPointer]. Returns `null` when the body
          * doesn't have the pointer shape (i.e. legacy v=2 full-manifest HEAD), so the caller
          * can fall back to `Manifest` decoding.
+         *
+         * The `v` field is checked explicitly: the [ManifestSerializer] dispatches on `v` for
+         * the same reason. Without the gate, a future v=4 pointer (or a partially-shaped
+         * legacy body that happens to satisfy the v=3 fields under `ignoreUnknownKeys = true`)
+         * could be misread as v=3.
          */
         fun decodeOrNull(
             json: Json,
@@ -698,8 +708,8 @@ data class ManifestHeadPointer(
         ): ManifestHeadPointer? =
             try {
                 val raw = json.decodeFromString(serializer(), bytes.decodeToString())
-                if (raw.manifestPath.isBlank()) null else raw
-            } catch (_: Throwable) {
+                if (raw.version != HEAD_POINTER_VERSION || raw.manifestPath.isBlank()) null else raw
+            } catch (_: SerializationException) {
                 null
             }
     }
