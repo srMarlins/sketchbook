@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -56,10 +57,14 @@ class LeasedLockRepository(
         var heartbeatJob: Job? = null,
     )
 
-    private val byUuid = mutableMapOf<ProjectUuid, PerUuid>()
+    // ConcurrentHashMap.computeIfAbsent: the lambda runs at most once per uuid even under
+    // concurrent first-touches from suspend callers (forceTake) and the non-suspend observe()
+    // path. Without this, two racing creators each instantiate their own LeaseLockState with
+    // its own MutableStateFlow + heartbeat job, dueling on the same lease.
+    private val byUuid = ConcurrentHashMap<ProjectUuid, PerUuid>()
 
     private fun get(uuid: ProjectUuid): PerUuid =
-        byUuid.getOrPut(uuid) {
+        byUuid.computeIfAbsent(uuid) {
             val backend = cloud() ?: NullCloudBackend
             PerUuid(
                 state =
