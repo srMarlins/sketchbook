@@ -64,13 +64,14 @@ class SqlTreeJournal(
                     catalog.transactionWithResult<Long?> {
                         // Idempotent on (tree_id, rev): if the snapshot row already exists,
                         // skip both writes so a re-subscribe doesn't double-up the journal.
-                        // tree_snapshots itself is INSERT OR IGNORE; we mirror that here so
-                        // the paired journal write doesn't duplicate either.
+                        // O(1) PK lookup — selectTreeSnapshots would re-read the whole tree's
+                        // history every poll tick.
                         val existing =
                             catalog.catalogQueries
-                                .selectTreeSnapshots(tree_id = treeId.value)
-                                .executeAsList()
-                                .any { it.rev == manifest.rev.value }
+                                .selectTreeSnapshotByRev(
+                                    tree_id = treeId.value,
+                                    rev = manifest.rev.value,
+                                ).executeAsOneOrNull() != null
                         if (existing) {
                             null
                         } else {

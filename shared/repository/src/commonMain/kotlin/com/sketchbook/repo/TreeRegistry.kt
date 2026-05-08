@@ -16,6 +16,7 @@ import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
 import kotlin.time.Instant
@@ -66,6 +67,18 @@ interface TreeRegistry {
         createdByHost: String,
     ): Result<TreeRegistryEntry>
 
+    /**
+     * Bulk-register multiple trees in a single registry-doc round-trip. The migrator (commit
+     * 10) calls this when seeding the registry from `project_identity` rows so it does one
+     * CAS write instead of N (one per project).
+     *
+     * Idempotent: entries whose `(kind, scopeKey)` already exist in the registry are
+     * preserved unchanged; new entries are appended. CAS-retries on registry-doc conflict
+     * up to [REGISTER_MAX_RETRIES]. Returns the resulting entries (existing + newly written)
+     * in input order.
+     */
+    suspend fun registerAll(specs: List<RegisterSpec>): Result<List<TreeRegistryEntry>>
+
     /** True if [userId] can read [entry]. v1: always the owner; v1.2: + collaborators with any role. */
     fun canRead(
         entry: TreeRegistryEntry,
@@ -88,6 +101,16 @@ interface TreeRegistry {
 data class TreeRegistrySnapshot(
     val entries: List<TreeRegistryEntry>,
     val generation: Generation?,
+)
+
+/** Argument shape for [TreeRegistry.registerAll]. */
+data class RegisterSpec(
+    val kind: TrackedTreeKind,
+    val scopeKey: String,
+    val displayName: String,
+    val treeId: TrackedTreeId,
+    val ownerUserId: UserId = UserId.DEFAULT,
+    val createdByHost: String,
 )
 
 @Serializable
@@ -141,13 +164,21 @@ class CloudTreeRegistry(
                 .selectTreeRegistryByKindScope(tree_kind = kind.wireName, scope_key = scopeKey)
                 .executeAsList()
         val row = rows.firstOrNull() ?: return null
+        // Decode the collaborators_json column so [canRead] / [canWrite] checks against a
+        // cached entry get the same answer they'd get against a freshly-fetched cloud doc.
+        // Malformed JSON (shouldn't happen in practice) falls back to empty rather than
+        // throwing — losing collaborators is a permission tightening, not a correctness break.
+        val collaborators =
+            runCatching {
+                JSON.decodeFromString(CollaboratorListSerializer, row.collaborators_json)
+            }.getOrDefault(emptyList())
         return TreeRegistryEntry(
             treeId = TrackedTreeId(row.tree_id),
             kind = TrackedTreeKind.fromWire(row.tree_kind),
             scopeKey = row.scope_key.orEmpty(),
             displayName = row.display_name.orEmpty(),
             ownerUserId = UserId(row.owner_user_id),
-            collaborators = emptyList(),
+            collaborators = collaborators,
             createdAt = Instant.fromEpochMilliseconds(row.updated_at),
             createdByHost = "",
         )
@@ -195,6 +226,60 @@ class CloudTreeRegistry(
         return Result.failure(SketchbookError.Conflict("registry CAS retries exhausted"))
     }
 
+    override suspend fun registerAll(specs: List<RegisterSpec>): Result<List<TreeRegistryEntry>> {
+        if (specs.isEmpty()) return Result.success(emptyList())
+        var attempt = 0
+        while (attempt < TreeRegistry.REGISTER_MAX_RETRIES) {
+            attempt += 1
+            val current = fetch()
+            val byKey = current.entries.associateBy { it.kind to it.scopeKey }.toMutableMap()
+            val results = mutableListOf<TreeRegistryEntry>()
+            var added = false
+            for (spec in specs) {
+                val k = spec.kind to spec.scopeKey
+                val existing = byKey[k]
+                if (existing != null) {
+                    results += existing
+                    continue
+                }
+                val entry =
+                    TreeRegistryEntry(
+                        treeId = spec.treeId,
+                        kind = spec.kind,
+                        scopeKey = spec.scopeKey,
+                        displayName = spec.displayName,
+                        ownerUserId = spec.ownerUserId,
+                        createdAt = clock.now(),
+                        createdByHost = spec.createdByHost,
+                    )
+                byKey[k] = entry
+                results += entry
+                added = true
+            }
+            if (!added) {
+                // Nothing to write — every spec already had an entry; refresh cache so
+                // observers see a consistent view and return.
+                refreshCache(current.entries)
+                return Result.success(results)
+            }
+            val merged = byKey.values.toList()
+            val owner = specs.first().ownerUserId
+            val doc = TreeRegistryDoc(ownerUserId = owner, trees = merged)
+            val expected = current.generation ?: Generation.ZERO
+            val bytes = JSON.encodeToString(TreeRegistryDoc.serializer(), doc).encodeToByteArray()
+            val result = cloud.writeDoc(TreeRegistry.REGISTRY_KEY, expected, bytes)
+            result
+                .onSuccess {
+                    refreshCache(merged)
+                    return Result.success(results)
+                }.onFailure { err ->
+                    if (err !is SketchbookError.Conflict) return Result.failure(err)
+                    // CAS conflict: re-read and retry.
+                }
+        }
+        return Result.failure(SketchbookError.Conflict("registry CAS retries exhausted"))
+    }
+
     override fun canRead(
         entry: TreeRegistryEntry,
         userId: UserId,
@@ -215,12 +300,15 @@ class CloudTreeRegistry(
         val now = clock.now().toEpochMilliseconds()
         catalog.transaction {
             for (e in entries) {
+                val collaboratorsJson =
+                    JSON.encodeToString(CollaboratorListSerializer, e.collaborators)
                 catalog.catalogQueries.upsertTreeRegistryEntry(
                     tree_id = e.treeId.value,
                     tree_kind = e.kind.wireName,
                     scope_key = e.scopeKey,
                     display_name = e.displayName,
                     owner_user_id = e.ownerUserId.value,
+                    collaborators_json = collaboratorsJson,
                     updated_at = now,
                 )
             }
@@ -234,5 +322,7 @@ class CloudTreeRegistry(
                 ignoreUnknownKeys = true
                 prettyPrint = false
             }
+
+        val CollaboratorListSerializer = ListSerializer(Collaborator.serializer())
     }
 }

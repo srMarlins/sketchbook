@@ -21,12 +21,16 @@ CREATE TABLE tree_sync_state (
 -- account own?" answerable without an HTTP round-trip on every launch. Refreshed by the
 -- TreeRegistry (commit 5) on cloud-doc reads.
 CREATE TABLE tree_registry_cache (
-    tree_id          TEXT PRIMARY KEY,
-    tree_kind        TEXT NOT NULL,
-    scope_key        TEXT,
-    display_name     TEXT,
-    owner_user_id    TEXT NOT NULL,
-    updated_at       INTEGER NOT NULL
+    tree_id           TEXT PRIMARY KEY,
+    tree_kind         TEXT NOT NULL,
+    scope_key         TEXT,
+    display_name      TEXT,
+    owner_user_id     TEXT NOT NULL,
+    -- JSON-encoded list of Collaborator entries. Empty array `[]` for v1 owner-only entries.
+    -- Stored verbatim so cache lookups produce a TreeRegistryEntry that round-trips through
+    -- canRead/canWrite without re-fetching the cloud document.
+    collaborators_json TEXT NOT NULL DEFAULT '[]',
+    updated_at        INTEGER NOT NULL
 );
 CREATE INDEX tree_registry_by_kind ON tree_registry_cache(tree_kind, scope_key);
 

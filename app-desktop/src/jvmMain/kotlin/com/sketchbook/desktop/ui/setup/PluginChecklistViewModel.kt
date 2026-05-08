@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.sketchbook.repo.HostPluginEntry
 import com.sketchbook.repo.MachineProfileStore
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -37,6 +39,15 @@ class PluginChecklistViewModel(
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<PluginChecklistUiState> = _state.asStateFlow()
 
+    /**
+     * Serializes [refresh] / [reprobe] so concurrent triggers (user clicks "Re-check"
+     * mid-refresh) can't race on `_state` and produce a torn view. Refresh + reprobe are
+     * always launched on [viewModelScope] but the `composeUnion` and `reprobeRunner` calls
+     * suspend, so without the mutex two interleaved transitions could swap values
+     * out of order.
+     */
+    private val stateMutex = Mutex()
+
     init {
         refresh()
     }
@@ -44,55 +55,60 @@ class PluginChecklistViewModel(
     /** Re-fetch the cloud's per-host union and recompute the buckets. */
     fun refresh() {
         viewModelScope.launch {
-            val union = profileStore.composeUnion()
-            val os = osProvider.os()
-            val pending = SetupNav.filterPending(union.union, os)
-            val pendingRows = pending.map { it.toRow() }
-            val alreadyInstalledRows =
-                union.union
-                    .filter { it.installed }
-                    .map { it.toRow() }
-            _state.value =
-                PluginChecklistUiState(
-                    pending = pendingRows,
-                    recentlyInstalled = emptyList(),
-                    alreadyInstalled = alreadyInstalledRows,
-                    isReprobing = false,
-                )
+            stateMutex.withLock {
+                val union = profileStore.composeUnion()
+                val os = osProvider.os()
+                val pendingRows = SetupNav.filterPending(union.union, os).map { it.toRow() }
+                val alreadyInstalledRows =
+                    union.union
+                        .filter { it.installed }
+                        .map { it.toRow() }
+                _state.value =
+                    PluginChecklistUiState(
+                        pending = pendingRows,
+                        recentlyInstalled = emptyList(),
+                        alreadyInstalled = alreadyInstalledRows,
+                        isReprobing = false,
+                    )
+            }
         }
     }
 
     /**
      * Re-run the presence probe (caller-supplied side-effect — see [reprobeRunner]). Rows
      * that flipped to installed move from [pending] to [recentlyInstalled]; the rest stay
-     * pending. Idempotent: pre-existing alreadyInstalled rows aren't double-counted.
+     * pending. [alreadyInstalled] is preserved across reprobes — it's the session-frozen
+     * "installed at first load" bucket.
      */
     fun reprobe(reprobeRunner: suspend () -> List<HostPluginEntry>) {
         viewModelScope.launch {
             _state.value = _state.value.copy(isReprobing = true)
-            val refreshed = reprobeRunner()
-            val os = osProvider.os()
-            val installedKeys =
-                refreshed
-                    .filter { it.installed }
-                    .map { it.name to it.format }
-                    .toSet()
-            val current = _state.value
-            val (justInstalled, stillPending) =
-                current.pending.partition { (it.name to it.format) in installedKeys }
-            _state.value =
-                PluginChecklistUiState(
-                    pending = SetupNav.filterPending(refreshed, os).map { it.toRow() }.filter { row ->
-                        // A row that the union now considers installed shouldn't appear in
-                        // pending even if filterPending returned it.
-                        (row.name to row.format) !in installedKeys
-                    },
-                    recentlyInstalled = current.recentlyInstalled + justInstalled,
-                    alreadyInstalled =
-                        (current.alreadyInstalled + stillPending.filter { (it.name to it.format) in installedKeys })
-                            .distinctBy { it.name to it.format },
-                    isReprobing = false,
-                )
+            stateMutex.withLock {
+                val refreshed = reprobeRunner()
+                val os = osProvider.os()
+                val installedKeys =
+                    refreshed
+                        .filter { it.installed }
+                        .map { it.name to it.format }
+                        .toSet()
+                val current = _state.value
+                // Anything in current.pending whose (name, format) is now installed becomes
+                // a "just installed" row.
+                val justInstalled =
+                    current.pending.filter { (it.name to it.format) in installedKeys }
+                // The new pending list is whatever filterPending returns (it already drops
+                // installed rows — no need to filter again here).
+                val newPending = SetupNav.filterPending(refreshed, os).map { it.toRow() }
+                _state.value =
+                    PluginChecklistUiState(
+                        pending = newPending,
+                        recentlyInstalled = current.recentlyInstalled + justInstalled,
+                        // Session-frozen: rows that were installed at first load stay where
+                        // they are. New installs land in recentlyInstalled, not here.
+                        alreadyInstalled = current.alreadyInstalled,
+                        isReprobing = false,
+                    )
+            }
         }
     }
 

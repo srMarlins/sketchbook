@@ -9,16 +9,22 @@ import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
+import com.sketchbook.repo.RegisterSpec
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.TreeRegistry
 import com.sketchbook.repo.TreeRegistryEntry
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * JVM-backed [CloudMigrator]. Operates only via [CloudBackend]'s `CloudDoc` and `*Manifest`
@@ -73,77 +79,51 @@ class JvmCloudMigrator(
     }
 
     override fun migrate(): Flow<MigrationProgress> =
-        flow {
+        channelFlow {
             try {
-                emit(MigrationProgress.Probing)
+                send(MigrationProgress.Probing)
                 val legacy = listLegacyManifests()
                 val identities = readIdentities()
 
-                emit(MigrationProgress.Relocating(done = 0, total = legacy.size))
-                var done = 0
-                for (item in legacy) {
-                    val parsed = parseLegacyKey(item.key.path) ?: continue
-                    val destinationKey =
-                        CloudDocKey(
-                            MigrationLayout.v2ManifestPrefix(
-                                treeId = TrackedTreeId(parsed.projectUuid),
-                                kind = TrackedTreeKind.Project,
-                            ) + parsed.fileName,
+                send(MigrationProgress.Relocating(done = 0, total = legacy.size))
+                val relocateError = relocateInParallel(legacy, this)
+                if (relocateError != null) {
+                    send(MigrationProgress.Failed(relocateError))
+                    return@channelFlow
+                }
+
+                send(MigrationProgress.BuildingRegistry)
+                // Single round-trip to seed the registry with every project + the UL entry.
+                // Previously this was N writes (one per project) which dominated migration
+                // time on accounts with hundreds of projects.
+                val specs =
+                    identities.map { identity ->
+                        RegisterSpec(
+                            kind = TrackedTreeKind.Project,
+                            scopeKey = identity.uuid,
+                            displayName = identity.name,
+                            treeId = TrackedTreeId(identity.uuid),
+                            ownerUserId = ownerUserId,
+                            createdByHost = hostId,
                         )
-                    val read = cloud.readDoc(item.key)
-                        ?: continue // raced with delete; nothing to migrate.
-                    val write = cloud.writeDoc(destinationKey, expected = Generation.ZERO, bytes = read.bytes)
-                    if (write.isFailure && write.exceptionOrNull() !is SketchbookError.Conflict) {
-                        emit(
-                            MigrationProgress.Failed(
-                                "failed to copy ${item.key.path}: ${write.exceptionOrNull()?.message}",
-                            ),
+                    } +
+                        RegisterSpec(
+                            kind = TrackedTreeKind.UserLibrary,
+                            scopeKey = USER_LIBRARY_SCOPE_KEY,
+                            displayName = "Ableton User Library",
+                            treeId = TrackedTreeId(USER_LIBRARY_TREE_ID_PREFIX + hostId),
+                            ownerUserId = ownerUserId,
+                            createdByHost = hostId,
                         )
-                        return@flow
+                val registered =
+                    registry.registerAll(specs).getOrElse {
+                        send(MigrationProgress.Failed("registry register failed: ${it.message}"))
+                        return@channelFlow
                     }
-                    done += 1
-                    emit(MigrationProgress.Relocating(done = done, total = legacy.size))
-                }
-
-                emit(MigrationProgress.BuildingRegistry)
-                val registered = mutableListOf<TreeRegistryEntry>()
-                for (identity in identities) {
-                    val entry =
-                        registry
-                            .register(
-                                kind = TrackedTreeKind.Project,
-                                scopeKey = identity.uuid,
-                                displayName = identity.name,
-                                treeId = TrackedTreeId(identity.uuid),
-                                ownerUserId = ownerUserId,
-                                createdByHost = hostId,
-                            ).getOrElse {
-                                emit(MigrationProgress.Failed("registry register failed: ${it.message}"))
-                                return@flow
-                            }
-                    registered += entry
-                    emit(MigrationProgress.RegisteredTree(entry))
-                }
-
-                val userLibraryEntry =
-                    registry.lookup(TrackedTreeKind.UserLibrary, USER_LIBRARY_SCOPE_KEY)
-                        ?: registry
-                            .register(
-                                kind = TrackedTreeKind.UserLibrary,
-                                scopeKey = USER_LIBRARY_SCOPE_KEY,
-                                displayName = "Ableton User Library",
-                                treeId = TrackedTreeId(USER_LIBRARY_TREE_ID_PREFIX + hostId),
-                                ownerUserId = ownerUserId,
-                                createdByHost = hostId,
-                            ).getOrElse {
-                                emit(MigrationProgress.Failed("user_library register failed: ${it.message}"))
-                                return@flow
-                            }
-                registered += userLibraryEntry
-                emit(MigrationProgress.RegisteredTree(userLibraryEntry))
+                for (entry in registered) send(MigrationProgress.RegisteredTree(entry))
 
                 settings.markCloudMigrationComplete()
-                emit(
+                send(
                     MigrationProgress.Done(
                         report =
                             MigrationReport(
@@ -155,9 +135,53 @@ class JvmCloudMigrator(
                     ),
                 )
             } catch (t: Throwable) {
-                emit(MigrationProgress.Failed(t.message ?: "migration failed"))
+                send(MigrationProgress.Failed(t.message ?: "migration failed"))
             }
         }.flowOn(ioDispatcher)
+
+    /**
+     * Copy each legacy manifest to its v=2 destination concurrently, [RELOCATE_CONCURRENCY]
+     * at a time. Returns null on success, or a human-readable failure reason otherwise. The
+     * outer flow surfaces it as [MigrationProgress.Failed]. Progress events are pushed onto
+     * [progress] which the caller's [channelFlow] forwards to collectors —  `channelFlow`'s
+     * `SendChannel` is thread-safe, unlike the bare `flow` builder's `FlowCollector`.
+     */
+    private suspend fun relocateInParallel(
+        legacy: List<CloudDocRef>,
+        progress: SendChannel<MigrationProgress>,
+    ): String? {
+        if (legacy.isEmpty()) return null
+        val done = AtomicInteger(0)
+        var failure: String? = null
+        coroutineScope {
+            legacy
+                .chunked((legacy.size + RELOCATE_CONCURRENCY - 1) / RELOCATE_CONCURRENCY)
+                .map { chunk ->
+                    async {
+                        for (item in chunk) {
+                            if (failure != null) return@async
+                            val parsed = parseLegacyKey(item.key.path) ?: continue
+                            val destinationKey =
+                                CloudDocKey(
+                                    MigrationLayout.v2ManifestPrefix(
+                                        treeId = TrackedTreeId(parsed.projectUuid),
+                                        kind = TrackedTreeKind.Project,
+                                    ) + parsed.fileName,
+                                )
+                            val read = cloud.readDoc(item.key) ?: continue
+                            val write = cloud.writeDoc(destinationKey, expected = Generation.ZERO, bytes = read.bytes)
+                            if (write.isFailure && write.exceptionOrNull() !is SketchbookError.Conflict) {
+                                failure = "failed to copy ${item.key.path}: ${write.exceptionOrNull()?.message}"
+                                return@async
+                            }
+                            val current = done.incrementAndGet()
+                            progress.send(MigrationProgress.Relocating(done = current, total = legacy.size))
+                        }
+                    }
+                }.awaitAll()
+        }
+        return failure
+    }
 
     private suspend fun listLegacyManifests(): List<CloudDocRef> =
         runCatching { cloud.listDocs(CloudDocKey.Prefix(MigrationLayout.LEGACY_MANIFESTS_PREFIX)) }
@@ -174,6 +198,13 @@ class JvmCloudMigrator(
 
     private companion object {
         const val USER_LIBRARY_SCOPE_KEY: String = "default"
+
+        /**
+         * How many manifest copies run concurrently. Tuned conservatively — GCS can absorb
+         * far more, but bumping this trades head-room for marginal throughput on the typical
+         * "hundreds of manifests" account size.
+         */
+        const val RELOCATE_CONCURRENCY: Int = 8
 
         // For now the tree id is host-prefixed so each host's first migration produces a
         // distinct UL tree-id. Once shared User Library sync lands (post-v1.2) the migrator

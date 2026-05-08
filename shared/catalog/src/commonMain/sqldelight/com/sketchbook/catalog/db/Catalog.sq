@@ -752,12 +752,13 @@ CREATE TABLE tree_sync_state (
 );
 
 CREATE TABLE tree_registry_cache (
-    tree_id          TEXT PRIMARY KEY,
-    tree_kind        TEXT NOT NULL,
-    scope_key        TEXT,
-    display_name     TEXT,
-    owner_user_id    TEXT NOT NULL,
-    updated_at       INTEGER NOT NULL
+    tree_id           TEXT PRIMARY KEY,
+    tree_kind         TEXT NOT NULL,
+    scope_key         TEXT,
+    display_name      TEXT,
+    owner_user_id     TEXT NOT NULL,
+    collaborators_json TEXT NOT NULL DEFAULT '[]',
+    updated_at        INTEGER NOT NULL
 );
 CREATE INDEX tree_registry_by_kind ON tree_registry_cache(tree_kind, scope_key);
 
@@ -806,13 +807,14 @@ CREATE INDEX user_library_plugins_by_name ON user_library_plugins(plugin_name, p
 
 -- Tree registry cache CRUD.
 upsertTreeRegistryEntry:
-INSERT INTO tree_registry_cache(tree_id, tree_kind, scope_key, display_name, owner_user_id, updated_at)
-VALUES (:tree_id, :tree_kind, :scope_key, :display_name, :owner_user_id, :updated_at)
+INSERT INTO tree_registry_cache(tree_id, tree_kind, scope_key, display_name, owner_user_id, collaborators_json, updated_at)
+VALUES (:tree_id, :tree_kind, :scope_key, :display_name, :owner_user_id, :collaborators_json, :updated_at)
 ON CONFLICT(tree_id) DO UPDATE SET
     tree_kind = excluded.tree_kind,
     scope_key = excluded.scope_key,
     display_name = excluded.display_name,
     owner_user_id = excluded.owner_user_id,
+    collaborators_json = excluded.collaborators_json,
     updated_at = excluded.updated_at;
 
 selectTreeRegistryAll:
@@ -848,6 +850,12 @@ VALUES (:tree_id, :rev, :parent_rev, :timestamp, :host_id, :snapshot_kind, :labe
 
 selectTreeSnapshots:
 SELECT * FROM tree_snapshots WHERE tree_id = :tree_id ORDER BY rev DESC;
+
+-- O(1) existence check used by SqlTreeJournal.recordSnapshot's idempotency gate. Hits the
+-- (tree_id, rev) primary-key index directly so a hot poll loop doesn't re-read the entire
+-- snapshot history on every observed manifest.
+selectTreeSnapshotByRev:
+SELECT 1 FROM tree_snapshots WHERE tree_id = :tree_id AND rev = :rev LIMIT 1;
 
 -- Tree journal.
 insertTreeJournalEntry:
