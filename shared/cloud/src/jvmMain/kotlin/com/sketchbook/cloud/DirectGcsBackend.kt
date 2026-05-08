@@ -231,12 +231,7 @@ class DirectGcsBackend(
             }
         return when (response.status.value) {
             200, 201 -> true
-
             308 -> false
-
-            412 -> true
-
-            // already exists — content-addressed
             else -> throw remoteFailure(response, "PUT chunk $start-$endInclusive of $total")
         }
     }
@@ -312,15 +307,7 @@ class DirectGcsBackend(
         sinceRev: SnapshotRev?,
     ): List<ManifestRef> {
         val prefix = manifestsPrefix(treeId, kind)
-        val response =
-            http.get(listUrl()) {
-                authHeader()
-                parameter("prefix", prefix)
-            }
-        if (!response.status.isSuccess) throw remoteFailure(response, "LIST $prefix")
-        val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
-        val items = body["items"]?.jsonArray ?: return emptyList()
-        return items
+        return listAllItems(prefix)
             .mapNotNull { it.toManifestRef(prefix) }
             .filter { sinceRev == null || it.rev > sinceRev.value }
             .sortedBy { it.rev }
@@ -332,32 +319,17 @@ class DirectGcsBackend(
         expectedHead: Generation?,
         manifest: Manifest,
     ): Result<Generation> {
-        // Two writes: the timestamped manifest (idempotent, content-addressable filename) and
-        // the HEAD pointer (CAS). v1 PR-6 stores the HEAD as the manifest itself at a stable
-        // path; the JSON file is overwritten on each new rev. PR-9 may add a separate atomic
-        // pointer file.
+        // Two writes, ordered HEAD-first so a CAS-loser never leaves an orphan timestamped
+        // object behind. The timestamped copy is the historical artifact (`<rev:08d>-...json`)
+        // — if the HEAD CAS fails, no timestamped object should share that rev prefix, or
+        // `readManifest` (which lists by rev and picks `firstOrNull`) becomes
+        // non-deterministic between the winner and a stale loser.
         val timestamped = manifestPath(treeId, kind, manifest.rev.value, manifest.timestamp.toString(), manifest.hostId)
         val headPath = headPath(treeId, kind)
         val body = json.encodeToString(Manifest.serializer(), manifest).toByteArray(Charsets.UTF_8)
 
-        // Timestamped object — must not exist (rev is unique).
-        run {
-            val resp =
-                http.post(uploadUrl()) {
-                    authHeader()
-                    parameter("uploadType", "media")
-                    parameter("name", timestamped)
-                    headers { append("x-goog-if-generation-match", "0") }
-                    contentType(ContentType.Application.Json)
-                    setBody(body)
-                }
-            if (resp.status != HttpStatusCode.OK && resp.status != HttpStatusCode.PreconditionFailed) {
-                return Result.failure(remoteFailure(resp, "PUT $timestamped"))
-            }
-        }
-
-        // HEAD pointer — CAS via expectedHead.
-        val resp =
+        // HEAD pointer — CAS via expectedHead. Must succeed before we PUT the timestamped copy.
+        val headResp =
             http.post(uploadUrl()) {
                 authHeader()
                 parameter("uploadType", "media")
@@ -368,22 +340,38 @@ class DirectGcsBackend(
                 contentType(ContentType.Application.Json)
                 setBody(body)
             }
-        return when (resp.status) {
-            HttpStatusCode.OK -> {
-                val gen =
-                    resp.headers["x-goog-generation"]
+        val headGen =
+            when (headResp.status) {
+                HttpStatusCode.OK -> {
+                    headResp.headers["x-goog-generation"]
                         ?: return Result.failure(SketchbookError.IntegrityError("missing x-goog-generation on HEAD write"))
-                Result.success(Generation(gen))
+                }
+
+                HttpStatusCode.PreconditionFailed -> {
+                    return Result.failure(SketchbookError.Conflict("HEAD generation mismatch on tree=${treeId.value}"))
+                }
+
+                else -> {
+                    return Result.failure(remoteFailure(headResp, "PUT $headPath"))
+                }
             }
 
-            HttpStatusCode.PreconditionFailed -> {
-                Result.failure(SketchbookError.Conflict("HEAD generation mismatch on tree=${treeId.value}"))
+        // Timestamped object — must not exist (rev is unique). Idempotent on retry: a 412 here
+        // means another caller already wrote the same rev, which is fine since the bytes are
+        // identical. Any other failure is fatal (HEAD already advanced; we'd lose history).
+        val timestampedResp =
+            http.post(uploadUrl()) {
+                authHeader()
+                parameter("uploadType", "media")
+                parameter("name", timestamped)
+                headers { append("x-goog-if-generation-match", "0") }
+                contentType(ContentType.Application.Json)
+                setBody(body)
             }
-
-            else -> {
-                Result.failure(remoteFailure(resp, "PUT $headPath"))
-            }
+        if (timestampedResp.status != HttpStatusCode.OK && timestampedResp.status != HttpStatusCode.PreconditionFailed) {
+            return Result.failure(remoteFailure(timestampedResp, "PUT $timestamped"))
         }
+        return Result.success(Generation(headGen))
     }
 
     override suspend fun acquireLock(
@@ -542,15 +530,31 @@ class DirectGcsBackend(
 
     override suspend fun listDocs(prefix: CloudDocKey.Prefix): List<CloudDocRef> {
         val fullPrefix = "$tenantPrefix/${prefix.value}"
-        val response =
-            http.get(listUrl()) {
-                authHeader()
-                parameter("prefix", fullPrefix)
-            }
-        if (!response.status.isSuccess) throw remoteFailure(response, "LIST $fullPrefix")
-        val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
-        val items = body["items"]?.jsonArray ?: return emptyList()
-        return items.mapNotNull { it.toCloudDocRef("$tenantPrefix/") }
+        return listAllItems(fullPrefix).mapNotNull { it.toCloudDocRef("$tenantPrefix/") }
+    }
+
+    /**
+     * Walk the GCS object list across all pages, yielding raw JSON `items` objects. GCS caps a
+     * single response at 1000 items and signals continuation via `nextPageToken`. We follow the
+     * token until the response omits it ([GCS pagination](https://cloud.google.com/storage/docs/paginate-results)).
+     * Every caller composes domain types out of the items, so this helper stays raw.
+     */
+    private suspend fun listAllItems(prefix: String): List<JsonElement> {
+        val results = mutableListOf<JsonElement>()
+        var pageToken: String? = null
+        while (true) {
+            val response =
+                http.get(listUrl()) {
+                    authHeader()
+                    parameter("prefix", prefix)
+                    pageToken?.let { parameter("pageToken", it) }
+                }
+            if (!response.status.isSuccess) throw remoteFailure(response, "LIST $prefix")
+            val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
+            body["items"]?.jsonArray?.let { results.addAll(it) }
+            pageToken = body["nextPageToken"]?.jsonPrimitive?.contentOrNull
+            if (pageToken == null) return results
+        }
     }
 
     // ---- internals ----

@@ -126,8 +126,6 @@ class DirectGcsBackendTest {
             val manifest = manifestFixture()
             val backend =
                 makeBackend { request ->
-                    // First call: timestamped manifest write — return 200.
-                    // Second call: HEAD CAS write — return 412.
                     val isHeadWrite = request.url.parameters["name"]?.endsWith("/HEAD") == true
                     if (isHeadWrite) {
                         respond("", HttpStatusCode.PreconditionFailed)
@@ -145,6 +143,91 @@ class DirectGcsBackendTest {
             assertTrue(result.isFailure)
             val err = result.exceptionOrNull()
             assertTrue(err is com.sketchbook.core.SketchbookError.Conflict, "expected Conflict, got $err")
+        }
+
+    /**
+     * Regression: HEAD CAS conflict must short-circuit before the timestamped object is
+     * written, otherwise every losing CAS leaves an orphan `<rev:08d>-...json` in the bucket
+     * and `readManifest(rev=N)` becomes non-deterministic between winners and losers.
+     */
+    @Test
+    fun appendManifestHeadCASMismatchDoesNotWriteOrphanTimestamped() =
+        runTest {
+            val manifest = manifestFixture()
+            val seenWrites = mutableListOf<String>()
+            val backend =
+                makeBackend { request ->
+                    val name = request.url.parameters["name"].orEmpty()
+                    seenWrites += name
+                    val isHeadWrite = name.endsWith("/HEAD")
+                    if (isHeadWrite) {
+                        respond("", HttpStatusCode.PreconditionFailed)
+                    } else {
+                        respond("", HttpStatusCode.OK)
+                    }
+                }
+            val result =
+                backend.appendManifestHead(
+                    treeId = manifest.treeId,
+                    kind = TrackedTreeKind.Project,
+                    expectedHead = Generation("42"),
+                    manifest = manifest,
+                )
+            assertTrue(result.isFailure)
+            assertEquals(1, seenWrites.size, "expected only the HEAD write attempt, saw $seenWrites")
+            assertTrue(seenWrites.single().endsWith("/HEAD"), "expected only HEAD attempt, saw ${seenWrites.single()}")
+        }
+
+    /**
+     * Regression: GCS object-list responses cap at 1000 items per page; the pagination loop
+     * must follow `nextPageToken` until the response omits it. Without this, daily-snapshot
+     * projects silently truncate at ~2.7 years of history.
+     */
+    @Test
+    fun listManifestsFollowsPageTokenAcrossMultiplePages() =
+        runTest {
+            val pageOne =
+                """
+                {
+                  "kind": "storage#objects",
+                  "nextPageToken": "TOKEN-2",
+                  "items": [
+                    { "name": "users/test/manifests/proj/00000001-2026-05-05T12-00-00Z-mac.json", "generation": "10" },
+                    { "name": "users/test/manifests/proj/00000002-2026-05-05T12-00-01Z-mac.json", "generation": "11" }
+                  ]
+                }
+                """.trimIndent()
+            val pageTwo =
+                """
+                {
+                  "kind": "storage#objects",
+                  "items": [
+                    { "name": "users/test/manifests/proj/00000003-2026-05-05T12-00-02Z-mac.json", "generation": "12" }
+                  ]
+                }
+                """.trimIndent()
+            val pageTokensSeen = mutableListOf<String?>()
+            val backend =
+                makeBackend { request ->
+                    pageTokensSeen += request.url.parameters["pageToken"]
+                    val token = request.url.parameters["pageToken"]
+                    val body =
+                        if (token == null) {
+                            pageOne
+                        } else {
+                            assertEquals("TOKEN-2", token)
+                            pageTwo
+                        }
+                    respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                }
+            val refs =
+                backend.listManifests(
+                    treeId = TrackedTreeId("proj"),
+                    kind = TrackedTreeKind.Project,
+                    sinceRev = null,
+                )
+            assertEquals(listOf(1L, 2L, 3L), refs.map { it.rev })
+            assertEquals(listOf<String?>(null, "TOKEN-2"), pageTokensSeen)
         }
 
     @Test
