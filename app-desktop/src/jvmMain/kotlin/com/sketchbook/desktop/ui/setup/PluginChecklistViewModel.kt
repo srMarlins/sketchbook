@@ -3,6 +3,8 @@ package com.sketchbook.desktop.ui.setup
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sketchbook.core.Os
+import com.sketchbook.core.PluginFormat
 import com.sketchbook.repo.HostPluginEntry
 import com.sketchbook.repo.MachineProfileStore
 import com.sketchbook.repo.PluginPresenceProbe
@@ -60,8 +62,11 @@ class PluginChecklistViewModel(
         refresh()
     }
 
-    /** OS string used internally for filter + publish, exposed so the route can format the headline. */
-    fun osLabelHint(): String = osProvider.os()
+    /** Typed OS used internally for filter + publish, exposed so the route can format the headline. */
+    fun os(): Os = osProvider.os()
+
+    /** Wire-string variant of [os] for screens that just need the label. */
+    fun osLabelHint(): String = osProvider.os().wireName
 
     /** Re-fetch the cloud's per-host union and recompute the buckets. */
     fun refresh() {
@@ -188,7 +193,7 @@ data class PluginChecklistUiState(
 @Immutable
 data class PluginRow(
     val name: String,
-    val format: String,
+    val format: PluginFormat,
     val installed: Boolean,
 )
 

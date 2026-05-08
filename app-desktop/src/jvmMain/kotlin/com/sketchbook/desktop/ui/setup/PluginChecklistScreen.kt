@@ -120,7 +120,7 @@ private fun PluginRowItem(
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column {
             Text(row.name, fontWeight = FontWeight.Medium)
-            val sub = "${row.format}${if (justInstalled) " · just installed" else ""}"
+            val sub = "${row.format.wireName}${if (justInstalled) " · just installed" else ""}"
             Text(sub)
         }
     }

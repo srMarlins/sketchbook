@@ -83,7 +83,59 @@ data class PluginRef(
     val trackName: String?,
 )
 
-enum class PluginFormat { Vst2, Vst3, Au, AbletonNative, Unknown }
+/**
+ * Format of a plugin reference in a `.als` project. [wireName] is the canonical lowercase
+ * string used at every wire/SQL boundary — JSON manifests, SqlDelight columns, the
+ * legacy `project_plugins.plugin_type` text. `@SerialName` mirrors [wireName] so
+ * `kotlinx.serialization` (used by [com.sketchbook.repo.HostPluginEntry] and friends)
+ * encodes the same string without a custom serializer.
+ *
+ * `"component"` is an alias for [Au] surfaced by some Live versions; map it via
+ * [fromWireWithAliases] when reading historical data.
+ */
+@kotlinx.serialization.Serializable
+enum class PluginFormat(val wireName: String) {
+    @kotlinx.serialization.SerialName("vst")
+    Vst2("vst"),
+
+    @kotlinx.serialization.SerialName("vst3")
+    Vst3("vst3"),
+
+    @kotlinx.serialization.SerialName("au")
+    Au("au"),
+
+    @kotlinx.serialization.SerialName("ableton")
+    AbletonNative("ableton"),
+
+    @kotlinx.serialization.SerialName("unknown")
+    Unknown("unknown"),
+    ;
+
+    companion object {
+        /** Decode a wire/SQL string. Unknown values fall back to [Unknown]. */
+        fun fromWire(s: String): PluginFormat = entries.firstOrNull { it.wireName == s } ?: Unknown
+
+        /**
+         * Decode a wire/SQL string, accepting historical aliases:
+         *
+         * - `"component"` — Live's alias for AU on macOS
+         * - `"vst2"` — JvmScanner's `enum.name.lowercase()` style for the legacy
+         *   `project_plugins.plugin_type` column (predates [wireName])
+         * - `"abletonnative"` — same legacy style
+         *
+         * The CloudDoc wire format (`HostPluginEntry.format`) and `user_library_plugins`
+         * use [wireName]; only `project_plugins` writes the legacy enum-name style. Unifying
+         * the column is a separate cleanup — for now we accept either at the boundary.
+         */
+        fun fromWireWithAliases(s: String): PluginFormat =
+            when (s) {
+                "component" -> Au
+                "vst2" -> Vst2
+                "abletonnative" -> AbletonNative
+                else -> fromWire(s)
+            }
+    }
+}
 
 /**
  * Sample reference recovered from a `.als` file. The [rawPath] is whatever Live wrote — relative,

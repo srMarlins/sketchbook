@@ -5,6 +5,8 @@ import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.CloudDocKey
+import com.sketchbook.core.Os
+import com.sketchbook.core.PluginFormat
 import com.sketchbook.core.SketchbookError
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
@@ -49,7 +51,7 @@ interface MachineProfileStore {
     suspend fun publishHostSlice(
         hostId: String,
         hostName: String,
-        os: String,
+        os: Os,
     ): Result<HostPluginManifest>
 
     /**
@@ -82,7 +84,7 @@ data class HostPluginManifest(
     @SerialName("v") val version: Int = 1,
     @SerialName("host_id") val hostId: String,
     @SerialName("host_name") val hostName: String,
-    @SerialName("os") val os: String,
+    @SerialName("os") val os: Os,
     @SerialName("computed_at") val computedAt: Instant,
     @SerialName("plugins") val plugins: List<HostPluginEntry>,
 )
@@ -90,7 +92,7 @@ data class HostPluginManifest(
 @Serializable
 data class HostPluginEntry(
     @SerialName("name") val name: String,
-    @SerialName("format") val format: String,
+    @SerialName("format") val format: PluginFormat,
     @SerialName("installed") val installed: Boolean,
 )
 
@@ -108,7 +110,7 @@ data class UnionedPluginManifest(
 data class MachineEntry(
     @SerialName("host_id") val hostId: String,
     @SerialName("host_name") val hostName: String,
-    @SerialName("os") val os: String,
+    @SerialName("os") val os: Os,
     @SerialName("last_seen_at") val lastSeenAt: Instant,
     @SerialName("binary_version") val binaryVersion: String,
 )
@@ -140,7 +142,7 @@ class CloudMachineProfileStore(
     override suspend fun publishHostSlice(
         hostId: String,
         hostName: String,
-        os: String,
+        os: Os,
     ): Result<HostPluginManifest> {
         val plugins = composeHostSlice()
         val manifest =
@@ -260,22 +262,26 @@ class CloudMachineProfileStore(
             val byKey = mutableMapOf<PluginKey, HostPluginEntry>()
             val projectRows = catalog.catalogQueries.selectAllDistinctProjectPluginsWithInstalled().executeAsList()
             for (row in projectRows) {
-                val key = PluginKey(row.plugin_name, row.plugin_type)
+                // Map the SQL `plugin_type` text column to the typed PluginFormat enum at the
+                // boundary. Live's `"component"` alias for AU shows up here for legacy rows.
+                val format = PluginFormat.fromWireWithAliases(row.plugin_type)
+                val key = PluginKey(row.plugin_name, format)
                 byKey[key] =
                     HostPluginEntry(
                         name = row.plugin_name,
-                        format = row.plugin_type,
+                        format = format,
                         installed = (row.is_installed ?: 0L) > 0L,
                     )
             }
             val ulRows = catalog.catalogQueries.selectAllDistinctUserLibraryPluginsWithInstalled().executeAsList()
             for (row in ulRows) {
-                val key = PluginKey(row.plugin_name, row.plugin_type)
+                val format = PluginFormat.fromWireWithAliases(row.plugin_type)
+                val key = PluginKey(row.plugin_name, format)
                 val existing = byKey[key]
                 byKey[key] =
                     HostPluginEntry(
                         name = row.plugin_name,
-                        format = row.plugin_type,
+                        format = format,
                         installed = (existing?.installed ?: false) || ((row.is_installed ?: 0L) > 0L),
                     )
             }
@@ -305,13 +311,11 @@ class CloudMachineProfileStore(
 }
 
 /**
- * Internal map key for `(plugin_name, plugin_type)` rows. Promoted from `Pair<String,String>`
+ * Internal map key for `(plugin_name, format)` rows. Promoted from `Pair<String,String>`
  * so the field names show up in stack traces and `equals`/`hashCode` come from the data class
- * for free. The wire format on `HostPluginEntry` stays string-typed; promoting `format` to
- * the typed `PluginFormat` enum end-to-end is tracked in
- * https://github.com/srMarlins/sketchbook/issues/129.
+ * for free.
  */
 internal data class PluginKey(
     val name: String,
-    val format: String,
+    val format: PluginFormat,
 )

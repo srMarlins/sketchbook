@@ -14,6 +14,8 @@ import com.sketchbook.cloud.ManifestRef
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.CloudDocKey
 import com.sketchbook.core.Manifest
+import com.sketchbook.core.Os
+import com.sketchbook.core.PluginFormat
 import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.TrackedTreeId
@@ -47,7 +49,7 @@ class MachineProfileStoreTest {
             val cloud = FakeProfileCloud()
             val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
-            val slice = store.publishHostSlice("macstudio", "Mac Studio", os = "darwin").getOrThrow()
+            val slice = store.publishHostSlice("macstudio", "Mac Studio", os = Os.Mac).getOrThrow()
 
             // Three distinct (name, format): Serum, FabFilter, Diva. Serum's installed flag
             // should be true (project_plugins reported it installed; UL row didn't, but OR wins).
@@ -85,9 +87,9 @@ class MachineProfileStoreTest {
                             HostPluginManifest(
                                 hostId = "mac",
                                 hostName = "Mac",
-                                os = "darwin",
+                                os = Os.Mac,
                                 computedAt = now,
-                                plugins = listOf(HostPluginEntry("Serum", "vst3", installed = true)),
+                                plugins = listOf(HostPluginEntry("Serum", PluginFormat.Vst3, installed = true)),
                             ),
                         ).encodeToByteArray(),
             )
@@ -101,12 +103,12 @@ class MachineProfileStoreTest {
                             HostPluginManifest(
                                 hostId = "win",
                                 hostName = "Win",
-                                os = "windows",
+                                os = Os.Windows,
                                 computedAt = now,
                                 plugins =
                                     listOf(
-                                        HostPluginEntry("Serum", "vst3", installed = false),
-                                        HostPluginEntry("Diva", "vst3", installed = false),
+                                        HostPluginEntry("Serum", PluginFormat.Vst3, installed = false),
+                                        HostPluginEntry("Diva", PluginFormat.Vst3, installed = false),
                                     ),
                             ),
                         ).encodeToByteArray(),
@@ -155,7 +157,7 @@ class MachineProfileStoreTest {
             val cloud = ConcurrencyTrackingCloud()
             val store = CloudMachineProfileStore(cloud, handle.catalog, clock, kotlinx.coroutines.Dispatchers.Unconfined)
 
-            store.publishHostSlice("macstudio", "Mac Studio", os = "darwin").getOrThrow()
+            store.publishHostSlice("macstudio", "Mac Studio", os = Os.Mac).getOrThrow()
 
             assertEquals(0, cloud.readCallCount, "publishHostSlice should not read before writing")
         }
@@ -173,7 +175,7 @@ class MachineProfileStoreTest {
                     MachineEntry(
                         hostId = "macstudio",
                         hostName = "Mac Studio",
-                        os = "darwin",
+                        os = Os.Mac,
                         lastSeenAt = now,
                         binaryVersion = "0.4.0",
                     ),
@@ -194,11 +196,11 @@ class MachineProfileStoreTest {
 
             store
                 .registerMachine(
-                    MachineEntry("macstudio", "Mac Studio", "darwin", now, "0.4.0"),
+                    MachineEntry("macstudio", "Mac Studio", Os.Mac, now, "0.4.0"),
                 ).getOrThrow()
             store
                 .registerMachine(
-                    MachineEntry("macstudio", "Mac Studio (renamed)", "darwin", now, "0.5.0"),
+                    MachineEntry("macstudio", "Mac Studio (renamed)", Os.Mac, now, "0.5.0"),
                 ).getOrThrow()
 
             val machines = store.listMachines()
@@ -308,9 +310,9 @@ class MachineProfileStoreTest {
                     HostPluginManifest(
                         hostId = hostId,
                         hostName = hostId,
-                        os = "darwin",
+                        os = Os.Mac,
                         computedAt = now,
-                        plugins = listOf(HostPluginEntry("Serum", "vst3", installed = true)),
+                        plugins = listOf(HostPluginEntry("Serum", PluginFormat.Vst3, installed = true)),
                     ),
                 ).encodeToByteArray()
         cloud.writeDoc(MachineProfileStore.pluginManifestKey(hostId), expected = Generation.ZERO, bytes = bytes)

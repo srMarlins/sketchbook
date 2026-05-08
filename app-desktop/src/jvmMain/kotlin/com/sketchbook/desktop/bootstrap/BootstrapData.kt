@@ -2,6 +2,7 @@ package com.sketchbook.desktop.bootstrap
 
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.AppScope
+import com.sketchbook.core.Os
 import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
@@ -129,14 +130,14 @@ class BootstrapData(
     suspend fun publishHostPluginManifest(
         hostId: String,
         hostName: String,
-        os: String,
+        os: Os,
     ): Result<HostPluginManifest> = profile.publishHostSlice(hostId, hostName, os)
 
     /** Register / refresh this host in `<tenant>/profile/machines.json`. */
     suspend fun registerMachine(
         hostId: String,
         hostName: String,
-        os: String,
+        os: Os,
         binaryVersion: String,
     ): Result<Unit> =
         profile.registerMachine(
