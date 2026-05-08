@@ -3,12 +3,8 @@ package com.sketchbook.repo
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
-import com.sketchbook.core.AppScope
 import com.sketchbook.core.CloudDocKey
 import com.sketchbook.core.SketchbookError
-import dev.zacsweers.metro.ContributesBinding
-import dev.zacsweers.metro.Inject
-import dev.zacsweers.metro.SingleIn
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -112,9 +108,12 @@ internal data class MachinesDoc(
     @SerialName("machines") val machines: List<MachineEntry> = emptyList(),
 )
 
-@SingleIn(AppScope::class)
-@ContributesBinding(AppScope::class)
-@Inject
+/**
+ * Constructed at the call site (the desktop bootstrap wiring) once a [CloudBackend] is
+ * available. Not DI-bound at AppScope because the cloud handle is per-user via
+ * `SwappableSyncQueue` — same reason [com.sketchbook.migration.JvmCloudMigrator] is hand-
+ * constructed.
+ */
 class CloudMachineProfileStore(
     private val cloud: CloudBackend,
     private val catalog: Catalog,
