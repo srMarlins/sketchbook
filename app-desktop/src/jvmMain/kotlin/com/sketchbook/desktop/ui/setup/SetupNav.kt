@@ -65,21 +65,28 @@ object SetupNav {
         os: Os,
     ): Boolean =
         when (format) {
-            PluginFormat.Vst3 -> true
-            PluginFormat.Au ->
+            PluginFormat.Vst3 -> {
+                true
+            }
+
+            PluginFormat.Au -> {
                 when (os) {
                     Os.Mac -> true
                     Os.Windows, Os.Linux -> false
                 }
+            }
 
-            PluginFormat.Vst2 ->
+            PluginFormat.Vst2 -> {
                 when (os) {
                     Os.Windows, Os.Linux -> true
                     Os.Mac -> false
                 }
+            }
 
             // Not user-installable — Live ships it, "Unknown" is a parse fallback.
-            PluginFormat.AbletonNative, PluginFormat.Unknown -> false
+            PluginFormat.AbletonNative, PluginFormat.Unknown -> {
+                false
+            }
         }
 }
 

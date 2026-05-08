@@ -229,6 +229,10 @@ class CloudTreeRegistry(
         )
     }
 
+    @Suppress("ReturnCount")
+    // CAS retry loop has one early-return per failure mode (fetch error, idempotent hit,
+    // write success, non-conflict write error) plus the loop-exhausted Conflict at the end.
+    // Collapsing them through a single accumulator would obscure the control flow.
     override suspend fun register(
         kind: TrackedTreeKind,
         scopeKey: String,
@@ -276,6 +280,10 @@ class CloudTreeRegistry(
         return RegisterOutcome.Conflict
     }
 
+    @Suppress("ReturnCount")
+    // Same shape as [register]: empty-input, fetch error, no-write idempotent path, write
+    // success, non-conflict write error, plus loop-exhausted Conflict. Each early return
+    // names a distinct outcome — flattening is worse than the rule violation.
     override suspend fun registerAll(specs: List<RegisterSpec>): RegisterOutcome<List<TreeRegistryEntry>> {
         if (specs.isEmpty()) return RegisterOutcome.Ok(emptyList())
         repeat(TreeRegistry.REGISTER_MAX_RETRIES) {

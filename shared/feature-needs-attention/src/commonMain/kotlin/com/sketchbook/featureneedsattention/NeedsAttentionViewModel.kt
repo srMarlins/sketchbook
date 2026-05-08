@@ -114,6 +114,12 @@ class NeedsAttentionViewModel(
             candidates.any { it.path.lowercase().contains(needle) }
     }
 
+    // Each `Intent` arm wraps a suspend repository call in try/catch and rethrows
+    // CancellationException to keep structured concurrency honest (CLAUDE.md "runCatching at
+    // suspend boundaries"). The throws are cancellation propagation, not error-signalling.
+    // Length + complexity reflect one arm per Intent variant; splitting per arm would just
+    // re-introduce the dispatcher boilerplate at every call site.
+    @Suppress("ThrowsCount", "CyclomaticComplexMethod", "LongMethod")
     fun dispatch(intent: Intent) {
         when (intent) {
             is Intent.SetSearch -> {

@@ -211,6 +211,10 @@ class OnboardingViewModel(
         }
     }
 
+    @Suppress("ThrowsCount")
+    // Each persistence call needs its own canonical CancellationException rethrow (see
+    // CLAUDE.md "runCatching at suspend boundaries"). The rethrow itself is the only kind of
+    // throw here — they're not error-signalling throws, just cancellation propagation.
     private fun finish() {
         if (finished) return
         finished = true

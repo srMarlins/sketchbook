@@ -41,6 +41,10 @@ class OAuthClient(
     /** Test seam — production uses [java.awt.Desktop.browse]. */
     private val browserOpener: (String) -> Unit = ::openInSystemBrowser,
 ) : OAuthFlow {
+    @Suppress("ThrowsCount")
+    // Three throws are intentional: OAuthTimeout (callback never arrived), the rethrow of
+    // a callback-server failure surfaced via deferredCode, and the canonical
+    // CancellationException rethrow that keeps structured concurrency honest.
     override suspend fun signIn(): Result<OAuthTokens> {
         // try/catch (CancellationException) instead of runCatching: signIn awaits suspend
         // operations (deferredCode.await, exchangeCodeForTokens). runCatching would silently

@@ -295,7 +295,7 @@ private class ImmutableStubProfileStore(
 
     override suspend fun composeUnion(): UnionedPluginManifest = union
 
-    override suspend fun registerMachine(entry: MachineEntry) {}
+    override suspend fun registerMachine(entry: MachineEntry) = Unit
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }
@@ -317,7 +317,7 @@ private class MutableStubProfileStore(
 
     override suspend fun composeUnion(): UnionedPluginManifest = union
 
-    override suspend fun registerMachine(entry: MachineEntry) {}
+    override suspend fun registerMachine(entry: MachineEntry) = Unit
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }
@@ -333,9 +333,7 @@ private class ThrowingProfileStore(
 
     override suspend fun composeUnion(): UnionedPluginManifest = throw cause
 
-    override suspend fun registerMachine(entry: MachineEntry) {
-        throw cause
-    }
+    override suspend fun registerMachine(entry: MachineEntry): Unit = throw cause
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }
@@ -360,7 +358,7 @@ private class FlakyProfileStore(
             successUnion
         }
 
-    override suspend fun registerMachine(entry: MachineEntry) {}
+    override suspend fun registerMachine(entry: MachineEntry) = Unit
 
     override suspend fun listMachines(): List<MachineEntry> = emptyList()
 }

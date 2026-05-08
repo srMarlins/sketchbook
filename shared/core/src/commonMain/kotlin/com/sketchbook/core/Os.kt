@@ -15,7 +15,9 @@ import kotlinx.serialization.Serializable
  * + `else -> false` in `SetupNav.formatRunsOn`).
  */
 @Serializable
-enum class Os(val wireName: String) {
+enum class Os(
+    val wireName: String,
+) {
     @SerialName("darwin")
     Mac("darwin"),
 

@@ -338,7 +338,7 @@ private class FakeProfileCloud(
         source: RawSource,
         size: Long,
         scope: BlobScope,
-    ) {}
+    ) = Unit
 
     override suspend fun getBlob(
         hash: BlobHash,
@@ -381,7 +381,7 @@ private class FakeProfileCloud(
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
         expected: Generation,
-    ) {}
+    ) = Unit
 
     override suspend fun readDoc(key: CloudDocKey): CloudDocRead? {
         val d = docs[key] ?: return null
@@ -454,7 +454,7 @@ private class ConcurrencyTrackingCloud : CloudBackend {
         source: RawSource,
         size: Long,
         scope: BlobScope,
-    ) {}
+    ) = Unit
 
     override suspend fun getBlob(
         hash: BlobHash,
@@ -497,7 +497,7 @@ private class ConcurrencyTrackingCloud : CloudBackend {
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
         expected: Generation,
-    ) {}
+    ) = Unit
 
     override suspend fun readDoc(key: CloudDocKey): CloudDocRead? {
         mutex.withLock {

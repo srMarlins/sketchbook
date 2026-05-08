@@ -39,7 +39,7 @@
     <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectTreeJournalQuery$public val limit_: Long</ID>
     <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectTreeJournalQuery$public val tree_id: String</ID>
     <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectTreeRegistryByKindQuery$public val tree_kind: String</ID>
-    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectTreeRegistryByKindScopeQuery$public val scope_key: String?</ID>
+    <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectTreeRegistryByKindScopeQuery$public val scope_key: String</ID>
     <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectTreeRegistryByKindScopeQuery$public val tree_kind: String</ID>
     <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectTreeSnapshotByRevQuery$public val tree_id: String</ID>
     <ID>ConstructorParameterNaming:CatalogQueries.kt:CatalogQueries.SelectTreeSnapshotsQuery$public val tree_id: String</ID>
@@ -241,9 +241,11 @@
     <ID>ConstructorParameterNaming:Tree_journal.kt:Tree_journal$public val tree_id: String</ID>
     <ID>ConstructorParameterNaming:Tree_journal.kt:Tree_journal$public val tree_kind: String</ID>
     <ID>ConstructorParameterNaming:Tree_registry_cache.kt:Tree_registry_cache$public val collaborators_json: String</ID>
+    <ID>ConstructorParameterNaming:Tree_registry_cache.kt:Tree_registry_cache$public val created_at: Long</ID>
+    <ID>ConstructorParameterNaming:Tree_registry_cache.kt:Tree_registry_cache$public val created_by_host: String</ID>
     <ID>ConstructorParameterNaming:Tree_registry_cache.kt:Tree_registry_cache$public val display_name: String?</ID>
     <ID>ConstructorParameterNaming:Tree_registry_cache.kt:Tree_registry_cache$public val owner_user_id: String</ID>
-    <ID>ConstructorParameterNaming:Tree_registry_cache.kt:Tree_registry_cache$public val scope_key: String?</ID>
+    <ID>ConstructorParameterNaming:Tree_registry_cache.kt:Tree_registry_cache$public val scope_key: String</ID>
     <ID>ConstructorParameterNaming:Tree_registry_cache.kt:Tree_registry_cache$public val tree_id: String</ID>
     <ID>ConstructorParameterNaming:Tree_registry_cache.kt:Tree_registry_cache$public val tree_kind: String</ID>
     <ID>ConstructorParameterNaming:Tree_registry_cache.kt:Tree_registry_cache$public val updated_at: Long</ID>
@@ -273,7 +275,9 @@
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$cloud_head_rev: Long</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$cloud_head_rev: Long?</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$collaborators_json: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$created_at: Long</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$created_at: String</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$created_by_host: String</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$decided_at: String</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$display_name: String?</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$effort_breakdown: String?</ID>
@@ -320,7 +324,7 @@
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$rel_path: String</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$return_tracks: Long</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$sample_path: String</ID>
-    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$scope_key: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$scope_key: String</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$self_contained: Long</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$size_bytes: Long</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$size_bytes: Long?</ID>
@@ -332,6 +336,7 @@
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$total_bytes: Long</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$track_count: Long</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$track_name: String?</ID>
+    <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$tree_id: Collection&lt;String&gt;</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$tree_id: String</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$tree_kind: String</ID>
     <ID>FunctionParameterNaming:CatalogQueries.kt:CatalogQueries$updated_at: Long</ID>
@@ -339,6 +344,7 @@
     <ID>LongMethod:CatalogImpl.kt:CatalogImpl.Schema$override fun create: QueryResult.Value&lt;Unit&gt;</ID>
     <ID>LongMethod:CatalogImpl.kt:CatalogImpl.Schema$private fun migrateInternal: QueryResult.Value&lt;Unit&gt;</ID>
     <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$10</ID>
+    <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$11</ID>
     <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$3</ID>
     <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$4</ID>
     <ID>MagicNumber:CatalogImpl.kt:CatalogImpl.Schema$5</ID>
@@ -404,6 +410,7 @@
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$27</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$271_425_314</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$28</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$282_855_942</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$287_056_024</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$29</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries$296_426_123</ID>
@@ -473,12 +480,17 @@
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectTagsForProjectQuery$1_073_375_983</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectTreeJournalQuery$27_908_943</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectTreeRegistryByKindQuery$1_778_302_866</ID>
+    <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectTreeRegistryByKindScopeQuery$113_499_514</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectTreeSnapshotByRevQuery$1_322_280_802</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectTreeSnapshotsQuery$1_791_615_529</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectTreeSyncStateQuery$2_033_918_384</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectUserLibraryPluginsByNameQuery$275_360_070</ID>
     <ID>MagicNumber:CatalogQueries.kt:CatalogQueries.SelectUserLibraryPluginsForTreeQuery$944_607_281</ID>
     <ID>MatchingDeclarationName:Scanner.kt:ScanProgress</ID>
+    <ID>MaxLineLength:CatalogImpl.kt:CatalogImpl.Schema$driver.execute(null, "INSERT INTO tree_journal_new SELECT tree_journal.id, tree_journal.tree_id, tree_journal.tree_kind, tree_journal.timestamp, tree_journal.host_id, tree_journal.event_kind, tree_journal.payload_json, tree_journal.rev FROM tree_journal", 0)</ID>
+    <ID>MaxLineLength:CatalogImpl.kt:CatalogImpl.Schema$driver.execute(null, "INSERT INTO tree_snapshots_new SELECT tree_snapshots.tree_id, tree_snapshots.rev, tree_snapshots.parent_rev, tree_snapshots.timestamp, tree_snapshots.host_id, tree_snapshots.snapshot_kind, tree_snapshots.label, tree_snapshots.file_count, tree_snapshots.total_bytes, tree_snapshots.new_bytes, tree_snapshots.manifest_path FROM tree_snapshots", 0)</ID>
+    <ID>MaxLineLength:CatalogImpl.kt:CatalogImpl.Schema$driver.execute(null, "INSERT INTO tree_sync_state_new SELECT tree_sync_state.tree_id, tree_sync_state.tree_kind, tree_sync_state.local_rev, tree_sync_state.cloud_head_rev, tree_sync_state.dirty, tree_sync_state.updated_at FROM tree_sync_state", 0)</ID>
+    <ID>MaxLineLength:CatalogImpl.kt:CatalogImpl.Schema$driver.execute(null, "INSERT INTO user_library_plugins_new SELECT user_library_plugins.tree_id, user_library_plugins.rel_path, user_library_plugins.plugin_name, user_library_plugins.plugin_type, user_library_plugins.is_installed, user_library_plugins.last_seen_at FROM user_library_plugins", 0)</ID>
     <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$)</ID>
     <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public</ID>
     <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries$public fun selectAllDistinctProjectPluginsWithInstalled: Query&lt;SelectAllDistinctProjectPluginsWithInstalled&gt;</ID>
@@ -524,5 +536,6 @@
     <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectTreeSnapshotsQuery$override</ID>
     <ID>MaxLineLength:CatalogQueries.kt:CatalogQueries.SelectTreeSyncStateQuery$override</ID>
     <ID>TooManyFunctions:CatalogQueries.kt:CatalogQueries : TransacterImpl</ID>
+    <ID>VariableNaming:CatalogQueries.kt:CatalogQueries$val tree_idIndexes = createArguments(count = tree_id.size)</ID>
   </CurrentIssues>
 </SmellBaseline>

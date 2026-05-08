@@ -206,6 +206,10 @@ class SnapshotPipeline(
                 // policy.leaseRequired = false — `leaseGen` stays null and we never acquired one.
                 val gen = leaseGen
                 if (gen != null) {
+                    @Suppress("ThrowingExceptionFromFinally")
+                    // The throw is the canonical CancellationException rethrow — losing it
+                    // would silently swallow coroutine cancellation. Detekt's rule guards
+                    // against accidental loss; this rethrow is deliberate.
                     try {
                         cloud.releaseLock(treeId, kind, gen)
                     } catch (c: CancellationException) {

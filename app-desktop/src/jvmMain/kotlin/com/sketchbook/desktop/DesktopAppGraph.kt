@@ -81,8 +81,13 @@ import java.util.prefs.Preferences
  * **Catalog (SQLite).** Project / Snapshot / Proposals / Repair / Journal are SQLDelight-backed;
  * the DB lives at `~/.local/share/sketchbook/catalog.db` (Linux/Mac) or
  * `%APPDATA%\Sketchbook\catalog.db` (Windows). One handle per app instance.
+ *
+ * `@Suppress("TooManyFunctions")` — Metro DI graph: one accessor per binding,
+ * `@SingleIn(AppScope::class)`-scoped. Splitting by feature would force shared handles to
+ * appear in multiple sub-graphs.
  */
 @DependencyGraph(scope = AppScope::class)
+@Suppress("TooManyFunctions")
 interface DesktopAppGraph : ViewModelGraph {
     val appScope: CoroutineScope
     val authSession: AuthSession

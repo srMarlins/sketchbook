@@ -268,7 +268,7 @@ private class FakeBootstrapCloud(
         source: RawSource,
         size: Long,
         scope: BlobScope,
-    ) {}
+    ) = Unit
 
     override suspend fun getBlob(
         hash: BlobHash,
@@ -311,7 +311,7 @@ private class FakeBootstrapCloud(
         treeId: TrackedTreeId,
         kind: TrackedTreeKind,
         expected: Generation,
-    ) {}
+    ) = Unit
 
     override suspend fun readDoc(key: CloudDocKey): CloudDocRead? {
         val d = docs[key] ?: return null

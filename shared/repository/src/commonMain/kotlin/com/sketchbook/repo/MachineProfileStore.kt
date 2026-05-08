@@ -301,16 +301,20 @@ class CloudMachineProfileStore(
             }
 
         /**
-         * Backoff for [registerMachine]'s CAS retry loop. Base 50 ms doubled per attempt
-         * (capped at attempt index 5 → 1.6 s) with up to 50 ms of random jitter to break
-         * herd patterns on mass-update events. Pattern follows
+         * Backoff for [registerMachine]'s CAS retry loop. [BACKOFF_BASE_MS] doubled per attempt
+         * (capped at [BACKOFF_MAX_SHIFT] → 1.6 s) with up to [BACKOFF_JITTER_MS] of random
+         * jitter to break herd patterns on mass-update events. Pattern follows
          * https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/.
          */
         fun backoffDelayMillis(attempt: Int): Long {
-            val capped = attempt.coerceAtMost(5)
-            val base = 50L shl capped
-            return base + Random.nextLong(0, 50)
+            val capped = attempt.coerceAtMost(BACKOFF_MAX_SHIFT)
+            val base = BACKOFF_BASE_MS shl capped
+            return base + Random.nextLong(0, BACKOFF_JITTER_MS)
         }
+
+        private const val BACKOFF_BASE_MS: Long = 50L
+        private const val BACKOFF_JITTER_MS: Long = 50L
+        private const val BACKOFF_MAX_SHIFT: Int = 5
     }
 }
 

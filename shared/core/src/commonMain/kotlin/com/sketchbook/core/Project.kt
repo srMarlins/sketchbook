@@ -94,7 +94,9 @@ data class PluginRef(
  * [fromWireWithAliases] when reading historical data.
  */
 @kotlinx.serialization.Serializable
-enum class PluginFormat(val wireName: String) {
+enum class PluginFormat(
+    val wireName: String,
+) {
     @kotlinx.serialization.SerialName("vst")
     Vst2("vst"),
 
