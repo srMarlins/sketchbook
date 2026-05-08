@@ -22,6 +22,8 @@ import com.sketchbook.desktop.bootstrap.HostId
 import com.sketchbook.desktop.repo.LeasedLockRepository
 import com.sketchbook.desktop.repo.PreferencesSettingsRepository
 import com.sketchbook.desktop.repo.SwappableSyncQueue
+import com.sketchbook.desktop.ui.setup.HostSliceContext
+import com.sketchbook.desktop.ui.setup.OsProvider
 import com.sketchbook.repo.AlsPatchService
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LibraryRoot
@@ -152,6 +154,28 @@ interface DesktopAppGraph : ViewModelGraph {
     @Provides
     @SingleIn(AppScope::class)
     fun provideHostId(): HostId = HostId(hostIdentity().id)
+
+    /**
+     * Stable host identity wrapped for the bootstrap plugin-checklist plumbing. The plugin
+     * checklist VM publishes `<tenant>/profile/plugin_manifest_<host_id>.json` after each
+     * reprobe; bundling host_id + host_name into one binding keeps the VM constructor lean.
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideHostSliceContext(): HostSliceContext =
+        HostSliceContext(
+            hostId = hostIdentity().id,
+            hostName = hostIdentity().name,
+        )
+
+    /**
+     * OS-label provider for the plugin-checklist filter + publish path. Captured once at
+     * graph build so the VM doesn't re-read `os.name` on every reprobe — `OsProvider.Default`
+     * memoizes via `lazy`, so the indirection is essentially free at runtime.
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideOsProvider(): OsProvider = OsProvider.Default
 
     @Provides
     @SingleIn(AppScope::class)

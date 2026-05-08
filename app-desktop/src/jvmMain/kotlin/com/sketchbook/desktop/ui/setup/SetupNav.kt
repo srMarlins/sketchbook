@@ -48,7 +48,12 @@ object SetupNav {
             !entry.installed && formatRunsOn(entry.format, os)
         }
 
-    private fun formatRunsOn(
+    /**
+     * True iff a plugin in [format] runs on [os]. Public so the plugin checklist VM can OS-
+     * filter the `alreadyInstalled` bucket as well as `pending` (a Mac-only AU listed
+     * "installed" by the macOS host should not appear in the Windows host's view at all).
+     */
+    fun formatRunsOn(
         format: String,
         os: String,
     ): Boolean =
@@ -59,9 +64,9 @@ object SetupNav {
 
             "vst" -> os == "windows" || os == "linux"
 
+            // not user-installable.
             "ableton", "unknown" -> false
 
-            // not user-installable.
             else -> false
         }
 }

@@ -14,58 +14,92 @@ import androidx.compose.material.Divider
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.sketchbook.repo.HostPluginEntry
 
 /**
- * Final post-onboarding screen — the bootstrap plugin checklist. Driven by
- * [PluginChecklistViewModel].
+ * Stateless plugin-checklist surface. Pure Compose: takes the [state] up front and emits
+ * intents through the supplied lambdas. Tests + `@Preview` instantiate this directly without
+ * dragging the VM, the cloud, or the catalog into the test surface.
  *
- * Wireframe lives in `docs/plans/2026-05-07-backend-generalization-design.md`. This impl
- * is intentionally lean: the design doc's vendor + per-project counts surface lands when
- * the catalog carries vendor strings (out of scope here). Until then each row shows the
- * name, format, and the "Find online" search link.
+ * The route entry point that wires up the VM and lifecycle-aware state collection lands once
+ * [PluginChecklistViewModel] picks up `UserScope` DI (tracked in
+ * https://github.com/srMarlins/sketchbook/issues/130).
  */
 @Composable
 fun PluginChecklistScreen(
-    viewModel: PluginChecklistViewModel,
+    state: PluginChecklistUiState,
     onReprobe: () -> Unit,
     onDismiss: () -> Unit,
+    osLabel: String,
     modifier: Modifier = Modifier,
 ) {
-    val state by viewModel.state.collectAsState()
     Column(modifier = modifier.padding(16.dp)) {
-        Text("Set up this Mac", fontWeight = FontWeight.Bold)
+        Text("Set up this $osLabel", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        val total = state.pending.size + state.recentlyInstalled.size + state.alreadyInstalled.size
+
+        // Total + pending change at most when buckets reshuffle on reprobe; keep the
+        // computation off the recomposition hot path even though it's cheap today.
+        val total =
+            remember(state.pending, state.recentlyInstalled, state.alreadyInstalled) {
+                state.pending.size + state.recentlyInstalled.size + state.alreadyInstalled.size
+            }
         val pending = state.pending.size
-        Text(
-            "Found $total plugins across your projects and templates. " +
-                "$pending of them aren't installed on this Mac yet.",
-        )
+        if (state.isInitialLoad) {
+            Text("Loading plugin coverage…")
+        } else if (state.loadFailed != null) {
+            Text("Couldn't load plugin checklist: ${state.loadFailed}")
+        } else {
+            Text(
+                "Found $total plugins across your projects and templates. " +
+                    "$pending of them aren't installed on this $osLabel yet.",
+            )
+        }
         Spacer(Modifier.height(16.dp))
-        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+
+        // Wrap the list in `weight(1f)` so it scrolls inside the available area instead of
+        // pushing the action row off-screen for long lists. `items(...)` pass a stable key
+        // derived from `(name, format)` so reshuffles on reprobe don't reset row state.
+        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (state.recentlyInstalled.isNotEmpty()) {
-                item {
+                item("recently-installed-header") {
                     SectionHeader("Just installed (${state.recentlyInstalled.size})")
                 }
-                items(state.recentlyInstalled) { row -> PluginRowItem(row, justInstalled = true) }
-                item { Spacer(Modifier.height(12.dp)) }
+                items(
+                    items = state.recentlyInstalled,
+                    key = { row -> "ri:${row.name}|${row.format}" },
+                    contentType = { "plugin-row" },
+                ) { row -> PluginRowItem(row, justInstalled = true) }
+                item("recently-installed-spacer") { Spacer(Modifier.height(12.dp)) }
             }
-            items(state.pending) { row -> PluginRowItem(row, justInstalled = false) }
+            items(
+                items = state.pending,
+                key = { row -> "p:${row.name}|${row.format}" },
+                contentType = { "plugin-row" },
+            ) { row -> PluginRowItem(row, justInstalled = false) }
             if (state.alreadyInstalled.isNotEmpty()) {
-                item { Divider(Modifier.padding(vertical = 12.dp)) }
-                item { SectionHeader("Already installed (${state.alreadyInstalled.size})") }
-                items(state.alreadyInstalled) { row -> PluginRowItem(row, justInstalled = false) }
+                item("already-installed-divider") { Divider(Modifier.padding(vertical = 12.dp)) }
+                item("already-installed-header") {
+                    SectionHeader("Already installed (${state.alreadyInstalled.size})")
+                }
+                items(
+                    items = state.alreadyInstalled,
+                    key = { row -> "ai:${row.name}|${row.format}" },
+                    contentType = { "plugin-row" },
+                ) { row -> PluginRowItem(row, justInstalled = false) }
             }
         }
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onReprobe) {
+            // Disabled while a probe is in flight so users can't queue N reprobes by
+            // mashing the button — each click would otherwise serialize behind the mutex.
+            Button(
+                onClick = onReprobe,
+                enabled = !state.isReprobing,
+            ) {
                 Text(if (state.isReprobing) "Re-checking…" else "Re-check installed plugins")
             }
             OutlinedButton(onClick = onDismiss) { Text("Skip — show in Settings") }
@@ -84,14 +118,10 @@ private fun PluginRowItem(
     justInstalled: Boolean,
 ) {
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Column(modifier = Modifier.padding(end = 16.dp)) {
+        Column {
             Text(row.name, fontWeight = FontWeight.Medium)
             val sub = "${row.format}${if (justInstalled) " · just installed" else ""}"
             Text(sub)
         }
     }
 }
-
-/** Convert a flat union to the row shape the screen consumes. Used by the Settings entry. */
-fun toScreenRows(entries: List<HostPluginEntry>): List<PluginRow> =
-    entries.map { PluginRow(name = it.name, format = it.format, installed = it.installed) }
