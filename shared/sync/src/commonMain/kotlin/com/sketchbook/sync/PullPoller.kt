@@ -9,6 +9,7 @@ import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.projectUuid
 import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.TreeJournal
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -66,13 +67,30 @@ class PullPoller(
         flow {
             var sinceRev: SnapshotRev? = startAfter
             while (true) {
-                val refs = runCatching { cloud.listManifests(treeId, kind, sinceRev) }.getOrElse { emptyList() }
+                // try/catch (CancellationException) instead of runCatching: poll lambdas execute
+                // suspend cloud calls, and runCatching would silently catch coroutine cancellation
+                // and break structured concurrency. See CLAUDE.md "runCatching at suspend boundaries".
+                val refs =
+                    try {
+                        cloud.listManifests(treeId, kind, sinceRev)
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (_: Throwable) {
+                        emptyList()
+                    }
                 val sorted = refs.sortedBy { it.rev }
                 for (ref in sorted) {
                     val rev = SnapshotRev(ref.rev)
                     val current = sinceRev
                     if (current != null && rev <= current) continue
-                    val manifest = runCatching { cloud.readManifest(treeId, kind, rev) }.getOrNull() ?: continue
+                    val manifest =
+                        try {
+                            cloud.readManifest(treeId, kind, rev)
+                        } catch (c: CancellationException) {
+                            throw c
+                        } catch (_: Throwable) {
+                            continue
+                        }
                     // Project-only snapshot row goes to the legacy `snapshots` table; the
                     // `projectUuid` extension throws on non-project kinds, so we synthesize a
                     // ProjectUuid for the sync.Snapshot model only when emitting Project rows.

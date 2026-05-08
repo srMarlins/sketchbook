@@ -16,6 +16,7 @@ import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.LockStatus
 import com.sketchbook.sync.LeaseLockState
 import com.sketchbook.sync.LockState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -90,8 +91,10 @@ class LeasedLockRepository(
         var priorExpiresAtMs: Long? = null
         val treeId = TrackedTreeId(uuid.value)
         val kind = TrackedTreeKind.Project
-        val outcome =
-            runCatching {
+        // try/catch (CancellationException) instead of runCatching: backend.acquireLock /
+        // refreshLock are suspend; runCatching would silently swallow coroutine cancellation.
+        val outcome: Result<Unit> =
+            try {
                 // Best-effort: if a lock already exists, try refresh-overwrite via CAS.
                 val acquireResult = backend.acquireLock(treeId, kind, lock)
                 when (acquireResult) {
@@ -122,6 +125,11 @@ class LeasedLockRepository(
                         }
                     }
                 }
+                Result.success(Unit)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Result.failure(t)
             }
         if (outcome.isSuccess) {
             recordForceTake(uuid, priorOwnerHostName, priorExpiresAtMs)

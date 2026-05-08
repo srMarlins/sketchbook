@@ -7,6 +7,7 @@ import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.sync.JvmBlobCache
+import kotlinx.coroutines.CancellationException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -40,8 +41,12 @@ class ManifestMaterializer(
     ): Result<Unit> {
         val treeId = TrackedTreeId(uuid.value)
         val manifest =
-            runCatching { cloud.readManifest(treeId, TrackedTreeKind.Project, rev) }.getOrElse {
-                return Result.failure(it)
+            try {
+                cloud.readManifest(treeId, TrackedTreeKind.Project, rev)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                return Result.failure(t)
             }
         val scope: BlobScope =
             if (manifest.selfContained) BlobScope.Private(uuid) else BlobScope.Shared

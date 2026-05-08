@@ -16,6 +16,7 @@ import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.TrackedTreeId
 import com.sketchbook.core.TrackedTreeKind
 import com.sketchbook.core.UserId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlin.time.Clock
@@ -204,7 +205,15 @@ class SnapshotPipeline(
                 // 6) Release lease (best-effort; pipeline outcome already emitted). Skipped when
                 // policy.leaseRequired = false — `leaseGen` stays null and we never acquired one.
                 val gen = leaseGen
-                if (gen != null) runCatching { cloud.releaseLock(treeId, kind, gen) }
+                if (gen != null) {
+                    try {
+                        cloud.releaseLock(treeId, kind, gen)
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (_: Throwable) {
+                        // Best-effort release; pipeline outcome already emitted.
+                    }
+                }
             }
         }
 
@@ -299,9 +308,11 @@ class SnapshotPipeline(
             refs.maxByOrNull { it.rev }
                 ?: return MergeAttempt.Fail(SnapshotProgress.Failed(uuid, "merge: conflict but cannot find new HEAD"))
         val winning =
-            runCatching {
+            try {
                 cloud.readManifest(treeId, kind, SnapshotRev(latest.rev))
-            }.getOrElse { e ->
+            } catch (c: CancellationException) {
+                throw c
+            } catch (e: Throwable) {
                 return MergeAttempt.Fail(SnapshotProgress.Failed(uuid, "merge: read winning manifest failed: ${e.message}"))
             }
         val merged = mergeManifests(local = current, remote = winning, clock = clock)

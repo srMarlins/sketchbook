@@ -9,6 +9,7 @@ import com.sketchbook.repo.SettingsRepository
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -219,21 +220,43 @@ class OnboardingViewModel(
             // rest. The user has already committed mentally by tapping "Open Sketchbook" — the UI
             // is unwinding, not pausing for retry. Failures are emitted on [events] so the
             // screen can surface a non-blocking toast instead of swallowing them silently.
+            // try/catch (CancellationException) instead of runCatching: each repository.* is a
+            // suspend boundary, and runCatching would silently swallow coroutine cancellation.
+            // See CLAUDE.md "runCatching at suspend boundaries".
             s.projectsRoots.forEach { path ->
-                runCatching { repository.upsertRoot(LibraryRoot.Projects(path)) }
-                    .onFailure { emitFailure("Couldn't save Projects folder: $path") }
+                try {
+                    repository.upsertRoot(LibraryRoot.Projects(path))
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (_: Throwable) {
+                    emitFailure("Couldn't save Projects folder: $path")
+                }
             }
             s.sampleRoots.forEach { path ->
-                runCatching { repository.upsertRoot(LibraryRoot.UserSamples(path)) }
-                    .onFailure { emitFailure("Couldn't save Samples folder: $path") }
+                try {
+                    repository.upsertRoot(LibraryRoot.UserSamples(path))
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (_: Throwable) {
+                    emitFailure("Couldn't save Samples folder: $path")
+                }
             }
-            runCatching { repository.setPluginFolders(s.pluginFolders) }
-                .onFailure { emitFailure("Couldn't save plugin folders") }
-            runCatching {
+            try {
+                repository.setPluginFolders(s.pluginFolders)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (_: Throwable) {
+                emitFailure("Couldn't save plugin folders")
+            }
+            try {
                 repository.markFirstRunComplete(
                     OnboardingSkipFlags(samplesSkipped = s.sampleRoots.isEmpty()),
                 )
-            }.onFailure { emitFailure("Couldn't mark setup complete — Sketchbook may show this again on next launch") }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (_: Throwable) {
+                emitFailure("Couldn't mark setup complete — Sketchbook may show this again on next launch")
+            }
             // Scan kick-off goes last so it observes the just-flushed roots.
             scanTrigger.triggerScan()
         }

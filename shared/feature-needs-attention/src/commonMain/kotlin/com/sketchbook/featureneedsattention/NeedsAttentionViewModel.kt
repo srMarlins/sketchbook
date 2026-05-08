@@ -11,6 +11,7 @@ import com.sketchbook.repo.RepairRepository
 import dev.zacsweers.metro.ContributesIntoMap
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metrox.viewmodel.ViewModelKey
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -129,9 +130,17 @@ class NeedsAttentionViewModel(
             is Intent.RepairMacPaths -> {
                 viewModelScope.launch {
                     pending.update { it.copy(macRepairs = it.macRepairs + intent.projectId) }
+                    // try/catch (CancellationException) so a cancelled coroutine isn't silently
+                    // swallowed into Result.failure (runCatching catches Throwable). See CLAUDE.md
+                    // "runCatching at suspend boundaries".
                     val r =
-                        runCatching { repository.applyMacPathRepair(intent.projectId) }
-                            .getOrElse { Result.failure(it) }
+                        try {
+                            repository.applyMacPathRepair(intent.projectId)
+                        } catch (c: CancellationException) {
+                            throw c
+                        } catch (t: Throwable) {
+                            Result.failure(t)
+                        }
                     if (r.isSuccess) {
                         // Auto-cleanup will drop pending once the row leaves macImports.
                         _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
@@ -154,13 +163,17 @@ class NeedsAttentionViewModel(
                     val key = intent.projectId to intent.missingPath
                     pending.update { it.copy(missingApplies = it.missingApplies + key) }
                     val r =
-                        runCatching {
+                        try {
                             repository.applyMissingSampleMatch(
                                 projectId = intent.projectId,
                                 missingPath = intent.missingPath,
                                 candidatePath = intent.candidatePath,
                             )
-                        }.getOrElse { Result.failure(it) }
+                        } catch (c: CancellationException) {
+                            throw c
+                        } catch (t: Throwable) {
+                            Result.failure(t)
+                        }
                     if (r.isSuccess) {
                         _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
                     } else {
@@ -176,8 +189,13 @@ class NeedsAttentionViewModel(
                     val failures = mutableListOf<String>()
                     for (id in intent.projectIds) {
                         val r =
-                            runCatching { repository.acknowledgeMacImport(id) }
-                                .getOrElse { Result.failure(it) }
+                            try {
+                                repository.acknowledgeMacImport(id)
+                            } catch (c: CancellationException) {
+                                throw c
+                            } catch (t: Throwable) {
+                                Result.failure(t)
+                            }
                         val k = id.value.toString()
                         if (r.isSuccess) successes += k else failures += k
                     }
@@ -192,8 +210,13 @@ class NeedsAttentionViewModel(
                     val failures = mutableListOf<String>()
                     for (id in intent.projectIds) {
                         val r =
-                            runCatching { repository.applyMacPathRepair(id) }
-                                .getOrElse { Result.failure(it) }
+                            try {
+                                repository.applyMacPathRepair(id)
+                            } catch (c: CancellationException) {
+                                throw c
+                            } catch (t: Throwable) {
+                                Result.failure(t)
+                            }
                         val k = id.value.toString()
                         if (r.isSuccess) {
                             successes += k
@@ -222,9 +245,13 @@ class NeedsAttentionViewModel(
                             continue
                         }
                         val r =
-                            runCatching {
+                            try {
                                 repository.applyMissingSampleMatch(f.projectId, f.missingPath, auto.path)
-                            }.getOrElse { Result.failure(it) }
+                            } catch (c: CancellationException) {
+                                throw c
+                            } catch (t: Throwable) {
+                                Result.failure(t)
+                            }
                         if (r.isSuccess) {
                             successes += resultKey
                         } else {
@@ -242,9 +269,13 @@ class NeedsAttentionViewModel(
                     val failures = mutableListOf<String>()
                     for (f in intent.findings) {
                         val r =
-                            runCatching {
+                            try {
                                 repository.dismissMissingSample(f.projectId, f.missingPath)
-                            }.getOrElse { Result.failure(it) }
+                            } catch (c: CancellationException) {
+                                throw c
+                            } catch (t: Throwable) {
+                                Result.failure(t)
+                            }
                         val k = "${f.projectId.value}|${f.missingPath}"
                         if (r.isSuccess) successes += k else failures += k
                     }

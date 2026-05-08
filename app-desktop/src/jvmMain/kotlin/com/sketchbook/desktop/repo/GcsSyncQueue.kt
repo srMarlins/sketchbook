@@ -20,6 +20,7 @@ import com.sketchbook.sync.PipelineInput
 import com.sketchbook.sync.SnapshotPipeline
 import com.sketchbook.sync.SnapshotProgress
 import com.sketchbook.syncio.JvmWorkingTree
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -273,7 +274,9 @@ class GcsSyncQueue(
         theirRev: Long,
     ) {
         val j = journal ?: return
-        runCatching {
+        // Best-effort journal append. try/catch (CancellationException) instead of runCatching:
+        // j.append is suspend; runCatching would swallow coroutine cancellation.
+        try {
             j.append(
                 JournalEntry(
                     timestamp = Clock.System.now(),
@@ -281,6 +284,10 @@ class GcsSyncQueue(
                     action = ActionRecord.PushConflict(ourRev = ourRev, theirRev = theirRev),
                 ),
             )
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Throwable) {
+            // Best-effort: journal append failure is non-fatal.
         }
     }
 
@@ -376,7 +383,7 @@ class GcsSyncQueue(
         val row = projects.observeProject(pid).first() ?: return false
         val rawPath = row.path.value
         val alsPath = if (rawPath.length >= 2 && rawPath[1] == ':') rawPath else "/$rawPath"
-        return runCatching {
+        return try {
             val mtime =
                 withContext(ioDispatcher) {
                     Instant.fromEpochMilliseconds(
@@ -384,7 +391,11 @@ class GcsSyncQueue(
                     )
                 }
             (now - mtime).inWholeSeconds < QUIET_PERIOD_SECONDS
-        }.getOrDefault(false)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     private data class BackoffEntry(
