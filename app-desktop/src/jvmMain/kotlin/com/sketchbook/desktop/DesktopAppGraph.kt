@@ -40,6 +40,8 @@ import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.impl.SqlSnapshotRepository
+import com.sketchbook.sync.PullPoller
+import com.sketchbook.sync.SyncCoordinator
 import com.sketchbook.syncio.AlsPatcher
 import com.sketchbook.syncio.Watcher
 import com.sketchbook.syncio.WatcherToSyncState
@@ -61,6 +63,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.nio.file.Files
@@ -107,6 +110,7 @@ interface DesktopAppGraph : ViewModelGraph {
     val libraryScanCoordinator: LibraryScanCoordinator
     val userGraphHolder: UserGraphHolder
     val launchGate: LaunchGate
+    val syncCoordinator: SyncCoordinator
 
     // `metroViewModelFactory` is inherited from [ViewModelGraph] — the contributed
     // `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject` ViewModel map is plumbed
@@ -242,6 +246,30 @@ interface DesktopAppGraph : ViewModelGraph {
     @SingleIn(AppScope::class)
     fun provideMetadataStore(bootstrap: FirebaseSdkBootstrap): MetadataStore =
         FirestoreMetadataStore(ensureInitialized = bootstrap::ensureInitialized)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideSyncCoordinator(
+        authSession: AuthSession,
+        metadataStore: MetadataStore,
+        syncQueue: SyncQueue,
+        store: SyncStateStore,
+        snapshots: SnapshotRepository,
+        scope: CoroutineScope,
+    ): SyncCoordinator {
+        val swap = syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue
+        return SyncCoordinator(
+            userId =
+                authSession.state.map { (it as? com.sketchbook.auth.AuthState.SignedIn)?.userId?.value },
+            metadataStore = metadataStore,
+            pollerProvider = {
+                swap?.currentCloud?.value?.let { PullPoller(it, snapshots) }
+            },
+            syncStateStore = store,
+            onPostPull = { uuid -> autoMaterializeAfterPull(store, snapshots, uuid) },
+            scope = scope,
+        )
+    }
 
     @Provides
     @SingleIn(AppScope::class)

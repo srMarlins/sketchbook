@@ -120,12 +120,12 @@ class FirestoreMetadataStore(
     override fun <T : Any> observeCollection(
         path: CollectionPath,
         serializer: KSerializer<T>,
-    ): Flow<List<T>> =
+    ): Flow<List<CollectionEntry<T>>> =
         flow {
             ensureInitialized()
             emitAll(
                 firestore.collection(path.value).snapshots.map { qs ->
-                    qs.documents.map { it.data(serializer) }
+                    qs.documents.map { CollectionEntry(id = it.id, value = it.data(serializer)) }
                 },
             )
         }

@@ -79,14 +79,16 @@ interface MetadataStore {
 
     /**
      * Real-time subscription to a whole collection. Emits the full list on every change
-     * (small N — single-user trees/machines/plugins are bounded). Listeners deliver
-     * collection-internal ordering by document id; sort client-side if you need anything
-     * else.
+     * (small N — single-user trees/machines/plugins are bounded). Each entry carries the
+     * doc id ([CollectionEntry.id]) alongside the decoded value so SyncCoordinator-style
+     * consumers can route per-doc deltas without embedding the id in the wire shape.
+     * Listeners deliver collection-internal ordering by document id; sort client-side if
+     * you need anything else.
      */
     fun <T : Any> observeCollection(
         path: CollectionPath,
         serializer: KSerializer<T>,
-    ): Flow<List<T>>
+    ): Flow<List<CollectionEntry<T>>>
 
     /**
      * Acquire a lease lock at [path]. Atomic test-and-set: succeeds (returns `true`) iff the

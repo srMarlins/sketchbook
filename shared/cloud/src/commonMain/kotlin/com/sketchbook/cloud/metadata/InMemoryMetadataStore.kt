@@ -78,12 +78,16 @@ class InMemoryMetadataStore(
     override fun <T : Any> observeCollection(
         path: CollectionPath,
         serializer: KSerializer<T>,
-    ): Flow<List<T>> {
+    ): Flow<List<CollectionEntry<T>>> {
         val prefix = path.value + "/"
         return docs.map { all ->
             all.entries
                 .filter { it.key.startsWith(prefix) && !it.key.substring(prefix.length).contains('/') }
-                .mapNotNull { decode(it.value, serializer) }
+                .mapNotNull { entry ->
+                    decode(entry.value, serializer)?.let { v ->
+                        CollectionEntry(id = entry.key.substring(prefix.length), value = v)
+                    }
+                }
         }
     }
 

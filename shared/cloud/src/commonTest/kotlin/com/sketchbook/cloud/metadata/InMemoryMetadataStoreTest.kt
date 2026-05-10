@@ -76,7 +76,8 @@ class InMemoryMetadataStoreTest {
 
             val items = store.observeCollection(CollectionPath.trees(u), Sample.serializer()).first()
 
-            assertEquals(setOf(Sample("a", 1), Sample("b", 2)), items.toSet())
+            assertEquals(setOf(Sample("a", 1), Sample("b", 2)), items.map { it.value }.toSet())
+            assertEquals(setOf("a", "b"), items.map { it.id }.toSet())
         }
 
     @Test

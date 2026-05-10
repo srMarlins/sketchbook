@@ -6,6 +6,7 @@ import com.sketchbook.cloud.Generation
 import com.sketchbook.cloud.metadata.DocPath
 import com.sketchbook.cloud.metadata.LockDoc
 import com.sketchbook.cloud.metadata.MetadataStore
+import com.sketchbook.cloud.metadata.TreeDoc
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
 import com.sketchbook.core.ManifestFile
@@ -153,7 +154,8 @@ class SnapshotPipeline(
                 val casResult = cloud.appendManifestHead(uuid, parentExpectedHead, auto)
                 val saved =
                     casResult.fold(
-                        onSuccess = {
+                        onSuccess = { gen ->
+                            writeTreeHeadToFirestore(uuid, newRev, gen)
                             SnapshotProgress.Saved(uuid, newRev, input.kind, input.label)
                         },
                         onFailure = { err ->
@@ -180,7 +182,8 @@ class SnapshotPipeline(
                                     )
                                 val branchResult = cloud.appendManifestHead(uuid, latest.generation, branch)
                                 branchResult.fold(
-                                    onSuccess = {
+                                    onSuccess = { branchGen ->
+                                        writeTreeHeadToFirestore(uuid, branchRev, branchGen)
                                         SnapshotProgress.Saved(uuid, branchRev, SnapshotKind.Branch, label)
                                     },
                                     onFailure = { e ->
@@ -198,6 +201,44 @@ class SnapshotPipeline(
                 runCatching { metadataStore.releaseLock(lockPath, holder = hostId) }
             }
         }
+
+    /**
+     * Post-CAS head publication. Update the tree's Firestore doc with the new head_rev /
+     * head_gen / head_updated_at / head_updated_by_host so [SyncCoordinator]s on other
+     * machines fire `pollOnce` on the listener's next emission.
+     *
+     * Best-effort: if Firestore is unreachable the local manifest was still appended to
+     * Storage and other machines will discover it on their next manual pull. Logging the
+     * failure is better than failing the pipeline — the snapshot DID save locally, just the
+     * cross-machine notification didn't go out.
+     */
+    private suspend fun writeTreeHeadToFirestore(
+        uuid: ProjectUuid,
+        rev: SnapshotRev,
+        gen: com.sketchbook.cloud.Generation,
+    ) {
+        val path = DocPath.tree(ownerUserId.value, uuid.value)
+        val now = clock.now()
+        runCatching {
+            metadataStore.updateDoc(path, TreeDoc.serializer()) { existing ->
+                existing?.copy(
+                    head_rev = rev.value,
+                    head_gen = gen.raw,
+                    head_updated_at = now,
+                    head_updated_by_host = hostId,
+                ) ?: TreeDoc(
+                    owner_user_id = ownerUserId.value,
+                    display_name = uuid.value,
+                    created_at = now,
+                    created_by_host = hostId,
+                    head_rev = rev.value,
+                    head_gen = gen.raw,
+                    head_updated_at = now,
+                    head_updated_by_host = hostId,
+                )
+            }
+        }
+    }
 }
 
 /**
