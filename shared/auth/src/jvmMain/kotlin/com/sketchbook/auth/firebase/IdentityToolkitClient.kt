@@ -103,11 +103,15 @@ class IdentityToolkitClient(
     ): T {
         val text = response.bodyAsText()
         if (response.status != HttpStatusCode.OK) {
-            val message =
+            val parsed =
                 runCatching {
-                    JSON.decodeFromString(IdentityToolkitErrorEnvelope.serializer(), text).error.message
+                    JSON.decodeFromString(IdentityToolkitErrorEnvelope.serializer(), text).error
                 }.getOrNull()
-            error("Identity Toolkit ${response.status.value}: ${message ?: text}")
+            throw IdentityToolkitException(
+                statusCode = response.status.value,
+                errorCode = parsed?.message,
+                rawBody = text,
+            )
         }
         return JSON.decodeFromString(serializer, text)
     }
@@ -150,4 +154,35 @@ class IdentityToolkitClient(
         @SerialName("code") val code: Int,
         @SerialName("message") val message: String,
     )
+}
+
+/**
+ * Typed failure from [IdentityToolkitClient]. Callers can branch on [errorCode] to decide
+ * recovery (e.g. `INVALID_REFRESH_TOKEN` → force re-auth; `TOO_MANY_ATTEMPTS_TRY_LATER`
+ * → backoff). [rawBody] is preserved for logging when the wire envelope doesn't match the
+ * expected `{error: {code, message}}` shape.
+ *
+ * See <https://cloud.google.com/identity-platform/docs/error-codes> for Identity Toolkit's
+ * documented error-code vocabulary.
+ */
+class IdentityToolkitException(
+    val statusCode: Int,
+    val errorCode: String?,
+    val rawBody: String,
+) : RuntimeException(
+        buildString {
+            append("Identity Toolkit ")
+            append(statusCode)
+            if (errorCode != null) {
+                append(": ")
+                append(errorCode)
+            } else {
+                append(": ")
+                append(rawBody.take(MAX_BODY_PREVIEW))
+            }
+        },
+    ) {
+    private companion object {
+        const val MAX_BODY_PREVIEW = 200
+    }
 }
