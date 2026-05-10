@@ -9,6 +9,7 @@ import com.sketchbook.auth.firebase.FirebaseAuthSession
 import com.sketchbook.auth.firebase.FirebaseConfig
 import com.sketchbook.auth.firebase.GoogleIdTokenVerifier
 import com.sketchbook.auth.firebase.IdentityToolkitClient
+import com.sketchbook.auth.firebase.JwksGoogleIdTokenVerifier
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.CatalogFts
 import com.sketchbook.catalog.CatalogHandle
@@ -298,7 +299,7 @@ interface DesktopAppGraph : ViewModelGraph {
     @Provides
     @SingleIn(AppScope::class)
     fun provideGoogleIdTokenVerifier(): GoogleIdTokenVerifier =
-        GoogleIdTokenVerifier(expectedAudience = OAUTH_CLIENT_ID)
+        JwksGoogleIdTokenVerifier(expectedAudience = OAUTH_CLIENT_ID)
 
     @Provides
     @SingleIn(AppScope::class)

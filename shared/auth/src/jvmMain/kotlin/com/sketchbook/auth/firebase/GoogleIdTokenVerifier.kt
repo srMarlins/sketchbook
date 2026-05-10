@@ -6,7 +6,10 @@ import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.RSAKey
 import com.nimbusds.jwt.SignedJWT
 import java.net.URI
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -14,15 +17,23 @@ import kotlin.time.Instant
  * Verify Google-issued ID tokens client-side before handing them to Identity Toolkit.
  * Security-commitment #1 in `docs/plans/2026-05-08-firebase-migration-design.md`.
  *
- * Five checks: RS256 signature (against Google's published JWKS), issuer, audience (must
- * equal our OAuth client ID — rejects tokens minted for other apps), expiry, and signed-JWT
- * sanity. Clock skew tolerated by [clockSkewSeconds].
- *
- * Uses Nimbus JOSE+JWT's lower-level API directly. We avoid `DefaultJWTProcessor` because
- * its claim-verifier ergonomics shift between Nimbus minor versions; explicit checks here
- * pin the behavior.
+ * Production impl is [JwksGoogleIdTokenVerifier]. Tests inject fakes that bypass the
+ * RSA-key + network requirements.
  */
-open class GoogleIdTokenVerifier(
+fun interface GoogleIdTokenVerifier {
+    fun verify(idToken: String): Result<VerifiedGoogleIdToken>
+}
+
+/**
+ * Production [GoogleIdTokenVerifier] backed by Nimbus JOSE+JWT. Five checks:
+ * RS256 signature (against Google's published JWKS, cached for 1h in [jwksCache]),
+ * issuer, audience (must equal our OAuth client ID — rejects tokens minted for other
+ * apps), expiry, and signed-JWT sanity. Clock skew tolerated by [clockSkewSeconds].
+ *
+ * We avoid `DefaultJWTProcessor` because its claim-verifier ergonomics shift between
+ * Nimbus minor versions; explicit checks here pin the behavior.
+ */
+class JwksGoogleIdTokenVerifier(
     /**
      * Expected `aud` claim. Equals our Google OAuth Client ID (Desktop type). Tokens minted
      * for other apps must be rejected.
@@ -30,29 +41,26 @@ open class GoogleIdTokenVerifier(
     private val expectedAudience: String,
     private val clock: Clock = Clock.System,
     private val clockSkewSeconds: Long = 60,
-    private val jwksUri: URI = URI("https://www.googleapis.com/oauth2/v3/certs"),
-) {
+    jwksUri: URI = URI("https://www.googleapis.com/oauth2/v3/certs"),
+) : GoogleIdTokenVerifier {
     private val acceptedIssuers = setOf("https://accounts.google.com", "accounts.google.com")
+    private val jwksCache = JwksCache(jwksUri, clock, ttl = 60.minutes)
 
-    @Volatile private var cachedJwks: JWKSet? = null
-
-    @Volatile private var cachedJwksFetchedAt: Instant? = null
-    private val jwksCacheTtl = (60 * 60).seconds
-
-    open fun verify(idToken: String): Result<VerifiedGoogleIdToken> =
+    override fun verify(idToken: String): Result<VerifiedGoogleIdToken> =
         try {
             val signedJwt = SignedJWT.parse(idToken)
             require(signedJwt.header.algorithm == JWSAlgorithm.RS256) {
                 "expected RS256, got ${signedJwt.header.algorithm}"
             }
 
-            val jwks = jwks()
+            val jwks = jwksCache.get()
             val kid = requireNotNull(signedJwt.header.keyID) { "JWT missing kid header" }
             val jwk = requireNotNull(jwks.getKeyByKeyId(kid)) { "kid $kid not in Google JWKS" }
             val rsaKey = (jwk as? RSAKey) ?: error("kid $kid is not an RSA key")
 
-            val verifier = RSASSAVerifier(rsaKey.toRSAPublicKey())
-            require(signedJwt.verify(verifier)) { "signature verification failed" }
+            require(signedJwt.verify(RSASSAVerifier(rsaKey.toRSAPublicKey()))) {
+                "signature verification failed"
+            }
 
             val claims = signedJwt.jwtClaimsSet
             val now = clock.now()
@@ -89,17 +97,35 @@ open class GoogleIdTokenVerifier(
         } catch (t: Throwable) {
             Result.failure(t)
         }
+}
 
-    private fun jwks(): JWKSet {
+/**
+ * Atomically-cached [JWKSet] with a TTL. Google rotates the published JWKS at most daily;
+ * 1h is conservative. Single [AtomicReference] holds `(JWKSet, fetchedAt)` together so a
+ * concurrent reader can never see a stale TTL with a fresh key set (or vice versa) — both
+ * fields update in one CAS.
+ */
+private class JwksCache(
+    private val jwksUri: URI,
+    private val clock: Clock,
+    private val ttl: Duration,
+) {
+    private data class Entry(
+        val jwks: JWKSet,
+        val fetchedAt: Instant,
+    )
+
+    private val ref = AtomicReference<Entry?>(null)
+
+    fun get(): JWKSet {
         val now = clock.now()
-        val cached = cachedJwks
-        val fetchedAt = cachedJwksFetchedAt
-        if (cached != null && fetchedAt != null && now < fetchedAt + jwksCacheTtl) {
-            return cached
+        val cached = ref.get()
+        if (cached != null && now < cached.fetchedAt + ttl) {
+            return cached.jwks
         }
         val fresh = JWKSet.load(jwksUri.toURL())
-        cachedJwks = fresh
-        cachedJwksFetchedAt = now
+        ref.set(Entry(fresh, now))
         return fresh
     }
 }
+

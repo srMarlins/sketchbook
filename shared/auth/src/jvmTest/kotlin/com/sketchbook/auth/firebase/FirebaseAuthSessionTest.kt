@@ -217,8 +217,8 @@ class FirebaseAuthSessionTest {
      * access. End-to-end JWKS verification is exercised against real Google in the spike runs
      * (and, follow-up, against the Firebase Auth emulator).
      */
-    private object AlwaysAcceptVerifier : GoogleIdTokenVerifier(expectedAudience = "ignored") {
-        override fun verify(idToken: String): Result<VerifiedGoogleIdToken> =
+    private val AlwaysAcceptVerifier: GoogleIdTokenVerifier =
+        GoogleIdTokenVerifier {
             Result.success(
                 VerifiedGoogleIdToken(
                     sub = "google-sub",
@@ -229,12 +229,10 @@ class FirebaseAuthSessionTest {
                     expiresAt = Instant.DISTANT_FUTURE,
                 ),
             )
-    }
+        }
 
-    private object AlwaysRejectVerifier : GoogleIdTokenVerifier(expectedAudience = "ignored") {
-        override fun verify(idToken: String): Result<VerifiedGoogleIdToken> =
-            Result.failure(IllegalStateException("untrusted issuer"))
-    }
+    private val AlwaysRejectVerifier: GoogleIdTokenVerifier =
+        GoogleIdTokenVerifier { Result.failure(IllegalStateException("untrusted issuer")) }
 
     private companion object {
         val EXCHANGE_OK =
