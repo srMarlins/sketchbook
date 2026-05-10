@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
  *    token can be minted, without opening a browser.
  *  - Provide [accessToken] for cloud backends. Caches and refreshes transparently. Surfaces
  *    refresh failure by flipping [state] to `SignedOut` AND throwing — the caller (e.g.
- *    `OAuthCloudCredentials`) decides how to surface the failure to the user.
+ *    `FirebaseCloudCredentials`) decides how to surface the failure to the user.
  */
 interface AuthSession {
     val state: StateFlow<AuthState>

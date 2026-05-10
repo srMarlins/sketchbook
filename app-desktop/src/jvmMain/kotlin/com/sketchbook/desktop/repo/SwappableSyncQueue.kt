@@ -10,7 +10,7 @@ import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.UserId
-import com.sketchbook.desktop.auth.OAuthCloudCredentials
+import com.sketchbook.desktop.auth.FirebaseCloudCredentials
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.ProjectRepository
@@ -40,7 +40,7 @@ import java.util.UUID
  * UI's per-row pip and sidebar caption have something to bind to.
  *
  * Swap logic: a coroutine on the app scope observes [AuthSession.state]. On `SignedIn`, build
- * a real [GcsSyncQueue] wired with [OAuthCloudCredentials] and the signed-in Firebase UID,
+ * a real [GcsSyncQueue] wired with [FirebaseCloudCredentials] and the signed-in Firebase UID,
  * pointing at [FirebaseConfig.active]'s storage bucket. On `SignedOut`, fall back to
  * in-memory. Active uploads from the previous impl are not migrated — they finish on the
  * previous instance and the new instance picks up state from the catalog (`sync_state` rows).
@@ -121,7 +121,7 @@ class SwappableSyncQueue(
         cacheSettings: BlobCacheSettings,
     ): SyncQueue =
         runCatching {
-            val credentials = OAuthCloudCredentials(authSession)
+            val credentials = FirebaseCloudCredentials(authSession)
             val backend =
                 FirebaseBlobStore(
                     http = httpClient,

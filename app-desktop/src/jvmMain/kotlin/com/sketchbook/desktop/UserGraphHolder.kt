@@ -5,7 +5,7 @@ import com.sketchbook.auth.AuthState
 import com.sketchbook.auth.firebase.FirebaseConfig
 import com.sketchbook.cloud.FirebaseBlobStore
 import com.sketchbook.core.AppScope
-import com.sketchbook.desktop.auth.OAuthCloudCredentials
+import com.sketchbook.desktop.auth.FirebaseCloudCredentials
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import io.ktor.client.HttpClient
@@ -51,7 +51,7 @@ class UserGraphHolder(
                         val backend =
                             FirebaseBlobStore(
                                 http = httpClient,
-                                credentials = OAuthCloudCredentials(authSession),
+                                credentials = FirebaseCloudCredentials(authSession),
                                 bucket = FirebaseConfig.active().storageBucket,
                                 userId = auth.userId,
                             )
