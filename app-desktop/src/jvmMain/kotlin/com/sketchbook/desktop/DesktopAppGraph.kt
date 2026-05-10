@@ -252,7 +252,12 @@ interface DesktopAppGraph : ViewModelGraph {
     @SingleIn(AppScope::class)
     fun provideTokenStore(): TokenStore =
         KeyringTokenStore(
-            serviceName = "com.sketchbook.refresh",
+            // Phase 2 of the Firebase migration: refresh tokens now come from Identity
+            // Toolkit, not Google OAuth. Namespacing separately (security-commitment #2
+            // in docs/plans/2026-05-08-firebase-migration-design.md) prevents a transitional
+            // or rollback period from mixing token sources. No pre-Firebase keys exist in
+            // the wild — Sketchbook hasn't shipped — so no migration is needed.
+            serviceName = "sketchbook.firebase.refresh_token",
             accountName = "default",
         )
 
