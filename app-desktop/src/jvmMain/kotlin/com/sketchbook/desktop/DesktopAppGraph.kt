@@ -2,10 +2,13 @@ package com.sketchbook.desktop
 
 import com.sketchbook.actions.ProposalActionExecutor
 import com.sketchbook.auth.AuthSession
-import com.sketchbook.auth.GoogleAuthSession
 import com.sketchbook.auth.KeyringTokenStore
 import com.sketchbook.auth.OAuthClient
 import com.sketchbook.auth.TokenStore
+import com.sketchbook.auth.firebase.FirebaseAuthSession
+import com.sketchbook.auth.firebase.FirebaseConfig
+import com.sketchbook.auth.firebase.GoogleIdTokenVerifier
+import com.sketchbook.auth.firebase.IdentityToolkitClient
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.CatalogFts
 import com.sketchbook.catalog.CatalogHandle
@@ -274,13 +277,28 @@ interface DesktopAppGraph : ViewModelGraph {
         OAuthClient(
             httpClient = httpClient,
             clientId = OAUTH_CLIENT_ID,
+            // Firebase migration: we no longer need the GCS scope on the Google grant — bearer
+            // for GCS reads/writes is now the Firebase ID token (issued by Identity Toolkit).
+            // `openid` + `email` is all that's needed for the Identity Toolkit exchange.
             scopes =
                 listOf(
                     "openid",
                     "email",
-                    "https://www.googleapis.com/auth/devstorage.read_write",
                 ),
         )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideIdentityToolkitClient(httpClient: HttpClient): IdentityToolkitClient =
+        IdentityToolkitClient(
+            httpClient = httpClient,
+            webApiKey = FirebaseConfig.active().webApiKey,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideGoogleIdTokenVerifier(): GoogleIdTokenVerifier =
+        GoogleIdTokenVerifier(expectedAudience = OAUTH_CLIENT_ID)
 
     @Provides
     @SingleIn(AppScope::class)
@@ -288,14 +306,16 @@ interface DesktopAppGraph : ViewModelGraph {
         tokenStore: TokenStore,
         identityStore: PrefsIdentityStore,
         oauthClient: OAuthClient,
-        httpClient: HttpClient,
+        identityToolkit: IdentityToolkitClient,
+        googleIdTokenVerifier: GoogleIdTokenVerifier,
         appScope: CoroutineScope,
     ): AuthSession {
         val inner =
-            GoogleAuthSession(
+            FirebaseAuthSession(
                 tokenStore = tokenStore,
                 oauthClient = oauthClient,
-                httpClient = httpClient,
+                identityToolkit = identityToolkit,
+                googleIdTokenVerifier = googleIdTokenVerifier,
                 scope = appScope,
             )
         return DesktopAuthSession(
@@ -309,9 +329,16 @@ interface DesktopAppGraph : ViewModelGraph {
 /**
  * OAuth 2.0 desktop client ID for Sketchbook. Public clients have no secret — PKCE proves
  * the client. Created in the Google Cloud console under "OAuth 2.0 Client IDs" → Application
- * type "Desktop app". If you fork this repo, replace this with your own client ID.
+ * type "Desktop app". Pre-launch placeholder — set the real value via the
+ * `sketchbook.oauth.client_id` system property (or wire your own loader if you fork the repo).
+ *
+ * The Firebase migration uses this client ID for both Google sign-in *and* as the expected
+ * `aud` claim when verifying the resulting Google ID token before the Identity Toolkit
+ * exchange — see `GoogleIdTokenVerifier`.
  */
-private const val OAUTH_CLIENT_ID = "REPLACE_ME.apps.googleusercontent.com"
+private val OAUTH_CLIENT_ID: String =
+    System.getProperty("sketchbook.oauth.client_id")
+        ?: "REPLACE_ME.apps.googleusercontent.com"
 
 /**
  * Stable per-machine identity used by the sync pipeline as `hostId` (lease ownership) and

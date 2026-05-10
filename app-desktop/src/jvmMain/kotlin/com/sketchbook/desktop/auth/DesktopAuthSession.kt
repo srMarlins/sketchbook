@@ -2,7 +2,6 @@ package com.sketchbook.desktop.auth
 
 import com.sketchbook.auth.AuthSession
 import com.sketchbook.auth.AuthState
-import com.sketchbook.auth.GoogleAuthSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,10 +10,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
- * Desktop-flavored [AuthSession] that wraps [GoogleAuthSession] and weaves a
- * [PrefsIdentityStore] in/out so silent restore actually emits [AuthState.SignedIn] from a
- * cached identity (the `shared/auth` session deliberately doesn't re-fetch userinfo on
- * restore — see `GoogleAuthSession`'s docstring).
+ * Desktop-flavored [AuthSession] that wraps the inner production session
+ * (`FirebaseAuthSession`) and weaves a [PrefsIdentityStore] in/out so silent restore
+ * actually emits [AuthState.SignedIn] from a cached identity (the inner session deliberately
+ * doesn't re-fetch userinfo on restore).
  *
  * Init flow:
  *  - Optimistically expose the persisted identity as the initial state so the UI doesn't
@@ -23,7 +22,7 @@ import kotlinx.coroutines.launch
  *    SignedIn and clearing on SignedOut.
  */
 class DesktopAuthSession(
-    private val inner: GoogleAuthSession,
+    private val inner: AuthSession,
     private val identityStore: PrefsIdentityStore,
     scope: CoroutineScope,
 ) : AuthSession {
