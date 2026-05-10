@@ -6,6 +6,7 @@ import com.sketchbook.auth.firebase.FirebaseConfig
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.FirebaseBlobStore
+import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
@@ -65,6 +66,7 @@ class SwappableSyncQueue(
     private val firebaseConfig: FirebaseConfig,
     private val journal: JournalRepository? = null,
     private val httpClient: HttpClient,
+    private val metadataStore: MetadataStore,
 ) : SyncQueue,
     ForceSnapshotPipeline {
     private val fallback = InMemorySyncQueue(projects = projects, scope = scope)
@@ -139,6 +141,7 @@ class SwappableSyncQueue(
             val pipeline =
                 SnapshotPipeline(
                     cloud = backend,
+                    metadataStore = metadataStore,
                     ownerUserId = userId,
                     hostId = hostId,
                     hostName = hostName,

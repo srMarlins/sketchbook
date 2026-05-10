@@ -1,5 +1,6 @@
 plugins {
     id("kmp-test")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
@@ -11,6 +12,9 @@ kotlin {
             implementation(project(":shared:catalog"))
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.io.core)
+            // SnapshotPipeline writes LockDoc via MetadataStore (phase 3) — needs the KSerializer
+            // accessor.
+            implementation(libs.kotlinx.serialization.json)
         }
         jvmMain.dependencies {
             // JvmBlobCache uses the catalog's blob_cache table directly via the SQLDelight

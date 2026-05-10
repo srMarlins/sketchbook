@@ -1,7 +1,9 @@
 package com.sketchbook.integration
 
 import com.sketchbook.cloud.Generation
+import com.sketchbook.cloud.metadata.InMemoryMetadataStore
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.UserId
 import com.sketchbook.integration.fakes.FakeCloudBackend
 import com.sketchbook.integration.fakes.FixedClock
 import com.sketchbook.sync.PipelineInput
@@ -39,9 +41,12 @@ class SyncRoundTripTest {
             val hostBRoot = tmp.resolve("hostB").also { it.toFile().mkdirs() }
 
             val cloud = FakeCloudBackend()
+            val metadataStore = InMemoryMetadataStore(clock = FixedClock(now))
             val pipelineA =
                 SnapshotPipeline(
                     cloud = cloud,
+                    metadataStore = metadataStore,
+                    ownerUserId = UserId("test-user"),
                     hostId = "host-a",
                     hostName = "DesktopA",
                     clock = FixedClock(now),
@@ -68,6 +73,8 @@ class SyncRoundTripTest {
             val pipelineA2 =
                 SnapshotPipeline(
                     cloud = cloud,
+                    metadataStore = metadataStore,
+                    ownerUserId = UserId("test-user"),
                     hostId = "host-a",
                     hostName = "DesktopA",
                     clock = FixedClock(now),

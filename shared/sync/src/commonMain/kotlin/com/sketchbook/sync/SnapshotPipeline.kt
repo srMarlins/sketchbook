@@ -3,8 +3,9 @@ package com.sketchbook.sync
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
-import com.sketchbook.cloud.LeaseAcquireResult
-import com.sketchbook.cloud.LeaseLock
+import com.sketchbook.cloud.metadata.DocPath
+import com.sketchbook.cloud.metadata.LockDoc
+import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
 import com.sketchbook.core.ManifestFile
@@ -32,6 +33,7 @@ import kotlin.time.Duration.Companion.minutes
  */
 class SnapshotPipeline(
     private val cloud: CloudBackend,
+    private val metadataStore: MetadataStore,
     private val ownerUserId: UserId = UserId.DEFAULT,
     private val hostId: String,
     private val hostName: String,
@@ -46,28 +48,29 @@ class SnapshotPipeline(
             val parentExpectedHead = input.expectedHeadGeneration
             val blobScope: BlobScope = if (input.selfContained) BlobScope.Private(uuid) else BlobScope.Shared
 
-            // 1) Lease.
-            val leaseInstant = clock.now()
-            val lock =
-                LeaseLock(
-                    ownerHostId = hostId,
-                    ownerHostName = hostName,
-                    acquiredAt = leaseInstant,
-                    expiresAt = leaseInstant + leaseTtl,
-                )
-            val leaseGen: Generation =
-                when (val r = cloud.acquireLock(uuid, lock)) {
-                    is LeaseAcquireResult.Acquired -> {
-                        emit(SnapshotProgress.LeaseAcquired(uuid))
-                        r.generation
-                    }
-
-                    is LeaseAcquireResult.Held -> {
-                        emit(SnapshotProgress.LeaseHeld(uuid, r.held.ownerHostName))
-                        emit(SnapshotProgress.Failed(uuid, "lock held by ${r.held.ownerHostName}"))
-                        return@flow
-                    }
+            // 1) Lease — Firestore-backed CAS via MetadataStore. The lock doc lives at
+            //    /users/{uid}/locks/{treeId} per the design data model. Phase 3 ships the
+            //    metadata-side; the host-name population is a follow-up setDoc below so the
+            //    "held by X" UI has a friendly label even though the atomic primitive doesn't
+            //    take one.
+            val lockPath = DocPath.lock(ownerUserId.value, uuid.value)
+            val acquired = metadataStore.acquireLock(lockPath, holder = hostId, ttl = leaseTtl)
+            if (!acquired) {
+                val current = metadataStore.getDoc(lockPath, LockDoc.serializer())
+                val ownerLabel = current?.holderName?.takeIf { it.isNotBlank() } ?: current?.holder ?: "another host"
+                emit(SnapshotProgress.LeaseHeld(uuid, ownerLabel))
+                emit(SnapshotProgress.Failed(uuid, "lock held by $ownerLabel"))
+                return@flow
+            }
+            emit(SnapshotProgress.LeaseAcquired(uuid))
+            // Best-effort: backfill the holder-name on the lock doc so the UI side has a
+            // label. The acquireLock CAS wrote with holderName="" — overwriting with the
+            // populated doc is safe because we now own the lease.
+            metadataStore.getDoc(lockPath, LockDoc.serializer())?.let { acq ->
+                if (acq.holder == hostId && acq.holderName != hostName) {
+                    metadataStore.setDoc(lockPath, acq.copy(holderName = hostName), LockDoc.serializer())
                 }
+            }
 
             try {
                 // 2) Walk + diff.
@@ -192,7 +195,7 @@ class SnapshotPipeline(
                 if (saved != null) emit(saved)
             } finally {
                 // 6) Release lease (best-effort; pipeline outcome already emitted).
-                runCatching { cloud.releaseLock(uuid, leaseGen) }
+                runCatching { metadataStore.releaseLock(lockPath, holder = hostId) }
             }
         }
 }

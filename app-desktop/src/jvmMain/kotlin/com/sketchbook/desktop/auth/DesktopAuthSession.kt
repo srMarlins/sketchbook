@@ -76,4 +76,12 @@ class DesktopAuthSession(
     }
 
     override suspend fun idToken(): String = inner.idToken()
+
+    /**
+     * Expose the wrapped [FirebaseAuthSession] for components that need its richer surface
+     * (e.g. `FirebaseSdkBootstrap` needs `currentTokens()`, which isn't on the [AuthSession]
+     * interface). The DI graph never injects a raw `FirebaseAuthSession`; consumers cast their
+     * injected `AuthSession` to `DesktopAuthSession` and call `unwrap()`.
+     */
+    fun unwrap(): FirebaseAuthSession = inner
 }

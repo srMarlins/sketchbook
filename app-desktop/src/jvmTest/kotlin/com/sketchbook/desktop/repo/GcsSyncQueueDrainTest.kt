@@ -6,9 +6,7 @@ import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
-import com.sketchbook.cloud.LeaseAcquireResult
-import com.sketchbook.cloud.LeaseLock
-import com.sketchbook.cloud.LeaseRefreshResult
+import com.sketchbook.cloud.metadata.InMemoryMetadataStore
 import com.sketchbook.cloud.ManifestRef
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
@@ -90,9 +88,11 @@ class GcsSyncQueueDrainTest {
             )
         val syncState = SyncStateStore(catalog)
         val cloud = CountingCloudBackend()
+        val metadataStore = CountingMetadataStore()
         val pipeline =
             SnapshotPipeline(
                 cloud = cloud,
+                metadataStore = metadataStore,
                 ownerUserId = UserId.DEFAULT,
                 hostId = "host-test",
                 hostName = "TestHost",
@@ -109,7 +109,7 @@ class GcsSyncQueueDrainTest {
                 clock = clock,
                 ioDispatcher = testDispatcher,
             )
-        return Env(catalog, fts, projects, syncState, cloud, queue, clock)
+        return Env(catalog, fts, projects, syncState, cloud, metadataStore, queue, clock)
     }
 
     private data class Env(
@@ -118,6 +118,7 @@ class GcsSyncQueueDrainTest {
         val projects: SqlProjectRepository,
         val syncState: SyncStateStore,
         val cloud: CountingCloudBackend,
+        val metadataStore: CountingMetadataStore,
         val queue: GcsSyncQueue,
         val clock: VirtualClock,
     )
@@ -249,35 +250,35 @@ class GcsSyncQueueDrainTest {
             runCurrent()
 
             // First attempt at t=0.
-            assertEquals(1, env.cloud.lockAcquireCount, "first attempt should fire immediately")
+            assertEquals(1, env.metadataStore.lockAcquireCount, "first attempt should fire immediately")
 
             // Backoff after fail #1 = 30s. Verify no retry before that.
             advanceTimeBy(29_000)
             runCurrent()
-            assertEquals(1, env.cloud.lockAcquireCount, "no retry before 30s backoff expires")
+            assertEquals(1, env.metadataStore.lockAcquireCount, "no retry before 30s backoff expires")
             // Cross 30s boundary → next 60s wake fires retry. Use 60s wake (the only timer).
             advanceTimeBy(31_000)
             runCurrent() // total 60s → wake fires drainOnce.
-            assertEquals(2, env.cloud.lockAcquireCount, "second attempt at ~60s")
+            assertEquals(2, env.metadataStore.lockAcquireCount, "second attempt at ~60s")
 
             // Backoff after fail #2 = 60s. Next wake: another 60s window. Need to wait ~60s past t=60.
             advanceTimeBy(60_000)
             runCurrent() // t=120 → next wake.
-            assertEquals(3, env.cloud.lockAcquireCount, "third attempt around t=120s (60s backoff cleared)")
+            assertEquals(3, env.metadataStore.lockAcquireCount, "third attempt around t=120s (60s backoff cleared)")
 
             // Backoff after fail #3 = 300s. Next wake at +60s (t=180), but backoff still active.
             advanceTimeBy(60_000)
             runCurrent() // t=180.
-            assertEquals(3, env.cloud.lockAcquireCount, "still backed off at t=180s")
+            assertEquals(3, env.metadataStore.lockAcquireCount, "still backed off at t=180s")
             // Several more 60s wakes pass, all skip. We need t >= 120 + 300 = 420.
             advanceTimeBy(240_000)
             runCurrent() // t=420.
-            assertEquals(4, env.cloud.lockAcquireCount, "fourth attempt around t=420s (300s backoff cleared)")
+            assertEquals(4, env.metadataStore.lockAcquireCount, "fourth attempt around t=420s (300s backoff cleared)")
 
             // Backoff after fail #4 = 900s. Need t >= 420 + 900 = 1320.
             advanceTimeBy(900_000)
             runCurrent() // t=1320.
-            assertEquals(5, env.cloud.lockAcquireCount, "fifth attempt around t=1320s (900s cap)")
+            assertEquals(5, env.metadataStore.lockAcquireCount, "fifth attempt around t=1320s (900s cap)")
         }
 
     @Test
@@ -298,18 +299,18 @@ class GcsSyncQueueDrainTest {
             runCurrent() // attempt #4
             advanceTimeBy(900_000)
             runCurrent() // attempt #5
-            assertEquals(5, env.cloud.lockAcquireCount)
+            assertEquals(5, env.metadataStore.lockAcquireCount)
 
             // After attempt #5 fails, backoff should still be 900s (capped). Verify by advancing
             // exactly 900s — attempt #6 should fire right around that boundary.
             advanceTimeBy(900_000)
             runCurrent()
-            assertEquals(6, env.cloud.lockAcquireCount, "6th attempt should fire at 900s cap, not grow further")
+            assertEquals(6, env.metadataStore.lockAcquireCount, "6th attempt should fire at 900s cap, not grow further")
 
             // And the 7th: another 900s, not 30 minutes or anything bigger.
             advanceTimeBy(900_000)
             runCurrent()
-            assertEquals(7, env.cloud.lockAcquireCount, "7th attempt also at 900s cap (no further growth)")
+            assertEquals(7, env.metadataStore.lockAcquireCount, "7th attempt also at 900s cap (no further growth)")
         }
 
     @Test
@@ -327,11 +328,11 @@ class GcsSyncQueueDrainTest {
 
             // Pipeline ran once and produced the branch; uuid is now in `conflicts`. Even after a
             // long quiet period the drain should not retry the same uuid.
-            val attemptsAfterConflict = env.cloud.lockAcquireCount
+            val attemptsAfterConflict = env.metadataStore.lockAcquireCount
             advanceTimeBy(3_600_000)
             runCurrent() // 1h.
             advanceUntilIdle()
-            assertEquals(attemptsAfterConflict, env.cloud.lockAcquireCount, "uuid in conflict should not be re-attempted")
+            assertEquals(attemptsAfterConflict, env.metadataStore.lockAcquireCount, "uuid in conflict should not be re-attempted")
 
             // Manually clear the conflict — the row is still dirty (markSynced was called for the
             // branch write but the test simulates the user-driven clearance pattern).
@@ -340,7 +341,7 @@ class GcsSyncQueueDrainTest {
             advanceTimeBy(1_000)
             runCurrent()
             advanceUntilIdle()
-            assertTrue(env.cloud.lockAcquireCount > attemptsAfterConflict, "drain should pick up the uuid after conflict cleared")
+            assertTrue(env.metadataStore.lockAcquireCount > attemptsAfterConflict, "drain should pick up the uuid after conflict cleared")
         }
 
     @Test
@@ -359,7 +360,7 @@ class GcsSyncQueueDrainTest {
             runCurrent() // attempt #3 — succeeds, backoff cleared
 
             assertTrue(env.cloud.appendCount >= 1, "third attempt should have written a manifest")
-            val baselineAcquires = env.cloud.lockAcquireCount
+            val baselineAcquires = env.metadataStore.lockAcquireCount
 
             // Mutate the file so the next push must upload a new blob (head-then-PUT). Without a
             // content change, `headBlob` would short-circuit and `failuresRemaining` would never
@@ -371,7 +372,7 @@ class GcsSyncQueueDrainTest {
             env.syncState.markDirty(uuid)
             advanceTimeBy(1_000)
             runCurrent()
-            val attemptsAfterFreshFail = env.cloud.lockAcquireCount
+            val attemptsAfterFreshFail = env.metadataStore.lockAcquireCount
             assertTrue(attemptsAfterFreshFail > baselineAcquires, "version bump should have driven a retry")
 
             // After the fresh fail, backoff must be 30s (the floor). The next 60s wake will fire
@@ -380,7 +381,7 @@ class GcsSyncQueueDrainTest {
             advanceTimeBy(120_000)
             runCurrent()
             assertTrue(
-                env.cloud.lockAcquireCount > attemptsAfterFreshFail,
+                env.metadataStore.lockAcquireCount > attemptsAfterFreshFail,
                 "after reset, 30s backoff should let retry happen well before 5m",
             )
         }
@@ -396,7 +397,7 @@ class GcsSyncQueueDrainTest {
             runCurrent()
             advanceUntilIdle()
 
-            assertEquals(0, env.cloud.lockAcquireCount, "fresh-mtime project should be skipped")
+            assertEquals(0, env.metadataStore.lockAcquireCount, "fresh-mtime project should be skipped")
 
             // Age the file's mtime past the quiet period (now is at virtual t=current; set mtime
             // well into the past relative to the virtual clock).
@@ -473,14 +474,11 @@ private const val BASE_EPOCH_MS = 1_777_900_800_000L // 2026-05-06 UTC, comforta
 private class CountingCloudBackend : CloudBackend {
     var failuresRemaining: Int = 0
     var firstAppendIsConflict: Boolean = false
-    var lockAcquireCount: Int = 0
-        private set
     var appendCount: Int = 0
         private set
 
     private val blobs = mutableMapOf<Pair<BlobScope, BlobHash>, ByteArray>()
     private val manifests = mutableMapOf<ProjectUuid, MutableList<Pair<ManifestRef, Manifest>>>()
-    private val locks = mutableMapOf<ProjectUuid, Pair<LeaseLock, Generation>>()
     private var nextGen = 1L
     private var appendCalls = 0
 
@@ -550,35 +548,26 @@ private class CountingCloudBackend : CloudBackend {
         return Result.success(gen)
     }
 
+    // Lock methods removed in Phase 3 — leases live in MetadataStore; CountingMetadataStore below
+    // exposes the lock-acquire count tests rely on.
+}
+
+/**
+ * MetadataStore wrapper that decorates [InMemoryMetadataStore] with a counter on acquireLock.
+ * Drives the drain-backoff tests that previously counted on CloudBackend.acquireLock calls.
+ */
+private class CountingMetadataStore(
+    private val delegate: com.sketchbook.cloud.metadata.InMemoryMetadataStore = com.sketchbook.cloud.metadata.InMemoryMetadataStore(),
+) : com.sketchbook.cloud.metadata.MetadataStore by delegate {
+    var lockAcquireCount: Int = 0
+        private set
+
     override suspend fun acquireLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-    ): LeaseAcquireResult {
+        path: com.sketchbook.cloud.metadata.DocPath,
+        holder: String,
+        ttl: kotlin.time.Duration,
+    ): Boolean {
         lockAcquireCount += 1
-        val existing = locks[uuid]
-        if (existing != null) return LeaseAcquireResult.Held(existing.first, existing.second)
-        val gen = nextGeneration()
-        locks[uuid] = lock to gen
-        return LeaseAcquireResult.Acquired(gen)
-    }
-
-    override suspend fun refreshLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-        expected: Generation,
-    ): LeaseRefreshResult {
-        val existing = locks[uuid] ?: return LeaseRefreshResult.Stale
-        if (existing.second != expected) return LeaseRefreshResult.Stale
-        val gen = nextGeneration()
-        locks[uuid] = lock to gen
-        return LeaseRefreshResult.Refreshed(gen)
-    }
-
-    override suspend fun releaseLock(
-        uuid: ProjectUuid,
-        expected: Generation,
-    ) {
-        val existing = locks[uuid] ?: return
-        if (existing.second == expected) locks.remove(uuid)
+        return delegate.acquireLock(path, holder, ttl)
     }
 }

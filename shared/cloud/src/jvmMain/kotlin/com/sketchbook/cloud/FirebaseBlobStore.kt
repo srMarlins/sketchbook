@@ -9,7 +9,6 @@ import com.sketchbook.core.UserId
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.bearerAuth
-import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.head
 import io.ktor.client.request.headers
@@ -391,96 +390,9 @@ class FirebaseBlobStore(
         }
     }
 
-    override suspend fun acquireLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-    ): LeaseAcquireResult {
-        val path = lockPath(uuid)
-        val body = json.encodeToString(LeaseLock.serializer(), lock).toByteArray(Charsets.UTF_8)
-        val resp =
-            http.post(uploadUrl()) {
-                authHeader()
-                parameter("uploadType", "media")
-                parameter("name", path)
-                headers { append("x-goog-if-generation-match", "0") }
-                contentType(ContentType.Application.Json)
-                setBody(body)
-            }
-        return when (resp.status) {
-            HttpStatusCode.OK -> {
-                val gen =
-                    resp.headers["x-goog-generation"]
-                        ?: throw SketchbookError.IntegrityError("missing x-goog-generation on lock write")
-                LeaseAcquireResult.Acquired(Generation(gen))
-            }
-
-            HttpStatusCode.PreconditionFailed -> {
-                val existing =
-                    http.get(objectUrl(path)) {
-                        authHeader()
-                        parameter("alt", "media")
-                    }
-                val existingLock = json.decodeFromString(LeaseLock.serializer(), existing.bodyAsText())
-                val gen =
-                    existing.headers["x-goog-generation"]
-                        ?: throw SketchbookError.IntegrityError("missing x-goog-generation on held lock read")
-                LeaseAcquireResult.Held(existingLock, Generation(gen))
-            }
-
-            else -> {
-                throw remoteFailure(resp, "PUT $path")
-            }
-        }
-    }
-
-    override suspend fun refreshLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-        expected: Generation,
-    ): LeaseRefreshResult {
-        val path = lockPath(uuid)
-        val body = json.encodeToString(LeaseLock.serializer(), lock).toByteArray(Charsets.UTF_8)
-        val resp =
-            http.post(uploadUrl()) {
-                authHeader()
-                parameter("uploadType", "media")
-                parameter("name", path)
-                headers { append("x-goog-if-generation-match", expected.raw) }
-                contentType(ContentType.Application.Json)
-                setBody(body)
-            }
-        return when (resp.status) {
-            HttpStatusCode.OK -> {
-                val gen =
-                    resp.headers["x-goog-generation"]
-                        ?: throw SketchbookError.IntegrityError("missing x-goog-generation on lock refresh")
-                LeaseRefreshResult.Refreshed(Generation(gen))
-            }
-
-            HttpStatusCode.PreconditionFailed -> {
-                LeaseRefreshResult.Stale
-            }
-
-            else -> {
-                throw remoteFailure(resp, "REFRESH $path")
-            }
-        }
-    }
-
-    override suspend fun releaseLock(
-        uuid: ProjectUuid,
-        expected: Generation,
-    ) {
-        val path = lockPath(uuid)
-        val resp =
-            http.delete(objectUrl(path)) {
-                authHeader()
-                headers { append("x-goog-if-generation-match", expected.raw) }
-            }
-        if (resp.status != HttpStatusCode.NoContent && resp.status != HttpStatusCode.NotFound) {
-            throw remoteFailure(resp, "DELETE $path")
-        }
-    }
+    // Lock methods deleted in Phase 3 — leases now live as Firestore docs at
+    // /users/{uid}/locks/{treeId} via MetadataStore. The pre-Phase-3
+    // <user>/locks/<uuid>.lock GCS object path is dead.
 
     // ---- internals ----
 
@@ -513,8 +425,6 @@ class FirebaseBlobStore(
     ): String = "$tenantPrefix/manifests/${uuid.value}/${rev.toString().padStart(8, '0')}-${timestamp.replace(':', '-')}-$host.json"
 
     private fun headPath(uuid: ProjectUuid): String = "$tenantPrefix/manifests/${uuid.value}/HEAD"
-
-    private fun lockPath(uuid: ProjectUuid): String = "$tenantPrefix/locks/${uuid.value}.lock"
 
     private fun JsonElement.toManifestRef(prefix: String): ManifestRef? {
         val obj = this.jsonObject

@@ -14,15 +14,15 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
- * Contract tests for [FakeMetadataStore] — same contract the [FirestoreMetadataStore]
+ * Contract tests for [InMemoryMetadataStore] — same contract the [FirestoreMetadataStore]
  * promises. The fake is the substitute used by SyncCoordinator / lock-repo tests downstream;
  * if a CRUD or lock semantic drifts, those downstream tests stop being meaningful.
  */
-class FakeMetadataStoreTest {
+class InMemoryMetadataStoreTest {
     @Test
     fun `setDoc + getDoc round-trips a value`() =
         runTest {
-            val store = FakeMetadataStore()
+            val store = InMemoryMetadataStore()
             val path = DocPath.tree("u", "t1")
 
             assertNull(store.getDoc(path, Sample.serializer()))
@@ -33,7 +33,7 @@ class FakeMetadataStoreTest {
     @Test
     fun `updateDoc CAS reads the existing value and writes the transformed one`() =
         runTest {
-            val store = FakeMetadataStore()
+            val store = InMemoryMetadataStore()
             val path = DocPath.tree("u", "t1")
             store.setDoc(path, Sample("orig", 1), Sample.serializer())
 
@@ -49,7 +49,7 @@ class FakeMetadataStoreTest {
     @Test
     fun `deleteDoc removes the value and propagates to observers`() =
         runTest {
-            val store = FakeMetadataStore()
+            val store = InMemoryMetadataStore()
             val path = DocPath.tree("u", "t1")
             store.setDoc(path, Sample("x", 1), Sample.serializer())
 
@@ -62,7 +62,7 @@ class FakeMetadataStoreTest {
     @Test
     fun `observeCollection emits only direct children of the collection`() =
         runTest {
-            val store = FakeMetadataStore()
+            val store = InMemoryMetadataStore()
             val u = "user1"
             store.setDoc(DocPath.tree(u, "a"), Sample("a", 1), Sample.serializer())
             store.setDoc(DocPath.tree(u, "b"), Sample("b", 2), Sample.serializer())
@@ -82,7 +82,7 @@ class FakeMetadataStoreTest {
     @Test
     fun `acquireLock succeeds on a fresh path and rejects a second holder`() =
         runTest {
-            val store = FakeMetadataStore()
+            val store = InMemoryMetadataStore()
             val path = DocPath.lock("u", "t1")
 
             assertTrue(store.acquireLock(path, "host-a", 10.minutes))
@@ -92,7 +92,7 @@ class FakeMetadataStoreTest {
     @Test
     fun `acquireLock by the same holder succeeds and bumps the heartbeat`() =
         runTest {
-            val store = FakeMetadataStore()
+            val store = InMemoryMetadataStore()
             val path = DocPath.lock("u", "t1")
 
             assertTrue(store.acquireLock(path, "host-a", 10.minutes))
@@ -106,7 +106,7 @@ class FakeMetadataStoreTest {
     fun `acquireLock takes over an expired lease`() =
         runTest {
             val controllable = ControllableClock(Instant.fromEpochSeconds(1_700_000_000))
-            val store = FakeMetadataStore(clock = controllable)
+            val store = InMemoryMetadataStore(clock = controllable)
             val path = DocPath.lock("u", "t1")
 
             assertTrue(store.acquireLock(path, "host-a", 1.seconds))
@@ -119,7 +119,7 @@ class FakeMetadataStoreTest {
     @Test
     fun `refreshLock fails if a different holder owns the lease`() =
         runTest {
-            val store = FakeMetadataStore()
+            val store = InMemoryMetadataStore()
             val path = DocPath.lock("u", "t1")
             store.acquireLock(path, "host-a", 10.minutes)
 
@@ -131,7 +131,7 @@ class FakeMetadataStoreTest {
     @Test
     fun `releaseLock no-ops when caller is not the holder`() =
         runTest {
-            val store = FakeMetadataStore()
+            val store = InMemoryMetadataStore()
             val path = DocPath.lock("u", "t1")
             store.acquireLock(path, "host-a", 10.minutes)
 
@@ -146,7 +146,7 @@ class FakeMetadataStoreTest {
             // Regression guard: kotlinx-serialization 1.11 added native kotlin.time.Instant
             // support. If that breaks on a future bump, LockDoc fails to encode and every
             // lock-related test goes red. Pin behavior here so the failure is localized.
-            val store = FakeMetadataStore()
+            val store = InMemoryMetadataStore()
             val path = DocPath.lock("u", "t1")
             store.acquireLock(path, "host-a", 5.minutes)
 

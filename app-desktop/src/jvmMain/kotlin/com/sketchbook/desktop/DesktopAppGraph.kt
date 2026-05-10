@@ -7,10 +7,13 @@ import com.sketchbook.auth.OAuthClient
 import com.sketchbook.auth.TokenStore
 import com.sketchbook.auth.firebase.FirebaseAuthSession
 import com.sketchbook.auth.firebase.FirebaseConfig
+import com.sketchbook.auth.firebase.FirebaseSdkBootstrap
 import com.sketchbook.auth.firebase.GoogleIdTokenVerifier
 import com.sketchbook.auth.firebase.IdentityToolkitClient
 import com.sketchbook.auth.firebase.JwksGoogleIdTokenVerifier
 import com.sketchbook.catalog.CatalogDb
+import com.sketchbook.cloud.metadata.FirestoreMetadataStore
+import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.catalog.CatalogFts
 import com.sketchbook.catalog.CatalogHandle
 import com.sketchbook.catalog.JvmSampleScanner
@@ -202,19 +205,44 @@ interface DesktopAppGraph : ViewModelGraph {
     fun provideLockRepository(
         store: SyncStateStore,
         scope: CoroutineScope,
-        syncQueue: SyncQueue,
+        authSession: AuthSession,
+        metadataStore: MetadataStore,
         journal: JournalRepository,
     ): LockRepository =
         LeasedLockRepository(
-            cloud = {
-                (syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue)?.currentCloud?.value
-            },
+            // Provide the store eagerly — FirestoreMetadataStore is safe to construct before
+            // sign-in; its methods bootstrap-then-call. Listener startup short-circuits when
+            // userId == null so signed-out app instances incur no SDK calls.
+            metadataStore = { metadataStore },
+            userId = { (authSession.state.value as? com.sketchbook.auth.AuthState.SignedIn)?.userId?.value },
             syncStateStore = store,
             hostId = hostIdentity().id,
             hostName = hostIdentity().name,
             scope = scope,
             journal = journal,
         )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideFirebaseSdkBootstrap(
+        authSession: AuthSession,
+        firebaseConfig: FirebaseConfig,
+    ): FirebaseSdkBootstrap {
+        // Bootstrap consumes the inner FirebaseAuthSession because it needs the full
+        // FirebaseTokens bundle (uid + email + expiresAt), not just the bearer string. The
+        // DI-vended AuthSession is wrapped in DesktopAuthSession — drill in via reflection
+        // would be ugly; instead, FirebaseAuthSession is exposed by name on DesktopAuthSession
+        // (see com.sketchbook.desktop.auth.DesktopAuthSession.unwrap()).
+        val inner =
+            (authSession as? com.sketchbook.desktop.auth.DesktopAuthSession)?.unwrap()
+                ?: error("FirebaseSdkBootstrap requires DesktopAuthSession-wrapped FirebaseAuthSession")
+        return FirebaseSdkBootstrap(authSession = inner, config = firebaseConfig)
+    }
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideMetadataStore(bootstrap: FirebaseSdkBootstrap): MetadataStore =
+        FirestoreMetadataStore(ensureInitialized = bootstrap::ensureInitialized)
 
     @Provides
     @SingleIn(AppScope::class)
@@ -232,6 +260,7 @@ interface DesktopAppGraph : ViewModelGraph {
         httpClient: HttpClient,
         firebaseConfig: FirebaseConfig,
         scope: CoroutineScope,
+        metadataStore: MetadataStore,
     ): SyncQueue =
         SwappableSyncQueue(
             authSession = authSession,
@@ -246,6 +275,7 @@ interface DesktopAppGraph : ViewModelGraph {
             firebaseConfig = firebaseConfig,
             journal = journal,
             httpClient = httpClient,
+            metadataStore = metadataStore,
         )
 
     /**

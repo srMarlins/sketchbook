@@ -12,17 +12,24 @@ import kotlin.time.Duration
 import kotlin.time.Instant
 
 /**
- * In-memory [MetadataStore] for unit tests. Keys docs by path string; stores serialized JSON
- * to keep `getDoc / observeDoc` reproducible across types. Listener flows are backed by a
- * [MutableStateFlow] keyed by path/collection prefix so a write fans out to every observer
- * instantly — no scheduler quirks.
+ * In-memory [MetadataStore]. Used as the fake for unit tests across modules and as a local-
+ * only fallback when cloud creds aren't configured (so the lock surface still has well-defined
+ * semantics without crossing the network). Lives in commonMain rather than commonTest because
+ * downstream modules (`:shared:sync`, `:app-desktop`) need to construct it in their own tests
+ * — the repo convention for cross-module fakes/in-memory impls (mirrors
+ * `InMemoryJournalRepository`).
+ *
+ * Keys docs by path string; stores serialized JSON so `getDoc / observeDoc` go through the
+ * same kotlinx-serialization paths the real adapter would. Listener flows are backed by a
+ * single [MutableStateFlow] keyed by path/collection prefix; a write fans out to every
+ * observer instantly with no scheduler quirks.
  *
  * **Not a Firestore emulator.** Behavior matches the contract of [MetadataStore]; the wire
  * shape that an actual Firestore would impose (Map<String, Any?> field ordering, server-
  * timestamp materialization, snapshot metadata) is intentionally not modeled. Use the real
  * emulator (deferred follow-up) for those concerns.
  */
-class FakeMetadataStore(
+class InMemoryMetadataStore(
     private val clock: Clock = Clock.System,
     private val json: Json = Json,
 ) : MetadataStore {

@@ -63,22 +63,8 @@ interface CloudBackend {
         manifest: Manifest,
     ): Result<Generation>
 
-    /** CAS-acquire the lease lock for a project. */
-    suspend fun acquireLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-    ): LeaseAcquireResult
-
-    /** Heartbeat-refresh an existing lease lock; fails if our generation no longer matches. */
-    suspend fun refreshLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-        expected: Generation,
-    ): LeaseRefreshResult
-
-    /** Release our lease lock. */
-    suspend fun releaseLock(
-        uuid: ProjectUuid,
-        expected: Generation,
-    )
+    // NOTE (Phase 3, 2026-05-10): the lease-lock methods (acquireLock / refreshLock /
+    // releaseLock) moved from this interface to com.sketchbook.cloud.metadata.MetadataStore
+    // as Firestore-backed `/users/{uid}/locks/{treeId}` docs. See the Phase 3 entry findings
+    // in docs/plans/2026-05-08-firebase-migration-design.md.
 }

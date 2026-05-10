@@ -4,6 +4,8 @@ import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.FirebaseFirestore
 import dev.gitlive.firebase.firestore.firestore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.KSerializer
 import kotlin.time.Clock
@@ -37,13 +39,29 @@ import kotlin.time.Duration
  *   (`Firebase.firestore`); tests may inject an emulator-backed instance.
  */
 class FirestoreMetadataStore(
-    private val firestore: FirebaseFirestore = Firebase.firestore,
+    /**
+     * Suspends until the gitlive SDK is ready to use (Pattern A1 token injection + `Firebase
+     * .initialize` complete). Production wiring points this at
+     * `FirebaseSdkBootstrap::ensureInitialized` — idempotent after the first successful call.
+     * Default is a no-op so tests + the in-memory adapter can construct without bootstrap.
+     */
+    private val ensureInitialized: suspend () -> Unit = {},
+    /**
+     * Lazy accessor for the gitlive `FirebaseFirestore` singleton. Default reads
+     * `Firebase.firestore`, which must not be evaluated before `Firebase.initialize` runs.
+     * Tests can override with an emulator-backed instance.
+     */
+    private val firestoreProvider: () -> FirebaseFirestore = { Firebase.firestore },
     private val clock: Clock = Clock.System,
 ) : MetadataStore {
+    /** Resolved on first use — guarantees [ensureInitialized] has already run. */
+    private val firestore: FirebaseFirestore by lazy { firestoreProvider() }
+
     override suspend fun <T : Any> getDoc(
         path: DocPath,
         serializer: KSerializer<T>,
     ): T? {
+        ensureInitialized()
         val snap = firestore.document(path.value).get()
         return if (snap.exists) snap.data(serializer) else null
     }
@@ -53,6 +71,7 @@ class FirestoreMetadataStore(
         value: T,
         serializer: KSerializer<T>,
     ) {
+        ensureInitialized()
         firestore.document(path.value).set(serializer, value)
     }
 
@@ -61,6 +80,7 @@ class FirestoreMetadataStore(
         serializer: KSerializer<T>,
         transform: suspend (current: T?) -> T,
     ): T {
+        ensureInitialized()
         // gitlive's runTransaction body is a `suspend Transaction.() -> T` extension lambda;
         // Firestore retries on contention. The `transform` callback in our port is `suspend`,
         // and Firestore's retry contract calls for idempotent bodies — callers must not start
@@ -76,6 +96,7 @@ class FirestoreMetadataStore(
     }
 
     override suspend fun deleteDoc(path: DocPath) {
+        ensureInitialized()
         firestore.document(path.value).delete()
     }
 
@@ -83,16 +104,30 @@ class FirestoreMetadataStore(
         path: DocPath,
         serializer: KSerializer<T>,
     ): Flow<T?> =
-        firestore.document(path.value).snapshots.map { snap ->
-            if (snap.exists) snap.data(serializer) else null
+        flow {
+            // Defer the bootstrap call to flow collection time — observeDoc is not suspending
+            // by contract, but the returned Flow is, so calling ensureInitialized inside the
+            // flow builder satisfies "first SDK touch is gated by bootstrap" without forcing
+            // the caller to call a suspend factory.
+            ensureInitialized()
+            emitAll(
+                firestore.document(path.value).snapshots.map { snap ->
+                    if (snap.exists) snap.data(serializer) else null
+                },
+            )
         }
 
     override fun <T : Any> observeCollection(
         path: CollectionPath,
         serializer: KSerializer<T>,
     ): Flow<List<T>> =
-        firestore.collection(path.value).snapshots.map { qs ->
-            qs.documents.map { it.data(serializer) }
+        flow {
+            ensureInitialized()
+            emitAll(
+                firestore.collection(path.value).snapshots.map { qs ->
+                    qs.documents.map { it.data(serializer) }
+                },
+            )
         }
 
     override suspend fun acquireLock(
@@ -100,6 +135,7 @@ class FirestoreMetadataStore(
         holder: String,
         ttl: Duration,
     ): Boolean {
+        ensureInitialized()
         val now = clock.now()
         val ref = firestore.document(path.value)
         return runCatching {
@@ -136,6 +172,7 @@ class FirestoreMetadataStore(
         holder: String,
         ttl: Duration,
     ): Boolean {
+        ensureInitialized()
         val now = clock.now()
         val ref = firestore.document(path.value)
         return runCatching {
@@ -164,6 +201,7 @@ class FirestoreMetadataStore(
         path: DocPath,
         holder: String,
     ) {
+        ensureInitialized()
         // Best-effort cleanup; never throws. Wraps the whole tx in runCatching because
         // releaseLock at the end of a snapshot pipeline run shouldn't bubble a Firestore
         // error up the stack — the pipeline succeeded by then.

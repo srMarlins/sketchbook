@@ -1,7 +1,11 @@
 package com.sketchbook.sync
 
 import com.sketchbook.cloud.Generation
+import com.sketchbook.cloud.metadata.DocPath
+import com.sketchbook.cloud.metadata.InMemoryMetadataStore
+import com.sketchbook.cloud.metadata.LockDoc
 import com.sketchbook.core.Manifest
+import com.sketchbook.core.UserId
 import com.sketchbook.core.ManifestFile
 import com.sketchbook.core.ManifestStats
 import com.sketchbook.core.ProjectUuid
@@ -19,13 +23,19 @@ class SnapshotPipelineTest {
     private val uuid = ProjectUuid("01H-test-uuid")
     private val now = Instant.parse("2026-05-05T12:00:00Z")
 
-    private fun pipeline(cloud: FakeCloudBackend) =
-        SnapshotPipeline(
-            cloud = cloud,
-            hostId = "host-a",
-            hostName = "DesktopA",
-            clock = FixedClock(now),
-        )
+    private val userId = UserId("test-user")
+
+    private fun pipeline(
+        cloud: FakeCloudBackend,
+        metadataStore: InMemoryMetadataStore = InMemoryMetadataStore(clock = FixedClock(now)),
+    ) = SnapshotPipeline(
+        cloud = cloud,
+        metadataStore = metadataStore,
+        ownerUserId = userId,
+        hostId = "host-a",
+        hostName = "DesktopA",
+        clock = FixedClock(now),
+    )
 
     @Test
     fun firstSyncUploadsAllBlobsAndWritesManifest() =
@@ -238,14 +248,17 @@ class SnapshotPipelineTest {
     fun heldLeaseAbortsWithoutUpload() =
         runTest {
             val cloud = FakeCloudBackend()
-            cloud.forceLock(
-                uuid,
-                com.sketchbook.cloud.LeaseLock(
-                    ownerHostId = "host-b",
-                    ownerHostName = "MacStudio",
+            val metadataStore = InMemoryMetadataStore(clock = FixedClock(now))
+            // Seed an active lease held by another host.
+            metadataStore.setDoc(
+                DocPath.lock(userId.value, uuid.value),
+                LockDoc(
+                    holder = "host-b",
+                    holderName = "MacStudio",
                     acquiredAt = now,
-                    expiresAt = now,
+                    expiresAt = now + kotlin.time.Duration.parse("1h"),
                 ),
+                LockDoc.serializer(),
             )
 
             val tree =
@@ -253,7 +266,7 @@ class SnapshotPipelineTest {
                     mapOf("Project.als" to FakeWorkingTree.FileBlob("v1".encodeToByteArray(), now)),
                 )
             val events =
-                pipeline(cloud)
+                pipeline(cloud, metadataStore)
                     .run(
                         PipelineInput(uuid, tree, null, Generation.ZERO),
                     ).toList()

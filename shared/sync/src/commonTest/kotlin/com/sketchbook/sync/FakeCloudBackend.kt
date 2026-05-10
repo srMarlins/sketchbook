@@ -3,9 +3,6 @@ package com.sketchbook.sync
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
-import com.sketchbook.cloud.LeaseAcquireResult
-import com.sketchbook.cloud.LeaseLock
-import com.sketchbook.cloud.LeaseRefreshResult
 import com.sketchbook.cloud.ManifestRef
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
@@ -17,24 +14,18 @@ import kotlinx.io.buffered
 import kotlinx.io.readByteArray
 
 /**
- * In-memory [CloudBackend] for unit tests. Tracks blobs by hash, manifests per project, and a
- * single `head` per project. Conditional writes use a synthetic monotonically increasing
- * generation counter.
+ * In-memory [CloudBackend] for unit tests. Tracks blobs by hash and manifests per project.
+ * Conditional manifest writes use a synthetic monotonically-increasing generation counter.
+ * Locks moved to MetadataStore in Phase 3 — use InMemoryMetadataStore for lock-touching tests.
  */
 class FakeCloudBackend : CloudBackend {
     private val blobs = mutableMapOf<BlobKey, ByteArray>()
     private val manifests = mutableMapOf<ProjectUuid, MutableList<StoredManifest>>()
-    private val locks = mutableMapOf<ProjectUuid, StoredLock>()
     private var generationCounter: Long = 1
 
     private data class StoredManifest(
         val ref: ManifestRef,
         val manifest: Manifest,
-    )
-
-    private data class StoredLock(
-        val lock: LeaseLock,
-        val generation: Generation,
     )
 
     private data class BlobKey(
@@ -110,38 +101,7 @@ class FakeCloudBackend : CloudBackend {
         return Result.success(gen)
     }
 
-    override suspend fun acquireLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-    ): LeaseAcquireResult {
-        val existing = locks[uuid]
-        if (existing != null) {
-            return LeaseAcquireResult.Held(existing.lock, existing.generation)
-        }
-        val gen = nextGeneration()
-        locks[uuid] = StoredLock(lock, gen)
-        return LeaseAcquireResult.Acquired(gen)
-    }
-
-    override suspend fun refreshLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-        expected: Generation,
-    ): LeaseRefreshResult {
-        val existing = locks[uuid] ?: return LeaseRefreshResult.Stale
-        if (existing.generation != expected) return LeaseRefreshResult.Stale
-        val gen = nextGeneration()
-        locks[uuid] = StoredLock(lock, gen)
-        return LeaseRefreshResult.Refreshed(gen)
-    }
-
-    override suspend fun releaseLock(
-        uuid: ProjectUuid,
-        expected: Generation,
-    ) {
-        val existing = locks[uuid] ?: return
-        if (existing.generation == expected) locks.remove(uuid)
-    }
+    // Lock methods removed in Phase 3 — use InMemoryMetadataStore for tests that touch leases.
 
     // Test-only helpers.
 
@@ -169,12 +129,4 @@ class FakeCloudBackend : CloudBackend {
 
     fun manifestsFor(uuid: ProjectUuid): List<Manifest> = manifests[uuid]?.map { it.manifest } ?: emptyList()
 
-    fun forceLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-    ): Generation {
-        val gen = nextGeneration()
-        locks[uuid] = StoredLock(lock, gen)
-        return gen
-    }
 }
