@@ -538,6 +538,18 @@ The spike's job is to **validate Pattern A's load-bearing assumption** before Ph
 - Set up the rules-unit-testing harness in CI per security-commitment #4. Build fails on rule regression.
 - **Output:** runnable dev + prod Firebase projects with empty data, Rules + indexes deployed, CI gating regressions. PR ships only the rules files + `firebase.json`.
 
+**Phase 1 status (2026-05-10):** done. Rules deployed to `sketchbook-jtf-2026` (dev) and `sketchbook-jtf-prod-2026` (prod). CI rules harness deferred to its own PR per the runbook. Captured public prod values (non-secrets, per `FirebaseConfig.kt` doc comment):
+
+| Key | Value |
+|---|---|
+| Project ID | `sketchbook-jtf-prod-2026` |
+| Web API key | `AIzaSyAKqe8qY63pS9UJJAmm908ik2vkm3ZCBjA` |
+| Storage bucket | `sketchbook-jtf-prod-2026.firebasestorage.app` |
+| Auth domain | `sketchbook-jtf-prod-2026.firebaseapp.com` |
+| Web app ID | `1:379138566416:web:1e953d3acebfdcc740dd95` |
+
+Desktop OAuth client ID + secret for prod live in `spikes/firebase-poc/src/main/kotlin/com/sketchbook/spike/firebase/secrets.prod.local.kt` (gitignored) — Phase 2 will lift these into its own secrets-management approach.
+
 ### Phase 2: Auth + Storage rewire (rip-and-replace)
 
 This is the biggest single PR. We swap out auth and the blob layer in one go because they share auth tokens, and there's no point shimming the in-between state when there's no user data to migrate.

@@ -86,3 +86,4 @@ live-page*.png
 # Firebase migration spike — local OAuth secrets. Template is committed;
 # the filled-in version stays local. See secrets.local.kt.template for setup.
 spikes/firebase-poc/src/main/kotlin/com/sketchbook/spike/firebase/secrets.local.kt
+spikes/firebase-poc/src/main/kotlin/com/sketchbook/spike/firebase/secrets.prod.local.kt
