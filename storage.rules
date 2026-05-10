@@ -1,0 +1,76 @@
+// Sketchbook Firebase Storage Security Rules
+//
+// Layout mirrors Firestore's: per-tenant namespace at /users/{uid}/**. Per the migration
+// design (docs/plans/2026-05-08-firebase-migration-design.md "Data model" → "Cloud Storage"):
+//
+//   gs://<bucket>/users/{uid}/blobs/{shard}/{hash}                  shared blobs
+//   gs://<bucket>/users/{uid}/blobs-private/{uuid}/{shard}/{hash}   per-tree private blobs
+//   gs://<bucket>/users/{uid}/trees/{kind}/{treeId}/manifests/...   manifest bodies (JSON)
+//
+// Same owner-uid pattern as firestore.rules. v1.2 collaborator scaffold is a TODO
+// at the bottom; not active until the data model + Firestore rules add collab.
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // -----------------------------------------------------------------------------------
+    // helpers
+    // -----------------------------------------------------------------------------------
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthed() && request.auth.uid == uid;
+    }
+
+    // Per-object cap. Ableton projects with embedded audio routinely hit 100–200 MB;
+    // 500 MB leaves room for outliers (long stems, sample packs) without making the
+    // user think hard about it. Above this they get a 403, which is a clearer signal
+    // than a quota breach mid-upload.
+    //
+    // Note: this only applies to user-driven content under /users/{uid}/. The size of
+    // the *bucket* is separately bounded by GCP billing / project quotas.
+    function withinObjectSizeLimit() {
+      return request.resource.size < 500 * 1024 * 1024;
+    }
+
+    // -----------------------------------------------------------------------------------
+    // /users/{uid}/** — per-tenant namespace
+    //
+    // Catches every blob/manifest path the client writes. The recursive wildcard
+    // {allPaths=**} means a single rule block covers blobs/, blobs-private/, and
+    // trees/{kind}/{treeId}/manifests/ without enumerating each.
+    // -----------------------------------------------------------------------------------
+
+    match /users/{uid}/{allPaths=**} {
+      allow read: if isOwner(uid);
+      allow write: if isOwner(uid) && withinObjectSizeLimit();
+    }
+
+    // -----------------------------------------------------------------------------------
+    // v1.2 collaborator scaffold (DISABLED until collab ships).
+    //
+    // When active, collaborators on a tree need read access to that tree's blobs +
+    // manifests. The path structure makes this awkward — blobs are content-addressed
+    // under /users/{ownerUid}/blobs/, not under /trees/. Two options when we get there:
+    //
+    //   (a) Look up the tree doc via firestore.exists() (Storage Rules can do this)
+    //       to check if the caller is a collaborator. Costs one Firestore read per
+    //       blob fetch — expensive for hot read paths.
+    //
+    //   (b) Mint short-lived signed URLs server-side for collaborator reads. No rule
+    //       changes needed; collaborators never touch the bucket directly.
+    //
+    // (b) is the better architecture for v1.2 — punt rule changes until then.
+    // -----------------------------------------------------------------------------------
+
+    // Default deny: anything not matched above is rejected.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
