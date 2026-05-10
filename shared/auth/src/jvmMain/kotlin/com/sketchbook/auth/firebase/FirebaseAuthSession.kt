@@ -169,6 +169,6 @@ class FirebaseAuthSession(
             tokenStore.write(refreshed.refreshToken)
         }
         // Don't flip state to SignedIn — DesktopAuthSession owns the cached identity (email)
-        // and decides when to emit. Same convention as GoogleAuthSession.
+        // and decides when to emit.
     }
 }
