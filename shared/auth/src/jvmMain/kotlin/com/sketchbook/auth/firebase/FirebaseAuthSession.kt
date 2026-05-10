@@ -115,33 +115,38 @@ class FirebaseAuthSession(
             Result.success(signedIn)
         }
 
-    override suspend fun signOut() =
+    override suspend fun signOut() {
+        // Two-phase to avoid holding refreshMutex over a network call. The first phase
+        // captures the still-valid ID token (needed to authenticate the revoke call) and
+        // atomically flips local state to SignedOut. The second phase does the best-effort
+        // revoke OUTSIDE the mutex so other auth ops (`idToken`, `tryRestore`, `currentTokens`)
+        // can't stall behind a slow Cloud Function or hung TLS handshake.
+        //
+        // Race: a concurrent `refresh()` that landed between us capturing the token and us
+        // taking the mutex could rotate tokens; that's fine — the captured token is still
+        // valid for ~1h and the revoke call uses it as the bearer (not as the to-be-revoked).
+        // After our `tokenStore.clear()` lands, any in-flight refresh that completes after
+        // overwrites with a fresh refresh token, but the next caller through `refresh()`
+        // sees `_state == SignedOut` first and bails before touching the store.
+        val revokeToken: String?
         refreshMutex.withLock {
-            // Refresh ordering: any in-flight refresh has either (a) committed already, in
-            // which case we overwrite that commit below, or (b) is queued behind us, in which
-            // case it'll see SignedOut + empty keyring and bail.
-            //
-            // Security-commitment #3 Part B: fire revokeMySession BEFORE clearing local state
-            // so the caller's current ID token (still valid for ~1h) authenticates the
-            // callable. Best-effort — a Firebase outage or transient network failure must
-            // not block sign-out (the local-state clear that follows is the user-visible
-            // contract). Server-side revoke kills every other device's refresh token; the
-            // local keyring + memory wipe handles this device.
             val snap = tokens.value
-            val cf = cloudFunctions
-            if (cf != null && snap is SessionTokens.Active) {
-                runCatching { cf.revokeMySession(snap.idToken) }
-                    .onFailure { e ->
-                        // Log + continue. A persistent failure mode (e.g. function not
-                        // deployed yet, or rules denying) will show up across many sign-outs;
-                        // user-visible behavior is unchanged.
-                        System.err.println("[FirebaseAuthSession] revokeMySession failed: $e")
-                    }
-            }
+            revokeToken = (snap as? SessionTokens.Active)?.idToken
             tokenStore.clear()
             tokens.value = SessionTokens.None
             _state.value = AuthState.SignedOut
         }
+        // Security-commitment #3 Part B: best-effort `admin.auth().revokeRefreshTokens(uid)`.
+        // A persistent failure mode (function not deployed yet, rules denying) will surface
+        // across many sign-outs; user-visible behavior here is unchanged.
+        val cf = cloudFunctions
+        if (cf != null && revokeToken != null) {
+            runCatching { cf.revokeMySession(revokeToken) }
+                .onFailure { e ->
+                    System.err.println("[FirebaseAuthSession] revokeMySession failed: $e")
+                }
+        }
+    }
 
     override suspend fun idToken(): String = currentTokens().idToken
 

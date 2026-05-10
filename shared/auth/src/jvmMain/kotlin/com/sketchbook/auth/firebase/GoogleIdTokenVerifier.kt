@@ -5,6 +5,8 @@ import com.nimbusds.jose.crypto.RSASSAVerifier
 import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.RSAKey
 import com.nimbusds.jwt.SignedJWT
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.net.URI
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.time.Clock
@@ -21,7 +23,12 @@ import kotlin.time.Instant
  * RSA-key + network requirements.
  */
 fun interface GoogleIdTokenVerifier {
-    fun verify(idToken: String): Result<VerifiedGoogleIdToken>
+    /**
+     * Suspend so impls can offload blocking I/O (the production [JwksGoogleIdTokenVerifier]
+     * fetches Google's JWKS over HTTP on a cache miss). Callers run inside an existing
+     * suspend context already — `FirebaseAuthSession.signIn` is the production path.
+     */
+    suspend fun verify(idToken: String): Result<VerifiedGoogleIdToken>
 }
 
 /**
@@ -44,9 +51,9 @@ class JwksGoogleIdTokenVerifier(
     jwksUri: URI = URI("https://www.googleapis.com/oauth2/v3/certs"),
 ) : GoogleIdTokenVerifier {
     private val acceptedIssuers = setOf("https://accounts.google.com", "accounts.google.com")
-    private val jwksCache = JwksCache(jwksUri, clock, ttl = 60.minutes)
+    private val jwksCache = JwksCache(jwksUri, clock, ttl = 60.minutes, loader = { uri -> JWKSet.load(uri.toURL()) })
 
-    override fun verify(idToken: String): Result<VerifiedGoogleIdToken> =
+    override suspend fun verify(idToken: String): Result<VerifiedGoogleIdToken> =
         try {
             val signedJwt = SignedJWT.parse(idToken)
             require(signedJwt.header.algorithm == JWSAlgorithm.RS256) {
@@ -109,6 +116,7 @@ private class JwksCache(
     private val jwksUri: URI,
     private val clock: Clock,
     private val ttl: Duration,
+    private val loader: (URI) -> JWKSet,
 ) {
     private data class Entry(
         val jwks: JWKSet,
@@ -117,13 +125,19 @@ private class JwksCache(
 
     private val ref = AtomicReference<Entry?>(null)
 
-    fun get(): JWKSet {
+    /**
+     * Returns the cached JWKS or fetches a fresh one. The fetch hops to [Dispatchers.IO]
+     * because [JWKSet.load] is JVM-blocking HTTP; on a cache miss during sign-in this used
+     * to potentially stall the calling thread (Main/UI) for the round-trip to
+     * `googleapis.com`.
+     */
+    suspend fun get(): JWKSet {
         val now = clock.now()
         val cached = ref.get()
         if (cached != null && now < cached.fetchedAt + ttl) {
             return cached.jwks
         }
-        val fresh = JWKSet.load(jwksUri.toURL())
+        val fresh = withContext(Dispatchers.IO) { loader(jwksUri) }
         ref.set(Entry(fresh, now))
         return fresh
     }
