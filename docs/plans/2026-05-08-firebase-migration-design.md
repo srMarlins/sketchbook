@@ -798,6 +798,56 @@ Designed to lift cleanly into `shared/auth` and `shared/cloud/metadata` when Pha
 
 The probe orchestration code in `Probes.kt` and `Main.kt` is throwaway.
 
+## Phase 3 entry findings (2026-05-10) — reconciliation with the live codebase
+
+The Phase 3 plan above was drafted at the same time as Phase 2 was being scoped, before any of the metadata layer was implemented. A discovery pass at Phase 3 start surfaced a few drift points worth recording before the per-step commits land.
+
+### Names cited in the plan that do **not** exist in code
+
+| Plan name | Status | Phase 3 disposition |
+|---|---|---|
+| `CloudTreeRegistry` | never existed | introduce fresh under `shared/cloud/.../registry` |
+| `CloudMachineProfileStore` | never existed | introduce fresh under `shared/cloud/.../machines` |
+| `TreeRegistryDoc`, `MachinesDoc`, `CloudDocKey`, `CloudDocKeys` | never existed | introduce Firestore-shaped `@Serializable` types directly; no migration |
+| `plugin_manifest_<host>.json` | never existed; per-host plugin slice has never been on the cloud | scaffold a `PluginManifestStore` against `/users/{uid}/plugins/{hostId}` mirroring machines |
+| `CloudBackend.readDoc / writeDoc / listDocs` | never existed; only `readManifest / listManifests / appendManifestHead` (manifest-blob) + the lock trio exist | nothing to delete on the doc side; lock methods move out per the next row |
+| `tree_registry_cache` table with `head_rev / head_gen` columns | never existed; the live table is `sync_state` keyed by `project_uuid` with `cloud_head_rev` (no `head_gen`) | add `head_rev` and `head_gen` columns onto `sync_state` (v14 migration) so the SyncCoordinator's diff against the local mirror has a stable parity field; the existing `cloud_head_rev` is the previous-pull-cycle mirror |
+| `TrackedTreeId` / `TrackedTreeKind` | never existed; the sync unit today is `ProjectUuid` | Firestore tree doc id == `ProjectUuid.value`; `kind` field on the doc defaults to `"Project"`; the `Kind`/`scope_key` distinction stays a v1.2+ concern |
+| `PullPoller.pollOnce(...)` | never existed; current `PullPoller` exposes only `subscribe(uuid, startAfter): Flow<Snapshot>` whose body contains the 30 s `while(true)` loop | extract `suspend fun pollOnce(uuid, sinceRev): List<Snapshot>` from the inside of the flow body; delete `subscribe`; `SyncCoordinator` drives `pollOnce` from Firestore listener deltas |
+| Storage-resident `<tree>/manifests/HEAD` JSON pointer | exists today: `appendManifestHead` writes the manifest body AND a stable-named `HEAD` JSON object | drop the HEAD-pointer write only; the timestamped manifest body still lives in Storage. Add a `MetadataStore` write inside `SnapshotPipeline` after the blob CAS to land `head_rev` / `head_gen` on the Firestore tree doc |
+| Storage-resident `<user>/locks/<uuid>.lock` JSON | exists today on `CloudBackend.acquireLock / refreshLock / releaseLock` | replace with `/users/{uid}/locks/{treeId}` Firestore docs; delete the three methods from `CloudBackend`; `LeasedLockRepository` lifts onto `MetadataStore` |
+
+### What this means for the per-step work
+
+- **No "rewrite from CloudDoc" framing.** There's no CloudDoc surface to dissolve. The registry / machine / plugin stores are net-new classes — cleaner, since they're shaped for Firestore from day one rather than carrying over a flat-doc API.
+- **`CloudBackend` doesn't get split into `BlobStore` + `MetadataStore` in this phase.** That refactor is real but it's its own change; doing it here would balloon the diff. The lock methods come off `CloudBackend` (moved to `MetadataStore`); the remaining blob / manifest methods stay where they are. A follow-up note at the end of this doc covers the split.
+- **`sync_state` gains `head_rev` and `head_gen`** (TEXT, nullable, default `NULL`). These are the listener-mirror fields the `SyncCoordinator` compares against the inbound Firestore tree doc to decide whether to fire `pollOnce`. The pre-existing `cloud_head_rev` continues to mean "highest rev whose manifest we've recorded in `snapshots`" — the two are intentionally separate so a listener delta arriving before the pull completes can be deduped without a race against the slower pull pipeline.
+- **Security commitments status update.** #1 / #2 / #3 Part A done in Phase 2. #3 Part B (`revokeMySession` Cloud Function) is in Phase 3 step 13. #4 (Rules-unit-testing in CI) and #5 (no service-account keys) are explicitly deferred to a follow-up PR — emulator wiring + a pre-commit hook are each meaningful chunks unto themselves and unrelated to whether Phase 3 ships listeners.
+
+### `AuthSession.accessToken()` → `idToken()` rename
+
+Lifts out of Phase 2's deferred-rename list (see commit `7c7ab02`) and lands as the first non-discovery commit of Phase 3. Touches `AuthSession`, `FirebaseAuthSession`, `DesktopAuthSession`, `FirebaseCloudCredentials`, `FakeAuthSession`, and the Settings test fixtures. Mechanical; isolated commit so subsequent diffs read cleanly.
+
+### Pattern A1 (storage hijack) — production wiring
+
+Phase 2 minted Firebase tokens via `IdentityToolkitClient` but never plumbed them into the gitlive SDK — the production app has been calling neither `Firebase.initialize` nor any listener-using code, so there was nothing to plumb against. Phase 3's `FirestoreMetadataStore` is the first consumer; the Pattern A1 mechanism (spike `pattern-a1` probe, source-validated against firebase-java-sdk 0.6.3 `FirebaseAuth.kt:241/248`) lifts into production unchanged:
+
+- `JvmFirebasePlatform` becomes the storage backend for `FirebasePlatform`. Backed by an in-memory `ConcurrentHashMap` plus an optional file-backed mirror at `<dataDir>/firebase-platform/` for the SDK's non-auth state. Auth-state writes go to the in-memory side only (the keyring already holds the durable refresh token; we don't double-store it).
+- `AuthStateInjector.preSeed(tokens)` builds the `FirebaseUserImpl`-shaped JSON the SDK reads at boot under `com.google.firebase.auth.FIREBASE_USER`. Storage-key constant is the literal Android string; format mapping handles both camelCase and snake_case (the SDK accepts either).
+- `FirebaseAuthSession` gains a one-shot `prepareForFirebaseSdk()` that pre-seeds the platform with current tokens before `Firebase.initialize(...)` is called. State observation (auth-state listener on the SDK) and refresh continue to be the SDK's responsibility once seeded.
+
+### Out of scope for Phase 3 (carry into a follow-up PR)
+
+These showed up during discovery but are explicitly NOT being addressed here:
+
+1. **`CloudBackend` → `BlobStore` + `MetadataStore` split.** The interface stays monolithic in Phase 3 minus the three lock methods. Splitting is mechanical but invasive (touches every test fake).
+2. **Firestore Rules unit tests in CI** (security-commitment #4). Needs a `tests/firestore-rules/` source set + `firebase emulators:exec` runner + CI workflow wiring.
+3. **Service-account-JSON pre-commit hook** (security-commitment #5). Trivial in isolation but earns its own commit + a pre-commit-test target.
+4. **Admin-SDK import lint** (security-commitment #6). A Detekt rule or a Konsist assertion; we never add the dep so a lint guards against future regressions only.
+5. **Plugin presence slice population.** `PluginManifestStore` ships as a scaffold (interface + Firestore adapter); wiring it to the `PluginPresenceProbe` is its own scope.
+6. **Per-machine `last_seen_at` heartbeat.** The `machines/{hostId}` doc has the field; nobody writes to it yet.
+7. **Re-using `FirebaseConfig.active()` for the project-id used when initializing the SDK.** The Pattern A1 init pulls `FirebaseConfig` already; this is a non-change beyond confirming the prod alias works at runtime, which requires the user's prod credentials.
+
 ## Out of scope (deliberate non-goals — do not expand this PR series)
 
 - **Cloud Functions for server-side validation.** May want eventually for things like "validate manifest before write" or "delete user data on account closure," but adds operational complexity. Defer.
