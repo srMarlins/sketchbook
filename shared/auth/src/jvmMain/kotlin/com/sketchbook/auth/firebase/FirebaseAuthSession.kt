@@ -117,13 +117,23 @@ class FirebaseAuthSession(
             _state.value = AuthState.SignedOut
         }
 
-    override suspend fun idToken(): String {
-        // Fast path: read state without acquiring any lock. MutableStateFlow.value is volatile.
+    override suspend fun idToken(): String = currentTokens().idToken
+
+    /**
+     * Return the full current Firebase token bundle. Refreshes on expiry exactly like
+     * [idToken] does. Used by [FirebaseSdkBootstrap] which needs the uid + email + expiresAt
+     * fields (not just the bearer string) to pre-seed the gitlive SDK with Pattern A1.
+     *
+     * Throws [AuthSessionExpired] if refresh fails; [state] has already flipped to
+     * `SignedOut` in that case.
+     */
+    suspend fun currentTokens(): FirebaseTokens {
         val snap = tokens.value
         if (snap is SessionTokens.Active && clock.now() < snap.expiresAt) {
-            return snap.idToken
+            return snap.toFirebaseTokens()
         }
-        return refresh()
+        refresh()
+        return (tokens.value as SessionTokens.Active).toFirebaseTokens()
     }
 
     private suspend fun refresh(): String =
@@ -163,6 +173,18 @@ class FirebaseAuthSession(
                 uid = t.uid,
             )
     }
+
+    private fun SessionTokens.Active.toFirebaseTokens(): FirebaseTokens =
+        FirebaseTokens(
+            idToken = idToken,
+            refreshToken = refreshToken,
+            uid = uid,
+            // Add the 60s slack back so the bootstrap reports the original expiry. The
+            // bootstrap clamps to a 60s floor anyway, so the round-trip is lossless within
+            // the slack window.
+            expiresAt = expiresAt + 60.seconds,
+            email = (_state.value as? AuthState.SignedIn)?.email,
+        )
 
     private sealed interface SessionTokens {
         data object None : SessionTokens
