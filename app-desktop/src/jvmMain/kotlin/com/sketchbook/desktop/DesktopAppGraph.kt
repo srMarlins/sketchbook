@@ -316,8 +316,9 @@ interface DesktopAppGraph : ViewModelGraph {
                 oauthClient = oauthClient,
                 identityToolkit = identityToolkit,
                 googleIdTokenVerifier = googleIdTokenVerifier,
-                scope = appScope,
             )
+        // tryRestore() is driven by DesktopAuthSession's init — keeps the FirebaseAuthSession
+        // class itself lifecycle-free (no init-block side-effects).
         return DesktopAuthSession(
             inner = inner,
             identityStore = identityStore,
