@@ -88,7 +88,22 @@ class FirebaseAuthSession(
 
     override suspend fun signOut() =
         mutex.withLock {
-            // Best-effort refresh-token revoke wires in Step 4 (security-commitment #3).
+            // Security-commitment #3 (refresh-token revoke) is implemented in two parts:
+            //
+            //   Part A — Phase 2 (this step): clear local state. The in-memory cache and
+            //   keyring entry go before _state flips, so a concurrent reader holding the
+            //   FirebaseAuthSession mutex contender position can't observe stale tokens.
+            //
+            //   Part B — Phase 3 (deferred): server-side revoke via a Cloud Function calling
+            //   `auth.revokeRefreshTokens(uid)`. Identity Toolkit has no public client-facing
+            //   revoke endpoint — refresh tokens are only invalidatable via Admin SDK. The
+            //   function lands alongside the MetadataStore work in Phase 3, since both need
+            //   the same Cloud Functions deployment.
+            //
+            // The Phase-2 cut is acceptable for current shipping state (no users yet); Phase
+            // 3 closes the race window between sign-out and keyring deletion that the design
+            // doc cites. See docs/plans/2026-05-08-firebase-migration-design.md → Security
+            // commitments #3.
             tokenStore.clear()
             cachedIdToken = null
             cachedRefreshToken = null
