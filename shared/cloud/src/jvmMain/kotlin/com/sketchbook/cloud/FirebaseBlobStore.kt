@@ -52,15 +52,25 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 
 /**
- * Google Cloud Storage backend over the JSON API. Conditional writes use
+ * [CloudBackend] over GCS REST against a Firebase-managed bucket. Conditional writes use
  * `x-goog-if-generation-match`; reads use `?alt=media`. v1 single-PUT only — resumable upload
- * lands in PR-9 alongside the snapshot pipeline that needs it.
+ * lands alongside the snapshot pipeline that needs it.
  *
- * **Tenant prefix:** every key is prefixed with `users/<userId.value>/` per design §3.2 so
- * v1.2 multi-user can share a bucket and per-user IAM `resource.name.startsWith(...)`
- * conditions resolve cleanly.
+ * **Auth:** [credentials] returns a Firebase ID token (issued by Identity Toolkit; default 1h
+ * TTL). GCS accepts Firebase ID tokens as bearer credentials, so the REST shape is unchanged
+ * from the pre-Firebase implementation — only the token source differs.
+ *
+ * **Bucket:** the bucket name is the Firebase project's auto-provisioned Cloud Storage bucket
+ * (e.g. `sketchbook-jtf-2026.firebasestorage.app`), supplied by DI from
+ * [com.sketchbook.auth.firebase.FirebaseConfig.storageBucket]. Users no longer pick a bucket
+ * — the per-user namespace is the `users/{uid}/` prefix below, enforced by Storage Security
+ * Rules. See `storage.rules`.
+ *
+ * **Tenant prefix:** every key is prefixed with `users/<userId.value>/` so Security Rules
+ * `match /users/{uid}/{allPaths=**}` and (later) v1.2 collaborator-aware reads resolve
+ * cleanly. `userId` is the Firebase Auth UID (`request.auth.uid`).
  */
-class DirectGcsBackend(
+class FirebaseBlobStore(
     private val http: HttpClient,
     private val credentials: CloudCredentials,
     private val bucket: String,

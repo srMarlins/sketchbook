@@ -28,10 +28,10 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Instant
 
-class DirectGcsBackendTest {
+class FirebaseBlobStoreTest {
     private fun makeBackend(
         handle: suspend MockRequestHandleScope.(HttpRequestData) -> io.ktor.client.request.HttpResponseData,
-    ): DirectGcsBackend {
+    ): FirebaseBlobStore {
         // Stub auth so tests don't generate real RSA keys for every assertion.
         val key =
             ServiceAccountKey(
@@ -52,7 +52,7 @@ class DirectGcsBackendTest {
         val credentials: CloudCredentials = GcsAuth(key, HttpClient(tokenEngine))
 
         val backendEngine = MockEngine { request -> handle(request) }
-        return DirectGcsBackend(
+        return FirebaseBlobStore(
             http = HttpClient(backendEngine),
             credentials = credentials,
             bucket = "sk-bucket",

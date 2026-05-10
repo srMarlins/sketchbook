@@ -4,7 +4,7 @@ import com.sketchbook.auth.AuthSession
 import com.sketchbook.auth.AuthState
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.cloud.CloudBackend
-import com.sketchbook.cloud.DirectGcsBackend
+import com.sketchbook.cloud.FirebaseBlobStore
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
@@ -133,7 +133,7 @@ class SwappableSyncQueue(
         runCatching {
             val credentials = OAuthCloudCredentials(authSession)
             val backend =
-                DirectGcsBackend(
+                FirebaseBlobStore(
                     http = httpClient,
                     credentials = credentials,
                     bucket = bucket,

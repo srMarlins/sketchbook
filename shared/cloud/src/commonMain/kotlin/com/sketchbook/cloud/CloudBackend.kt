@@ -7,7 +7,7 @@ import com.sketchbook.core.SnapshotRev
 import kotlinx.io.RawSource
 
 /**
- * Provider-agnostic cloud client. v1 ships [DirectGcsBackend] (jvmMain) against Google Cloud
+ * Provider-agnostic cloud client. v1 ships [FirebaseBlobStore] (jvmMain) against Google Cloud
  * Storage; v1.2 may add an R2/B2 backend at credit expiry. The interface only speaks domain
  * types and provider-neutral [Generation] tokens.
  */

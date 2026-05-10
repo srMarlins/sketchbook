@@ -6,7 +6,7 @@ import com.sketchbook.cloud.CloudCredentials
 /**
  * Cloud-credentials adapter that pulls a fresh OAuth access token from an [AuthSession]. The
  * session handles token caching + refresh — this class is just the seam between the cloud
- * backend and the auth subsystem so [com.sketchbook.cloud.DirectGcsBackend] never depends on
+ * backend and the auth subsystem so [com.sketchbook.cloud.FirebaseBlobStore] never depends on
  * `shared/auth`.
  */
 class OAuthCloudCredentials(

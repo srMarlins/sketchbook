@@ -43,7 +43,7 @@ import kotlin.time.Instant
 /**
  * Real cloud-backed `SyncQueue`. Composes:
  *
- *  - [CloudBackend] — the GCS adapter (DirectGcsBackend in production, FakeCloudBackend in tests).
+ *  - [CloudBackend] — the GCS adapter (FirebaseBlobStore in production, FakeCloudBackend in tests).
  *  - [SnapshotPipeline] — the §4.2 lease-walk-upload-CAS sequence.
  *  - [SyncStateStore] — catalog-backed per-project state and identity.
  *  - [ProjectRepository] — for looking up the on-disk path from a [ProjectId].

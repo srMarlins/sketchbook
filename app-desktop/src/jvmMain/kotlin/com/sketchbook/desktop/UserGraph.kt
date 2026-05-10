@@ -12,7 +12,7 @@ import com.sketchbook.cloud.CloudBackend
  * implicit via a `@GraphExtension.Factory` interface that the parent graph extends). The plan's
  * sketch in §11.2 was based on a slightly different shape; rather than burn iterations on the
  * exact factory syntax for a single-binding subgraph, the holder constructs the underlying
- * [com.sketchbook.cloud.DirectGcsBackend] directly. Promote to a real `@GraphExtension` if and
+ * [com.sketchbook.cloud.FirebaseBlobStore] directly. Promote to a real `@GraphExtension` if and
  * when this graph grows past one or two bindings, or when sync services move into it.
  *
  * See `docs/architecture/dependency-injection.md` §1.1.
