@@ -7,16 +7,11 @@ import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.SnapshotRepository
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
 class PullPollerTest {
@@ -75,33 +70,47 @@ class PullPollerTest {
         )
 
     @Test
-    fun emitsExistingManifestsOnFirstPoll() =
+    fun pollOnceReturnsAllManifestsInOrderAndPersists() =
         runTest {
             val cloud = FakeCloudBackend()
             cloud.seedManifest(uuid, manifest(1))
             cloud.seedManifest(uuid, manifest(2))
             val repo = RecordingSnapshotRepository()
-            val poller = PullPoller(cloud, repo, pollInterval = 100.milliseconds)
+            val poller = PullPoller(cloud, repo)
 
-            val first = poller.subscribe(uuid).take(2).toList()
+            val pulled = poller.pollOnce(uuid)
 
-            assertEquals(listOf(SnapshotRev(1), SnapshotRev(2)), first.map { it.rev })
+            assertEquals(listOf(SnapshotRev(1), SnapshotRev(2)), pulled.map { it.rev })
             assertEquals(2, repo.recorded.size)
         }
 
     @Test
-    fun startAfterSkipsKnownRevs() =
+    fun pollOnceWithSinceRevSkipsKnown() =
         runTest {
             val cloud = FakeCloudBackend()
             cloud.seedManifest(uuid, manifest(1))
             cloud.seedManifest(uuid, manifest(2))
             cloud.seedManifest(uuid, manifest(3))
             val repo = RecordingSnapshotRepository()
-            val poller = PullPoller(cloud, repo, pollInterval = 100.milliseconds)
+            val poller = PullPoller(cloud, repo)
 
-            val first = poller.subscribe(uuid, startAfter = SnapshotRev(2)).first()
+            val pulled = poller.pollOnce(uuid, sinceRev = SnapshotRev(2))
 
-            assertEquals(SnapshotRev(3), first.rev)
+            assertEquals(listOf(SnapshotRev(3)), pulled.map { it.rev })
             assertEquals(1, repo.recorded.size)
+        }
+
+    @Test
+    fun pollOnceIsIdempotentOnRepeat() =
+        runTest {
+            val cloud = FakeCloudBackend()
+            cloud.seedManifest(uuid, manifest(1))
+            val repo = RecordingSnapshotRepository()
+            val poller = PullPoller(cloud, repo)
+
+            poller.pollOnce(uuid, sinceRev = SnapshotRev(1))
+            val second = poller.pollOnce(uuid, sinceRev = SnapshotRev(1))
+
+            assertEquals(emptyList(), second)
         }
 }

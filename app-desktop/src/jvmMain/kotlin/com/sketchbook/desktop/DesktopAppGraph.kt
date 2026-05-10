@@ -40,7 +40,6 @@ import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.impl.SqlSnapshotRepository
-import com.sketchbook.sync.PullPoller
 import com.sketchbook.syncio.AlsPatcher
 import com.sketchbook.syncio.Watcher
 import com.sketchbook.syncio.WatcherToSyncState
@@ -421,46 +420,10 @@ private fun hostIdentity(): HostIdentity {
 /** Builds the graph at runtime — Metro generates the impl class. */
 fun buildDesktopAppGraph(): DesktopAppGraph = createGraph<DesktopAppGraph>()
 
-/**
- * Spawn the background pull-poll loop. One coroutine per project subscribes to
- * [PullPoller.subscribe] and advances `sync_state.cloud_head_rev` as new manifests land. The
- * outer `collectLatest` over [SyncStateStore.observeAll] re-spawns the per-project subscribers
- * when projects appear or disappear.
- *
- * No-op while cloud is unconfigured ([SwappableSyncQueue.currentCloud] == null). The poller
- * lives on the app scope; closing the app cancels everything.
- */
-@OptIn(ExperimentalCoroutinesApi::class)
-fun startBackgroundPull(graph: DesktopAppGraph) {
-    val swap = graph.syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue ?: return
-    val store = graph.syncStateStore
-    val snapshots = graph.snapshotRepository
-    graph.appScope.launch {
-        // Re-spawn the per-project pollers whenever the active cloud backend changes (creds
-        // come/go) so the long-running coroutines aren't bound to a torn-down http client.
-        swap.currentCloud.collectLatest { cloud ->
-            if (cloud == null) return@collectLatest
-            val poller = PullPoller(cloud = cloud, snapshots = snapshots)
-            store.observeAll().collectLatest { rows ->
-                // collectLatest cancels the previous block, including the per-project launches.
-                kotlinx.coroutines.coroutineScope {
-                    for (row in rows) {
-                        launch {
-                            poller
-                                .subscribe(
-                                    uuid = row.uuid,
-                                    startAfter = if (row.localRev > 0) SnapshotRev(row.localRev) else null,
-                                ).collect { newSnapshot ->
-                                    store.markCloudHead(newSnapshot.projectUuid, newSnapshot.rev.value)
-                                    autoMaterializeAfterPull(store, snapshots, newSnapshot.projectUuid)
-                                }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+// Phase 3 (2026-05-10): `startBackgroundPull` (the per-project 30s polling fan-out) is gone.
+// SyncCoordinator (next commit) replaces it — listens to Firestore tree-doc deltas and fires
+// `PullPoller.pollOnce` on head_rev advances. The materialize-after-pull helper below survives
+// because SyncCoordinator calls it on the same trigger.
 
 /**
  * Auto-materialize inbound cloud manifests when it's safe to clobber the working tree:
