@@ -2,6 +2,6 @@
   "projects": {
     "default": "sketchbook-jtf-2026",
     "dev": "sketchbook-jtf-2026",
-    "prod": "TBD-create-sketchbook-prod-firebase-project"
+    "prod": "sketchbook-jtf-prod-2026"
   }
 }
