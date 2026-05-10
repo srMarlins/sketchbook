@@ -66,7 +66,6 @@ class LaunchGateTest {
 
         override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
 
-        override suspend fun setCloudBucket(bucket: String?) = Result.success(Unit)
 
         override suspend fun setSelfContained(
             uuid: ProjectUuid,
@@ -112,7 +111,6 @@ class LaunchGateTest {
 
         override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
 
-        override suspend fun setCloudBucket(bucket: String?) = Result.success(Unit)
 
         override suspend fun setSelfContained(
             uuid: ProjectUuid,

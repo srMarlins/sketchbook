@@ -56,7 +56,6 @@ internal class FakeSettingsRepository(
         return Result.success(Unit)
     }
 
-    override suspend fun setCloudBucket(bucket: String?): Result<Unit> = Result.success(Unit)
 
     override suspend fun setSelfContained(
         uuid: ProjectUuid,

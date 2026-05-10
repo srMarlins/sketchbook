@@ -73,11 +73,6 @@ class SettingsViewModelTest {
             return Result.success(Unit)
         }
 
-        override suspend fun setCloudBucket(bucket: String?): Result<Unit> {
-            flow.value = flow.value.copy(cloudBucket = bucket)
-            return Result.success(Unit)
-        }
-
         override suspend fun setSelfContained(
             uuid: ProjectUuid,
             value: Boolean,
@@ -160,7 +155,6 @@ class SettingsViewModelTest {
                 var s = awaitItem()
                 while (s.libraryRoots.isEmpty()) s = awaitItem()
                 assertEquals(2, s.libraryRoots.size)
-                assertEquals(null, s.cloudBucket)
                 cancelAndIgnoreRemainingEvents()
             }
         }

@@ -85,19 +85,6 @@ class PreferencesSettingsRepository(
             Result.success(Unit)
         }
 
-    override suspend fun setCloudBucket(bucket: String?): Result<Unit> =
-        withContext(ioDispatcher) {
-            val normalized = bucket?.takeIf { it.isNotBlank() }
-            if (normalized == null) {
-                node.remove(KEY_CLOUD_BUCKET)
-            } else {
-                node.put(KEY_CLOUD_BUCKET, normalized)
-            }
-            node.flush()
-            state.value = state.value.copy(cloudBucket = normalized)
-            Result.success(Unit)
-        }
-
     override suspend fun setSelfContained(
         uuid: ProjectUuid,
         value: Boolean,
@@ -201,7 +188,6 @@ class PreferencesSettingsRepository(
 
     private fun read(): Settings {
         val roots = readRoots()
-        val bucket = node.get(KEY_CLOUD_BUCKET, null)?.takeIf { it.isNotBlank() }
         val selfContained = readSelfContained()
         val cache = readCacheSettings()
         val firstRunCompletedAt =
@@ -218,7 +204,6 @@ class PreferencesSettingsRepository(
             libraryRoots = roots,
             selfContainedProjects = selfContained,
             cacheSettings = cache,
-            cloudBucket = bucket,
             firstRunCompletedAt = firstRunCompletedAt,
             onboardingSkipped = onboardingSkipped,
             pluginFolders = pluginFolders,
@@ -345,7 +330,6 @@ class PreferencesSettingsRepository(
 
     private companion object {
         const val KEY_ROOTS = "library_roots_v1"
-        const val KEY_CLOUD_BUCKET = "cloud_bucket"
         const val KEY_SELF_CONTAINED = "self_contained_uuids_v1"
         const val KEY_CACHE_MAX_BYTES = "cache_max_bytes"
         const val KEY_CACHE_LRU = "cache_lru_enabled"

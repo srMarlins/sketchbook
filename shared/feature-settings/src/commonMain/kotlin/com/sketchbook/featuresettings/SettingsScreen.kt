@@ -38,8 +38,8 @@ import kotlinx.coroutines.delay
 
 /**
  * Settings screen. The page is centered in a max-width column so it doesn't sprawl on a wide
- * window. Cloud sign-in + bucket configuration land in Phase 5 as a dedicated "Cloud" section;
- * the legacy service-account JSON disclosure has been removed.
+ * window. Cloud bucket configuration is no longer exposed — the bucket is fixed per Firebase
+ * environment (see `FirebaseConfig`).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -161,30 +161,8 @@ internal fun SettingsContent(
                                 ) { Text("Sign in with Google") }
                             }
                         }
-                        // Bucket configuration only matters once the user is signed in — render
-                        // the input lazily so it doesn't appear inert below the sign-in CTA.
-                        if (state.auth is AuthState.SignedIn) {
-                            var bucketDraft by remember(state.cloudBucket) {
-                                mutableStateOf(state.cloudBucket.orEmpty())
-                            }
-                            // Debounce so a SyncQueue + UserGraph rebuild doesn't fire per keystroke.
-                            LaunchedEffect(bucketDraft) {
-                                if (bucketDraft != state.cloudBucket.orEmpty()) {
-                                    delay(BUCKET_DEBOUNCE_MS)
-                                    dispatch(
-                                        SettingsViewModel.Intent.SetCloudBucket(
-                                            bucketDraft.takeIf { it.isNotBlank() },
-                                        ),
-                                    )
-                                }
-                            }
-                            com.sketchbook.uishared.components.TextField(
-                                value = bucketDraft,
-                                onChange = { bucketDraft = it },
-                                placeholder = "Bucket name (e.g. sketchbook-prod)",
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
+                        // Storage bucket is fixed per Firebase environment (FirebaseConfig) — no
+                        // longer user-configurable.
                     }
                 }
             }
@@ -373,5 +351,3 @@ private fun LibraryRootCard(
         }
     }
 }
-
-private const val BUCKET_DEBOUNCE_MS: Long = 500

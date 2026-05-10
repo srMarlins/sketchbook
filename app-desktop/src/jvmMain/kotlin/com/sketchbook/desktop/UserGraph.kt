@@ -3,9 +3,10 @@ package com.sketchbook.desktop
 import com.sketchbook.cloud.CloudBackend
 
 /**
- * Per-user object graph. Lifetime: `AuthState.SignedIn` ↔ `SignedOut`, scoped to a specific
- * `(UserId, bucket)` pair. Built and torn down by [UserGraphHolder] as `AuthSession.state` and
- * the configured `cloudBucket` change.
+ * Per-user object graph. Lifetime: `AuthState.SignedIn` ↔ `SignedOut`, keyed on the
+ * signed-in Firebase UID. Built and torn down by [UserGraphHolder] as `AuthSession.state`
+ * changes. The bucket is fixed per Firebase environment (`FirebaseConfig.active()`); no
+ * per-user bucket configuration.
  *
  * **Implementation note.** This is hand-rolled rather than a Metro `@GraphExtension`. Metro
  * 1.0.0's `@GraphExtension` annotation does not take a `parent` argument (the parent linkage is
