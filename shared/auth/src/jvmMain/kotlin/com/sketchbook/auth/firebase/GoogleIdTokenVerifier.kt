@@ -22,7 +22,7 @@ import kotlin.time.Instant
  * its claim-verifier ergonomics shift between Nimbus minor versions; explicit checks here
  * pin the behavior.
  */
-class GoogleIdTokenVerifier(
+open class GoogleIdTokenVerifier(
     /**
      * Expected `aud` claim. Equals our Google OAuth Client ID (Desktop type). Tokens minted
      * for other apps must be rejected.
@@ -39,7 +39,7 @@ class GoogleIdTokenVerifier(
     @Volatile private var cachedJwksFetchedAt: Instant? = null
     private val jwksCacheTtl = (60 * 60).seconds
 
-    fun verify(idToken: String): Result<VerifiedGoogleIdToken> =
+    open fun verify(idToken: String): Result<VerifiedGoogleIdToken> =
         try {
             val signedJwt = SignedJWT.parse(idToken)
             require(signedJwt.header.algorithm == JWSAlgorithm.RS256) {
