@@ -5,6 +5,7 @@ import com.sketchbook.auth.AuthSession
 import com.sketchbook.auth.KeyringTokenStore
 import com.sketchbook.auth.OAuthClient
 import com.sketchbook.auth.TokenStore
+import com.sketchbook.auth.firebase.CloudFunctionsClient
 import com.sketchbook.auth.firebase.FirebaseAuthSession
 import com.sketchbook.auth.firebase.FirebaseConfig
 import com.sketchbook.auth.firebase.FirebaseSdkBootstrap
@@ -369,12 +370,24 @@ interface DesktopAppGraph : ViewModelGraph {
 
     @Provides
     @SingleIn(AppScope::class)
+    fun provideCloudFunctionsClient(
+        httpClient: HttpClient,
+        firebaseConfig: FirebaseConfig,
+    ): CloudFunctionsClient =
+        CloudFunctionsClient(
+            httpClient = httpClient,
+            projectId = firebaseConfig.projectId,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
     fun provideAuthSession(
         tokenStore: TokenStore,
         identityStore: PrefsIdentityStore,
         oauthClient: OAuthClient,
         identityToolkit: IdentityToolkitClient,
         googleIdTokenVerifier: GoogleIdTokenVerifier,
+        cloudFunctions: CloudFunctionsClient,
         appScope: CoroutineScope,
     ): AuthSession {
         val inner =
@@ -383,6 +396,7 @@ interface DesktopAppGraph : ViewModelGraph {
                 oauthClient = oauthClient,
                 identityToolkit = identityToolkit,
                 googleIdTokenVerifier = googleIdTokenVerifier,
+                cloudFunctions = cloudFunctions,
             )
         // tryRestore() is driven by DesktopAuthSession's init — keeps the FirebaseAuthSession
         // class itself lifecycle-free (no init-block side-effects).

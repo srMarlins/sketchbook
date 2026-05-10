@@ -50,6 +50,14 @@ class FirebaseAuthSession(
     private val identityToolkit: IdentityToolkitClient,
     private val googleIdTokenVerifier: GoogleIdTokenVerifier,
     private val clock: Clock = Clock.System,
+    /**
+     * Best-effort Firebase refresh-token revocation on sign-out (security-commitment #3
+     * Part B — backed by the `revokeMySession` Cloud Function). Null disables the call;
+     * production wiring sets this in [com.sketchbook.desktop.DesktopAppGraph]. A failure
+     * here logs and continues with local clear — sign-out is never blocked on the
+     * network.
+     */
+    private val cloudFunctions: CloudFunctionsClient? = null,
 ) : AuthSession {
     private val tokens = MutableStateFlow<SessionTokens>(SessionTokens.None)
     private val _state = MutableStateFlow<AuthState>(AuthState.SignedOut)
@@ -112,6 +120,24 @@ class FirebaseAuthSession(
             // Refresh ordering: any in-flight refresh has either (a) committed already, in
             // which case we overwrite that commit below, or (b) is queued behind us, in which
             // case it'll see SignedOut + empty keyring and bail.
+            //
+            // Security-commitment #3 Part B: fire revokeMySession BEFORE clearing local state
+            // so the caller's current ID token (still valid for ~1h) authenticates the
+            // callable. Best-effort — a Firebase outage or transient network failure must
+            // not block sign-out (the local-state clear that follows is the user-visible
+            // contract). Server-side revoke kills every other device's refresh token; the
+            // local keyring + memory wipe handles this device.
+            val snap = tokens.value
+            val cf = cloudFunctions
+            if (cf != null && snap is SessionTokens.Active) {
+                runCatching { cf.revokeMySession(snap.idToken) }
+                    .onFailure { e ->
+                        // Log + continue. A persistent failure mode (e.g. function not
+                        // deployed yet, or rules denying) will show up across many sign-outs;
+                        // user-visible behavior is unchanged.
+                        System.err.println("[FirebaseAuthSession] revokeMySession failed: $e")
+                    }
+            }
             tokenStore.clear()
             tokens.value = SessionTokens.None
             _state.value = AuthState.SignedOut
