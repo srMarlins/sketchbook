@@ -144,7 +144,7 @@ class SettingsViewModelTest {
             _state.value = AuthState.SignedOut
         }
 
-        override suspend fun accessToken(): String = "fake"
+        override suspend fun idToken(): String = "fake"
     }
 
     @Test

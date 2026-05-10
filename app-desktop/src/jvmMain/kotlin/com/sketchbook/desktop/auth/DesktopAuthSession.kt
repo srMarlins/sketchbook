@@ -75,5 +75,5 @@ class DesktopAuthSession(
         identityStore.clear()
     }
 
-    override suspend fun accessToken(): String = inner.accessToken()
+    override suspend fun idToken(): String = inner.idToken()
 }

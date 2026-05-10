@@ -50,26 +50,26 @@ class FirebaseAuthSessionTest {
         }
 
     @Test
-    fun `accessToken returns the Firebase ID token from the exchange`() =
+    fun `idToken returns the Firebase ID token from the exchange`() =
         runTest {
             val session = newSession(exchangeResponse = EXCHANGE_OK)
             session.signIn().getOrThrow()
 
-            assertEquals("FAKE_FIREBASE_ID_TOKEN", session.accessToken())
+            assertEquals("FAKE_FIREBASE_ID_TOKEN", session.idToken())
         }
 
     @Test
-    fun `accessToken refreshes when cached token has expired`() =
+    fun `idToken refreshes when cached token has expired`() =
         runTest {
             val clock = ControllableClock()
             val responses = ResponseQueue(EXCHANGE_OK, REFRESH_OK)
             val session = newSession(clock = clock, responses = responses)
             session.signIn().getOrThrow()
 
-            // Move past the cached expiry; next accessToken hits the refresh endpoint.
+            // Move past the cached expiry; next idToken hits the refresh endpoint.
             clock.advance(2.hours)
 
-            assertEquals("FRESH_FIREBASE_ID_TOKEN", session.accessToken())
+            assertEquals("FRESH_FIREBASE_ID_TOKEN", session.idToken())
         }
 
     @Test
@@ -114,7 +114,7 @@ class FirebaseAuthSessionTest {
             session.signIn().getOrThrow()
             clock.advance(2.hours)
 
-            assertFailsWith<AuthSessionExpired> { session.accessToken() }
+            assertFailsWith<AuthSessionExpired> { session.idToken() }
             assertTrue(session.state.value is AuthState.SignedOut)
             assertEquals(1, store.clears.get())
         }
@@ -127,7 +127,7 @@ class FirebaseAuthSessionTest {
 
             session.tryRestore()
 
-            assertEquals("FRESH_FIREBASE_ID_TOKEN", session.accessToken())
+            assertEquals("FRESH_FIREBASE_ID_TOKEN", session.idToken())
         }
 
     @Test

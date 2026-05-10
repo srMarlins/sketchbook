@@ -23,5 +23,5 @@ class FakeAuthSession(
         _state.value = AuthState.SignedOut
     }
 
-    override suspend fun accessToken(): String = "fake-access-token"
+    override suspend fun idToken(): String = "fake-id-token"
 }

@@ -15,5 +15,5 @@ import com.sketchbook.cloud.CloudCredentials
 class FirebaseCloudCredentials(
     private val authSession: AuthSession,
 ) : CloudCredentials {
-    override suspend fun token(): String = authSession.accessToken()
+    override suspend fun token(): String = authSession.idToken()
 }

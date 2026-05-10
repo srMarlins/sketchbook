@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
  * Implementations must:
  *  - Read any persisted refresh token at construction and emit `SignedIn` if a fresh access
  *    token can be minted, without opening a browser.
- *  - Provide [accessToken] for cloud backends. Caches and refreshes transparently. Surfaces
+ *  - Provide [idToken] for cloud backends. Caches and refreshes transparently. Surfaces
  *    refresh failure by flipping [state] to `SignedOut` AND throwing — the caller (e.g.
  *    `FirebaseCloudCredentials`) decides how to surface the failure to the user.
  */
@@ -29,8 +29,9 @@ interface AuthSession {
     suspend fun signOut()
 
     /**
-     * Mint or return a cached access token. Throws [AuthSessionExpired] if refresh fails; in
-     * that case [state] has already flipped to `SignedOut`.
+     * Mint or return a cached Firebase ID token. This is the bearer for every downstream cloud
+     * call (Firestore listeners, Firebase Storage uploads). Throws [AuthSessionExpired] if
+     * refresh fails; in that case [state] has already flipped to `SignedOut`.
      */
-    suspend fun accessToken(): String
+    suspend fun idToken(): String
 }

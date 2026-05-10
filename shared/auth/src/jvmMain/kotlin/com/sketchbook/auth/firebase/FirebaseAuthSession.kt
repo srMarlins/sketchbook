@@ -28,15 +28,15 @@ import kotlin.time.Instant
  *   4. The **Firebase** refresh token is persisted in [tokenStore]; the Google refresh token
  *      is discarded.
  *
- * [accessToken] returns the Firebase ID token (default 1h TTL); the secure-token endpoint is
- * called for refresh ~60s before expiry. Concurrent `accessToken` callers find an expired
+ * [idToken] returns the Firebase ID token (default 1h TTL); the secure-token endpoint is
+ * called for refresh ~60s before expiry. Concurrent `idToken` callers find an expired
  * token and coalesce on [refreshMutex] — exactly one refresh request goes over the wire.
  *
  * **Concurrency.** State lives in a single [MutableStateFlow]; transitions are atomic.
  * Two narrow mutexes guard write-side operations:
  *
  *   - [signInMutex] serializes sign-in (one browser flow at a time). Held over the browser
- *     flow because concurrent sign-ins make no sense — but `accessToken` / `signOut` do NOT
+ *     flow because concurrent sign-ins make no sense — but `idToken` / `signOut` do NOT
  *     take this mutex, so they're never blocked by a hung browser flow.
  *   - [refreshMutex] serializes refresh, [signOut], and [tryRestore]. Held over the network
  *     call but the refresh is fast (~tens of ms), so concurrent `signOut` blocking briefly is
@@ -60,7 +60,7 @@ class FirebaseAuthSession(
 
     /**
      * Silently restore from a persisted refresh token if one exists. Returns `true` if the
-     * session is now active (tokens cached, ready for [accessToken]), `false` otherwise.
+     * session is now active (tokens cached, ready for [idToken]), `false` otherwise.
      * Called once at app startup by the wrapper
      * [com.sketchbook.desktop.auth.DesktopAuthSession]. Never throws — restore is best-effort.
      */
@@ -117,7 +117,7 @@ class FirebaseAuthSession(
             _state.value = AuthState.SignedOut
         }
 
-    override suspend fun accessToken(): String {
+    override suspend fun idToken(): String {
         // Fast path: read state without acquiring any lock. MutableStateFlow.value is volatile.
         val snap = tokens.value
         if (snap is SessionTokens.Active && clock.now() < snap.expiresAt) {
