@@ -27,8 +27,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -60,6 +62,7 @@ class SwappableSyncQueue(
     private val scope: CoroutineScope,
     private val hostId: String,
     private val hostName: String,
+    private val firebaseConfig: FirebaseConfig,
     private val journal: JournalRepository? = null,
     private val httpClient: HttpClient,
 ) : SyncQueue,
@@ -87,30 +90,34 @@ class SwappableSyncQueue(
 
     init {
         scope.launch {
-            authSession.state.collect { auth ->
-                val previous = delegate.value
-                val next =
-                    if (auth is AuthState.SignedIn) {
-                        buildGcsQueue(
-                            authSession = authSession,
-                            userId = auth.userId,
-                            bucket = FirebaseConfig.active().storageBucket,
-                            cacheSettings = settings.observe().first().cacheSettings,
-                        )
-                    } else {
-                        currentMaterializer = null
-                        _currentCloud.value = null
-                        fallback
+            // Only rebuild on identity transitions — emissions that don't change UID are no-ops.
+            authSession.state
+                .map { (it as? AuthState.SignedIn)?.userId }
+                .distinctUntilChanged()
+                .collect { userId ->
+                    val previous = delegate.value
+                    val next =
+                        if (userId != null) {
+                            buildGcsQueue(
+                                authSession = authSession,
+                                userId = userId,
+                                bucket = firebaseConfig.storageBucket,
+                                cacheSettings = settings.observe().first().cacheSettings,
+                            )
+                        } else {
+                            currentMaterializer = null
+                            _currentCloud.value = null
+                            fallback
+                        }
+                    // Stop the outgoing drain *before* publishing the new delegate so we don't
+                    // race two GcsSyncQueue drain loops against the same DB. InMemorySyncQueue
+                    // has no drain, so the cast guard handles that path.
+                    if (previous !== next) {
+                        (previous as? GcsSyncQueue)?.stop()
                     }
-                // Stop the outgoing drain *before* publishing the new delegate so we don't
-                // race two GcsSyncQueue drain loops against the same DB. InMemorySyncQueue
-                // has no drain, so the cast guard handles that path.
-                if (previous !== next) {
-                    (previous as? GcsSyncQueue)?.stop()
+                    delegate.value = next
+                    (next as? GcsSyncQueue)?.start()
                 }
-                delegate.value = next
-                (next as? GcsSyncQueue)?.start()
-            }
         }
     }
 
@@ -176,9 +183,12 @@ class SwappableSyncQueue(
                 scope = scope,
                 journal = journal,
             )
-        }.getOrElse {
-            // Bad creds or unsupported config — fall back to in-memory so the UI keeps rendering.
-            // The error surfaces via the next access-token request when a sync attempt actually runs.
+        }.getOrElse { failure ->
+            // Bad creds or unsupported config — fall back to in-memory so the UI keeps
+            // rendering. Log the cause so the failure isn't silent; the next access-token
+            // request will also surface the underlying issue when a real sync attempt runs.
+            System.err.println("[SwappableSyncQueue] buildGcsQueue failed: $failure")
+            failure.printStackTrace(System.err)
             currentMaterializer = null
             _currentCloud.value = null
             fallback

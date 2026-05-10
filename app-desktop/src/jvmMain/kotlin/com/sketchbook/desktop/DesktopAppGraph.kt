@@ -218,6 +218,10 @@ interface DesktopAppGraph : ViewModelGraph {
 
     @Provides
     @SingleIn(AppScope::class)
+    fun provideFirebaseConfig(): FirebaseConfig = FirebaseConfig.active()
+
+    @Provides
+    @SingleIn(AppScope::class)
     fun provideSyncQueue(
         authSession: AuthSession,
         settings: SettingsRepository,
@@ -226,6 +230,7 @@ interface DesktopAppGraph : ViewModelGraph {
         catalog: Catalog,
         journal: JournalRepository,
         httpClient: HttpClient,
+        firebaseConfig: FirebaseConfig,
         scope: CoroutineScope,
     ): SyncQueue =
         SwappableSyncQueue(
@@ -238,6 +243,7 @@ interface DesktopAppGraph : ViewModelGraph {
             scope = scope,
             hostId = hostIdentity().id,
             hostName = hostIdentity().name,
+            firebaseConfig = firebaseConfig,
             journal = journal,
             httpClient = httpClient,
         )
@@ -290,10 +296,13 @@ interface DesktopAppGraph : ViewModelGraph {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideIdentityToolkitClient(httpClient: HttpClient): IdentityToolkitClient =
+    fun provideIdentityToolkitClient(
+        httpClient: HttpClient,
+        firebaseConfig: FirebaseConfig,
+    ): IdentityToolkitClient =
         IdentityToolkitClient(
             httpClient = httpClient,
-            webApiKey = FirebaseConfig.active().webApiKey,
+            webApiKey = firebaseConfig.webApiKey,
         )
 
     @Provides

@@ -5,6 +5,7 @@ import com.sketchbook.auth.AuthState
 import com.sketchbook.auth.firebase.FirebaseConfig
 import com.sketchbook.cloud.FirebaseBlobStore
 import com.sketchbook.core.AppScope
+import com.sketchbook.core.UserId
 import com.sketchbook.desktop.auth.FirebaseCloudCredentials
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -12,6 +13,8 @@ import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -38,6 +41,7 @@ import kotlinx.coroutines.launch
 class UserGraphHolder(
     private val authSession: AuthSession,
     private val httpClient: HttpClient,
+    private val firebaseConfig: FirebaseConfig,
     private val scope: CoroutineScope,
 ) {
     private val _userGraph = MutableStateFlow<UserGraph?>(null)
@@ -45,21 +49,24 @@ class UserGraphHolder(
 
     init {
         scope.launch {
-            authSession.state.collect { auth ->
-                _userGraph.value =
-                    if (auth is AuthState.SignedIn) {
-                        val backend =
-                            FirebaseBlobStore(
-                                http = httpClient,
-                                credentials = FirebaseCloudCredentials(authSession),
-                                bucket = FirebaseConfig.active().storageBucket,
-                                userId = auth.userId,
-                            )
-                        UserGraph(cloudBackend = backend)
-                    } else {
-                        null
-                    }
-            }
+            authSession.state
+                .map { (it as? AuthState.SignedIn)?.userId }
+                .distinctUntilChanged()
+                .collect { userId ->
+                    _userGraph.value =
+                        if (userId != null) buildGraph(userId) else null
+                }
         }
     }
+
+    private fun buildGraph(userId: UserId): UserGraph =
+        UserGraph(
+            cloudBackend =
+                FirebaseBlobStore(
+                    http = httpClient,
+                    credentials = FirebaseCloudCredentials(authSession),
+                    bucket = firebaseConfig.storageBucket,
+                    userId = userId,
+                ),
+        )
 }
