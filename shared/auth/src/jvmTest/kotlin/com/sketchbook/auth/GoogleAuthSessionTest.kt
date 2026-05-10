@@ -81,6 +81,7 @@ private class StubOAuthClient(
         OAuthTokens(
             accessToken = "at-FAKE",
             refreshToken = "rt-FRESH",
+            idToken = "fake-google-id-token",
             expiresInSeconds = 3600,
             userId = UserId("11223344"),
             email = "alice@example.com",
@@ -97,6 +98,7 @@ private fun stubClient(
         OAuthTokens(
             accessToken = "at-FAKE",
             refreshToken = "rt-FRESH",
+            idToken = "fake-google-id-token",
             expiresInSeconds = 3600,
             userId = UserId("11223344"),
             email = "alice@example.com",

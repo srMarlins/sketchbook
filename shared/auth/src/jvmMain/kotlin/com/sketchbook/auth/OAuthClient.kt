@@ -114,12 +114,14 @@ class OAuthClient(
                 throw OAuthFailed("token exchange failed: ${response.status} $body")
             }
             val parsed = JSON.decodeFromString(TokenResponse.serializer(), body)
-            val (sub, email) = parseSubAndEmail(parsed.idToken)
+            val rawIdToken = parsed.idToken ?: throw OAuthFailed("no id_token in response — did you request the openid scope?")
+            val (sub, email) = parseSubAndEmail(rawIdToken)
             OAuthTokens(
                 accessToken = parsed.accessToken,
                 refreshToken =
                     parsed.refreshToken
                         ?: throw OAuthFailed("no refresh_token in token response — did you set access_type=offline?"),
+                idToken = rawIdToken,
                 expiresInSeconds = parsed.expiresIn,
                 userId = UserId(sub),
                 email = email,
@@ -212,6 +214,12 @@ class OAuthClient(
 data class OAuthTokens(
     val accessToken: String,
     val refreshToken: String,
+    /**
+     * Raw Google-issued ID token (JWT, RS256). Forwarded to Identity Toolkit's
+     * `signInWithIdp` by [com.sketchbook.auth.firebase.FirebaseAuthSession] after JWKS
+     * verification. Pre-Firebase callers can ignore.
+     */
+    val idToken: String,
     val expiresInSeconds: Long,
     val userId: UserId,
     val email: String,
