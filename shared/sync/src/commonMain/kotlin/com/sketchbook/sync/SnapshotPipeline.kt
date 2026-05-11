@@ -50,12 +50,16 @@ class SnapshotPipeline(
             val blobScope: BlobScope = if (input.selfContained) BlobScope.Private(uuid) else BlobScope.Shared
 
             // 1) Lease — Firestore-backed CAS via MetadataStore. The lock doc lives at
-            //    /users/{uid}/locks/{treeId} per the design data model. Phase 3 ships the
-            //    metadata-side; the host-name population is a follow-up setDoc below so the
-            //    "held by X" UI has a friendly label even though the atomic primitive doesn't
-            //    take one.
+            //    /users/{uid}/locks/{treeId} per the design data model. holderName goes in
+            //    the same CAS write so the "held by X" UI label lands in one round-trip.
             val lockPath = DocPath.lock(ownerUserId.value, uuid.value)
-            val acquired = metadataStore.acquireLock(lockPath, holder = hostId, ttl = leaseTtl)
+            val acquired =
+                metadataStore.acquireLock(
+                    path = lockPath,
+                    holder = hostId,
+                    ttl = leaseTtl,
+                    holderName = hostName,
+                )
             if (!acquired) {
                 val current = metadataStore.getDoc(lockPath, LockDoc.serializer())
                 val ownerLabel = current?.holderName?.takeIf { it.isNotBlank() } ?: current?.holder ?: "another host"
@@ -64,14 +68,6 @@ class SnapshotPipeline(
                 return@flow
             }
             emit(SnapshotProgress.LeaseAcquired(uuid))
-            // Best-effort: backfill the holder-name on the lock doc so the UI side has a
-            // label. The acquireLock CAS wrote with holderName="" — overwriting with the
-            // populated doc is safe because we now own the lease.
-            metadataStore.getDoc(lockPath, LockDoc.serializer())?.let { acq ->
-                if (acq.holder == hostId && acq.holderName != hostName) {
-                    metadataStore.setDoc(lockPath, acq.copy(holderName = hostName), LockDoc.serializer())
-                }
-            }
 
             try {
                 // 2) Walk + diff.

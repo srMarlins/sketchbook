@@ -134,6 +134,7 @@ class FirestoreMetadataStore(
         path: DocPath,
         holder: String,
         ttl: Duration,
+        holderName: String,
     ): Boolean {
         ensureInitialized()
         val now = clock.now()
@@ -153,7 +154,7 @@ class FirestoreMetadataStore(
                         LockDoc.serializer(),
                         LockDoc(
                             holder = holder,
-                            holderName = "",
+                            holderName = holderName,
                             acquiredAt = now,
                             expiresAt = now + ttl,
                             heartbeatSeq = nextSeq,

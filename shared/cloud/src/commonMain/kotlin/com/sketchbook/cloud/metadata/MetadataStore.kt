@@ -93,8 +93,13 @@ interface MetadataStore {
     /**
      * Acquire a lease lock at [path]. Atomic test-and-set: succeeds (returns `true`) iff the
      * doc is absent OR the existing lease has expired OR the existing lease is held by
-     * [holder]. On success the doc is written with `holder`, `acquiredAt = now`, `expiresAt =
-     * now + ttl`. Returns `false` if a non-expired lease held by someone else exists.
+     * [holder]. On success the doc is written with `holder`, `holderName` (UI label), now /
+     * now + ttl. Returns `false` if a non-expired lease held by someone else exists.
+     *
+     * [holderName] is the human-readable display label the UI shows in "held by X until Y"
+     * badges. Passed inline so the acquire writes the full LockDoc in a single transaction
+     * — landing it via a follow-up `setDoc` would double the Firestore write cost and
+     * latency for every lease operation.
      *
      * The returned bool is sufficient for binary "did we get it?"; richer "who holds it"
      * comes from [observeDoc] against the same path with [LockDoc.serializer].
@@ -103,6 +108,7 @@ interface MetadataStore {
         path: DocPath,
         holder: String,
         ttl: Duration,
+        holderName: String = "",
     ): Boolean
 
     /**

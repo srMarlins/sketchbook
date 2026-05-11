@@ -95,6 +95,7 @@ class InMemoryMetadataStore(
         path: DocPath,
         holder: String,
         ttl: Duration,
+        holderName: String,
     ): Boolean {
         val now: Instant = clock.now()
         return mutex.withLock {
@@ -108,7 +109,7 @@ class InMemoryMetadataStore(
             val doc =
                 LockDoc(
                     holder = holder,
-                    holderName = "",
+                    holderName = holderName,
                     acquiredAt = now,
                     expiresAt = now + ttl,
                     heartbeatSeq = nextSeq,

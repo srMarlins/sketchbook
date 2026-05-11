@@ -89,15 +89,15 @@ class LeasedLockRepository(
         // acceptable for force-take semantics: the user already accepted "I am racing the
         // current holder"; whoever lands their write last wins.
         runCatching { store.releaseLockAsAnyone(path) }
-        val acquired = store.acquireLock(path, holder = hostId, ttl = leaseTtl)
+        val acquired =
+            store.acquireLock(
+                path = path,
+                holder = hostId,
+                ttl = leaseTtl,
+                holderName = hostName,
+            )
         if (!acquired) {
             return Result.failure(IllegalStateException("force-take race: another host re-acquired the lock"))
-        }
-        // Backfill the holder name on the lock doc.
-        store.getDoc(path, LockDoc.serializer())?.let { acq ->
-            if (acq.holder == hostId && acq.holderName != hostName) {
-                store.setDoc(path, acq.copy(holderName = hostName), LockDoc.serializer())
-            }
         }
         startHeartbeat(uuid, per)
         recordForceTake(uuid, priorOwnerName, priorExpiresAtMs)
