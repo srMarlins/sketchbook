@@ -1,9 +1,16 @@
 package com.sketchbook.sync
 
 import com.sketchbook.cloud.Generation
+import com.sketchbook.cloud.metadata.CollectionEntry
+import com.sketchbook.cloud.metadata.CollectionPath
 import com.sketchbook.cloud.metadata.DocPath
 import com.sketchbook.cloud.metadata.InMemoryMetadataStore
 import com.sketchbook.cloud.metadata.LockDoc
+import com.sketchbook.cloud.metadata.MetadataStore
+import com.sketchbook.cloud.metadata.TreeDoc
+import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.KSerializer
+import kotlin.time.Duration
 import com.sketchbook.core.Manifest
 import com.sketchbook.core.UserId
 import com.sketchbook.core.ManifestFile
@@ -276,4 +283,108 @@ class SnapshotPipelineTest {
             assertEquals(0, cloud.blobsCount())
             assertEquals(0, cloud.manifestsFor(uuid).size)
         }
+
+    @Test
+    fun treeHeadWriteRetriesOnTransientFailure() =
+        runTest {
+            val cloud = FakeCloudBackend()
+            val underlying = InMemoryMetadataStore(clock = FixedClock(now))
+            // Fail the first 2 updateDoc calls (which are the tree-head publication retries),
+            // then let the 3rd succeed. acquireLock/releaseLock pass through unmodified so the
+            // lease flow doesn't see the fault injection.
+            val flaky = FlakyUpdateDocStore(underlying, failsRemaining = 2)
+            val pipeline =
+                SnapshotPipeline(
+                    cloud = cloud,
+                    metadataStore = flaky,
+                    ownerUserId = userId,
+                    hostId = "host-a",
+                    hostName = "DesktopA",
+                    clock = FixedClock(now),
+                )
+            val tree =
+                FakeWorkingTree(
+                    mapOf("Project.als" to FakeWorkingTree.FileBlob("v1".encodeToByteArray(), now)),
+                )
+
+            val events =
+                pipeline
+                    .run(PipelineInput(uuid, tree, null, Generation.ZERO))
+                    .toList()
+
+            assertNotNull(events.filterIsInstance<SnapshotProgress.Saved>().singleOrNull())
+            assertEquals(2, flaky.failuresInjected, "expected the first 2 updateDoc calls to be faulted")
+            // The third attempt succeeded — TreeDoc landed.
+            val written = underlying.getDoc(DocPath.tree(userId.value, uuid.value), TreeDoc.serializer())
+            assertNotNull(written)
+            assertEquals(1L, written.head_rev)
+        }
+}
+
+/**
+ * Decorates [InMemoryMetadataStore] to fail the first [failsRemaining] `updateDoc` invocations
+ * with a synthetic [RuntimeException], then delegates normally. All other operations pass
+ * through unchanged. Used by [SnapshotPipelineTest.treeHeadWriteRetriesOnTransientFailure] to
+ * verify the head-write retry loop.
+ */
+private class FlakyUpdateDocStore(
+    private val delegate: InMemoryMetadataStore,
+    private var failsRemaining: Int,
+) : MetadataStore {
+    var failuresInjected: Int = 0
+        private set
+
+    override suspend fun <T : Any> getDoc(
+        path: DocPath,
+        serializer: KSerializer<T>,
+    ): T? = delegate.getDoc(path, serializer)
+
+    override suspend fun <T : Any> setDoc(
+        path: DocPath,
+        value: T,
+        serializer: KSerializer<T>,
+    ) = delegate.setDoc(path, value, serializer)
+
+    override suspend fun <T : Any> updateDoc(
+        path: DocPath,
+        serializer: KSerializer<T>,
+        transform: suspend (current: T?) -> T,
+    ): T {
+        if (failsRemaining > 0) {
+            failsRemaining--
+            failuresInjected++
+            throw RuntimeException("synthetic transient failure")
+        }
+        return delegate.updateDoc(path, serializer, transform)
+    }
+
+    override suspend fun deleteDoc(path: DocPath) = delegate.deleteDoc(path)
+
+    override fun <T : Any> observeDoc(
+        path: DocPath,
+        serializer: KSerializer<T>,
+    ): Flow<T?> = delegate.observeDoc(path, serializer)
+
+    override fun <T : Any> observeCollection(
+        path: CollectionPath,
+        serializer: KSerializer<T>,
+    ): Flow<List<CollectionEntry<T>>> = delegate.observeCollection(path, serializer)
+
+    override suspend fun acquireLock(
+        path: DocPath,
+        holder: String,
+        ttl: Duration,
+        holderName: String,
+    ): Boolean = delegate.acquireLock(path, holder, ttl, holderName)
+
+    override suspend fun refreshLock(
+        path: DocPath,
+        holder: String,
+        ttl: Duration,
+    ): Boolean = delegate.refreshLock(path, holder, ttl)
+
+    override suspend fun releaseLock(
+        path: DocPath,
+        holder: String,
+    ) = delegate.releaseLock(path, holder)
 }

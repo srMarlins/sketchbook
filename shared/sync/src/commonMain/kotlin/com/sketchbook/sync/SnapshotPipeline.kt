@@ -16,8 +16,10 @@ import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.UserId
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -203,10 +205,14 @@ class SnapshotPipeline(
      * head_gen / head_updated_at / head_updated_by_host so [SyncCoordinator]s on other
      * machines fire `pollOnce` on the listener's next emission.
      *
-     * Best-effort: if Firestore is unreachable the local manifest was still appended to
-     * Storage and other machines will discover it on their next manual pull. Logging the
-     * failure is better than failing the pipeline — the snapshot DID save locally, just the
-     * cross-machine notification didn't go out.
+     * Retried up to 3 times with exponential backoff (200ms, 400ms) — head publication is
+     * the cross-machine notification primitive; a transient Firestore blip (network blip,
+     * brief 5xx, dropped listener gRPC stream) shouldn't cost us a cycle of sync latency.
+     * If all retries fail we log and return: the local manifest was still appended to
+     * Storage, so other machines will discover it on their next manual pull.
+     *
+     * CancellationException is re-thrown without retry so the surrounding pipeline coroutine
+     * can unwind cleanly when the caller cancels (e.g. UID change, app shutdown).
      */
     private suspend fun writeTreeHeadToFirestore(
         uuid: ProjectUuid,
@@ -215,25 +221,47 @@ class SnapshotPipeline(
     ) {
         val path = DocPath.tree(ownerUserId.value, uuid.value)
         val now = clock.now()
-        runCatching {
-            metadataStore.updateDoc(path, TreeDoc.serializer()) { existing ->
-                existing?.copy(
-                    head_rev = rev.value,
-                    head_gen = gen.raw,
-                    head_updated_at = now,
-                    head_updated_by_host = hostId,
-                ) ?: TreeDoc(
-                    owner_user_id = ownerUserId.value,
-                    display_name = uuid.value,
-                    created_at = now,
-                    created_by_host = hostId,
-                    head_rev = rev.value,
-                    head_gen = gen.raw,
-                    head_updated_at = now,
-                    head_updated_by_host = hostId,
-                )
+        var attempt = 0
+        var lastError: Throwable? = null
+        while (attempt < HEAD_WRITE_MAX_ATTEMPTS) {
+            try {
+                metadataStore.updateDoc(path, TreeDoc.serializer()) { existing ->
+                    existing?.copy(
+                        head_rev = rev.value,
+                        head_gen = gen.raw,
+                        head_updated_at = now,
+                        head_updated_by_host = hostId,
+                    ) ?: TreeDoc(
+                        owner_user_id = ownerUserId.value,
+                        display_name = uuid.value,
+                        created_at = now,
+                        created_by_host = hostId,
+                        head_rev = rev.value,
+                        head_gen = gen.raw,
+                        head_updated_at = now,
+                        head_updated_by_host = hostId,
+                    )
+                }
+                return
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (t: Throwable) {
+                lastError = t
+                attempt++
+                if (attempt >= HEAD_WRITE_MAX_ATTEMPTS) break
+                // 200ms, 400ms — two retries inside ~600ms total. Small enough that a
+                // user-perceived save isn't blocked, large enough to clear a brief 5xx.
+                delay(HEAD_WRITE_BASE_DELAY_MS shl (attempt - 1))
             }
         }
+        System.err.println(
+            "[SnapshotPipeline] tree head write failed after $HEAD_WRITE_MAX_ATTEMPTS attempts for uuid=${uuid.value}: $lastError",
+        )
+    }
+
+    private companion object {
+        const val HEAD_WRITE_MAX_ATTEMPTS = 3
+        const val HEAD_WRITE_BASE_DELAY_MS = 200L
     }
 }
 
