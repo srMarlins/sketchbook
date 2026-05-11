@@ -508,6 +508,13 @@ private class CountingCloudBackend : CloudBackend {
         scope: BlobScope,
     ): RawSource = error("not used in drain tests")
 
+    override suspend fun readManifest(ref: ManifestRef): Manifest =
+        manifests.values
+            .firstOrNull { list -> list.any { it.first == ref } }
+            ?.first { it.first == ref }
+            ?.second
+            ?: throw SketchbookError.NotFound("no manifest for ref ${ref.path}")
+
     override suspend fun readManifest(
         uuid: ProjectUuid,
         rev: SnapshotRev,

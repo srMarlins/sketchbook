@@ -116,6 +116,38 @@ class LeasedLockRepositoryTest {
         }
 
     @Test
+    fun signedOutUidEmissionStartsListenerOnSubsequentSignIn() =
+        runTest {
+            val metadataStore = InMemoryMetadataStore()
+            val syncStore = SyncStateStore(CatalogDb.openInMemory().catalog)
+            val userIdFlow = MutableStateFlow<String?>(null)
+            val repo =
+                LeasedLockRepository(
+                    metadataStore = { metadataStore },
+                    userIdFlow = userIdFlow,
+                    syncStateStore = syncStore,
+                    hostId = "host-a",
+                    hostName = "DesktopA",
+                    scope = backgroundScope,
+                )
+
+            // Pre-sign-in observe() — listener can't start (uid is null) but the status flow
+            // still exists. Should yield Free.
+            assertEquals(LockStatus.Free, repo.observe(uuid).first())
+
+            // Sign in. The init-block observer's drop(1) skips the initial null replay, then
+            // emits "user-a" — which fires resetState, clearing the cache; the next observe
+            // call rebuilds the PerUuid with a real listener bound to user-a's path. Without
+            // K5's reset behavior the listener never starts after sign-in.
+            userIdFlow.value = "user-a"
+
+            // A forceTake exercises the post-sign-in path end-to-end; the listener now sees
+            // the doc and the status flips to Ours.
+            assertTrue(repo.forceTake(uuid).isSuccess)
+            assertTrue(awaitOurs(repo) is LockStatus.Ours)
+        }
+
+    @Test
     fun uidTransitionTearsDownPerUuidJobsAndResetsStatus() =
         runTest {
             val metadataStore = InMemoryMetadataStore()
