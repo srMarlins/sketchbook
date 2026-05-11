@@ -9,11 +9,19 @@ import com.sketchbook.core.SnapshotRev
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Replaces the pre-Phase-3 per-project polling fan-out. Listens to `/users/{uid}/trees`
@@ -47,7 +55,21 @@ class SyncCoordinator(
     private val syncStateStore: SyncStateStore,
     private val onPostPull: suspend (ProjectUuid) -> Unit = {},
     private val scope: CoroutineScope,
+    private val initialBackoff: Duration = 1.seconds,
+    private val maxBackoff: Duration = 5.minutes,
 ) {
+    /**
+     * Per-uuid serialization of [handleTreeEntry]. Two emissions for the same uuid (rare, but
+     * possible when Firestore double-fires under load + the head_rev cache happens not to
+     * dedup) would otherwise kick two concurrent `pollOnce(uuid)`s, racing the SQL writes in
+     * SnapshotRepository.recordSnapshot. The mutex is cheap (one allocation per project ever
+     * observed) and process-local; it is not a Firestore-level lock.
+     */
+    private val perUuidMutex = mutableMapOf<ProjectUuid, Mutex>()
+
+    private fun mutexFor(uuid: ProjectUuid): Mutex =
+        synchronized(perUuidMutex) { perUuidMutex.getOrPut(uuid) { Mutex() } }
+
     fun start(): Job =
         scope.launch {
             userId.distinctUntilChanged().collectLatest { uid ->
@@ -55,33 +77,44 @@ class SyncCoordinator(
                 // Per-UID cache of the last head_rev we observed for each tree. observeCollection
                 // re-emits the FULL list on every change; without this cache, one tree's
                 // head_rev advance would trigger an O(N) DB lookup against sync_state for every
-                // unchanged sibling. The cache holds the value Firestore last reported — when
-                // the next emission matches it for a given treeId, we know nothing changed and
-                // can skip the DB call. Lives in the collectLatest scope so UID transitions
+                // unchanged sibling. Lives in the collectLatest scope so UID transitions
                 // naturally clear it.
                 val lastSeenHead = mutableMapOf<String, Long>()
-                try {
-                    metadataStore
-                        .observeCollection(CollectionPath.trees(uid), TreeDoc.serializer())
-                        .collect { entries ->
-                            for (entry in entries) {
-                                val previousHead = lastSeenHead[entry.id]
-                                if (previousHead != null && previousHead == entry.value.head_rev) {
-                                    continue
+                var backoff = initialBackoff
+                while (currentCoroutineContext().isActive) {
+                    try {
+                        metadataStore
+                            .observeCollection(CollectionPath.trees(uid), TreeDoc.serializer())
+                            .collect { entries ->
+                                // Reset the backoff every time we land in the collector — a
+                                // successful subscription is a healthy signal.
+                                backoff = initialBackoff
+                                for (entry in entries) {
+                                    val previousHead = lastSeenHead[entry.id]
+                                    if (previousHead != null && previousHead == entry.value.head_rev) {
+                                        continue
+                                    }
+                                    lastSeenHead[entry.id] = entry.value.head_rev
+                                    handleTreeEntry(entry.id, entry.value)
                                 }
-                                lastSeenHead[entry.id] = entry.value.head_rev
-                                handleTreeEntry(entry.id, entry.value)
                             }
-                        }
-                } catch (c: CancellationException) {
-                    throw c
-                } catch (e: Throwable) {
-                    // Listener pipe broke — typically rules-denied or transient network. Don't
-                    // retry-loop forever here; the userId.distinctUntilChanged outer collector
-                    // re-emits the same uid only on a true transition, which is the natural
-                    // recovery hook (sign-out → sign-in resubscribes). Phase C3 layers a
-                    // bounded backoff/retry on top of this for transient blips.
-                    System.err.println("[SyncCoordinator] listener crashed for uid=$uid: $e")
+                        // Collect returned cleanly (Firestore listener closed the upstream).
+                        // Treat as terminal for this uid; the next userId emission resubscribes.
+                        return@collectLatest
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (e: Throwable) {
+                        // Transient listener pipe failure — typically network blip or 5xx
+                        // upstream of Firestore. Retry with bounded exponential backoff so
+                        // sub-second cross-machine sync recovers without waiting for the next
+                        // sign-out → sign-in cycle. Cancellation propagates from the outer
+                        // collectLatest (uid change, app shutdown) and tears the loop down.
+                        System.err.println(
+                            "[SyncCoordinator] listener crashed for uid=$uid, retrying in $backoff: $e",
+                        )
+                        delay(backoff)
+                        backoff = (backoff * 2).coerceAtMost(maxBackoff)
+                    }
                 }
             }
         }
@@ -91,21 +124,26 @@ class SyncCoordinator(
         doc: TreeDoc,
     ) {
         val uuid = ProjectUuid(treeId)
-        val state = syncStateStore.stateOf(uuid)
-        val localCloudHead = state?.cloudHeadRev ?: 0L
-        // Doc reports a rev we haven't pulled yet — fetch the missing manifests.
-        if (doc.head_rev <= localCloudHead) return
-        val poller = pollerProvider() ?: return
-        val pulled =
-            poller.pollOnce(
-                uuid,
-                sinceRev = if (localCloudHead > 0) SnapshotRev(localCloudHead) else null,
-            )
-        if (pulled.isEmpty()) return
-        // Single watermark advance per batch. PullPoller guarantees the returned list is a
-        // contiguous successful prefix from sinceRev + 1, so the final rev is the safe
-        // watermark — no need to fire the reactive cascade per snapshot (M3).
-        syncStateStore.markCloudHead(uuid, pulled.last().rev.value)
-        onPostPull(uuid)
+        // Serialize concurrent pollOnce invocations for the same uuid (H6). Cheap — one Mutex
+        // allocation per project ever observed; Mutex.withLock is cancellation-safe so a
+        // uid-flip / app-shutdown still unwinds cleanly.
+        mutexFor(uuid).withLock {
+            val state = syncStateStore.stateOf(uuid)
+            val localCloudHead = state?.cloudHeadRev ?: 0L
+            // Doc reports a rev we haven't pulled yet — fetch the missing manifests.
+            if (doc.head_rev <= localCloudHead) return@withLock
+            val poller = pollerProvider() ?: return@withLock
+            val pulled =
+                poller.pollOnce(
+                    uuid,
+                    sinceRev = if (localCloudHead > 0) SnapshotRev(localCloudHead) else null,
+                )
+            if (pulled.isEmpty()) return@withLock
+            // Single watermark advance per batch. PullPoller guarantees the returned list is a
+            // contiguous successful prefix from sinceRev + 1, so the final rev is the safe
+            // watermark — no need to fire the reactive cascade per snapshot (M3/E1).
+            syncStateStore.markCloudHead(uuid, pulled.last().rev.value)
+            onPostPull(uuid)
+        }
     }
 }
