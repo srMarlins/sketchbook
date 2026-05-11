@@ -2,10 +2,16 @@ package com.sketchbook.desktop
 
 import com.sketchbook.actions.ProposalActionExecutor
 import com.sketchbook.auth.AuthSession
-import com.sketchbook.auth.GoogleAuthSession
 import com.sketchbook.auth.KeyringTokenStore
 import com.sketchbook.auth.OAuthClient
 import com.sketchbook.auth.TokenStore
+import com.sketchbook.auth.firebase.CloudFunctionsClient
+import com.sketchbook.auth.firebase.FirebaseAuthSession
+import com.sketchbook.auth.firebase.FirebaseConfig
+import com.sketchbook.auth.firebase.FirebaseSdkBootstrap
+import com.sketchbook.auth.firebase.GoogleIdTokenVerifier
+import com.sketchbook.auth.firebase.IdentityToolkitClient
+import com.sketchbook.auth.firebase.JwksGoogleIdTokenVerifier
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.CatalogFts
 import com.sketchbook.catalog.CatalogHandle
@@ -13,6 +19,8 @@ import com.sketchbook.catalog.JvmSampleScanner
 import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.catalog.db.Catalog
+import com.sketchbook.cloud.metadata.FirestoreMetadataStore
+import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
@@ -34,6 +42,7 @@ import com.sketchbook.repo.SnapshotRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.impl.SqlSnapshotRepository
 import com.sketchbook.sync.PullPoller
+import com.sketchbook.sync.SyncCoordinator
 import com.sketchbook.syncio.AlsPatcher
 import com.sketchbook.syncio.Watcher
 import com.sketchbook.syncio.WatcherToSyncState
@@ -44,6 +53,7 @@ import dev.zacsweers.metro.createGraph
 import dev.zacsweers.metrox.viewmodel.ViewModelGraph
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +65,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.nio.file.Files
@@ -101,6 +113,7 @@ interface DesktopAppGraph : ViewModelGraph {
     val libraryScanCoordinator: LibraryScanCoordinator
     val userGraphHolder: UserGraphHolder
     val launchGate: LaunchGate
+    val syncCoordinator: SyncCoordinator
 
     // `metroViewModelFactory` is inherited from [ViewModelGraph] — the contributed
     // `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject` ViewModel map is plumbed
@@ -193,24 +206,84 @@ interface DesktopAppGraph : ViewModelGraph {
             ioDispatcher = Dispatchers.IO,
         )
 
+    /**
+     * Stable per-machine identity. SingleIn so [hostIdentity] (disk I/O + InetAddress lookup)
+     * runs once per JVM, not 4× during graph construction (M19).
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideHostIdentity(): HostIdentity = hostIdentity()
+
     @Provides
     @SingleIn(AppScope::class)
     fun provideLockRepository(
         store: SyncStateStore,
         scope: CoroutineScope,
-        syncQueue: SyncQueue,
+        authSession: AuthSession,
+        metadataStore: MetadataStore,
         journal: JournalRepository,
-    ): LockRepository =
-        LeasedLockRepository(
-            cloud = {
-                (syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue)?.currentCloud?.value
-            },
+        hostIdentity: HostIdentity,
+    ): LockRepository {
+        // Map AuthSession.state → StateFlow<String?> of the current UID. stateIn keeps it hot for
+        // the app's lifetime so LeasedLockRepository's transition observer never misses an emission.
+        val userIdFlow =
+            authSession.state
+                .map { (it as? com.sketchbook.auth.AuthState.SignedIn)?.userId?.value }
+                .stateIn(
+                    scope = scope,
+                    started = kotlinx.coroutines.flow.SharingStarted.Eagerly,
+                    initialValue = (authSession.state.value as? com.sketchbook.auth.AuthState.SignedIn)?.userId?.value,
+                )
+        return LeasedLockRepository(
+            // Provide the store eagerly — FirestoreMetadataStore is safe to construct before
+            // sign-in; its methods bootstrap-then-call. Listener startup short-circuits when
+            // userId == null so signed-out app instances incur no SDK calls.
+            metadataStore = { metadataStore },
+            userIdFlow = userIdFlow,
             syncStateStore = store,
-            hostId = hostIdentity().id,
-            hostName = hostIdentity().name,
+            hostId = hostIdentity.id,
+            hostName = hostIdentity.name,
             scope = scope,
             journal = journal,
         )
+    }
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideFirebaseSdkBootstrap(firebaseAuthGraph: FirebaseAuthGraph): FirebaseSdkBootstrap = firebaseAuthGraph.bootstrap
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideMetadataStore(bootstrap: FirebaseSdkBootstrap): MetadataStore =
+        FirestoreMetadataStore(ensureInitialized = bootstrap::ensureInitialized)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideSyncCoordinator(
+        authSession: AuthSession,
+        metadataStore: MetadataStore,
+        syncQueue: SyncQueue,
+        store: SyncStateStore,
+        snapshots: SnapshotRepository,
+        scope: CoroutineScope,
+    ): SyncCoordinator {
+        val swap = syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue
+        return SyncCoordinator(
+            userId =
+                authSession.state.map { (it as? com.sketchbook.auth.AuthState.SignedIn)?.userId?.value },
+            metadataStore = metadataStore,
+            pollerProvider = {
+                swap?.currentCloud?.value?.let { PullPoller(it, snapshots) }
+            },
+            syncStateStore = store,
+            onPostPull = { uuid -> autoMaterializeAfterPull(store, snapshots, uuid) },
+            scope = scope,
+        )
+    }
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideFirebaseConfig(): FirebaseConfig = FirebaseConfig.active()
 
     @Provides
     @SingleIn(AppScope::class)
@@ -222,7 +295,10 @@ interface DesktopAppGraph : ViewModelGraph {
         catalog: Catalog,
         journal: JournalRepository,
         httpClient: HttpClient,
+        firebaseConfig: FirebaseConfig,
         scope: CoroutineScope,
+        metadataStore: MetadataStore,
+        hostIdentity: HostIdentity,
     ): SyncQueue =
         SwappableSyncQueue(
             authSession = authSession,
@@ -232,10 +308,12 @@ interface DesktopAppGraph : ViewModelGraph {
             catalog = catalog,
             blobCacheRoot = catalogDbPath().parent.resolve("blob-cache"),
             scope = scope,
-            hostId = hostIdentity().id,
-            hostName = hostIdentity().name,
+            hostId = hostIdentity.id,
+            hostName = hostIdentity.name,
+            firebaseConfig = firebaseConfig,
             journal = journal,
             httpClient = httpClient,
+            metadataStore = metadataStore,
         )
 
     /**
@@ -243,16 +321,35 @@ interface DesktopAppGraph : ViewModelGraph {
      * calls (OAuth, GCS, token revoke). One CIO connection pool app-wide is the right default —
      * each independent client would carry its own selector thread + connection pool, and HTTP/1.1
      * keep-alive across calls dies on a per-instance boundary.
+     *
+     * **Timeouts.** [HttpTimeout] applies globally so no call can stall forever on a hung
+     * socket / regional outage / blocked TLS handshake. Connect (5s) and socket-idle (30s) are
+     * conservative ceilings; per-request timeouts (`requestTimeoutMillis`) are overridden on the
+     * call site for short, latency-sensitive calls — e.g. [CloudFunctionsClient.revokeMySession]
+     * caps its own request at 5s so sign-out doesn't drag during a slow Cloud Function.
      */
     @Provides
     @SingleIn(AppScope::class)
-    fun provideHttpClient(): HttpClient = HttpClient(CIO)
+    fun provideHttpClient(): HttpClient =
+        HttpClient(CIO) {
+            install(HttpTimeout) {
+                connectTimeoutMillis = 5_000
+                requestTimeoutMillis = 60_000
+                socketTimeoutMillis = 30_000
+            }
+            expectSuccess = false
+        }
 
     @Provides
     @SingleIn(AppScope::class)
     fun provideTokenStore(): TokenStore =
         KeyringTokenStore(
-            serviceName = "com.sketchbook.refresh",
+            // Phase 2 of the Firebase migration: refresh tokens now come from Identity
+            // Toolkit, not Google OAuth. Namespacing separately (security-commitment #2
+            // in docs/plans/2026-05-08-firebase-migration-design.md) prevents a transitional
+            // or rollback period from mixing token sources. No pre-Firebase keys exist in
+            // the wild — Sketchbook hasn't shipped — so no migration is needed.
+            serviceName = "sketchbook.firebase.refresh_token",
             accountName = "default",
         )
 
@@ -269,30 +366,87 @@ interface DesktopAppGraph : ViewModelGraph {
         OAuthClient(
             httpClient = httpClient,
             clientId = OAUTH_CLIENT_ID,
+            // Firebase migration: we no longer need the GCS scope on the Google grant — bearer
+            // for GCS reads/writes is now the Firebase ID token (issued by Identity Toolkit).
+            // `openid` + `email` is all that's needed for the Identity Toolkit exchange.
             scopes =
                 listOf(
                     "openid",
                     "email",
-                    "https://www.googleapis.com/auth/devstorage.read_write",
                 ),
         )
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideAuthSession(
-        tokenStore: TokenStore,
-        identityStore: PrefsIdentityStore,
-        oauthClient: OAuthClient,
+    fun provideIdentityToolkitClient(
         httpClient: HttpClient,
-        appScope: CoroutineScope,
-    ): AuthSession {
-        val inner =
-            GoogleAuthSession(
+        firebaseConfig: FirebaseConfig,
+    ): IdentityToolkitClient =
+        IdentityToolkitClient(
+            httpClient = httpClient,
+            webApiKey = firebaseConfig.webApiKey,
+        )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideGoogleIdTokenVerifier(): GoogleIdTokenVerifier = JwksGoogleIdTokenVerifier(expectedAudience = OAUTH_CLIENT_ID)
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideCloudFunctionsClient(
+        httpClient: HttpClient,
+        firebaseConfig: FirebaseConfig,
+    ): CloudFunctionsClient =
+        CloudFunctionsClient(
+            httpClient = httpClient,
+            projectId = firebaseConfig.projectId,
+        )
+
+    /**
+     * Pairing of [FirebaseAuthSession] + [FirebaseSdkBootstrap]. They're construction-coupled:
+     * the bootstrap reads tokens off the auth session, and the auth session needs the
+     * bootstrap's `clearSession` hook so sign-out tears down the SDK. We build them together
+     * (lateinit-style closure) and expose each via its own `@Provides` accessor below.
+     */
+    data class FirebaseAuthGraph(
+        val authSession: FirebaseAuthSession,
+        val bootstrap: FirebaseSdkBootstrap,
+    )
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideFirebaseAuthGraph(
+        tokenStore: TokenStore,
+        oauthClient: OAuthClient,
+        identityToolkit: IdentityToolkitClient,
+        googleIdTokenVerifier: GoogleIdTokenVerifier,
+        cloudFunctions: CloudFunctionsClient,
+        firebaseConfig: FirebaseConfig,
+    ): FirebaseAuthGraph {
+        lateinit var bootstrap: FirebaseSdkBootstrap
+        val auth =
+            FirebaseAuthSession(
                 tokenStore = tokenStore,
                 oauthClient = oauthClient,
-                httpClient = httpClient,
-                scope = appScope,
+                identityToolkit = identityToolkit,
+                googleIdTokenVerifier = googleIdTokenVerifier,
+                cloudFunctions = cloudFunctions,
+                sdkClearSession = { bootstrap.clearSession() },
             )
+        bootstrap = FirebaseSdkBootstrap(authSession = auth, config = firebaseConfig)
+        return FirebaseAuthGraph(auth, bootstrap)
+    }
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideAuthSession(
+        firebaseAuthGraph: FirebaseAuthGraph,
+        identityStore: PrefsIdentityStore,
+        appScope: CoroutineScope,
+    ): AuthSession {
+        val inner = firebaseAuthGraph.authSession
+        // tryRestore() is driven by DesktopAuthSession's init — keeps the FirebaseAuthSession
+        // class itself lifecycle-free (no init-block side-effects).
         return DesktopAuthSession(
             inner = inner,
             identityStore = identityStore,
@@ -304,16 +458,36 @@ interface DesktopAppGraph : ViewModelGraph {
 /**
  * OAuth 2.0 desktop client ID for Sketchbook. Public clients have no secret — PKCE proves
  * the client. Created in the Google Cloud console under "OAuth 2.0 Client IDs" → Application
- * type "Desktop app". If you fork this repo, replace this with your own client ID.
+ * type "Desktop app". Pre-launch placeholder — set the real value via the
+ * `sketchbook.oauth.client_id` system property (or wire your own loader if you fork the repo).
+ *
+ * The Firebase migration uses this client ID for both Google sign-in *and* as the expected
+ * `aud` claim when verifying the resulting Google ID token before the Identity Toolkit
+ * exchange — see `GoogleIdTokenVerifier`.
  */
-private const val OAUTH_CLIENT_ID = "REPLACE_ME.apps.googleusercontent.com"
+private const val OAUTH_CLIENT_ID_PLACEHOLDER = "REPLACE_ME.apps.googleusercontent.com"
+
+private val OAUTH_CLIENT_ID: String =
+    run {
+        val v = System.getProperty("sketchbook.oauth.client_id") ?: OAUTH_CLIENT_ID_PLACEHOLDER
+        val env = System.getProperty("sketchbook.env", "dev")
+        // Fail fast in production rather than silently shipping a binary whose Google sign-in
+        // immediately rejects (the placeholder is not a registered client ID). Dev / test
+        // launches keep the placeholder so unit tests don't need to set the property (M10/F4).
+        if (env == "prod" && v == OAUTH_CLIENT_ID_PLACEHOLDER) {
+            error(
+                "OAUTH_CLIENT_ID placeholder in production build — set -Dsketchbook.oauth.client_id=...",
+            )
+        }
+        v
+    }
 
 /**
  * Stable per-machine identity used by the sync pipeline as `hostId` (lease ownership) and
  * `hostName` (display in conflict messages). The id is generated once and cached at
  * `<dataDir>/host-id`; the name defaults to `Sketchbook on <hostname>`.
  */
-private data class HostIdentity(
+data class HostIdentity(
     val id: String,
     val name: String,
 )
@@ -348,46 +522,10 @@ private fun hostIdentity(): HostIdentity {
 /** Builds the graph at runtime — Metro generates the impl class. */
 fun buildDesktopAppGraph(): DesktopAppGraph = createGraph<DesktopAppGraph>()
 
-/**
- * Spawn the background pull-poll loop. One coroutine per project subscribes to
- * [PullPoller.subscribe] and advances `sync_state.cloud_head_rev` as new manifests land. The
- * outer `collectLatest` over [SyncStateStore.observeAll] re-spawns the per-project subscribers
- * when projects appear or disappear.
- *
- * No-op while cloud is unconfigured ([SwappableSyncQueue.currentCloud] == null). The poller
- * lives on the app scope; closing the app cancels everything.
- */
-@OptIn(ExperimentalCoroutinesApi::class)
-fun startBackgroundPull(graph: DesktopAppGraph) {
-    val swap = graph.syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue ?: return
-    val store = graph.syncStateStore
-    val snapshots = graph.snapshotRepository
-    graph.appScope.launch {
-        // Re-spawn the per-project pollers whenever the active cloud backend changes (creds
-        // come/go) so the long-running coroutines aren't bound to a torn-down http client.
-        swap.currentCloud.collectLatest { cloud ->
-            if (cloud == null) return@collectLatest
-            val poller = PullPoller(cloud = cloud, snapshots = snapshots)
-            store.observeAll().collectLatest { rows ->
-                // collectLatest cancels the previous block, including the per-project launches.
-                kotlinx.coroutines.coroutineScope {
-                    for (row in rows) {
-                        launch {
-                            poller
-                                .subscribe(
-                                    uuid = row.uuid,
-                                    startAfter = if (row.localRev > 0) SnapshotRev(row.localRev) else null,
-                                ).collect { newSnapshot ->
-                                    store.markCloudHead(newSnapshot.projectUuid, newSnapshot.rev.value)
-                                    autoMaterializeAfterPull(store, snapshots, newSnapshot.projectUuid)
-                                }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+// Phase 3 (2026-05-10): `startBackgroundPull` (the per-project 30s polling fan-out) is gone.
+// SyncCoordinator (next commit) replaces it — listens to Firestore tree-doc deltas and fires
+// `PullPoller.pollOnce` on head_rev advances. The materialize-after-pull helper below survives
+// because SyncCoordinator calls it on the same trigger.
 
 /**
  * Auto-materialize inbound cloud manifests when it's safe to clobber the working tree:

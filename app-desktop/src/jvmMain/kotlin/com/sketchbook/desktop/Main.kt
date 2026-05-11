@@ -51,7 +51,10 @@ private fun bootstrapGraph(resetFirstRun: Boolean): DesktopAppGraph {
     // LaunchGate sees `firstRunCompletedAt = null` on its first emission and routes to the
     // Onboarding surface. Roots / plugin folders / cloud config survive.
     if (resetFirstRun) runBlocking { graph.settingsRepository.resetFirstRun() }
-    startBackgroundPull(graph)
+    // SyncCoordinator replaces the pre-Phase-3 per-project polling fan-out. Subscribes to
+    // /users/{uid}/trees via the Firestore listener and fires PullPoller.pollOnce on each
+    // head_rev advance — sub-second cross-machine sync vs the previous 30s polling latency.
+    graph.syncCoordinator.start()
     startWatcher(graph)
     graph.libraryScanCoordinator.start()
     // Touch the holder so Metro instantiates the AppScope singleton at startup. The holder's

@@ -2,24 +2,17 @@ package com.sketchbook.desktop.repo
 
 import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.catalog.SyncStateStore
-import com.sketchbook.cloud.BlobScope
-import com.sketchbook.cloud.CloudBackend
-import com.sketchbook.cloud.Generation
-import com.sketchbook.cloud.LeaseAcquireResult
-import com.sketchbook.cloud.LeaseLock
-import com.sketchbook.cloud.LeaseRefreshResult
-import com.sketchbook.cloud.ManifestRef
-import com.sketchbook.core.BlobHash
-import com.sketchbook.core.Manifest
+import com.sketchbook.cloud.metadata.InMemoryMetadataStore
+import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
-import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.LockStatus
 import com.sketchbook.repo.impl.InMemoryJournalRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.test.runTest
-import kotlinx.io.RawSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -30,27 +23,21 @@ class LeasedLockRepositoryTest {
     @Test
     fun forceTakeOnEmptyAcquiresAndFlipsToOurs() =
         runTest {
-            val cloud = FakeLockCloud()
+            val metadataStore = InMemoryMetadataStore()
             val store = SyncStateStore(CatalogDb.openInMemory().catalog)
-            val repo =
-                LeasedLockRepository(
-                    cloud = { cloud },
-                    syncStateStore = store,
-                    hostId = "host-a",
-                    hostName = "DesktopA",
-                    scope = backgroundScope,
-                )
+            val repo = newRepo(metadataStore, store)
             val r = repo.forceTake(uuid)
             assertTrue(r.isSuccess, "forceTake failed: ${r.exceptionOrNull()}")
-            val status = repo.observe(uuid).first()
+            // The lock-doc listener emits the doc shape; await the first emission whose
+            // status is Ours. Other emissions may have been Free before the listener saw the
+            // post-forceTake write.
+            val status: LockStatus = awaitOurs(repo)
             assertTrue(status is LockStatus.Ours, "expected Ours, got $status")
         }
 
     @Test
     fun forceTakeAppendsForceTakeLockJournalEntry() =
         runTest {
-            val cloud = FakeLockCloud()
-            // Seed a project + identity so projectIdFor(uuid) resolves to a real ProjectId.
             val handle = CatalogDb.openInMemory()
             val catalog = handle.catalog
             catalog.catalogQueries.insertOrReplaceProject(
@@ -81,17 +68,11 @@ class LeasedLockRepositoryTest {
                 uuid = uuid.value,
                 created_at = "2026-05-06T00:00:00Z",
             )
-            val store = SyncStateStore(catalog)
+            val syncStore = SyncStateStore(catalog)
             val journal = InMemoryJournalRepository()
-            val repo =
-                LeasedLockRepository(
-                    cloud = { cloud },
-                    syncStateStore = store,
-                    hostId = "host-a",
-                    hostName = "DesktopA",
-                    scope = backgroundScope,
-                    journal = journal,
-                )
+            val metadataStore = InMemoryMetadataStore()
+            val repo = newRepo(metadataStore, syncStore, journal = journal)
+
             val r = repo.forceTake(uuid)
             assertTrue(r.isSuccess)
             val entries = journal.observeRecent().first()
@@ -106,7 +87,8 @@ class LeasedLockRepositoryTest {
             val store = SyncStateStore(CatalogDb.openInMemory().catalog)
             val repo =
                 LeasedLockRepository(
-                    cloud = { null },
+                    metadataStore = { null },
+                    userIdFlow = MutableStateFlow("test-user"),
                     syncStateStore = store,
                     hostId = "host-a",
                     hostName = "DesktopA",
@@ -115,77 +97,82 @@ class LeasedLockRepositoryTest {
             val r = repo.forceTake(uuid)
             assertTrue(r.isFailure)
         }
-}
 
-/** Minimal CloudBackend supporting the lock-only paths LeasedLockRepository exercises. */
-private class FakeLockCloud : CloudBackend {
-    private var lock: Pair<LeaseLock, Generation>? = null
-    private var nextGen = 1L
-
-    override suspend fun headBlob(
-        hash: BlobHash,
-        scope: BlobScope,
-    ) = false
-
-    override suspend fun putBlob(
-        hash: BlobHash,
-        source: RawSource,
-        size: Long,
-        scope: BlobScope,
-    ) {}
-
-    override suspend fun getBlob(
-        hash: BlobHash,
-        scope: BlobScope,
-    ): RawSource = error("not used")
-
-    override suspend fun readManifest(
-        uuid: ProjectUuid,
-        rev: SnapshotRev,
-    ): Manifest = error("not used")
-
-    override suspend fun listManifests(
-        uuid: ProjectUuid,
-        sinceRev: SnapshotRev?,
-    ) = emptyList<ManifestRef>()
-
-    override suspend fun appendManifestHead(
-        uuid: ProjectUuid,
-        expectedHead: Generation?,
-        manifest: Manifest,
-    ) = Result.failure<Generation>(error("not used"))
-
-    override suspend fun acquireLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-    ): LeaseAcquireResult {
-        val current = this.lock
-        return if (current == null) {
-            val gen = Generation((nextGen++).toString())
-            this.lock = lock to gen
-            LeaseAcquireResult.Acquired(gen)
-        } else {
-            LeaseAcquireResult.Held(current.first, current.second)
+    @Test
+    fun forceTakeWithoutUserFails() =
+        runTest {
+            val store = SyncStateStore(CatalogDb.openInMemory().catalog)
+            val repo =
+                LeasedLockRepository(
+                    metadataStore = { InMemoryMetadataStore() },
+                    userIdFlow = MutableStateFlow(null),
+                    syncStateStore = store,
+                    hostId = "host-a",
+                    hostName = "DesktopA",
+                    scope = backgroundScope,
+                )
+            val r = repo.forceTake(uuid)
+            assertTrue(r.isFailure)
         }
-    }
 
-    override suspend fun refreshLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-        expected: Generation,
-    ): LeaseRefreshResult {
-        val current = this.lock ?: return LeaseRefreshResult.Stale
-        if (current.second != expected) return LeaseRefreshResult.Stale
-        val gen = Generation((nextGen++).toString())
-        this.lock = lock to gen
-        return LeaseRefreshResult.Refreshed(gen)
-    }
+    @Test
+    fun uidTransitionTearsDownPerUuidJobsAndResetsStatus() =
+        runTest {
+            val metadataStore = InMemoryMetadataStore()
+            val syncStore = SyncStateStore(CatalogDb.openInMemory().catalog)
+            val userIdFlow = MutableStateFlow<String?>("user-a")
+            val repo =
+                LeasedLockRepository(
+                    metadataStore = { metadataStore },
+                    userIdFlow = userIdFlow,
+                    syncStateStore = syncStore,
+                    hostId = "host-a",
+                    hostName = "DesktopA",
+                    scope = backgroundScope,
+                )
 
-    override suspend fun releaseLock(
-        uuid: ProjectUuid,
-        expected: Generation,
-    ) {
-        val current = this.lock ?: return
-        if (current.second == expected) this.lock = null
+            // Acquire as user-a — listener subscription + status flow are now bound to user-a's
+            // Firestore path.
+            assertTrue(repo.forceTake(uuid).isSuccess)
+            assertTrue(awaitOurs(repo) is LockStatus.Ours)
+
+            // Switch UIDs. The init-block observer should cancel the prior listener and clear
+            // the cache so the next observe(uuid) restarts a fresh listener against user-b's
+            // path — which has no doc — and emits Free.
+            userIdFlow.value = "user-b"
+            val nextStatus =
+                repo
+                    .observe(uuid)
+                    .firstOrNull { it is LockStatus.Free }
+                    ?: error("listener never re-emitted Free after UID change")
+            assertTrue(nextStatus is LockStatus.Free)
+        }
+
+    private fun kotlinx.coroutines.test.TestScope.newRepo(
+        metadataStore: MetadataStore,
+        syncStateStore: SyncStateStore,
+        journal: InMemoryJournalRepository? = null,
+    ): LeasedLockRepository =
+        LeasedLockRepository(
+            metadataStore = { metadataStore },
+            userIdFlow = MutableStateFlow("test-user"),
+            syncStateStore = syncStateStore,
+            hostId = "host-a",
+            hostName = "DesktopA",
+            scope = backgroundScope,
+            journal = journal,
+        )
+
+    /**
+     * The lock-doc listener emits asynchronously; await up to a few yields for the post-
+     * forceTake Ours emission. The cancellable [firstOrNull] under a timeout pattern would
+     * suffice for production, but in a TestScope `runTest`'s virtual scheduler is enough.
+     */
+    private suspend fun awaitOurs(repo: LeasedLockRepository): LockStatus {
+        // Drop the initial Free emission and wait for the next non-Free status.
+        return repo
+            .observe(uuid)
+            .firstOrNull { it is LockStatus.Ours }
+            ?: error("listener never emitted Ours")
     }
 }

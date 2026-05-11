@@ -26,6 +26,11 @@ hikaricp = "5.1.0"
 # Networking
 ktor = "3.4.3"
 
+# Firebase (gitlive Kotlin Multiplatform wrapper). Pinned because gitlive's "alpha"
+# means minor bumps can break common APIs; emulator integration test catches drift
+# at PR time. See docs/plans/2026-05-08-firebase-migration-design.md.
+gitlive-firebase = "2.4.0"
+
 # Coroutines / IO / serialization
 coroutines = "1.10.2"
 kotlinx-io = "0.9.0"
@@ -46,6 +51,12 @@ javakeyring = "1.0.4"
 # pure-Java port (slower than the JNI binding but cross-platform and zero-dep). Re-evaluate
 # with a vendored JNI wrapper if profiling shows the hash phase as a bottleneck.
 blake3 = "1.3"
+
+# JWT / JWKS verification (security-commitment #1: verify Google ID token signature
+# client-side before the Identity Toolkit exchange). Nimbus is the de-facto Java standard;
+# rolling our own RS256 verification is a known footgun (algorithm confusion, missing
+# claim validation, time-skew handling).
+nimbus-jose-jwt = "10.0.2"
 
 # Testing
 kotest = "6.1.11"
@@ -100,6 +111,14 @@ ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-utils-jvm = { module = "io.ktor:ktor-utils-jvm", version.ref = "ktor" }
 ktor-io-jvm = { module = "io.ktor:ktor-io-jvm", version.ref = "ktor" }
 
+# Firebase (gitlive). On JVM, these transitively pull in `dev.gitlive:firebase-java-sdk`
+# (a community port of the Android client SDK to pure JVM). Cloud Storage isn't a
+# supported product on JVM there — we use Firebase Storage's REST API directly
+# instead, with the Firebase ID token as bearer.
+gitlive-firebase-app = { module = "dev.gitlive:firebase-app", version.ref = "gitlive-firebase" }
+gitlive-firebase-auth = { module = "dev.gitlive:firebase-auth", version.ref = "gitlive-firebase" }
+gitlive-firebase-firestore = { module = "dev.gitlive:firebase-firestore", version.ref = "gitlive-firebase" }
+
 # Logging
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 
@@ -109,6 +128,9 @@ blake3 = { module = "io.github.rctcwyvrn:blake3", version.ref = "blake3" }
 
 # OS keychain (JVM)
 javakeyring = { module = "com.github.javakeyring:java-keyring", version.ref = "javakeyring" }
+
+# JWT / JWKS verification (security-commitment #1)
+nimbus-jose-jwt = { module = "com.nimbusds:nimbus-jose-jwt", version.ref = "nimbus-jose-jwt" }
 
 # UI
 material3-adaptive = { module = "org.jetbrains.compose.material3.adaptive:adaptive", version.ref = "material3-adaptive" }

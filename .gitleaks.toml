@@ -23,11 +23,28 @@ regexes = [
   # PEM markers that appear as string literals in JWT-signing code.
   '''-----BEGIN (PRIVATE|RSA PRIVATE) KEY-----''',
   '''-----END (PRIVATE|RSA PRIVATE) KEY-----''',
+  # Firebase Web API keys are public client identifiers — they identify the
+  # project to Identity Toolkit + secure-token endpoints; security is via
+  # Firebase Auth + Security Rules, not via keeping the key hidden. The
+  # values below are Sketchbook's dev + prod Web API keys, embedded in
+  # FirebaseConfig.kt by design (see the data-object KDoc + the runbook).
+  # Allowlisting the exact values rather than path-allowlisting
+  # FirebaseConfig.kt so a REAL secret accidentally pasted into the same
+  # file would still trip gitleaks.
+  '''AIzaSyB132N_cFwVnLJEff3qoMeYqEoQUNtdIR8''',
+  '''AIzaSyAKqe8qY63pS9UJJAmm908ik2vkm3ZCBjA''',
 ]
 
 # Identifiers that LOOK secret but are public (project IDs, bucket names,
 # SA emails). These appear in commit messages, docs, and code.
 stopwords = [
   "sketchbook-jtf-2026",
+  "sketchbook-jtf-prod-2026",
   "sketchbook-app@sketchbook-jtf-2026.iam.gserviceaccount.com",
+  # java.util.prefs Preferences storage-key constants in
+  # PreferencesSettingsRepository.kt. The strings have no entropy + no
+  # relationship to any real secret material; the high entropy in the
+  # generic-api-key rule is a false positive on these versioned key names.
+  "self_contained_uuids_v1",
+  "cloud_credential_json",
 ]

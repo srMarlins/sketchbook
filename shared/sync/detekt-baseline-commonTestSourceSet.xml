@@ -2,19 +2,7 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ArgumentListWrapping:FakeCloudBackend.kt:FakeCloudBackend$(8, '0')</ID>
-    <ID>ArgumentListWrapping:SnapshotPipelineTest.kt:SnapshotPipelineTest$("x" to FakeWorkingTree.FileBlob(bytes, now))</ID>
-    <ID>ArgumentListWrapping:SnapshotPipelineTest.kt:SnapshotPipelineTest$("x")</ID>
-    <ID>ArgumentListWrapping:SnapshotPipelineTest.kt:SnapshotPipelineTest$(bytes, now)</ID>
-    <ID>ArgumentListWrapping:SnapshotPipelineTest.kt:SnapshotPipelineTest$(hash, FakeWorkingTree(mapOf("x" to FakeWorkingTree.FileBlob(bytes, now))).read("x"), bytes.size.toLong())</ID>
-    <ID>ArgumentListWrapping:SnapshotPipelineTest.kt:SnapshotPipelineTest$(mapOf("x" to FakeWorkingTree.FileBlob(bytes, now)))</ID>
-    <ID>ClassSignature:FakeWorkingTree.kt:FakeWorkingTree : WorkingTree</ID>
-    <ID>FunctionSignature:ForceSnapshotUseCaseTest.kt:FakeForceSnapshotPipeline$override suspend fun recordForcedNamed: Result&lt;SnapshotRev&gt;</ID>
-    <ID>FunctionSignature:PullPollerTest.kt:PullPollerTest.RecordingSnapshotRepository$override suspend fun recordSnapshot: Result&lt;Unit&gt;</ID>
-    <ID>FunctionSignature:PullPollerTest.kt:PullPollerTest.RecordingSnapshotRepository$override suspend fun setSnapshotLabel: Result&lt;com.sketchbook.repo.JournalEntry&gt;</ID>
-    <ID>MaxLineLength:PullPollerTest.kt:PullPollerTest.RecordingSnapshotRepository$override suspend</ID>
-    <ID>NoUnusedImports:PullPollerTest.kt:com.sketchbook.sync.PullPollerTest.kt</ID>
-    <ID>ParameterListWrapping:PullPollerTest.kt:PullPollerTest.RecordingSnapshotRepository$(snapshot: Snapshot, manifestPath: String, manifestHash: String)</ID>
-    <ID>ParameterListWrapping:PullPollerTest.kt:PullPollerTest.RecordingSnapshotRepository$(uuid: ProjectUuid, rev: SnapshotRev, label: String?)</ID>
+    <ID>ThrowsCount:FakeCloudBackend.kt:FakeCloudBackend$override suspend fun readManifest: Manifest</ID>
+    <ID>TooGenericExceptionThrown:SnapshotPipelineTest.kt:FlakyUpdateDocStore$throw RuntimeException("synthetic transient failure")</ID>
   </CurrentIssues>
 </SmellBaseline>

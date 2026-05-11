@@ -20,8 +20,6 @@ interface SettingsRepository {
 
     suspend fun removeRoot(root: LibraryRoot): Result<Unit>
 
-    suspend fun setCloudBucket(bucket: String?): Result<Unit>
-
     suspend fun setSelfContained(
         uuid: ProjectUuid,
         value: Boolean,
@@ -64,8 +62,6 @@ data class Settings(
     val libraryRoots: List<LibraryRoot>,
     val selfContainedProjects: Set<ProjectUuid>,
     val cacheSettings: BlobCacheSettings = BlobCacheSettings.Default,
-    /** GCS bucket name for uploads. Null when unconfigured. */
-    val cloudBucket: String? = null,
     /** Wall-clock instant the user finished onboarding (or skipped to defaults). Null until then. */
     val firstRunCompletedAt: kotlin.time.Instant? = null,
     /** Sticky flags for soft re-prompt banners on Home after onboarding completes. */

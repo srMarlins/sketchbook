@@ -2,48 +2,46 @@ package com.sketchbook.desktop
 
 import com.sketchbook.auth.AuthSession
 import com.sketchbook.auth.AuthState
-import com.sketchbook.cloud.DirectGcsBackend
+import com.sketchbook.auth.firebase.FirebaseConfig
+import com.sketchbook.cloud.FirebaseBlobStore
 import com.sketchbook.core.AppScope
-import com.sketchbook.desktop.auth.OAuthCloudCredentials
-import com.sketchbook.repo.SettingsRepository
+import com.sketchbook.core.UserId
+import com.sketchbook.desktop.auth.FirebaseCloudCredentials
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * Owns the per-user [UserGraph] and rebuilds it on auth/bucket changes. Lives in `AppScope`
+ * Owns the per-user [UserGraph] and rebuilds it on auth state changes. Lives in `AppScope`
  * because the holder itself is application-lifetime; the graph it exposes is `null` whenever
- * the user is signed out OR no `cloudBucket` is configured.
+ * the user is signed out.
  *
- * **Pivot semantics.** `combine`s [AuthSession.state] with `Settings.cloudBucket`. On
- * `(SignedIn, non-blank bucket)`: builds a fresh [UserGraph] with a [DirectGcsBackend] keyed on
- * the signed-in user's id and the configured bucket. On any other state: emits `null`. The
- * previous backend's HTTP-client connections are not migrated — in-flight uploads finish on the
- * old instance; the new graph picks up state from the catalog.
+ * **Pivot semantics.** Observes [AuthSession.state]. On `SignedIn`: builds a fresh
+ * [UserGraph] with a [FirebaseBlobStore] pointed at the Firebase-managed bucket from
+ * [FirebaseConfig.active] and keyed on the signed-in Firebase UID. On `SignedOut`: emits
+ * `null`. In-flight uploads on the previous backend finish on the old instance; the new
+ * graph picks up state from the catalog.
  *
- * **Coexists with [com.sketchbook.desktop.repo.SwappableSyncQueue].** The sync queue still owns
- * its own `DirectGcsBackend` for now; this holder is the new canonical owner of cloud-backend
- * lifetime. A follow-up PR migrates the sync queue to read from this holder.
+ * **Coexists with [com.sketchbook.desktop.repo.SwappableSyncQueue].** The sync queue still
+ * owns its own [FirebaseBlobStore] for now; this holder is the canonical owner of cloud-
+ * backend lifetime. A follow-up PR migrates the sync queue to read from this holder.
  *
- * **Shared [HttpClient].** The holder uses the application-scoped `HttpClient` from the graph
- * (one CIO connection pool app-wide). The same client backs OAuth, GCS, and any other network
- * service; only the thin [DirectGcsBackend] wrapper is rebuilt per `(userId, bucket)` swap.
- *
- * See `docs/architecture/dependency-injection.md` §1.1.
+ * **Shared [HttpClient].** The holder uses the application-scoped `HttpClient` from the
+ * graph (one CIO connection pool app-wide). The same client backs OAuth, GCS, and any other
+ * network service; only the thin [FirebaseBlobStore] wrapper is rebuilt per UID swap.
  */
 @SingleIn(AppScope::class)
 @Inject
 class UserGraphHolder(
     private val authSession: AuthSession,
-    private val settings: SettingsRepository,
     private val httpClient: HttpClient,
+    private val firebaseConfig: FirebaseConfig,
     private val scope: CoroutineScope,
 ) {
     private val _userGraph = MutableStateFlow<UserGraph?>(null)
@@ -51,25 +49,24 @@ class UserGraphHolder(
 
     init {
         scope.launch {
-            combine(
-                authSession.state,
-                settings.observe().map { it.cloudBucket }.distinctUntilChanged(),
-            ) { auth, bucket -> auth to bucket }
-                .collect { (auth, bucket) ->
+            authSession.state
+                .map { (it as? AuthState.SignedIn)?.userId }
+                .distinctUntilChanged()
+                .collect { userId ->
                     _userGraph.value =
-                        if (auth is AuthState.SignedIn && !bucket.isNullOrBlank()) {
-                            val backend =
-                                DirectGcsBackend(
-                                    http = httpClient,
-                                    credentials = OAuthCloudCredentials(authSession),
-                                    bucket = bucket,
-                                    userId = auth.userId,
-                                )
-                            UserGraph(cloudBackend = backend)
-                        } else {
-                            null
-                        }
+                        if (userId != null) buildGraph(userId) else null
                 }
         }
     }
+
+    private fun buildGraph(userId: UserId): UserGraph =
+        UserGraph(
+            cloudBackend =
+                FirebaseBlobStore(
+                    http = httpClient,
+                    credentials = FirebaseCloudCredentials(authSession),
+                    bucket = firebaseConfig.storageBucket,
+                    userId = userId,
+                ),
+        )
 }

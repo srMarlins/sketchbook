@@ -4,7 +4,6 @@
   <CurrentIssues>
     <ID>CyclomaticComplexMethod:RootContent.kt:@Composable fun RootContent</ID>
     <ID>CyclomaticComplexMethod:RootContent.kt:@Composable private fun DetailPanelRoutePane</ID>
-    <ID>EmptyFunctionBlock:LeasedLockRepository.kt:NullCloudBackend${}</ID>
     <ID>FunctionNaming:HealthChip.kt:@Composable fun HealthChip</ID>
     <ID>FunctionNaming:HealthChip.kt:@Composable private fun BreakdownRow</ID>
     <ID>FunctionNaming:HealthChip.kt:@Composable private fun HealthBreakdownPopup</ID>
@@ -55,6 +54,9 @@
     <ID>LongMethod:RootContent.kt:@Composable private fun TagsEditorRow</ID>
     <ID>LoopWithTooManyJumpStatements:DesktopAppGraph.kt:while</ID>
     <ID>MagicNumber:DesktopAppGraph.kt:30_000</ID>
+    <ID>MagicNumber:DesktopAppGraph.kt:DesktopAppGraph$30_000</ID>
+    <ID>MagicNumber:DesktopAppGraph.kt:DesktopAppGraph$5_000</ID>
+    <ID>MagicNumber:DesktopAppGraph.kt:DesktopAppGraph$60_000</ID>
     <ID>MagicNumber:GcsSyncQueue.kt:GcsSyncQueue$60_000L</ID>
     <ID>MagicNumber:InMemorySyncQueue.kt:InMemorySyncQueue$4</ID>
     <ID>MagicNumber:InMemorySyncQueue.kt:InMemorySyncQueue$450</ID>
@@ -75,8 +77,10 @@
     <ID>ModifierClickableOrder:RootContent.kt:clickable(onClick = onClick)</ID>
     <ID>ModifierMissing:RootContent.kt:@Composable fun RootContent</ID>
     <ID>ModifierWithoutDefault:InboxScreen.kt:modifier: Modifier</ID>
+    <ID>PrintStackTrace:SwappableSyncQueue.kt:SwappableSyncQueue$failure</ID>
+    <ID>ReturnCount:LeasedLockRepository.kt:LeasedLockRepository$override suspend fun forceTake: Result&lt;Unit&gt;</ID>
+    <ID>TooManyFunctions:DesktopAppGraph.kt:DesktopAppGraph : ViewModelGraph</ID>
     <ID>UnusedParameter:InboxScreen.kt:initialTab: InboxTab</ID>
-    <ID>UnusedParameter:LeasedLockRepository.kt:LeasedLockRepository$uuid: ProjectUuid</ID>
     <ID>ViewModelForwarding:InboxScreen.kt:DetailPaneSwitch( detail = detail, proposalsVm = proposalsVm, needsAttentionVm = needsAttentionVm, journalVm = journalVm, onDismiss = onDismiss, )</ID>
     <ID>ViewModelForwarding:InboxScreen.kt:JournalDetailPane( entry = detail.entry, projectName = detail.projectName, vm = journalVm, onDismiss = onDismiss, )</ID>
     <ID>ViewModelForwarding:InboxScreen.kt:NeedsAttentionDetailPane( target = detail.target, vm = needsAttentionVm, onDismiss = onDismiss, )</ID>

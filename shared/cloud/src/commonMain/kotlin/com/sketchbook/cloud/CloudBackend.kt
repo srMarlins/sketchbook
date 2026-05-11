@@ -7,7 +7,7 @@ import com.sketchbook.core.SnapshotRev
 import kotlinx.io.RawSource
 
 /**
- * Provider-agnostic cloud client. v1 ships [DirectGcsBackend] (jvmMain) against Google Cloud
+ * Provider-agnostic cloud client. v1 ships [FirebaseBlobStore] (jvmMain) against Google Cloud
  * Storage; v1.2 may add an R2/B2 backend at credit expiry. The interface only speaks domain
  * types and provider-neutral [Generation] tokens.
  */
@@ -36,7 +36,21 @@ interface CloudBackend {
         scope: BlobScope = BlobScope.Shared,
     ): RawSource
 
-    /** Read a single manifest by `(uuid, rev)`. */
+    /**
+     * Read a manifest whose Storage path is already known (returned by [listManifests]).
+     *
+     * **Prefer this over the `(uuid, rev)` overload** whenever you have a [ManifestRef] in
+     * hand. The ref carries the exact object name; the legacy overload internally calls
+     * [listManifests] to resolve the path, which is O(N) per call and quadratic when looping
+     * over a range (e.g. `PullPoller` catch-up).
+     */
+    suspend fun readManifest(ref: ManifestRef): Manifest
+
+    /**
+     * Read a single manifest by `(uuid, rev)`. **Legacy** — resolves the Storage path by
+     * calling [listManifests] internally. Use [readManifest] with a [ManifestRef] when you
+     * already have one (e.g. straight off a `listManifests` result).
+     */
     suspend fun readManifest(
         uuid: ProjectUuid,
         rev: SnapshotRev,
@@ -63,22 +77,8 @@ interface CloudBackend {
         manifest: Manifest,
     ): Result<Generation>
 
-    /** CAS-acquire the lease lock for a project. */
-    suspend fun acquireLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-    ): LeaseAcquireResult
-
-    /** Heartbeat-refresh an existing lease lock; fails if our generation no longer matches. */
-    suspend fun refreshLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-        expected: Generation,
-    ): LeaseRefreshResult
-
-    /** Release our lease lock. */
-    suspend fun releaseLock(
-        uuid: ProjectUuid,
-        expected: Generation,
-    )
+    // NOTE (Phase 3, 2026-05-10): the lease-lock methods (acquireLock / refreshLock /
+    // releaseLock) moved from this interface to com.sketchbook.cloud.metadata.MetadataStore
+    // as Firestore-backed `/users/{uid}/locks/{treeId}` docs. See the Phase 3 entry findings
+    // in docs/plans/2026-05-08-firebase-migration-design.md.
 }

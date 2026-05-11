@@ -51,17 +51,6 @@ class PreferencesSettingsRepositoryTest {
         }
 
     @Test
-    fun roundtripsBucket() =
-        runTest {
-            val first = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
-            first.setCloudBucket("sketchbook-prod").getOrThrow()
-
-            val second = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
-            val s = second.observe().first()
-            assertEquals("sketchbook-prod", s.cloudBucket)
-        }
-
-    @Test
     fun clearsLegacyServiceAccountJsonOnInit() =
         runTest {
             // Seed the legacy key directly to mimic an upgrading user.

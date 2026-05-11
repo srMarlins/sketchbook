@@ -1,0 +1,11 @@
+node_modules/
+*.log
+.firebase/
+
+# Service-account credentials — never commit. Backstops security-commitment #5 until a
+# pre-commit hook lands in CI to flag misnamed keys.
+service-account-*.json
+serviceAccountKey.json
+*.pem
+.env
+.env.*

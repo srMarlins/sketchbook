@@ -1,10 +1,11 @@
 package com.sketchbook.desktop.repo
 
 import com.sketchbook.catalog.SyncStateStore
-import com.sketchbook.cloud.CloudBackend
-import com.sketchbook.cloud.LeaseAcquireResult
-import com.sketchbook.cloud.LeaseLock
-import com.sketchbook.cloud.LeaseRefreshResult
+import com.sketchbook.cloud.metadata.AcquireResult
+import com.sketchbook.cloud.metadata.DocPath
+import com.sketchbook.cloud.metadata.LockDoc
+import com.sketchbook.cloud.metadata.MetadataStore
+import com.sketchbook.cloud.metadata.RefreshResult
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.ActionRecord
@@ -12,117 +13,224 @@ import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.LockStatus
-import com.sketchbook.sync.LeaseLockState
-import com.sketchbook.sync.LockState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
- * Real `LockRepository` impl that wraps [LeaseLockState] per uuid. Heartbeats every 60s while
- * we hold a lease; on `Lost` (CAS-stale), the repository's [observe] flow reports `Stale` so the
- * UI can prompt for force-take.
+ * Firestore-backed [LockRepository] (Phase 3). Replaces the previous CloudBackend-backed
+ * implementation that wrote `<user>/locks/<uuid>.lock` GCS objects — leases now live at
+ * `/users/{uid}/locks/{treeId}` Firestore docs as [LockDoc].
  *
- * Replaces [InMemoryLockRepository] in production. The in-memory variant is kept around for
- * unit tests in the feature modules that don't want to spin up a CloudBackend.
+ * One per-project listener subscription drives the UI flow ([observe]); transitions go through
+ * [MetadataStore.acquireLock] / [refreshLock] / [releaseLock] which atomic-test-and-set against
+ * the same doc. Heartbeats refresh on a 5-minute cadence while we hold a lease; on takeover
+ * (refreshLock returning false) we surface the new holder via the listener path naturally.
  *
- * **Cloud dep is a function so creds-not-yet-set isn't a hard error.** The desktop graph builds
- * this once and hands it a `() -> CloudBackend?` derived from `SwappableSyncQueue.currentCloud`;
- * acquire / heartbeat short-circuit when the cloud is null (status drops to Free).
+ * **Cloud is a `() -> ...` callback so creds-not-yet-set isn't fatal.** The desktop graph
+ * builds this once at app start; acquire / heartbeat short-circuit when the metadata store
+ * isn't wired up yet (which currently is "never" once Phase 3 lands, but the same shape lets
+ * `signed-out → no listeners` continue to work).
+ *
+ * @param userIdFlow StateFlow of the current Firebase UID, or `null` when signed-out. The repo
+ *   uses `.value` for synchronous path building and observes transitions to tear down per-uuid
+ *   listener/heartbeat jobs whenever the UID changes (sign-out, account switch). Without the
+ *   teardown, cached entries in [byUuid] would keep streaming the previous user's lock docs
+ *   under the previous user's Firestore path while new acquires use the new UID — desynchronizing
+ *   the UI flow from the holder of record.
  */
 class LeasedLockRepository(
-    private val cloud: () -> CloudBackend?,
+    private val metadataStore: () -> MetadataStore?,
+    private val userIdFlow: StateFlow<String?>,
     private val syncStateStore: SyncStateStore,
     private val hostId: String,
     private val hostName: String,
     private val scope: CoroutineScope,
     private val journal: JournalRepository? = null,
     private val clock: Clock = Clock.System,
+    private val leaseTtl: Duration = 15.minutes,
+    private val heartbeatInterval: Duration = 5.minutes,
 ) : LockRepository {
+    init {
+        // UID transitions wipe state. `drop(1)` skips the replayed current value so the initial
+        // UID doesn't fire resetState() (which would race the test body / startup acquires);
+        // StateFlow already de-duplicates by equality, so subsequent emissions are real changes.
+        scope.launch {
+            userIdFlow.drop(1).collectLatest { _ ->
+                resetState()
+            }
+        }
+    }
+
     private data class PerUuid(
-        val state: LeaseLockState,
-        val flow: MutableStateFlow<LockStatus>,
+        val status: MutableStateFlow<LockStatus> = MutableStateFlow(LockStatus.Free),
+        var listenerJob: Job? = null,
         var heartbeatJob: Job? = null,
     )
 
     private val byUuid = mutableMapOf<ProjectUuid, PerUuid>()
 
     private fun get(uuid: ProjectUuid): PerUuid =
-        byUuid.getOrPut(uuid) {
-            val backend = cloud() ?: NullCloudBackend
-            PerUuid(
-                state =
-                    LeaseLockState(
-                        cloud = backend,
-                        uuid = uuid,
-                        hostId = hostId,
-                        hostName = hostName,
-                        clock = clock,
-                    ),
-                flow = MutableStateFlow<LockStatus>(LockStatus.Free),
-            )
+        synchronized(byUuid) {
+            byUuid.getOrPut(uuid) {
+                val per = PerUuid()
+                startListener(uuid, per)
+                per
+            }
         }
 
-    override fun observe(uuid: ProjectUuid): Flow<LockStatus> = get(uuid).flow.asStateFlow()
+    private fun resetState() {
+        val drained =
+            synchronized(byUuid) {
+                val copy = byUuid.values.toList()
+                byUuid.clear()
+                copy
+            }
+        for (per in drained) {
+            per.listenerJob?.cancel()
+            per.heartbeatJob?.cancel()
+            per.status.value = LockStatus.Free
+        }
+    }
+
+    override fun observe(uuid: ProjectUuid): Flow<LockStatus> = get(uuid).status.asStateFlow()
 
     override suspend fun forceTake(uuid: ProjectUuid): Result<Unit> {
-        val backend = cloud() ?: return Result.failure(IllegalStateException("cloud not configured"))
+        val store = metadataStore() ?: return Result.failure(IllegalStateException("cloud not configured"))
+        val uid = userIdFlow.value ?: return Result.failure(IllegalStateException("signed out"))
         val per = get(uuid)
-        // Try to acquire; CAS uses the existing lock's generation if present.
-        val lock =
-            LeaseLock(
-                ownerHostId = hostId,
-                ownerHostName = hostName,
-                acquiredAt = clock.now(),
-                expiresAt = clock.now() + 15.minutes,
-            )
-        var priorOwnerHostName: String? = null
-        var priorExpiresAtMs: Long? = null
-        val outcome =
-            runCatching {
-                // Best-effort: if a lock already exists, try refresh-overwrite via CAS.
-                val acquireResult = backend.acquireLock(uuid, lock)
-                when (acquireResult) {
-                    is LeaseAcquireResult.Acquired -> {
-                        per.flow.value = LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
-                        startHeartbeat(uuid, per)
-                    }
+        val path = DocPath.lock(uid, uuid.value)
 
-                    is LeaseAcquireResult.Held -> {
-                        priorOwnerHostName = acquireResult.held.ownerHostName
-                        priorExpiresAtMs = acquireResult.held.expiresAt.toEpochMilliseconds()
-                        // Force-take: overwrite via refresh CAS targeting the held generation.
-                        val r = backend.refreshLock(uuid, lock, acquireResult.generation)
-                        when (r) {
-                            is LeaseRefreshResult.Refreshed -> {
-                                per.flow.value = LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
-                                startHeartbeat(uuid, per)
-                            }
+        // Capture the prior holder (if any) for journal context BEFORE we overwrite.
+        val prior = store.getDoc(path, LockDoc.serializer())
+        val priorOwnerName = prior?.holderName?.takeIf { it.isNotBlank() } ?: prior?.holder
+        val priorExpiresAtMs = prior?.expiresAt?.toEpochMilliseconds()
 
-                            LeaseRefreshResult.Stale -> {
-                                per.flow.value =
-                                    LockStatus.Stale(
-                                        ownerHostName = acquireResult.held.ownerHostName,
-                                        expiresAt = acquireResult.held.expiresAt,
-                                    )
-                                throw IllegalStateException("force-take race: lock changed under us")
+        // forceTake bypasses the "live lease blocks acquire" check by deleting the old doc
+        // first. Two writes, not atomic — between them another host could acquire. That's
+        // acceptable for force-take semantics: the user already accepted "I am racing the
+        // current holder"; whoever lands their write last wins.
+        runCatching { store.releaseLockAsAnyone(path) }
+        when (
+            val acquired =
+                store.acquireLock(
+                    path = path,
+                    holder = hostId,
+                    ttl = leaseTtl,
+                    holderName = hostName,
+                )
+        ) {
+            AcquireResult.Acquired -> {
+                Unit
+            }
+
+            is AcquireResult.HeldByOther -> {
+                return Result.failure(
+                    IllegalStateException("force-take race: another host re-acquired the lock"),
+                )
+            }
+
+            is AcquireResult.Failed -> {
+                return Result.failure(acquired.cause)
+            }
+        }
+        startHeartbeat(uuid, per)
+        recordForceTake(uuid, priorOwnerName, priorExpiresAtMs)
+        return Result.success(Unit)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun startListener(
+        uuid: ProjectUuid,
+        per: PerUuid,
+    ) {
+        per.listenerJob?.cancel()
+        val store = metadataStore() ?: return
+        val uid = userIdFlow.value ?: return
+        val path = DocPath.lock(uid, uuid.value)
+        per.listenerJob =
+            scope.launch {
+                // Deadline-driven re-derivation (H5). A lease that quietly expires past its
+                // expiresAt should flip HeldByOther → Stale in the UI, but the Firestore
+                // listener won't re-emit until the doc is touched. Compute the exact delay to
+                // the expiry boundary and re-emit then — one wake-up per lease instead of
+                // 30 ticks/15min while idle. `flatMapLatest` cancels the pending wake-up if a
+                // new lock-doc emission arrives before the deadline.
+                store
+                    .observeDoc(path, LockDoc.serializer())
+                    .flatMapLatest { lock ->
+                        flow {
+                            emit(computeStatus(lock, clock.now()))
+                            val expiresAt = lock?.expiresAt ?: return@flow
+                            val now = clock.now()
+                            if (now < expiresAt) {
+                                kotlinx.coroutines.delay(expiresAt - now)
+                                emit(computeStatus(lock, clock.now()))
                             }
+                        }
+                    }.collect { status -> per.status.value = status }
+            }
+    }
+
+    private fun computeStatus(
+        lock: LockDoc?,
+        now: Instant,
+    ): LockStatus =
+        when {
+            lock == null -> LockStatus.Free
+            lock.holder == hostId -> LockStatus.Ours(lock.acquiredAt, lock.expiresAt)
+            lock.expiresAt <= now -> LockStatus.Stale(lock.holderLabel(), lock.expiresAt)
+            else -> LockStatus.HeldByOther(lock.holderLabel(), lock.acquiredAt, lock.expiresAt)
+        }
+
+    private fun startHeartbeat(
+        uuid: ProjectUuid,
+        per: PerUuid,
+    ) {
+        per.heartbeatJob?.cancel()
+        per.heartbeatJob =
+            scope.launch {
+                val store = metadataStore() ?: return@launch
+                val uid = userIdFlow.value ?: return@launch
+                val path = DocPath.lock(uid, uuid.value)
+                while (true) {
+                    delay(heartbeatInterval)
+                    // Only Lost is terminal. Operational failures (Failed) retry on the next
+                    // cadence — the previous TTL is still in force so a transient network blip
+                    // doesn't drop the lease (N6).
+                    when (val r = store.refreshLock(path, hostId, leaseTtl)) {
+                        RefreshResult.Refreshed -> {
+                            Unit
+                        }
+
+                        RefreshResult.Lost -> {
+                            // Listener will flip the UI from Ours → HeldByOther on the next
+                            // emission. Stop heartbeating.
+                            return@launch
+                        }
+
+                        is RefreshResult.Failed -> {
+                            System.err.println(
+                                "[LeasedLockRepository] heartbeat refresh failed for uuid=${uuid.value} (will retry): ${r.cause}",
+                            )
                         }
                     }
                 }
             }
-        if (outcome.isSuccess) {
-            recordForceTake(uuid, priorOwnerHostName, priorExpiresAtMs)
-        }
-        return outcome
     }
 
     private suspend fun recordForceTake(
@@ -145,99 +253,15 @@ class LeasedLockRepository(
         )
     }
 
-    private fun startHeartbeat(
-        uuid: ProjectUuid,
-        per: PerUuid,
-    ) {
-        per.heartbeatJob?.cancel()
-        per.heartbeatJob =
-            scope.launch {
-                // The actual refresh CAS happens inside LeaseLockState — but we delegate to it for
-                // the new design via acquire() which spawns its own heartbeat. To avoid double-
-                // heartbeating, we DON'T launch a parallel heartbeat here when LeaseLockState is
-                // already running one. Today this loop only mirrors LockState → LockStatus so the
-                // UI sees Lost as Stale.
-                per.state.state.collect { st ->
-                    per.flow.value =
-                        when (st) {
-                            LockState.Idle -> {
-                                LockStatus.Free
-                            }
-
-                            is LockState.Owned -> {
-                                LockStatus.Ours(st.lock.acquiredAt, st.lock.expiresAt)
-                            }
-
-                            is LockState.HeldByOther -> {
-                                // If the lease has expired, surface as Stale so the UI offers force-take.
-                                val now = clock.now()
-                                if (st.held.expiresAt <= now) {
-                                    LockStatus.Stale(st.held.ownerHostName, st.held.expiresAt)
-                                } else {
-                                    LockStatus.HeldByOther(st.held.ownerHostName, st.held.acquiredAt, st.held.expiresAt)
-                                }
-                            }
-
-                            LockState.Lost -> {
-                                LockStatus.Free
-                            }
-                        }
-                }
-            }
-    }
+    private fun LockDoc.holderLabel(): String = holderName.takeIf { it.isNotBlank() } ?: holder
 }
 
 /**
- * Sentinel [CloudBackend] used when the desktop has no cloud creds yet. All ops fail; the
- * [LeasedLockRepository] short-circuits before calling these in normal paths.
+ * Internal helper: best-effort delete of the lock doc regardless of holder, used only by the
+ * `forceTake` path. Not on [MetadataStore] because it deliberately violates the "only the
+ * holder can release" contract — surfacing it as a member would invite misuse from non-
+ * force-take call sites.
  */
-private object NullCloudBackend : CloudBackend {
-    override suspend fun headBlob(
-        hash: com.sketchbook.core.BlobHash,
-        scope: com.sketchbook.cloud.BlobScope,
-    ) = false
-
-    override suspend fun putBlob(
-        hash: com.sketchbook.core.BlobHash,
-        source: kotlinx.io.RawSource,
-        size: Long,
-        scope: com.sketchbook.cloud.BlobScope,
-    ) = error("cloud not configured")
-
-    override suspend fun getBlob(
-        hash: com.sketchbook.core.BlobHash,
-        scope: com.sketchbook.cloud.BlobScope,
-    ) = error("cloud not configured")
-
-    override suspend fun readManifest(
-        uuid: ProjectUuid,
-        rev: com.sketchbook.core.SnapshotRev,
-    ) = error("cloud not configured")
-
-    override suspend fun listManifests(
-        uuid: ProjectUuid,
-        sinceRev: com.sketchbook.core.SnapshotRev?,
-    ) = emptyList<com.sketchbook.cloud.ManifestRef>()
-
-    override suspend fun appendManifestHead(
-        uuid: ProjectUuid,
-        expectedHead: com.sketchbook.cloud.Generation?,
-        manifest: com.sketchbook.core.Manifest,
-    ) = Result.failure<com.sketchbook.cloud.Generation>(IllegalStateException("cloud not configured"))
-
-    override suspend fun acquireLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-    ) = LeaseAcquireResult.Acquired(com.sketchbook.cloud.Generation("0"))
-
-    override suspend fun refreshLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-        expected: com.sketchbook.cloud.Generation,
-    ) = LeaseRefreshResult.Stale
-
-    override suspend fun releaseLock(
-        uuid: ProjectUuid,
-        expected: com.sketchbook.cloud.Generation,
-    ) {}
+private suspend fun MetadataStore.releaseLockAsAnyone(path: DocPath) {
+    runCatching { deleteDoc(path) }
 }

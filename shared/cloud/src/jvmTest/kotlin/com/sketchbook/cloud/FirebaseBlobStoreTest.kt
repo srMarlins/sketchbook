@@ -20,39 +20,22 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.Buffer
-import java.security.KeyPairGenerator
-import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Instant
 
-class DirectGcsBackendTest {
+class FirebaseBlobStoreTest {
     private fun makeBackend(
         handle: suspend MockRequestHandleScope.(HttpRequestData) -> io.ktor.client.request.HttpResponseData,
-    ): DirectGcsBackend {
-        // Stub auth so tests don't generate real RSA keys for every assertion.
-        val key =
-            ServiceAccountKey(
-                type = "service_account",
-                projectId = "sk-test",
-                privateKeyId = "kid",
-                privateKeyPem = newRsaPem(),
-                clientEmail = "sa@sk-test.iam.gserviceaccount.com",
-            )
-        val tokenEngine =
-            MockEngine {
-                respond(
-                    """{"access_token":"ya29.fake","expires_in":3600,"token_type":"Bearer"}""",
-                    HttpStatusCode.OK,
-                    headersOf(HttpHeaders.ContentType, "application/json"),
-                )
-            }
-        val credentials: CloudCredentials = GcsAuth(key, HttpClient(tokenEngine))
-
+    ): FirebaseBlobStore {
+        // Static bearer — no JWT signing, no token-exchange mock. Production uses the Firebase
+        // ID token via FirebaseCloudCredentials; tests only need a stable string the backend
+        // sees in the Authorization header.
+        val credentials = CloudCredentials { "ya29.fake" }
         val backendEngine = MockEngine { request -> handle(request) }
-        return DirectGcsBackend(
+        return FirebaseBlobStore(
             http = HttpClient(backendEngine),
             credentials = credentials,
             bucket = "sk-bucket",
@@ -166,46 +149,8 @@ class DirectGcsBackendTest {
             assertEquals(Generation("100"), result.getOrNull())
         }
 
-    @Test
-    fun acquireLockHandlesHeldCase() =
-        runTest {
-            val uuid = ProjectUuid("01HZQX5N3M8F9G2K7B1A6Y4WCE")
-            val existing =
-                LeaseLock(
-                    ownerHostId = "macstudio",
-                    ownerHostName = "MacStudio",
-                    acquiredAt = Instant.parse("2026-05-05T12:00:00Z"),
-                    expiresAt = Instant.parse("2026-05-05T12:05:00Z"),
-                )
-            var call = 0
-            val backend =
-                makeBackend { request ->
-                    call++
-                    when (call) {
-                        1 -> {
-                            respond("", HttpStatusCode.PreconditionFailed)
-                        }
-
-                        // initial CAS write
-                        2 -> {
-                            respond(
-                                kotlinx.serialization.json.Json
-                                    .encodeToString(LeaseLock.serializer(), existing),
-                                HttpStatusCode.OK,
-                                headersOf("x-goog-generation", "55"),
-                            )
-                        }
-
-                        else -> {
-                            fail("unexpected call $call")
-                        }
-                    }
-                }
-            val result = backend.acquireLock(uuid, existing.copy(ownerHostId = "windowspc"))
-            assertTrue(result is LeaseAcquireResult.Held)
-            assertEquals(Generation("55"), result.generation)
-            assertEquals("macstudio", result.held.ownerHostId)
-        }
+    // FirebaseBlobStore.acquireLock (and the matching refresh/release) removed in Phase 3 —
+    // leases live in MetadataStore (see FakeMetadataStoreTest / FirestoreMetadataStore).
 
     private fun manifestFixture(): Manifest =
         Manifest(
@@ -228,14 +173,6 @@ class DirectGcsBackendTest {
                 ),
             stats = ManifestStats(fileCount = 1, totalBytes = 1024, newBytes = 1024),
         )
-
-    private fun newRsaPem(): String {
-        val gen = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }
-        val pair = gen.generateKeyPair()
-        return "-----BEGIN PRIVATE KEY-----\n" +
-            Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(pair.private.encoded) +
-            "\n-----END PRIVATE KEY-----\n"
-    }
 
     private fun byteArrayRawSource(bytes: ByteArray): kotlinx.io.RawSource =
         object : kotlinx.io.RawSource {

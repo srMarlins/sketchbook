@@ -2,19 +2,20 @@ package com.sketchbook.desktop.repo
 
 import com.sketchbook.auth.AuthSession
 import com.sketchbook.auth.AuthState
+import com.sketchbook.auth.firebase.FirebaseConfig
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.cloud.CloudBackend
-import com.sketchbook.cloud.DirectGcsBackend
+import com.sketchbook.cloud.FirebaseBlobStore
+import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.UserId
-import com.sketchbook.desktop.auth.OAuthCloudCredentials
+import com.sketchbook.desktop.auth.FirebaseCloudCredentials
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProjectSyncState
-import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
@@ -27,7 +28,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -36,18 +36,18 @@ import kotlinx.coroutines.launch
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * Façade over the actual sync queue impl. The cloud backend is only constructible once the user
- * has signed in via OAuth AND a bucket is configured in [SettingsRepository]; until then, calls
- * route through [InMemorySyncQueue] so the UI's per-row pip and sidebar caption have something to
- * bind to.
+ * Façade over the actual sync queue impl. The cloud backend is only constructible once the
+ * user has signed in via Google; until then, calls route through [InMemorySyncQueue] so the
+ * UI's per-row pip and sidebar caption have something to bind to.
  *
- * Swap logic: a coroutine on the app scope `combine`s [AuthSession.state] with
- * [Settings.cloudBucket]. When both are usable (`SignedIn` + non-blank bucket), build a real
- * [GcsSyncQueue] wired with [OAuthCloudCredentials] and the real signed-in `userId`; otherwise
- * fall back to in-memory. Active uploads from the previous impl are not migrated — they finish on
- * the previous instance and the new instance picks up state from the catalog (`sync_state` rows).
+ * Swap logic: a coroutine on the app scope observes [AuthSession.state]. On `SignedIn`, build
+ * a real [GcsSyncQueue] wired with [FirebaseCloudCredentials] and the signed-in Firebase UID,
+ * pointing at [FirebaseConfig.active]'s storage bucket. On `SignedOut`, fall back to
+ * in-memory. Active uploads from the previous impl are not migrated — they finish on the
+ * previous instance and the new instance picks up state from the catalog (`sync_state` rows).
  *
  * **Thread-model.** The delegate is a [MutableStateFlow]; reads `flatMapLatest` over it so a
  * swap mid-observation transparently re-subscribes. UI snapshot accessors call through the
@@ -64,8 +64,10 @@ class SwappableSyncQueue(
     private val scope: CoroutineScope,
     private val hostId: String,
     private val hostName: String,
+    private val firebaseConfig: FirebaseConfig,
     private val journal: JournalRepository? = null,
     private val httpClient: HttpClient,
+    private val metadataStore: MetadataStore,
 ) : SyncQueue,
     ForceSnapshotPipeline {
     private val fallback = InMemorySyncQueue(projects = projects, scope = scope)
@@ -91,20 +93,18 @@ class SwappableSyncQueue(
 
     init {
         scope.launch {
-            // Re-build the queue when EITHER auth state OR bucket changes.
-            combine(
-                authSession.state,
-                settings.observe().map { it.cloudBucket }.distinctUntilChanged(),
-            ) { auth, bucket -> auth to bucket }
+            // Only rebuild on identity transitions — emissions that don't change UID are no-ops.
+            authSession.state
+                .map { (it as? AuthState.SignedIn)?.userId }
                 .distinctUntilChanged()
-                .collect { (auth, bucket) ->
+                .collect { userId ->
                     val previous = delegate.value
                     val next =
-                        if (auth is AuthState.SignedIn && !bucket.isNullOrBlank()) {
+                        if (userId != null) {
                             buildGcsQueue(
                                 authSession = authSession,
-                                userId = auth.userId,
-                                bucket = bucket,
+                                userId = userId,
+                                bucket = firebaseConfig.storageBucket,
                                 cacheSettings = settings.observe().first().cacheSettings,
                             )
                         } else {
@@ -130,10 +130,10 @@ class SwappableSyncQueue(
         bucket: String,
         cacheSettings: BlobCacheSettings,
     ): SyncQueue =
-        runCatching {
-            val credentials = OAuthCloudCredentials(authSession)
+        try {
+            val credentials = FirebaseCloudCredentials(authSession)
             val backend =
-                DirectGcsBackend(
+                FirebaseBlobStore(
                     http = httpClient,
                     credentials = credentials,
                     bucket = bucket,
@@ -142,6 +142,7 @@ class SwappableSyncQueue(
             val pipeline =
                 SnapshotPipeline(
                     cloud = backend,
+                    metadataStore = metadataStore,
                     ownerUserId = userId,
                     hostId = hostId,
                     hostName = hostName,
@@ -186,9 +187,14 @@ class SwappableSyncQueue(
                 scope = scope,
                 journal = journal,
             )
-        }.getOrElse {
-            // Bad creds or unsupported config — fall back to in-memory so the UI keeps rendering.
-            // The error surfaces via the next access-token request when a sync attempt actually runs.
+        } catch (c: CancellationException) {
+            throw c
+        } catch (failure: Throwable) {
+            // Bad creds or unsupported config — fall back to in-memory so the UI keeps
+            // rendering. Log the cause so the failure isn't silent; the next access-token
+            // request will also surface the underlying issue when a real sync attempt runs.
+            System.err.println("[SwappableSyncQueue] buildGcsQueue failed: $failure")
+            failure.printStackTrace(System.err)
             currentMaterializer = null
             _currentCloud.value = null
             fallback
@@ -217,7 +223,7 @@ class SwappableSyncQueue(
 
             else -> {
                 Result.failure(
-                    IllegalStateException("Cloud sync isn't configured — sign in and set a bucket in Settings first."),
+                    IllegalStateException("Cloud sync isn't configured — sign in first."),
                 )
             }
         }

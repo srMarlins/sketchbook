@@ -44,7 +44,6 @@ private fun sampleConfiguredState(): SettingsViewModel.State =
                     kind = ExternalKind.Splice,
                 ),
             ),
-        cloudBucket = null,
         auth = AuthState.SignedOut,
         selfContainedProjects = emptySet(),
         cacheSettings = BlobCacheSettings(maxSizeBytes = 20L * 1024 * 1024 * 1024, lruEnabled = true),
