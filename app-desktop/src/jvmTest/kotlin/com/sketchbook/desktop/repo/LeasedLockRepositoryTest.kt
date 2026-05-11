@@ -9,6 +9,7 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.LockStatus
 import com.sketchbook.repo.impl.InMemoryJournalRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.test.runTest
@@ -87,7 +88,7 @@ class LeasedLockRepositoryTest {
             val repo =
                 LeasedLockRepository(
                     metadataStore = { null },
-                    userId = { "test-user" },
+                    userIdFlow = MutableStateFlow("test-user"),
                     syncStateStore = store,
                     hostId = "host-a",
                     hostName = "DesktopA",
@@ -104,7 +105,7 @@ class LeasedLockRepositoryTest {
             val repo =
                 LeasedLockRepository(
                     metadataStore = { InMemoryMetadataStore() },
-                    userId = { null },
+                    userIdFlow = MutableStateFlow(null),
                     syncStateStore = store,
                     hostId = "host-a",
                     hostName = "DesktopA",
@@ -114,6 +115,39 @@ class LeasedLockRepositoryTest {
             assertTrue(r.isFailure)
         }
 
+    @Test
+    fun uidTransitionTearsDownPerUuidJobsAndResetsStatus() =
+        runTest {
+            val metadataStore = InMemoryMetadataStore()
+            val syncStore = SyncStateStore(CatalogDb.openInMemory().catalog)
+            val userIdFlow = MutableStateFlow<String?>("user-a")
+            val repo =
+                LeasedLockRepository(
+                    metadataStore = { metadataStore },
+                    userIdFlow = userIdFlow,
+                    syncStateStore = syncStore,
+                    hostId = "host-a",
+                    hostName = "DesktopA",
+                    scope = backgroundScope,
+                )
+
+            // Acquire as user-a — listener subscription + status flow are now bound to user-a's
+            // Firestore path.
+            assertTrue(repo.forceTake(uuid).isSuccess)
+            assertTrue(awaitOurs(repo) is LockStatus.Ours)
+
+            // Switch UIDs. The init-block observer should cancel the prior listener and clear
+            // the cache so the next observe(uuid) restarts a fresh listener against user-b's
+            // path — which has no doc — and emits Free.
+            userIdFlow.value = "user-b"
+            val nextStatus =
+                repo
+                    .observe(uuid)
+                    .firstOrNull { it is LockStatus.Free }
+                    ?: error("listener never re-emitted Free after UID change")
+            assertTrue(nextStatus is LockStatus.Free)
+        }
+
     private fun kotlinx.coroutines.test.TestScope.newRepo(
         metadataStore: MetadataStore,
         syncStateStore: SyncStateStore,
@@ -121,7 +155,7 @@ class LeasedLockRepositoryTest {
     ): LeasedLockRepository =
         LeasedLockRepository(
             metadataStore = { metadataStore },
-            userId = { "test-user" },
+            userIdFlow = MutableStateFlow("test-user"),
             syncStateStore = syncStateStore,
             hostId = "host-a",
             hostName = "DesktopA",

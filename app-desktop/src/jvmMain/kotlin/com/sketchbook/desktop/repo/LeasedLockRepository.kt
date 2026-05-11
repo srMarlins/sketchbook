@@ -13,13 +13,13 @@ import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.LockStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -40,13 +40,16 @@ import kotlin.time.Duration.Companion.minutes
  * isn't wired up yet (which currently is "never" once Phase 3 lands, but the same shape lets
  * `signed-out → no listeners` continue to work).
  *
- * @param userId function that returns the current Firebase UID, or `null` if signed-out. Path
- *   building changes when the user changes; the per-uuid listeners are torn down + rebuilt
- *   in `UserGraphHolder` on UID transitions so we don't need to worry about it here.
+ * @param userIdFlow StateFlow of the current Firebase UID, or `null` when signed-out. The repo
+ *   uses `.value` for synchronous path building and observes transitions to tear down per-uuid
+ *   listener/heartbeat jobs whenever the UID changes (sign-out, account switch). Without the
+ *   teardown, cached entries in [byUuid] would keep streaming the previous user's lock docs
+ *   under the previous user's Firestore path while new acquires use the new UID — desynchronizing
+ *   the UI flow from the holder of record.
  */
 class LeasedLockRepository(
     private val metadataStore: () -> MetadataStore?,
-    private val userId: () -> String?,
+    private val userIdFlow: StateFlow<String?>,
     private val syncStateStore: SyncStateStore,
     private val hostId: String,
     private val hostName: String,
@@ -56,6 +59,16 @@ class LeasedLockRepository(
     private val leaseTtl: Duration = 15.minutes,
     private val heartbeatInterval: Duration = 5.minutes,
 ) : LockRepository {
+    init {
+        // UID transitions wipe state. `drop(1)` skips the replayed current value so the initial
+        // UID doesn't fire resetState() (which would race the test body / startup acquires);
+        // StateFlow already de-duplicates by equality, so subsequent emissions are real changes.
+        scope.launch {
+            userIdFlow.drop(1).collectLatest { _ ->
+                resetState()
+            }
+        }
+    }
     private data class PerUuid(
         val status: MutableStateFlow<LockStatus> = MutableStateFlow(LockStatus.Free),
         var listenerJob: Job? = null,
@@ -65,17 +78,33 @@ class LeasedLockRepository(
     private val byUuid = mutableMapOf<ProjectUuid, PerUuid>()
 
     private fun get(uuid: ProjectUuid): PerUuid =
-        byUuid.getOrPut(uuid) {
-            val per = PerUuid()
-            startListener(uuid, per)
-            per
+        synchronized(byUuid) {
+            byUuid.getOrPut(uuid) {
+                val per = PerUuid()
+                startListener(uuid, per)
+                per
+            }
         }
+
+    private fun resetState() {
+        val drained =
+            synchronized(byUuid) {
+                val copy = byUuid.values.toList()
+                byUuid.clear()
+                copy
+            }
+        for (per in drained) {
+            per.listenerJob?.cancel()
+            per.heartbeatJob?.cancel()
+            per.status.value = LockStatus.Free
+        }
+    }
 
     override fun observe(uuid: ProjectUuid): Flow<LockStatus> = get(uuid).status.asStateFlow()
 
     override suspend fun forceTake(uuid: ProjectUuid): Result<Unit> {
         val store = metadataStore() ?: return Result.failure(IllegalStateException("cloud not configured"))
-        val uid = userId() ?: return Result.failure(IllegalStateException("signed out"))
+        val uid = userIdFlow.value ?: return Result.failure(IllegalStateException("signed out"))
         val per = get(uuid)
         val path = DocPath.lock(uid, uuid.value)
 
@@ -110,7 +139,7 @@ class LeasedLockRepository(
     ) {
         per.listenerJob?.cancel()
         val store = metadataStore() ?: return
-        val uid = userId() ?: return
+        val uid = userIdFlow.value ?: return
         val path = DocPath.lock(uid, uuid.value)
         per.listenerJob =
             scope.launch {
@@ -140,7 +169,7 @@ class LeasedLockRepository(
         per.heartbeatJob =
             scope.launch {
                 val store = metadataStore() ?: return@launch
-                val uid = userId() ?: return@launch
+                val uid = userIdFlow.value ?: return@launch
                 val path = DocPath.lock(uid, uuid.value)
                 while (true) {
                     delay(heartbeatInterval)

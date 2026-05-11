@@ -65,6 +65,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.nio.file.Files
@@ -212,19 +213,30 @@ interface DesktopAppGraph : ViewModelGraph {
         authSession: AuthSession,
         metadataStore: MetadataStore,
         journal: JournalRepository,
-    ): LockRepository =
-        LeasedLockRepository(
+    ): LockRepository {
+        // Map AuthSession.state → StateFlow<String?> of the current UID. stateIn keeps it hot for
+        // the app's lifetime so LeasedLockRepository's transition observer never misses an emission.
+        val userIdFlow =
+            authSession.state
+                .map { (it as? com.sketchbook.auth.AuthState.SignedIn)?.userId?.value }
+                .stateIn(
+                    scope = scope,
+                    started = kotlinx.coroutines.flow.SharingStarted.Eagerly,
+                    initialValue = (authSession.state.value as? com.sketchbook.auth.AuthState.SignedIn)?.userId?.value,
+                )
+        return LeasedLockRepository(
             // Provide the store eagerly — FirestoreMetadataStore is safe to construct before
             // sign-in; its methods bootstrap-then-call. Listener startup short-circuits when
             // userId == null so signed-out app instances incur no SDK calls.
             metadataStore = { metadataStore },
-            userId = { (authSession.state.value as? com.sketchbook.auth.AuthState.SignedIn)?.userId?.value },
+            userIdFlow = userIdFlow,
             syncStateStore = store,
             hostId = hostIdentity().id,
             hostName = hostIdentity().name,
             scope = scope,
             journal = journal,
         )
+    }
 
     @Provides
     @SingleIn(AppScope::class)
