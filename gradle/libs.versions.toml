@@ -7,7 +7,7 @@ jvm-toolchain = "21"
 # UI
 compose = "1.11.0-rc01"
 material3-adaptive = "1.2.0"
-nav3 = "1.0.0-alpha06"
+nav3 = "1.0.0+dev2861"
 
 # DI
 metro = "1.0.0"
