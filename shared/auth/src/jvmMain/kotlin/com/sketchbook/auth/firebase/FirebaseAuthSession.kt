@@ -58,6 +58,14 @@ class FirebaseAuthSession(
      * network.
      */
     private val cloudFunctions: CloudFunctionsClient? = null,
+    /**
+     * Optional hook that tears down the gitlive/firebase-java-sdk session. Wired to
+     * [FirebaseSdkBootstrap.clearSession] in production. Required for sign-out → sign-in-
+     * as-different-user to not leak the previous user's `Firebase.auth.currentUser` into
+     * subsequent Firestore listener calls. Default no-op for tests that don't initialize
+     * the SDK.
+     */
+    private val sdkClearSession: suspend () -> Unit = {},
 ) : AuthSession {
     private val tokens = MutableStateFlow<SessionTokens>(SessionTokens.None)
     private val _state = MutableStateFlow<AuthState>(AuthState.SignedOut)
@@ -146,6 +154,15 @@ class FirebaseAuthSession(
                     System.err.println("[FirebaseAuthSession] revokeMySession failed: $e")
                 }
         }
+        // Tear down the gitlive SDK so a subsequent sign-in (same or different UID) starts
+        // from a clean slate. Without this the SDK's `Firebase.auth.currentUser` would
+        // remain populated with the previous user's identity, and listener RPCs would
+        // continue carrying the old auth header. Best-effort: a tear-down failure logs
+        // and continues — the local-state clear above is the user-visible contract.
+        runCatching { sdkClearSession() }
+            .onFailure { e ->
+                System.err.println("[FirebaseAuthSession] sdkClearSession failed: $e")
+            }
     }
 
     override suspend fun idToken(): String = currentTokens().idToken

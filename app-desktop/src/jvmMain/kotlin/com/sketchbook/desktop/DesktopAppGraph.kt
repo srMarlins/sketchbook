@@ -228,20 +228,8 @@ interface DesktopAppGraph : ViewModelGraph {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideFirebaseSdkBootstrap(
-        authSession: AuthSession,
-        firebaseConfig: FirebaseConfig,
-    ): FirebaseSdkBootstrap {
-        // Bootstrap consumes the inner FirebaseAuthSession because it needs the full
-        // FirebaseTokens bundle (uid + email + expiresAt), not just the bearer string. The
-        // DI-vended AuthSession is wrapped in DesktopAuthSession — drill in via reflection
-        // would be ugly; instead, FirebaseAuthSession is exposed by name on DesktopAuthSession
-        // (see com.sketchbook.desktop.auth.DesktopAuthSession.unwrap()).
-        val inner =
-            (authSession as? com.sketchbook.desktop.auth.DesktopAuthSession)?.unwrap()
-                ?: error("FirebaseSdkBootstrap requires DesktopAuthSession-wrapped FirebaseAuthSession")
-        return FirebaseSdkBootstrap(authSession = inner, config = firebaseConfig)
-    }
+    fun provideFirebaseSdkBootstrap(firebaseAuthGraph: FirebaseAuthGraph): FirebaseSdkBootstrap =
+        firebaseAuthGraph.bootstrap
 
     @Provides
     @SingleIn(AppScope::class)
@@ -379,25 +367,49 @@ interface DesktopAppGraph : ViewModelGraph {
             projectId = firebaseConfig.projectId,
         )
 
+    /**
+     * Pairing of [FirebaseAuthSession] + [FirebaseSdkBootstrap]. They're construction-coupled:
+     * the bootstrap reads tokens off the auth session, and the auth session needs the
+     * bootstrap's `clearSession` hook so sign-out tears down the SDK. We build them together
+     * (lateinit-style closure) and expose each via its own `@Provides` accessor below.
+     */
+    data class FirebaseAuthGraph(
+        val authSession: FirebaseAuthSession,
+        val bootstrap: FirebaseSdkBootstrap,
+    )
+
     @Provides
     @SingleIn(AppScope::class)
-    fun provideAuthSession(
+    fun provideFirebaseAuthGraph(
         tokenStore: TokenStore,
-        identityStore: PrefsIdentityStore,
         oauthClient: OAuthClient,
         identityToolkit: IdentityToolkitClient,
         googleIdTokenVerifier: GoogleIdTokenVerifier,
         cloudFunctions: CloudFunctionsClient,
-        appScope: CoroutineScope,
-    ): AuthSession {
-        val inner =
+        firebaseConfig: FirebaseConfig,
+    ): FirebaseAuthGraph {
+        lateinit var bootstrap: FirebaseSdkBootstrap
+        val auth =
             FirebaseAuthSession(
                 tokenStore = tokenStore,
                 oauthClient = oauthClient,
                 identityToolkit = identityToolkit,
                 googleIdTokenVerifier = googleIdTokenVerifier,
                 cloudFunctions = cloudFunctions,
+                sdkClearSession = { bootstrap.clearSession() },
             )
+        bootstrap = FirebaseSdkBootstrap(authSession = auth, config = firebaseConfig)
+        return FirebaseAuthGraph(auth, bootstrap)
+    }
+
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideAuthSession(
+        firebaseAuthGraph: FirebaseAuthGraph,
+        identityStore: PrefsIdentityStore,
+        appScope: CoroutineScope,
+    ): AuthSession {
+        val inner = firebaseAuthGraph.authSession
         // tryRestore() is driven by DesktopAuthSession's init — keeps the FirebaseAuthSession
         // class itself lifecycle-free (no init-block side-effects).
         return DesktopAuthSession(

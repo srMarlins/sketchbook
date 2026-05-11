@@ -2,9 +2,11 @@ package com.sketchbook.auth.firebase
 
 import android.app.Application
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.FirebasePlatform
 import com.google.firebase.initialize
+import dev.gitlive.firebase.auth.auth
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -19,12 +21,17 @@ import kotlinx.coroutines.sync.withLock
  * user). The underlying `Firebase.initialize` and `FirebasePlatform.initializeFirebasePlatform`
  * each throw "already exists" on the second invocation; we wrap those.
  *
- * **Multi-user note (Phase 3 limitation).** The SDK's process-singleton `FirebasePlatform`
- * survives sign-out → sign-in-as-different-user. We overwrite the seeded user state on each
- * `ensureInitialized` call, but the gitlive `Firebase.auth.currentUser` cache may lag until
- * its own next refresh cycle. UserGraphHolder already rebuilds the cloud adapters on UID
- * transitions, so this lag isn't observable in normal use. Documented in the migration
- * design's "Phase 3 entry findings → Out of scope for Phase 3".
+ * **Sign-out → sign-in handling.** firebase-java-sdk's `FirebaseAuth` reads the persisted
+ * user JSON exactly once — at construction (`FirebaseAuth.kt:248–254`). Re-seeding storage
+ * after that point does nothing; the SDK's `currentUser` stays whatever was set at boot.
+ * That means just clearing local state on sign-out leaves the gitlive SDK still acting as
+ * the previous user, which is a real cross-user leak risk on subsequent listener calls.
+ *
+ * [clearSession] handles this by (1) calling gitlive's `Firebase.auth.signOut()` to null
+ * the SDK-side currentUser + run its own storage clear, and (2) `FirebaseApp.delete()`-ing
+ * the underlying app so the *next* `ensureInitialized` re-runs `Firebase.initialize` with
+ * fresh tokens and the new user shows up as `currentUser` from the very first RPC.
+ * `FirebaseAuthSession.signOut` calls `clearSession` after its local-state clear.
  *
  * @property authSession source of fresh Firebase ID + refresh tokens. Used for the pre-seed
  *   payload; once the SDK is initialized, the SDK manages its own refresh cycle independently.
@@ -96,6 +103,39 @@ class FirebaseSdkBootstrap(
                 if (e.message?.contains("already exists", ignoreCase = true) != true) throw e
             }
             initialized = true
+        }
+    }
+
+    /**
+     * Tear down the gitlive/firebase-java-sdk session so the next [ensureInitialized] can
+     * rebuild for a fresh user (different UID, or same user signing in again after sign-out).
+     * Idempotent — calling twice in a row is a no-op after the first.
+     *
+     * Three steps:
+     *   1. `Firebase.auth.signOut()` → nulls SDK-side currentUser + runs the SDK's own
+     *      storage clear path. Without this, Firestore RPCs continue carrying the old
+     *      user's bearer.
+     *   2. `FirebaseApp.delete()` → tears down the FirebaseApp itself. Required because
+     *      `FirebaseAuth` reads its persisted user only at construction; the next user's
+     *      tokens only become `currentUser` after a fresh `Firebase.initialize` pass.
+     *   3. Reset our own `initialized` + `platform` so the next `ensureInitialized`
+     *      reseeds and re-initializes from a clean slate.
+     */
+    suspend fun clearSession() {
+        mutex.withLock {
+            if (!initialized) return@withLock
+            // Explicitly use the gitlive Firebase companion — `Firebase` (unqualified) in
+            // this file is `com.google.firebase.Firebase`, whose `auth` extension is
+            // firebase-java-sdk's, not gitlive's. gitlive's auth is what we initialized.
+            runCatching { dev.gitlive.firebase.Firebase.auth.signOut() }
+            runCatching {
+                // Default app — Sketchbook only ever initializes one. delete() blocks until
+                // background callbacks drain; safe to call from a suspend context.
+                FirebaseApp.getInstance().delete()
+            }
+            platform?.clear(FIREBASE_USER_STORAGE_KEY)
+            platform = null
+            initialized = false
         }
     }
 }
