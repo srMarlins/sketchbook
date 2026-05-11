@@ -5,6 +5,11 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.SnapshotRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -20,6 +25,12 @@ import kotlin.coroutines.cancellation.CancellationException
 class PullPoller(
     private val cloud: CloudBackend,
     private val snapshots: SnapshotRepository,
+    /**
+     * Parallelism for the manifest-fetch fan-out. 4 strikes a balance between cold-catch-up
+     * latency (1 list + N gets — 50 manifests at 200ms RTT drops from 10s to ~2.5s) and not
+     * spamming GCS's per-bucket-prefix QPS budget when many projects bulk-pull at once.
+     */
+    private val manifestFetchPermits: Int = 4,
 ) {
     /**
      * Read everything in cloud at `rev > sinceRev` and record it locally.
@@ -51,22 +62,42 @@ class PullPoller(
             } catch (_: Throwable) {
                 return emptyList()
             }
-        val sorted = refs.sortedBy { it.rev }
+        val sortedRefs =
+            refs
+                .filter { sinceRev == null || it.rev > sinceRev.value }
+                .sortedBy { it.rev }
+        if (sortedRefs.isEmpty()) return emptyList()
+
+        // Parallel fetch within a bounded semaphore (E2). Each ref's read runs concurrently
+        // up to [manifestFetchPermits], drops cancellation through coroutineScope, and folds
+        // transient failures into a Result so the contiguous-prefix check (B1) below can
+        // stop at the first hole without losing the successful prefix.
+        val semaphore = Semaphore(manifestFetchPermits)
+        val results =
+            coroutineScope {
+                sortedRefs
+                    .map { ref ->
+                        async {
+                            semaphore.withPermit {
+                                try {
+                                    Result.success(cloud.readManifest(ref))
+                                } catch (c: CancellationException) {
+                                    throw c
+                                } catch (t: Throwable) {
+                                    Result.failure(t)
+                                }
+                            }
+                        }
+                    }.awaitAll()
+            }
+
         val out = mutableListOf<Snapshot>()
-        var cursor: SnapshotRev? = sinceRev
-        for (ref in sorted) {
-            val rev = SnapshotRev(ref.rev)
-            val c = cursor
-            if (c != null && rev <= c) continue
+        for ((ref, result) in sortedRefs.zip(results)) {
             val manifest =
-                try {
-                    cloud.readManifest(ref)
-                } catch (ce: CancellationException) {
-                    throw ce
-                } catch (_: Throwable) {
+                result.getOrElse {
                     // Hole in the contiguous range — stop the pull. The watermark stays at the
-                    // last successful rev; the next listener emission will re-issue this poll
-                    // with sinceRev = lastSuccess and retry the failed read.
+                    // last successful rev; the next listener emission re-issues this poll with
+                    // sinceRev = lastSuccess and retries the failed read.
                     break
                 }
             val snapshot =
@@ -86,7 +117,6 @@ class PullPoller(
                 )
             snapshots.recordSnapshot(snapshot, manifestPath = ref.path, manifestHash = "")
             out += snapshot
-            cursor = rev
         }
         return out
     }

@@ -206,6 +206,14 @@ interface DesktopAppGraph : ViewModelGraph {
             ioDispatcher = Dispatchers.IO,
         )
 
+    /**
+     * Stable per-machine identity. SingleIn so [hostIdentity] (disk I/O + InetAddress lookup)
+     * runs once per JVM, not 4× during graph construction (M19).
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideHostIdentity(): HostIdentity = hostIdentity()
+
     @Provides
     @SingleIn(AppScope::class)
     fun provideLockRepository(
@@ -214,6 +222,7 @@ interface DesktopAppGraph : ViewModelGraph {
         authSession: AuthSession,
         metadataStore: MetadataStore,
         journal: JournalRepository,
+        hostIdentity: HostIdentity,
     ): LockRepository {
         // Map AuthSession.state → StateFlow<String?> of the current UID. stateIn keeps it hot for
         // the app's lifetime so LeasedLockRepository's transition observer never misses an emission.
@@ -232,8 +241,8 @@ interface DesktopAppGraph : ViewModelGraph {
             metadataStore = { metadataStore },
             userIdFlow = userIdFlow,
             syncStateStore = store,
-            hostId = hostIdentity().id,
-            hostName = hostIdentity().name,
+            hostId = hostIdentity.id,
+            hostName = hostIdentity.name,
             scope = scope,
             journal = journal,
         )
@@ -290,6 +299,7 @@ interface DesktopAppGraph : ViewModelGraph {
         firebaseConfig: FirebaseConfig,
         scope: CoroutineScope,
         metadataStore: MetadataStore,
+        hostIdentity: HostIdentity,
     ): SyncQueue =
         SwappableSyncQueue(
             authSession = authSession,
@@ -299,8 +309,8 @@ interface DesktopAppGraph : ViewModelGraph {
             catalog = catalog,
             blobCacheRoot = catalogDbPath().parent.resolve("blob-cache"),
             scope = scope,
-            hostId = hostIdentity().id,
-            hostName = hostIdentity().name,
+            hostId = hostIdentity.id,
+            hostName = hostIdentity.name,
             firebaseConfig = firebaseConfig,
             journal = journal,
             httpClient = httpClient,
@@ -466,7 +476,7 @@ private val OAUTH_CLIENT_ID: String =
  * `hostName` (display in conflict messages). The id is generated once and cached at
  * `<dataDir>/host-id`; the name defaults to `Sketchbook on <hostname>`.
  */
-private data class HostIdentity(
+data class HostIdentity(
     val id: String,
     val name: String,
 )
