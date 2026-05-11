@@ -53,6 +53,7 @@ import dev.zacsweers.metro.createGraph
 import dev.zacsweers.metrox.viewmodel.ViewModelGraph
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -205,6 +206,14 @@ interface DesktopAppGraph : ViewModelGraph {
             ioDispatcher = Dispatchers.IO,
         )
 
+    /**
+     * Stable per-machine identity. SingleIn so [hostIdentity] (disk I/O + InetAddress lookup)
+     * runs once per JVM, not 4× during graph construction (M19).
+     */
+    @Provides
+    @SingleIn(AppScope::class)
+    fun provideHostIdentity(): HostIdentity = hostIdentity()
+
     @Provides
     @SingleIn(AppScope::class)
     fun provideLockRepository(
@@ -213,6 +222,7 @@ interface DesktopAppGraph : ViewModelGraph {
         authSession: AuthSession,
         metadataStore: MetadataStore,
         journal: JournalRepository,
+        hostIdentity: HostIdentity,
     ): LockRepository {
         // Map AuthSession.state → StateFlow<String?> of the current UID. stateIn keeps it hot for
         // the app's lifetime so LeasedLockRepository's transition observer never misses an emission.
@@ -231,8 +241,8 @@ interface DesktopAppGraph : ViewModelGraph {
             metadataStore = { metadataStore },
             userIdFlow = userIdFlow,
             syncStateStore = store,
-            hostId = hostIdentity().id,
-            hostName = hostIdentity().name,
+            hostId = hostIdentity.id,
+            hostName = hostIdentity.name,
             scope = scope,
             journal = journal,
         )
@@ -289,6 +299,7 @@ interface DesktopAppGraph : ViewModelGraph {
         firebaseConfig: FirebaseConfig,
         scope: CoroutineScope,
         metadataStore: MetadataStore,
+        hostIdentity: HostIdentity,
     ): SyncQueue =
         SwappableSyncQueue(
             authSession = authSession,
@@ -298,8 +309,8 @@ interface DesktopAppGraph : ViewModelGraph {
             catalog = catalog,
             blobCacheRoot = catalogDbPath().parent.resolve("blob-cache"),
             scope = scope,
-            hostId = hostIdentity().id,
-            hostName = hostIdentity().name,
+            hostId = hostIdentity.id,
+            hostName = hostIdentity.name,
             firebaseConfig = firebaseConfig,
             journal = journal,
             httpClient = httpClient,
@@ -311,10 +322,24 @@ interface DesktopAppGraph : ViewModelGraph {
      * calls (OAuth, GCS, token revoke). One CIO connection pool app-wide is the right default —
      * each independent client would carry its own selector thread + connection pool, and HTTP/1.1
      * keep-alive across calls dies on a per-instance boundary.
+     *
+     * **Timeouts.** [HttpTimeout] applies globally so no call can stall forever on a hung
+     * socket / regional outage / blocked TLS handshake. Connect (5s) and socket-idle (30s) are
+     * conservative ceilings; per-request timeouts (`requestTimeoutMillis`) are overridden on the
+     * call site for short, latency-sensitive calls — e.g. [CloudFunctionsClient.revokeMySession]
+     * caps its own request at 5s so sign-out doesn't drag during a slow Cloud Function.
      */
     @Provides
     @SingleIn(AppScope::class)
-    fun provideHttpClient(): HttpClient = HttpClient(CIO)
+    fun provideHttpClient(): HttpClient =
+        HttpClient(CIO) {
+            install(HttpTimeout) {
+                connectTimeoutMillis = 5_000
+                requestTimeoutMillis = 60_000
+                socketTimeoutMillis = 30_000
+            }
+            expectSuccess = false
+        }
 
     @Provides
     @SingleIn(AppScope::class)
@@ -442,16 +467,29 @@ interface DesktopAppGraph : ViewModelGraph {
  * `aud` claim when verifying the resulting Google ID token before the Identity Toolkit
  * exchange — see `GoogleIdTokenVerifier`.
  */
+private const val OAUTH_CLIENT_ID_PLACEHOLDER = "REPLACE_ME.apps.googleusercontent.com"
+
 private val OAUTH_CLIENT_ID: String =
-    System.getProperty("sketchbook.oauth.client_id")
-        ?: "REPLACE_ME.apps.googleusercontent.com"
+    run {
+        val v = System.getProperty("sketchbook.oauth.client_id") ?: OAUTH_CLIENT_ID_PLACEHOLDER
+        val env = System.getProperty("sketchbook.env", "dev")
+        // Fail fast in production rather than silently shipping a binary whose Google sign-in
+        // immediately rejects (the placeholder is not a registered client ID). Dev / test
+        // launches keep the placeholder so unit tests don't need to set the property (M10/F4).
+        if (env == "prod" && v == OAUTH_CLIENT_ID_PLACEHOLDER) {
+            error(
+                "OAUTH_CLIENT_ID placeholder in production build — set -Dsketchbook.oauth.client_id=...",
+            )
+        }
+        v
+    }
 
 /**
  * Stable per-machine identity used by the sync pipeline as `hostId` (lease ownership) and
  * `hostName` (display in conflict messages). The id is generated once and cached at
  * `<dataDir>/host-id`; the name defaults to `Sketchbook on <hostname>`.
  */
-private data class HostIdentity(
+data class HostIdentity(
     val id: String,
     val name: String,
 )

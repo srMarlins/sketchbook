@@ -137,6 +137,8 @@ private class CountingCloud(
         return buf
     }
 
+    override suspend fun readManifest(ref: ManifestRef): Manifest = error("not used")
+
     override suspend fun readManifest(
         uuid: ProjectUuid,
         rev: SnapshotRev,

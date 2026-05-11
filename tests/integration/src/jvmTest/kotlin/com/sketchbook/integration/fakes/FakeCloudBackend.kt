@@ -57,6 +57,12 @@ class FakeCloudBackend : CloudBackend {
         scope: BlobScope,
     ): RawSource = error("not used in these tests")
 
+    override suspend fun readManifest(ref: ManifestRef): Manifest {
+        val list = manifests.values.firstOrNull { it.any { sm -> sm.ref == ref } }
+            ?: throw SketchbookError.NotFound("no manifests for ref ${ref.path}")
+        return list.first { it.ref == ref }.manifest
+    }
+
     override suspend fun readManifest(
         uuid: ProjectUuid,
         rev: SnapshotRev,

@@ -20,8 +20,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.Buffer
-import java.security.KeyPairGenerator
-import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -32,25 +30,10 @@ class FirebaseBlobStoreTest {
     private fun makeBackend(
         handle: suspend MockRequestHandleScope.(HttpRequestData) -> io.ktor.client.request.HttpResponseData,
     ): FirebaseBlobStore {
-        // Stub auth so tests don't generate real RSA keys for every assertion.
-        val key =
-            ServiceAccountKey(
-                type = "service_account",
-                projectId = "sk-test",
-                privateKeyId = "kid",
-                privateKeyPem = newRsaPem(),
-                clientEmail = "sa@sk-test.iam.gserviceaccount.com",
-            )
-        val tokenEngine =
-            MockEngine {
-                respond(
-                    """{"access_token":"ya29.fake","expires_in":3600,"token_type":"Bearer"}""",
-                    HttpStatusCode.OK,
-                    headersOf(HttpHeaders.ContentType, "application/json"),
-                )
-            }
-        val credentials: CloudCredentials = GcsAuth(key, HttpClient(tokenEngine))
-
+        // Static bearer — no JWT signing, no token-exchange mock. Production uses the Firebase
+        // ID token via FirebaseCloudCredentials; tests only need a stable string the backend
+        // sees in the Authorization header.
+        val credentials = CloudCredentials { "ya29.fake" }
         val backendEngine = MockEngine { request -> handle(request) }
         return FirebaseBlobStore(
             http = HttpClient(backendEngine),
@@ -190,14 +173,6 @@ class FirebaseBlobStoreTest {
                 ),
             stats = ManifestStats(fileCount = 1, totalBytes = 1024, newBytes = 1024),
         )
-
-    private fun newRsaPem(): String {
-        val gen = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }
-        val pair = gen.generateKeyPair()
-        return "-----BEGIN PRIVATE KEY-----\n" +
-            Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(pair.private.encoded) +
-            "\n-----END PRIVATE KEY-----\n"
-    }
 
     private fun byteArrayRawSource(bytes: ByteArray): kotlinx.io.RawSource =
         object : kotlinx.io.RawSource {

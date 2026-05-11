@@ -97,7 +97,12 @@ class IdentityToolkitClientTest {
 
             val mockEngine =
                 MockEngine { request ->
-                    capturedBody = (request.body as io.ktor.http.content.TextContent).text
+                    // F5: refresh now uses ktor's submitForm → FormDataContent. Read the
+                    // bytes back through the OutgoingContent's writer-channel.
+                    capturedBody =
+                        (request.body as io.ktor.http.content.OutgoingContent.ByteArrayContent)
+                            .bytes()
+                            .toString(Charsets.UTF_8)
                     capturedContentType = request.body.contentType?.toString()
                     respond(
                         content =

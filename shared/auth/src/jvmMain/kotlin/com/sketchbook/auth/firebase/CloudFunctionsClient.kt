@@ -1,6 +1,7 @@
 package com.sketchbook.auth.firebase
 
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -28,7 +29,7 @@ import kotlinx.serialization.json.Json
  * Phase 3 ships one callable: [revokeMySession]. Future callables (per-host kill switch,
  * server-side abuse hooks) plug into the same class.
  */
-class CloudFunctionsClient(
+open class CloudFunctionsClient(
     private val httpClient: HttpClient,
     private val projectId: String,
     private val region: String = "us-central1",
@@ -50,13 +51,19 @@ class CloudFunctionsClient(
      *
      * Returns the parsed result body on success; throws on HTTP failure.
      */
-    suspend fun revokeMySession(idToken: String): RevokeMySessionResult {
+    open suspend fun revokeMySession(idToken: String): RevokeMySessionResult {
         val url = "https://$region-$projectId.cloudfunctions.net/revokeMySession"
         val response =
             httpClient.post(url) {
                 bearerAuth(idToken)
                 contentType(ContentType.Application.Json)
                 setBody("""{"data":{}}""")
+                // Sign-out is a single round-trip; tighten budgets so a slow region or
+                // hung function doesn't drag the user-visible sign-out flow.
+                timeout {
+                    connectTimeoutMillis = 2_000
+                    requestTimeoutMillis = 5_000
+                }
             }
         if (response.status.value !in 200..299) {
             throw CloudFunctionException(

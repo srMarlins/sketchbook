@@ -6,6 +6,8 @@ import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.RSAKey
 import com.nimbusds.jwt.SignedJWT
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.net.URI
 import java.util.concurrent.atomic.AtomicReference
@@ -49,9 +51,10 @@ class JwksGoogleIdTokenVerifier(
     private val clock: Clock = Clock.System,
     private val clockSkewSeconds: Long = 60,
     jwksUri: URI = URI("https://www.googleapis.com/oauth2/v3/certs"),
+    jwksLoader: suspend (URI) -> JWKSet = { uri -> JWKSet.load(uri.toURL()) },
 ) : GoogleIdTokenVerifier {
     private val acceptedIssuers = setOf("https://accounts.google.com", "accounts.google.com")
-    private val jwksCache = JwksCache(jwksUri, clock, ttl = 60.minutes, loader = { uri -> JWKSet.load(uri.toURL()) })
+    private val jwksCache = JwksCache(jwksUri, clock, ttl = 60.minutes, loader = jwksLoader)
 
     override suspend fun verify(idToken: String): Result<VerifiedGoogleIdToken> =
         try {
@@ -60,8 +63,18 @@ class JwksGoogleIdTokenVerifier(
                 "expected RS256, got ${signedJwt.header.algorithm}"
             }
 
-            val jwks = jwksCache.get()
             val kid = requireNotNull(signedJwt.header.keyID) { "JWT missing kid header" }
+            // Cache-miss force-refresh: if the kid isn't in the cached set, the publishing key
+            // probably rotated within the TTL window. A single force-refresh closes that ≤1h
+            // auth outage without spamming the JWKS endpoint (the single-flight mutex coalesces
+            // concurrent refreshes to one network call).
+            val initial = jwksCache.get()
+            val jwks =
+                if (initial.getKeyByKeyId(kid) != null) {
+                    initial
+                } else {
+                    jwksCache.refresh()
+                }
             val jwk = requireNotNull(jwks.getKeyByKeyId(kid)) { "kid $kid not in Google JWKS" }
             val rsaKey = (jwk as? RSAKey) ?: error("kid $kid is not an RSA key")
 
@@ -111,12 +124,18 @@ class JwksGoogleIdTokenVerifier(
  * 1h is conservative. Single [AtomicReference] holds `(JWKSet, fetchedAt)` together so a
  * concurrent reader can never see a stale TTL with a fresh key set (or vice versa) — both
  * fields update in one CAS.
+ *
+ * **Single-flight refresh.** `loadMutex` serializes concurrent refresh attempts so a thunder
+ * of 100 concurrent verify-on-cache-miss callers triggers exactly one network fetch. The
+ * `get()` happy path is lock-free; only callers who genuinely need a refresh enter the
+ * critical section, and the re-check inside the lock lets the second caller observe the
+ * first's refresh.
  */
 private class JwksCache(
     private val jwksUri: URI,
     private val clock: Clock,
     private val ttl: Duration,
-    private val loader: (URI) -> JWKSet,
+    private val loader: suspend (URI) -> JWKSet,
 ) {
     private data class Entry(
         val jwks: JWKSet,
@@ -124,6 +143,7 @@ private class JwksCache(
     )
 
     private val ref = AtomicReference<Entry?>(null)
+    private val loadMutex = Mutex()
 
     /**
      * Returns the cached JWKS or fetches a fresh one. The fetch hops to [Dispatchers.IO]
@@ -133,13 +153,22 @@ private class JwksCache(
      */
     suspend fun get(): JWKSet {
         val now = clock.now()
-        val cached = ref.get()
-        if (cached != null && now < cached.fetchedAt + ttl) {
-            return cached.jwks
-        }
-        val fresh = withContext(Dispatchers.IO) { loader(jwksUri) }
-        ref.set(Entry(fresh, now))
-        return fresh
+        ref.get()?.takeIf { now < it.fetchedAt + ttl }?.let { return it.jwks }
+        return refresh(now)
     }
+
+    /**
+     * Force a reload regardless of TTL. Used on `kid` cache-miss (the publishing key likely
+     * rotated within the TTL window). Serialized via [loadMutex] so 100 concurrent verifies
+     * don't each fire their own HTTP fetch.
+     */
+    suspend fun refresh(now: Instant = clock.now()): JWKSet =
+        loadMutex.withLock {
+            // Re-check inside the lock — another caller may have just refreshed.
+            ref.get()?.takeIf { now < it.fetchedAt + ttl }?.let { return@withLock it.jwks }
+            val fresh = withContext(Dispatchers.IO) { loader(jwksUri) }
+            ref.set(Entry(fresh, now))
+            fresh
+        }
 }
 

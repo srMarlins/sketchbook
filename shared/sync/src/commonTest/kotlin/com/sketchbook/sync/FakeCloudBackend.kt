@@ -57,13 +57,39 @@ class FakeCloudBackend : CloudBackend {
         scope: BlobScope,
     ): RawSource = error("not used in these tests")
 
+    override suspend fun readManifest(ref: ManifestRef): Manifest {
+        readManifestFailures[ref.rev]?.let { throw it }
+        val list = manifests.values.firstOrNull { it.any { sm -> sm.ref == ref } }
+            ?: throw SketchbookError.NotFound("no manifests for ref ${ref.path}")
+        return list.first { it.ref == ref }.manifest
+    }
+
     override suspend fun readManifest(
         uuid: ProjectUuid,
         rev: SnapshotRev,
     ): Manifest {
+        readManifestFailures[rev.value]?.let { throw it }
         val list = manifests[uuid] ?: throw SketchbookError.NotFound("no manifests for $uuid")
         return list.firstOrNull { it.manifest.rev == rev }?.manifest
             ?: throw SketchbookError.NotFound("rev $rev not found")
+    }
+
+    /**
+     * Test hook: configure [readManifest] to throw for a given rev. Used by PullPoller tests
+     * to assert the "stop at the first hole" contract (B1) — set a transient failure for one
+     * rev, verify the watermark only advances up to the gap.
+     */
+    private val readManifestFailures: MutableMap<Long, Throwable> = mutableMapOf()
+
+    fun failReadManifestOnce(
+        rev: Long,
+        error: Throwable,
+    ) {
+        readManifestFailures[rev] = error
+    }
+
+    fun clearReadManifestFailure(rev: Long) {
+        readManifestFailures.remove(rev)
     }
 
     override suspend fun listManifests(

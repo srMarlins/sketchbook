@@ -119,7 +119,17 @@ service cloud.firestore {
         // Owner can create or refresh (update) a lock. Delete is allowed so the
         // current holder can release their own lease. Stale-lease takeover is a
         // tx-level concern; rules just gate by ownership.
-        allow create, update, delete: if isOwner(uid) && withinSizeLimit();
+        //
+        // hasOnly enforces the canonical LockDoc wire shape (snake_case, post-D3).
+        // Future field additions must update this whitelist. Empty/absent values
+        // for the optional `holder_name` are accepted via the `hasAny` check.
+        allow create, update: if isOwner(uid)
+                              && withinSizeLimit()
+                              && request.resource.data.keys()
+                                   .hasOnly(['holder', 'holder_name', 'acquired_at', 'expires_at'])
+                              && request.resource.data.keys()
+                                   .hasAll(['holder', 'acquired_at', 'expires_at']);
+        allow delete: if isOwner(uid);
       }
     }
 

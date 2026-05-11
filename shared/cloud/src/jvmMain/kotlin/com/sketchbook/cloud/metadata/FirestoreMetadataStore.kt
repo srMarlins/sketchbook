@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.KSerializer
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Duration
 
@@ -78,13 +79,12 @@ class FirestoreMetadataStore(
     override suspend fun <T : Any> updateDoc(
         path: DocPath,
         serializer: KSerializer<T>,
-        transform: suspend (current: T?) -> T,
+        transform: (current: T?) -> T,
     ): T {
         ensureInitialized()
         // gitlive's runTransaction body is a `suspend Transaction.() -> T` extension lambda;
-        // Firestore retries on contention. The `transform` callback in our port is `suspend`,
-        // and Firestore's retry contract calls for idempotent bodies — callers must not start
-        // unrelated side-effects inside transform.
+        // Firestore retries on contention. `transform` is non-suspend by contract (M15) so
+        // a caller can't accidentally do unrelated I/O inside the retry loop.
         val ref = firestore.document(path.value)
         return firestore.runTransaction<T> {
             val snap = get(ref)
@@ -135,12 +135,12 @@ class FirestoreMetadataStore(
         holder: String,
         ttl: Duration,
         holderName: String,
-    ): Boolean {
+    ): AcquireResult {
         ensureInitialized()
         val now = clock.now()
         val ref = firestore.document(path.value)
-        return runCatching {
-            firestore.runTransaction<Boolean> {
+        return try {
+            firestore.runTransaction<AcquireResult> {
                 val snap = get(ref)
                 val current = if (snap.exists) snap.data(LockDoc.serializer()) else null
                 val canAcquire =
@@ -148,7 +148,6 @@ class FirestoreMetadataStore(
                         current.holder == holder ||
                         current.expiresAt < now
                 if (canAcquire) {
-                    val nextSeq = (current?.heartbeatSeq ?: 0L) + 1
                     set(
                         ref,
                         LockDoc.serializer(),
@@ -157,45 +156,52 @@ class FirestoreMetadataStore(
                             holderName = holderName,
                             acquiredAt = now,
                             expiresAt = now + ttl,
-                            heartbeatSeq = nextSeq,
                         ),
                     )
-                    true
+                    AcquireResult.Acquired
                 } else {
-                    false
+                    AcquireResult.HeldByOther(current!!)
                 }
             }
-        }.getOrElse { false }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            AcquireResult.Failed(t)
+        }
     }
 
     override suspend fun refreshLock(
         path: DocPath,
         holder: String,
         ttl: Duration,
-    ): Boolean {
+    ): RefreshResult {
         ensureInitialized()
         val now = clock.now()
         val ref = firestore.document(path.value)
-        return runCatching {
-            firestore.runTransaction<Boolean> {
+        return try {
+            firestore.runTransaction<RefreshResult> {
                 val snap = get(ref)
                 val current = if (snap.exists) snap.data(LockDoc.serializer()) else null
                 if (current != null && current.holder == holder) {
                     set(
                         ref,
                         LockDoc.serializer(),
-                        current.copy(
-                            expiresAt = now + ttl,
-                            heartbeatSeq = current.heartbeatSeq + 1,
-                        ),
+                        current.copy(expiresAt = now + ttl),
                     )
-                    true
+                    RefreshResult.Refreshed
                 } else {
-                    // Stolen / absent / replaced — caller treats as takeover.
-                    false
+                    // Stolen / absent / replaced — caller treats as takeover. Terminal.
+                    RefreshResult.Lost
                 }
             }
-        }.getOrElse { false }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            // Operational failure (network, 5xx, permission denied). Don't fold into Lost —
+            // the caller's heartbeat needs to distinguish "lease stolen" (give up) from
+            // "transient blip" (retry on next cadence).
+            RefreshResult.Failed(t)
+        }
     }
 
     override suspend fun releaseLock(
@@ -207,7 +213,7 @@ class FirestoreMetadataStore(
         // releaseLock at the end of a snapshot pipeline run shouldn't bubble a Firestore
         // error up the stack — the pipeline succeeded by then.
         val ref = firestore.document(path.value)
-        runCatching {
+        try {
             firestore.runTransaction<Unit> {
                 val snap = get(ref)
                 if (snap.exists) {
@@ -217,6 +223,10 @@ class FirestoreMetadataStore(
                     }
                 }
             }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Throwable) {
+            // Best-effort release — see KDoc above. Swallow non-cancellation errors.
         }
     }
 }

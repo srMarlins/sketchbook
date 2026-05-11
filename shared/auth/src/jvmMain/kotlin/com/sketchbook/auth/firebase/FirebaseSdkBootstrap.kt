@@ -49,6 +49,19 @@ class FirebaseSdkBootstrap(
     private var initialized: Boolean = false
 
     /**
+     * Cache the (uid, expiresAt) pair that's currently materialized in [platform]'s storage
+     * so the fast path can short-circuit when subsequent [ensureInitialized] callers haven't
+     * actually rotated tokens (M6). Without this every Firestore RPC re-encodes the
+     * FirebaseUserImpl JSON + writes it to the platform map, costing a JSON serialization
+     * + map write per call. Cleared in [clearSession].
+     */
+    @Volatile
+    private var lastSeededUid: String? = null
+
+    @Volatile
+    private var lastSeededExpiresAtMillis: Long = 0L
+
+    /**
      * Mint a fresh token bundle, seed the platform with the FirebaseUserImpl JSON, and run
      * `Firebase.initialize` exactly once. After this returns, gitlive's `Firebase.firestore`
      * and `Firebase.auth` reach a signed-in instance.
@@ -56,20 +69,29 @@ class FirebaseSdkBootstrap(
      * Throws [com.sketchbook.auth.AuthSessionExpired] if the AuthSession can't mint tokens.
      */
     suspend fun ensureInitialized() {
-        // Fast path: already initialized AND the seeded user matches the current AuthSession
-        // user. Re-seeding is cheap (a single map.put) but we still avoid it when not needed.
+        // Fast path: already initialized AND the seeded (uid, expiresAt) still matches the
+        // current AuthSession tokens. The cache short-circuits a JSON re-encode + map write
+        // per RPC; without it every Firestore call paid that cost (M6). When tokens rotate
+        // (refresh, sign-in-as-different-user) we fall through to re-seed.
         if (initialized && platform != null) {
-            // Always refresh the seed — even if the SDK's own refresh has rotated tokens,
-            // a subsequent process restart will read the pre-seed first. Keeping the seed
-            // current avoids a one-RPC window of stale-token failures after launch.
             val tokens = authSession.currentTokens()
+            val expMillis = tokens.expiresAt.toEpochMilliseconds()
+            if (tokens.uid == lastSeededUid && expMillis == lastSeededExpiresAtMillis) return
             platform?.store(FIREBASE_USER_STORAGE_KEY, AuthStateInjector.firebaseUserImplJson(tokens))
+            lastSeededUid = tokens.uid
+            lastSeededExpiresAtMillis = expMillis
             return
         }
         mutex.withLock {
             if (initialized) {
                 val tokens = authSession.currentTokens()
+                val expMillis = tokens.expiresAt.toEpochMilliseconds()
+                if (tokens.uid == lastSeededUid && expMillis == lastSeededExpiresAtMillis) {
+                    return@withLock
+                }
                 platform?.store(FIREBASE_USER_STORAGE_KEY, AuthStateInjector.firebaseUserImplJson(tokens))
+                lastSeededUid = tokens.uid
+                lastSeededExpiresAtMillis = expMillis
                 return@withLock
             }
             val tokens = authSession.currentTokens()
@@ -77,6 +99,8 @@ class FirebaseSdkBootstrap(
             val platformImpl = JvmFirebasePlatform(seed = mapOf(FIREBASE_USER_STORAGE_KEY to userJson))
             FirebasePlatform.initializeFirebasePlatform(platformImpl)
             this.platform = platformImpl
+            lastSeededUid = tokens.uid
+            lastSeededExpiresAtMillis = tokens.expiresAt.toEpochMilliseconds()
 
             val options =
                 FirebaseOptions
@@ -136,6 +160,8 @@ class FirebaseSdkBootstrap(
             platform?.clear(FIREBASE_USER_STORAGE_KEY)
             platform = null
             initialized = false
+            lastSeededUid = null
+            lastSeededExpiresAtMillis = 0L
         }
     }
 }

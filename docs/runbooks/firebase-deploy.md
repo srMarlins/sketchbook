@@ -93,6 +93,28 @@ Once provisioned, update `.firebaserc`:
 ```
 …and `FirebaseConfig.kt` (or wherever Phase 2's production-bound config lives) with the prod project's Web API key + bucket name.
 
+## Deploying Cloud Functions
+
+Sketchbook ships one HTTPS-callable Function in Phase 3: `revokeMySession`. Source lives in `functions/`.
+
+```bash
+firebase deploy --only functions
+```
+
+After deploy, the function is reachable at `https://us-central1-<projectId>.cloudfunctions.net/revokeMySession`.
+
+**What `revokeMySession` invalidates.** Calling it server-side runs
+`admin.auth().revokeRefreshTokens(uid)`, which marks every refresh token issued to that UID as
+revoked. **It does NOT invalidate the caller's currently-cached Firebase ID token** — those
+remain valid for up to their remaining TTL (default 1h). Sign-out clears the local cached ID
+token immediately, so this only matters for cross-device propagation: another device holding a
+not-yet-expired ID token will continue functioning until its next refresh attempt, which then
+fails with `INVALID_REFRESH_TOKEN` and forces a re-sign-in.
+
+**URL note.** The current client targets the 1st-gen `cloudfunctions.net` alias. 2nd-gen
+functions are served from `*.run.app`; if a future deploy migrates to 2nd-gen, update
+`CloudFunctionsClient.revokeMySession`'s `url =` construction.
+
 ## When things go wrong
 
 | Symptom | Likely cause | Fix |
@@ -101,10 +123,17 @@ Once provisioned, update `.firebaserc`:
 | Rule deploys succeed but app still gets `PERMISSION_DENIED` | Rules taking time to propagate | Wait 60s. If still failing, check the Console's Rules tab matches what you deployed |
 | `firebase deploy --only storage` fails with "no bucket configured" | Storage isn't initialized in the Firebase Console | Console → Build → Storage → Get started |
 | `firebase use prod` errors with "Invalid project id" | `.firebaserc`'s `prod` alias still points at the placeholder | Update with the real prod project ID |
+| Sign-out succeeds locally but other devices stay signed in | Their cached Firebase ID token hasn't expired (≤1h TTL) | Expected — `revokeMySession` invalidates refresh tokens; the cached ID token expires on its own clock |
 
-## CI integration (deferred to Phase 3)
+## CI integration (Phase 3+ follow-up)
 
-Per security-commitment #4 in the migration design, rules-unit-testing in CI is required before Phase 3 (listener / metadata-store) ships. That harness lives in `tests/firestore-rules/` (TBD) and runs via `firebase emulators:exec`. Adding it is its own PR — not part of Phase 1.
+Per security-commitment #4 in the migration design, rules-unit-testing in CI is required as a
+defense against accidental rule regressions. The harness will live in `tests/firestore-rules/`
+(empty today — directory is referenced from `firestore.rules`'s top comment but the test files
+themselves are tracked as a separate follow-up). Phase 3 ships rules + lock-doc shape changes
+without the CI gate; the audit trail is `git blame` on `firestore.rules` + manual reasoning.
+The aspirational gitlive-2.4.0-emulator-drift note in `firestore.indexes.json` is also a
+follow-up — no CI check enforces it today.
 
 ## Cost note
 

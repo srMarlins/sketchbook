@@ -3,10 +3,13 @@ package com.sketchbook.sync
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
+import com.sketchbook.cloud.metadata.AcquireResult
 import com.sketchbook.cloud.metadata.DocPath
 import com.sketchbook.cloud.metadata.LockDoc
 import com.sketchbook.cloud.metadata.MetadataStore
+import com.sketchbook.cloud.metadata.RefreshResult
 import com.sketchbook.cloud.metadata.TreeDoc
+import com.sketchbook.cloud.metadata.updateDocBounded
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
 import com.sketchbook.core.ManifestFile
@@ -16,9 +19,13 @@ import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.UserId
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Duration
@@ -42,9 +49,16 @@ class SnapshotPipeline(
     private val hostName: String,
     private val clock: Clock = Clock.System,
     private val leaseTtl: Duration = 15.minutes,
+    /**
+     * Cadence for in-flight lease refresh while [run] holds the lock. 5min is the project-
+     * wide default; tests override this to verify the refresh actually fires. Must be
+     * strictly less than [leaseTtl] (less margin = more refresh churn; more margin = risk
+     * of losing the lease on a brief network blip during a long save).
+     */
+    private val heartbeatInterval: Duration = 5.minutes,
 ) {
     fun run(input: PipelineInput): Flow<SnapshotProgress> =
-        flow {
+        channelFlow {
             val uuid = input.uuid
             val parentRev = input.lastKnownManifest?.rev
             val parentFiles = input.lastKnownManifest?.files ?: emptyMap()
@@ -55,21 +69,64 @@ class SnapshotPipeline(
             //    /users/{uid}/locks/{treeId} per the design data model. holderName goes in
             //    the same CAS write so the "held by X" UI label lands in one round-trip.
             val lockPath = DocPath.lock(ownerUserId.value, uuid.value)
-            val acquired =
-                metadataStore.acquireLock(
-                    path = lockPath,
-                    holder = hostId,
-                    ttl = leaseTtl,
-                    holderName = hostName,
-                )
-            if (!acquired) {
-                val current = metadataStore.getDoc(lockPath, LockDoc.serializer())
-                val ownerLabel = current?.holderName?.takeIf { it.isNotBlank() } ?: current?.holder ?: "another host"
-                emit(SnapshotProgress.LeaseHeld(uuid, ownerLabel))
-                emit(SnapshotProgress.Failed(uuid, "lock held by $ownerLabel"))
-                return@flow
+            when (
+                val acquired =
+                    metadataStore.acquireLock(
+                        path = lockPath,
+                        holder = hostId,
+                        ttl = leaseTtl,
+                        holderName = hostName,
+                    )
+            ) {
+                AcquireResult.Acquired -> {
+                    send(SnapshotProgress.LeaseAcquired(uuid))
+                }
+
+                is AcquireResult.HeldByOther -> {
+                    val ownerLabel =
+                        acquired.current.holderName.takeIf { it.isNotBlank() }
+                            ?: acquired.current.holder
+                    send(SnapshotProgress.LeaseHeld(uuid, ownerLabel))
+                    send(SnapshotProgress.Failed(uuid, "lock held by $ownerLabel"))
+                    return@channelFlow
+                }
+
+                is AcquireResult.Failed -> {
+                    // Surface the actual operational failure (permission denied, network)
+                    // rather than masquerading as contention (M1).
+                    send(SnapshotProgress.Failed(uuid, "lock acquire failed: ${acquired.cause.message}"))
+                    return@channelFlow
+                }
             }
-            emit(SnapshotProgress.LeaseAcquired(uuid))
+
+            // Heartbeat loop, launched on the channelFlow's producerScope (`this`). The
+            // producerScope is a child scope of the flow's collection context; channelFlow
+            // automatically cancels every child coroutine when the flow body returns. That
+            // means the heartbeat's lifetime is bounded by the body without the flow's
+            // emit/send being gated on heartbeat-cancellation propagation. We still cancel
+            // the job explicitly in the finally block below so a refresh in flight at the
+            // end of the save doesn't re-extend the TTL after we delete the doc.
+            val heartbeatJob: Job =
+                launch {
+                    while (currentCoroutineContext().isActive) {
+                        delay(heartbeatInterval)
+                        // Typed RefreshResult: only Lost is terminal. Failed (operational
+                        // blip — network, 5xx, permission glitch) retries on the next
+                        // cadence so a brief outage during a long save doesn't drop the
+                        // lease (N6).
+                        when (val r = metadataStore.refreshLock(lockPath, holder = hostId, ttl = leaseTtl)) {
+                            RefreshResult.Refreshed -> Unit
+                            RefreshResult.Lost -> {
+                                // Doc no longer names us — give up. The CAS at step 5 will
+                                // surface the takeover as a Conflict if it lands.
+                                return@launch
+                            }
+                            is RefreshResult.Failed -> {
+                                System.err.println("[SnapshotPipeline] lease refresh failed (will retry): ${r.cause}")
+                            }
+                        }
+                    }
+                }
 
             try {
                 // 2) Walk + diff.
@@ -77,7 +134,7 @@ class SnapshotPipeline(
                 val unchanged = mutableMapOf<String, ManifestFile>()
                 val toUpload = mutableMapOf<String, ManifestFile>()
                 rels.forEachIndexed { i, rel ->
-                    emit(SnapshotProgress.Hashing(uuid, i + 1, rels.size))
+                    send(SnapshotProgress.Hashing(uuid, i + 1, rels.size))
                     val stat = input.tree.stat(rel)
                     val parent = parentFiles[rel]
                     if (parent != null && parent.size == stat.size && parent.mtime == stat.mtime) {
@@ -105,18 +162,18 @@ class SnapshotPipeline(
                     val anyRel = toUpload.entries.first { it.value.hash == hash }.key
                     if (cloud.headBlob(hash, blobScope)) {
                         bytesDone += first.size
-                        emit(SnapshotProgress.Uploading(uuid, hash, bytesDone, totalUploadBytes))
+                        send(SnapshotProgress.Uploading(uuid, hash, bytesDone, totalUploadBytes))
                         continue
                     }
                     cloud.putBlob(hash, input.tree.read(anyRel), first.size, blobScope)
                     actuallyUploadedBytes += first.size
                     bytesDone += first.size
-                    emit(SnapshotProgress.Uploading(uuid, hash, bytesDone, totalUploadBytes))
+                    send(SnapshotProgress.Uploading(uuid, hash, bytesDone, totalUploadBytes))
                 }
 
                 // 4) Compose manifest. New rev = parentRev+1, or 1 if no parent.
                 val newRev = parentRev?.next() ?: SnapshotRev(1)
-                emit(SnapshotProgress.WritingManifest(uuid, newRev))
+                send(SnapshotProgress.WritingManifest(uuid, newRev))
 
                 val files = LinkedHashMap<String, ManifestFile>(unchanged.size + toUpload.size)
                 files.putAll(unchanged)
@@ -164,7 +221,7 @@ class SnapshotPipeline(
                                 val refs = cloud.listManifests(uuid, sinceRev = parentRev)
                                 val latest = refs.maxByOrNull { it.rev }
                                 if (latest == null) {
-                                    emit(SnapshotProgress.Failed(uuid, "conflict but cannot find new HEAD"))
+                                    send(SnapshotProgress.Failed(uuid, "conflict but cannot find new HEAD"))
                                     return@fold null
                                 }
                                 val branchRev = SnapshotRev(latest.rev + 1)
@@ -193,10 +250,21 @@ class SnapshotPipeline(
                             }
                         },
                     )
-                if (saved != null) emit(saved)
+            if (saved != null) send(saved)
             } finally {
-                // 6) Release lease (best-effort; pipeline outcome already emitted).
-                runCatching { metadataStore.releaseLock(lockPath, holder = hostId) }
+                // 6) Stop heartbeating + release lease. Cancel the heartbeat first so a
+                //    refresh in flight at this moment doesn't re-extend the TTL after we
+                //    delete the doc. We don't need to join — channelFlow already waits for
+                //    its child coroutines (the heartbeat launch above) before the flow
+                //    completes downstream, and the cancel propagates through the producerScope.
+                heartbeatJob.cancel()
+                try {
+                    metadataStore.releaseLock(lockPath, holder = hostId)
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (_: Throwable) {
+                    // Pipeline outcome was already emitted; releaseLock is best-effort cleanup.
+                }
             }
         }
 
@@ -221,47 +289,42 @@ class SnapshotPipeline(
     ) {
         val path = DocPath.tree(ownerUserId.value, uuid.value)
         val now = clock.now()
-        var attempt = 0
-        var lastError: Throwable? = null
-        while (attempt < HEAD_WRITE_MAX_ATTEMPTS) {
-            try {
-                metadataStore.updateDoc(path, TreeDoc.serializer()) { existing ->
-                    existing?.copy(
-                        head_rev = rev.value,
-                        head_gen = gen.raw,
-                        head_updated_at = now,
-                        head_updated_by_host = hostId,
-                    ) ?: TreeDoc(
-                        owner_user_id = ownerUserId.value,
-                        display_name = uuid.value,
-                        created_at = now,
-                        created_by_host = hostId,
-                        head_rev = rev.value,
-                        head_gen = gen.raw,
-                        head_updated_at = now,
-                        head_updated_by_host = hostId,
-                    )
-                }
-                return
-            } catch (ce: CancellationException) {
-                throw ce
-            } catch (t: Throwable) {
-                lastError = t
-                attempt++
-                if (attempt >= HEAD_WRITE_MAX_ATTEMPTS) break
-                // 200ms, 400ms — two retries inside ~600ms total. Small enough that a
-                // user-perceived save isn't blocked, large enough to clear a brief 5xx.
-                delay(HEAD_WRITE_BASE_DELAY_MS shl (attempt - 1))
+        try {
+            metadataStore.updateDocBounded(
+                path,
+                TreeDoc.serializer(),
+                maxAttempts = HEAD_WRITE_MAX_ATTEMPTS,
+            ) { existing ->
+                existing?.copy(
+                    head_rev = rev.value,
+                    head_gen = gen.raw,
+                    head_updated_at = now,
+                    head_updated_by_host = hostId,
+                ) ?: TreeDoc(
+                    owner_user_id = ownerUserId.value,
+                    display_name = uuid.value,
+                    created_at = now,
+                    created_by_host = hostId,
+                    head_rev = rev.value,
+                    head_gen = gen.raw,
+                    head_updated_at = now,
+                    head_updated_by_host = hostId,
+                )
             }
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
+            // All retries exhausted. The local manifest was still appended to Storage, so
+            // other machines will discover it on their next manual pull (or the next sync
+            // cycle once their listener reconnects). Log + return.
+            System.err.println(
+                "[SnapshotPipeline] tree head write failed after $HEAD_WRITE_MAX_ATTEMPTS attempts for uuid=${uuid.value}: $t",
+            )
         }
-        System.err.println(
-            "[SnapshotPipeline] tree head write failed after $HEAD_WRITE_MAX_ATTEMPTS attempts for uuid=${uuid.value}: $lastError",
-        )
     }
 
     private companion object {
         const val HEAD_WRITE_MAX_ATTEMPTS = 3
-        const val HEAD_WRITE_BASE_DELAY_MS = 200L
     }
 }
 

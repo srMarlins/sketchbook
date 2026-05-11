@@ -348,7 +348,7 @@ private class FlakyUpdateDocStore(
     override suspend fun <T : Any> updateDoc(
         path: DocPath,
         serializer: KSerializer<T>,
-        transform: suspend (current: T?) -> T,
+        transform: (current: T?) -> T,
     ): T {
         if (failsRemaining > 0) {
             failsRemaining--
@@ -375,13 +375,13 @@ private class FlakyUpdateDocStore(
         holder: String,
         ttl: Duration,
         holderName: String,
-    ): Boolean = delegate.acquireLock(path, holder, ttl, holderName)
+    ): com.sketchbook.cloud.metadata.AcquireResult = delegate.acquireLock(path, holder, ttl, holderName)
 
     override suspend fun refreshLock(
         path: DocPath,
         holder: String,
         ttl: Duration,
-    ): Boolean = delegate.refreshLock(path, holder, ttl)
+    ): com.sketchbook.cloud.metadata.RefreshResult = delegate.refreshLock(path, holder, ttl)
 
     override suspend fun releaseLock(
         path: DocPath,

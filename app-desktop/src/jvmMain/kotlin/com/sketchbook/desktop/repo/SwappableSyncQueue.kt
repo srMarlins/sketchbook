@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Façade over the actual sync queue impl. The cloud backend is only constructible once the
@@ -129,7 +130,7 @@ class SwappableSyncQueue(
         bucket: String,
         cacheSettings: BlobCacheSettings,
     ): SyncQueue =
-        runCatching {
+        try {
             val credentials = FirebaseCloudCredentials(authSession)
             val backend =
                 FirebaseBlobStore(
@@ -186,7 +187,9 @@ class SwappableSyncQueue(
                 scope = scope,
                 journal = journal,
             )
-        }.getOrElse { failure ->
+        } catch (c: CancellationException) {
+            throw c
+        } catch (failure: Throwable) {
             // Bad creds or unsupported config — fall back to in-memory so the UI keeps
             // rendering. Log the cause so the failure isn't silent; the next access-token
             // request will also surface the underlying issue when a real sync attempt runs.
