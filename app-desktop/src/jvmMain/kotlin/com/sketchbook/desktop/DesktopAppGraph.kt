@@ -13,14 +13,14 @@ import com.sketchbook.auth.firebase.GoogleIdTokenVerifier
 import com.sketchbook.auth.firebase.IdentityToolkitClient
 import com.sketchbook.auth.firebase.JwksGoogleIdTokenVerifier
 import com.sketchbook.catalog.CatalogDb
-import com.sketchbook.cloud.metadata.FirestoreMetadataStore
-import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.catalog.CatalogFts
 import com.sketchbook.catalog.CatalogHandle
 import com.sketchbook.catalog.JvmSampleScanner
 import com.sketchbook.catalog.JvmScanner
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.catalog.db.Catalog
+import com.sketchbook.cloud.metadata.FirestoreMetadataStore
+import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
@@ -250,8 +250,7 @@ interface DesktopAppGraph : ViewModelGraph {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideFirebaseSdkBootstrap(firebaseAuthGraph: FirebaseAuthGraph): FirebaseSdkBootstrap =
-        firebaseAuthGraph.bootstrap
+    fun provideFirebaseSdkBootstrap(firebaseAuthGraph: FirebaseAuthGraph): FirebaseSdkBootstrap = firebaseAuthGraph.bootstrap
 
     @Provides
     @SingleIn(AppScope::class)
@@ -390,8 +389,7 @@ interface DesktopAppGraph : ViewModelGraph {
 
     @Provides
     @SingleIn(AppScope::class)
-    fun provideGoogleIdTokenVerifier(): GoogleIdTokenVerifier =
-        JwksGoogleIdTokenVerifier(expectedAudience = OAUTH_CLIENT_ID)
+    fun provideGoogleIdTokenVerifier(): GoogleIdTokenVerifier = JwksGoogleIdTokenVerifier(expectedAudience = OAUTH_CLIENT_ID)
 
     @Provides
     @SingleIn(AppScope::class)

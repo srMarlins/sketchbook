@@ -59,8 +59,9 @@ class FakeCloudBackend : CloudBackend {
 
     override suspend fun readManifest(ref: ManifestRef): Manifest {
         readManifestFailures[ref.rev]?.let { throw it }
-        val list = manifests.values.firstOrNull { it.any { sm -> sm.ref == ref } }
-            ?: throw SketchbookError.NotFound("no manifests for ref ${ref.path}")
+        val list =
+            manifests.values.firstOrNull { it.any { sm -> sm.ref == ref } }
+                ?: throw SketchbookError.NotFound("no manifests for ref ${ref.path}")
         return list.first { it.ref == ref }.manifest
     }
 
@@ -154,5 +155,4 @@ class FakeCloudBackend : CloudBackend {
     fun privateBlobsCount(uuid: ProjectUuid): Int = blobs.keys.count { (it.scope as? BlobScope.Private)?.uuid == uuid }
 
     fun manifestsFor(uuid: ProjectUuid): List<Manifest> = manifests[uuid]?.map { it.manifest } ?: emptyList()
-
 }

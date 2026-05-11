@@ -2,6 +2,6 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>NestedBlockDepth:JvmBlobCache.kt:JvmBlobCache$suspend fun getOrFetch: Path</ID>
+    <ID>NestedBlockDepth:JvmBlobCache.kt:JvmBlobCache$private suspend fun doFetch: Path</ID>
   </CurrentIssues>
 </SmellBaseline>

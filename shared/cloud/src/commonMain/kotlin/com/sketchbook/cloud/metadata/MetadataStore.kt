@@ -179,4 +179,3 @@ suspend fun <T : Any> MetadataStore.updateDocBounded(
     }
     throw lastError ?: IllegalStateException("updateDoc failed after $maxAttempts attempts")
 }
-

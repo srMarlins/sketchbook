@@ -2,6 +2,6 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>EmptyFunctionBlock:FirebaseBlobStoreTest.kt:FirebaseBlobStoreTest.&lt;no name provided&gt;${}</ID>
+    <ID>MatchingDeclarationName:ServiceAccount.kt:ServiceAccountKey</ID>
   </CurrentIssues>
 </SmellBaseline>

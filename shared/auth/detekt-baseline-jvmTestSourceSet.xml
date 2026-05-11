@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>TooGenericExceptionThrown:FirebaseAuthSessionTest.kt:FirebaseAuthSessionTest$throw RuntimeException("network down")</ID>
+  </CurrentIssues>
+</SmellBaseline>

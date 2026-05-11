@@ -151,7 +151,10 @@ class FirebaseSdkBootstrap(
             // Explicitly use the gitlive Firebase companion — `Firebase` (unqualified) in
             // this file is `com.google.firebase.Firebase`, whose `auth` extension is
             // firebase-java-sdk's, not gitlive's. gitlive's auth is what we initialized.
-            runCatching { dev.gitlive.firebase.Firebase.auth.signOut() }
+            runCatching {
+                dev.gitlive.firebase.Firebase.auth
+                    .signOut()
+            }
             runCatching {
                 // Default app — Sketchbook only ever initializes one. delete() blocks until
                 // background callbacks drain; safe to call from a suspend context.

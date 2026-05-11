@@ -2,18 +2,6 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ArgumentListWrapping:JvmBlobCacheTest.kt:CountingCloud$("1")</ID>
-    <ID>ArgumentListWrapping:JvmBlobCacheTest.kt:CountingCloud$("not used")</ID>
-    <ID>ArgumentListWrapping:JvmBlobCacheTest.kt:CountingCloud$(Generation("1"))</ID>
-    <ID>ArgumentListWrapping:JvmBlobCacheTest.kt:CountingCloud$(SketchbookError.Conflict("not used"))</ID>
     <ID>EmptyFunctionBlock:JvmBlobCacheTest.kt:CountingCloud${}</ID>
-    <ID>FunctionSignature:JvmBlobCacheTest.kt:CountingCloud$override suspend fun appendManifestHead</ID>
-    <ID>FunctionSignature:JvmBlobCacheTest.kt:CountingCloud$override suspend fun refreshLock</ID>
-    <ID>MaxLineLength:JvmBlobCacheTest.kt:CountingCloud$override suspend fun appendManifestHead</ID>
-    <ID>MaxLineLength:JvmBlobCacheTest.kt:CountingCloud$override suspend fun refreshLock</ID>
-    <ID>NoUnusedImports:JvmAudioIdSidecarTest.kt:com.sketchbook.sync.migration.JvmAudioIdSidecarTest.kt</ID>
-    <ID>NoUnusedImports:JvmFirstRunMigrationTest.kt:com.sketchbook.sync.migration.JvmFirstRunMigrationTest.kt</ID>
-    <ID>ParameterListWrapping:JvmBlobCacheTest.kt:CountingCloud$(uuid: ProjectUuid, expectedHead: Generation?, manifest: Manifest)</ID>
-    <ID>ParameterListWrapping:JvmBlobCacheTest.kt:CountingCloud$(uuid: ProjectUuid, lock: LeaseLock, expected: Generation)</ID>
   </CurrentIssues>
 </SmellBaseline>

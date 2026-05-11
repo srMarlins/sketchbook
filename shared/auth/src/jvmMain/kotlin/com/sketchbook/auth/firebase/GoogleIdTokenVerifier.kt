@@ -171,4 +171,3 @@ private class JwksCache(
             fresh
         }
 }
-

@@ -392,7 +392,6 @@ class JvmPluginPresenceProbeTest {
 
         override suspend fun removeRoot(root: LibraryRoot): Result<Unit> = Result.success(Unit)
 
-
         override suspend fun setSelfContained(
             uuid: ProjectUuid,
             value: Boolean,
