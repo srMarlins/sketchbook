@@ -574,7 +574,7 @@ private class CountingMetadataStore(
         holder: String,
         ttl: kotlin.time.Duration,
         holderName: String,
-    ): Boolean {
+    ): com.sketchbook.cloud.metadata.AcquireResult {
         lockAcquireCount += 1
         return delegate.acquireLock(path, holder, ttl, holderName)
     }

@@ -2,6 +2,7 @@ package com.sketchbook.cloud.metadata
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -54,7 +55,7 @@ class InMemoryMetadataStore(
     override suspend fun <T : Any> updateDoc(
         path: DocPath,
         serializer: KSerializer<T>,
-        transform: suspend (current: T?) -> T,
+        transform: (current: T?) -> T,
     ): T {
         // The mutex serializes the read-modify-write so two concurrent updateDoc calls don't
         // race (mirrors Firestore's tx semantics for a single-machine fake).
@@ -80,15 +81,20 @@ class InMemoryMetadataStore(
         serializer: KSerializer<T>,
     ): Flow<List<CollectionEntry<T>>> {
         val prefix = path.value + "/"
-        return docs.map { all ->
-            all.entries
-                .filter { it.key.startsWith(prefix) && !it.key.substring(prefix.length).contains('/') }
-                .mapNotNull { entry ->
-                    decode(entry.value, serializer)?.let { v ->
-                        CollectionEntry(id = entry.key.substring(prefix.length), value = v)
+        return docs
+            .map { all ->
+                all.entries
+                    .filter { it.key.startsWith(prefix) && !it.key.substring(prefix.length).contains('/') }
+                    .mapNotNull { entry ->
+                        decode(entry.value, serializer)?.let { v ->
+                            CollectionEntry(id = entry.key.substring(prefix.length), value = v)
+                        }
                     }
-                }
-        }
+            }
+            // The underlying docs flow emits on every write across the whole store. The
+            // distinctUntilChanged here keeps observers of one collection from waking up on
+            // unrelated writes to a different prefix (N10).
+            .distinctUntilChanged()
     }
 
     override suspend fun acquireLock(
@@ -96,7 +102,7 @@ class InMemoryMetadataStore(
         holder: String,
         ttl: Duration,
         holderName: String,
-    ): Boolean {
+    ): AcquireResult {
         val now: Instant = clock.now()
         return mutex.withLock {
             val current = decode(docs.value[path.value], LockDoc.serializer())
@@ -104,18 +110,16 @@ class InMemoryMetadataStore(
                 current == null ||
                     current.holder == holder ||
                     current.expiresAt < now
-            if (!canAcquire) return@withLock false
-            val nextSeq = (current?.heartbeatSeq ?: 0L) + 1
+            if (!canAcquire) return@withLock AcquireResult.HeldByOther(current!!)
             val doc =
                 LockDoc(
                     holder = holder,
                     holderName = holderName,
                     acquiredAt = now,
                     expiresAt = now + ttl,
-                    heartbeatSeq = nextSeq,
                 )
             docs.value = docs.value + (path.value to json.encodeToString(LockDoc.serializer(), doc))
-            true
+            AcquireResult.Acquired
         }
     }
 
@@ -128,11 +132,7 @@ class InMemoryMetadataStore(
         return mutex.withLock {
             val current = decode(docs.value[path.value], LockDoc.serializer()) ?: return@withLock false
             if (current.holder != holder) return@withLock false
-            val doc =
-                current.copy(
-                    expiresAt = now + ttl,
-                    heartbeatSeq = current.heartbeatSeq + 1,
-                )
+            val doc = current.copy(expiresAt = now + ttl)
             docs.value = docs.value + (path.value to json.encodeToString(LockDoc.serializer(), doc))
             true
         }

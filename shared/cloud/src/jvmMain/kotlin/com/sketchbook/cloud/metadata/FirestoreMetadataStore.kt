@@ -79,13 +79,12 @@ class FirestoreMetadataStore(
     override suspend fun <T : Any> updateDoc(
         path: DocPath,
         serializer: KSerializer<T>,
-        transform: suspend (current: T?) -> T,
+        transform: (current: T?) -> T,
     ): T {
         ensureInitialized()
         // gitlive's runTransaction body is a `suspend Transaction.() -> T` extension lambda;
-        // Firestore retries on contention. The `transform` callback in our port is `suspend`,
-        // and Firestore's retry contract calls for idempotent bodies — callers must not start
-        // unrelated side-effects inside transform.
+        // Firestore retries on contention. `transform` is non-suspend by contract (M15) so
+        // a caller can't accidentally do unrelated I/O inside the retry loop.
         val ref = firestore.document(path.value)
         return firestore.runTransaction<T> {
             val snap = get(ref)
@@ -136,12 +135,12 @@ class FirestoreMetadataStore(
         holder: String,
         ttl: Duration,
         holderName: String,
-    ): Boolean {
+    ): AcquireResult {
         ensureInitialized()
         val now = clock.now()
         val ref = firestore.document(path.value)
         return try {
-            firestore.runTransaction<Boolean> {
+            firestore.runTransaction<AcquireResult> {
                 val snap = get(ref)
                 val current = if (snap.exists) snap.data(LockDoc.serializer()) else null
                 val canAcquire =
@@ -149,7 +148,6 @@ class FirestoreMetadataStore(
                         current.holder == holder ||
                         current.expiresAt < now
                 if (canAcquire) {
-                    val nextSeq = (current?.heartbeatSeq ?: 0L) + 1
                     set(
                         ref,
                         LockDoc.serializer(),
@@ -158,18 +156,17 @@ class FirestoreMetadataStore(
                             holderName = holderName,
                             acquiredAt = now,
                             expiresAt = now + ttl,
-                            heartbeatSeq = nextSeq,
                         ),
                     )
-                    true
+                    AcquireResult.Acquired
                 } else {
-                    false
+                    AcquireResult.HeldByOther(current!!)
                 }
             }
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
-            false
+            AcquireResult.Failed(t)
         }
     }
 
@@ -189,10 +186,7 @@ class FirestoreMetadataStore(
                     set(
                         ref,
                         LockDoc.serializer(),
-                        current.copy(
-                            expiresAt = now + ttl,
-                            heartbeatSeq = current.heartbeatSeq + 1,
-                        ),
+                        current.copy(expiresAt = now + ttl),
                     )
                     true
                 } else {

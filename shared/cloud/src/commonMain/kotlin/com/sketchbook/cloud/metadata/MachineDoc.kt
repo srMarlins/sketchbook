@@ -1,5 +1,6 @@
 package com.sketchbook.cloud.metadata
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.time.Instant
 
@@ -12,13 +13,19 @@ import kotlin.time.Instant
  * (`match /machines/{hostId} { allow write: if isOwner(uid) ... }`); there's no
  * collaborator-aware variant on machine docs.
  *
+ * **Wire field naming.** Snake_case via [@SerialName] (M8) — consistent with [TreeDoc] and
+ * [LockDoc], so the Firestore Admin SDK and rule predicates see one canonical shape.
+ *
  * Phase 3 ships the shape and the store; wiring `last_seen_at` to a per-launch heartbeat is
  * a Phase 4 follow-up (see design doc §"Out of scope for Phase 3").
  */
 @Serializable
 data class MachineDoc(
-    val hostName: String,
-    val os: String,
-    val last_seen_at: Instant,
-    val binary_version: String = "",
+    @SerialName("host_name") val hostName: String,
+    @SerialName("os") val os: String,
+    // TODO(machine-heartbeat): nothing writes this today. Follow-up: write on session start
+    // + a launch-cadence heartbeat. Tracked in the design doc's "Out of scope for Phase 3"
+    // section.
+    @SerialName("last_seen_at") val lastSeenAt: Instant,
+    @SerialName("binary_version") val binaryVersion: String = "",
 )

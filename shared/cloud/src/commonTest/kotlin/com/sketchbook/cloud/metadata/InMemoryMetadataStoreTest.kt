@@ -86,21 +86,18 @@ class InMemoryMetadataStoreTest {
             val store = InMemoryMetadataStore()
             val path = DocPath.lock("u", "t1")
 
-            assertTrue(store.acquireLock(path, "host-a", 10.minutes))
-            assertFalse(store.acquireLock(path, "host-b", 10.minutes))
+            assertEquals(AcquireResult.Acquired, store.acquireLock(path, "host-a", 10.minutes))
+            assertTrue(store.acquireLock(path, "host-b", 10.minutes) is AcquireResult.HeldByOther)
         }
 
     @Test
-    fun `acquireLock by the same holder succeeds and bumps the heartbeat`() =
+    fun `acquireLock by the same holder succeeds`() =
         runTest {
             val store = InMemoryMetadataStore()
             val path = DocPath.lock("u", "t1")
 
-            assertTrue(store.acquireLock(path, "host-a", 10.minutes))
-            assertTrue(store.acquireLock(path, "host-a", 10.minutes))
-
-            val lock = store.getDoc(path, LockDoc.serializer())!!
-            assertEquals(2L, lock.heartbeatSeq)
+            assertEquals(AcquireResult.Acquired, store.acquireLock(path, "host-a", 10.minutes))
+            assertEquals(AcquireResult.Acquired, store.acquireLock(path, "host-a", 10.minutes))
         }
 
     @Test
@@ -110,9 +107,9 @@ class InMemoryMetadataStoreTest {
             val store = InMemoryMetadataStore(clock = controllable)
             val path = DocPath.lock("u", "t1")
 
-            assertTrue(store.acquireLock(path, "host-a", 1.seconds))
+            assertEquals(AcquireResult.Acquired, store.acquireLock(path, "host-a", 1.seconds))
             controllable.advanceBy(2.seconds)
-            assertTrue(store.acquireLock(path, "host-b", 10.minutes))
+            assertEquals(AcquireResult.Acquired, store.acquireLock(path, "host-b", 10.minutes))
 
             assertEquals("host-b", store.getDoc(path, LockDoc.serializer())!!.holder)
         }
@@ -153,7 +150,9 @@ class InMemoryMetadataStoreTest {
 
             val raw = store.rawDoc(path.value)!!
             assertTrue(raw.contains("holder"), "expected holder field in encoded JSON: $raw")
-            assertTrue(raw.contains("acquiredAt"), "expected acquiredAt field in encoded JSON: $raw")
+            // D3: wire shape is snake_case.
+            assertTrue(raw.contains("acquired_at"), "expected acquired_at field in encoded JSON: $raw")
+            assertTrue(raw.contains("expires_at"), "expected expires_at field in encoded JSON: $raw")
         }
 
     @Serializable

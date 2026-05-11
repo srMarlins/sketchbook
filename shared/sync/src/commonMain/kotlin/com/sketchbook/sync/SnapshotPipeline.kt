@@ -3,10 +3,12 @@ package com.sketchbook.sync
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
+import com.sketchbook.cloud.metadata.AcquireResult
 import com.sketchbook.cloud.metadata.DocPath
 import com.sketchbook.cloud.metadata.LockDoc
 import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.cloud.metadata.TreeDoc
+import com.sketchbook.cloud.metadata.updateDocBounded
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
 import com.sketchbook.core.ManifestFile
@@ -66,21 +68,35 @@ class SnapshotPipeline(
             //    /users/{uid}/locks/{treeId} per the design data model. holderName goes in
             //    the same CAS write so the "held by X" UI label lands in one round-trip.
             val lockPath = DocPath.lock(ownerUserId.value, uuid.value)
-            val acquired =
-                metadataStore.acquireLock(
-                    path = lockPath,
-                    holder = hostId,
-                    ttl = leaseTtl,
-                    holderName = hostName,
-                )
-            if (!acquired) {
-                val current = metadataStore.getDoc(lockPath, LockDoc.serializer())
-                val ownerLabel = current?.holderName?.takeIf { it.isNotBlank() } ?: current?.holder ?: "another host"
-                send(SnapshotProgress.LeaseHeld(uuid, ownerLabel))
-                send(SnapshotProgress.Failed(uuid, "lock held by $ownerLabel"))
-                return@channelFlow
+            when (
+                val acquired =
+                    metadataStore.acquireLock(
+                        path = lockPath,
+                        holder = hostId,
+                        ttl = leaseTtl,
+                        holderName = hostName,
+                    )
+            ) {
+                AcquireResult.Acquired -> {
+                    send(SnapshotProgress.LeaseAcquired(uuid))
+                }
+
+                is AcquireResult.HeldByOther -> {
+                    val ownerLabel =
+                        acquired.current.holderName.takeIf { it.isNotBlank() }
+                            ?: acquired.current.holder
+                    send(SnapshotProgress.LeaseHeld(uuid, ownerLabel))
+                    send(SnapshotProgress.Failed(uuid, "lock held by $ownerLabel"))
+                    return@channelFlow
+                }
+
+                is AcquireResult.Failed -> {
+                    // Surface the actual operational failure (permission denied, network)
+                    // rather than masquerading as contention (M1).
+                    send(SnapshotProgress.Failed(uuid, "lock acquire failed: ${acquired.cause.message}"))
+                    return@channelFlow
+                }
             }
-            send(SnapshotProgress.LeaseAcquired(uuid))
 
             // Heartbeat loop, launched on the channelFlow's producerScope (`this`). The
             // producerScope is a child scope of the flow's collection context; channelFlow
@@ -272,47 +288,42 @@ class SnapshotPipeline(
     ) {
         val path = DocPath.tree(ownerUserId.value, uuid.value)
         val now = clock.now()
-        var attempt = 0
-        var lastError: Throwable? = null
-        while (attempt < HEAD_WRITE_MAX_ATTEMPTS) {
-            try {
-                metadataStore.updateDoc(path, TreeDoc.serializer()) { existing ->
-                    existing?.copy(
-                        head_rev = rev.value,
-                        head_gen = gen.raw,
-                        head_updated_at = now,
-                        head_updated_by_host = hostId,
-                    ) ?: TreeDoc(
-                        owner_user_id = ownerUserId.value,
-                        display_name = uuid.value,
-                        created_at = now,
-                        created_by_host = hostId,
-                        head_rev = rev.value,
-                        head_gen = gen.raw,
-                        head_updated_at = now,
-                        head_updated_by_host = hostId,
-                    )
-                }
-                return
-            } catch (ce: CancellationException) {
-                throw ce
-            } catch (t: Throwable) {
-                lastError = t
-                attempt++
-                if (attempt >= HEAD_WRITE_MAX_ATTEMPTS) break
-                // 200ms, 400ms — two retries inside ~600ms total. Small enough that a
-                // user-perceived save isn't blocked, large enough to clear a brief 5xx.
-                delay(HEAD_WRITE_BASE_DELAY_MS shl (attempt - 1))
+        try {
+            metadataStore.updateDocBounded(
+                path,
+                TreeDoc.serializer(),
+                maxAttempts = HEAD_WRITE_MAX_ATTEMPTS,
+            ) { existing ->
+                existing?.copy(
+                    head_rev = rev.value,
+                    head_gen = gen.raw,
+                    head_updated_at = now,
+                    head_updated_by_host = hostId,
+                ) ?: TreeDoc(
+                    owner_user_id = ownerUserId.value,
+                    display_name = uuid.value,
+                    created_at = now,
+                    created_by_host = hostId,
+                    head_rev = rev.value,
+                    head_gen = gen.raw,
+                    head_updated_at = now,
+                    head_updated_by_host = hostId,
+                )
             }
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
+            // All retries exhausted. The local manifest was still appended to Storage, so
+            // other machines will discover it on their next manual pull (or the next sync
+            // cycle once their listener reconnects). Log + return.
+            System.err.println(
+                "[SnapshotPipeline] tree head write failed after $HEAD_WRITE_MAX_ATTEMPTS attempts for uuid=${uuid.value}: $t",
+            )
         }
-        System.err.println(
-            "[SnapshotPipeline] tree head write failed after $HEAD_WRITE_MAX_ATTEMPTS attempts for uuid=${uuid.value}: $lastError",
-        )
     }
 
     private companion object {
         const val HEAD_WRITE_MAX_ATTEMPTS = 3
-        const val HEAD_WRITE_BASE_DELAY_MS = 200L
     }
 }
 

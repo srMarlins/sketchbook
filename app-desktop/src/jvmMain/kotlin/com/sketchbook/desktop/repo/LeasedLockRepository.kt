@@ -1,6 +1,7 @@
 package com.sketchbook.desktop.repo
 
 import com.sketchbook.catalog.SyncStateStore
+import com.sketchbook.cloud.metadata.AcquireResult
 import com.sketchbook.cloud.metadata.DocPath
 import com.sketchbook.cloud.metadata.LockDoc
 import com.sketchbook.cloud.metadata.MetadataStore
@@ -122,15 +123,22 @@ class LeasedLockRepository(
         // acceptable for force-take semantics: the user already accepted "I am racing the
         // current holder"; whoever lands their write last wins.
         runCatching { store.releaseLockAsAnyone(path) }
-        val acquired =
-            store.acquireLock(
-                path = path,
-                holder = hostId,
-                ttl = leaseTtl,
-                holderName = hostName,
-            )
-        if (!acquired) {
-            return Result.failure(IllegalStateException("force-take race: another host re-acquired the lock"))
+        when (
+            val acquired =
+                store.acquireLock(
+                    path = path,
+                    holder = hostId,
+                    ttl = leaseTtl,
+                    holderName = hostName,
+                )
+        ) {
+            AcquireResult.Acquired -> Unit
+            is AcquireResult.HeldByOther ->
+                return Result.failure(
+                    IllegalStateException("force-take race: another host re-acquired the lock"),
+                )
+            is AcquireResult.Failed ->
+                return Result.failure(acquired.cause)
         }
         startHeartbeat(uuid, per)
         recordForceTake(uuid, priorOwnerName, priorExpiresAtMs)

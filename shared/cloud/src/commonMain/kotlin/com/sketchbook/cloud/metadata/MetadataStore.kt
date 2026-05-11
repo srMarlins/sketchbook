@@ -1,8 +1,11 @@
 package com.sketchbook.cloud.metadata
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.KSerializer
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Provider-neutral, document-oriented metadata store. The Firebase migration's port for
@@ -54,12 +57,16 @@ interface MetadataStore {
      * value. The transaction retries on conflict — [transform] must be idempotent (no side
      * effects beyond computing the new value).
      *
+     * [transform] is intentionally **not** `suspend` (M15): the transaction body retries on
+     * conflict, and a suspending body invites callers to perform unrelated I/O inside the
+     * retry loop. Compute the new value purely from [current] + closed-over state.
+     *
      * Returns the value that was written (i.e. [transform]'s last return).
      */
     suspend fun <T : Any> updateDoc(
         path: DocPath,
         serializer: KSerializer<T>,
-        transform: suspend (current: T?) -> T,
+        transform: (current: T?) -> T,
     ): T
 
     /**
@@ -91,30 +98,34 @@ interface MetadataStore {
     ): Flow<List<CollectionEntry<T>>>
 
     /**
-     * Acquire a lease lock at [path]. Atomic test-and-set: succeeds (returns `true`) iff the
-     * doc is absent OR the existing lease has expired OR the existing lease is held by
-     * [holder]. On success the doc is written with `holder`, `holderName` (UI label), now /
-     * now + ttl. Returns `false` if a non-expired lease held by someone else exists.
+     * Acquire a lease lock at [path]. Atomic test-and-set: succeeds (returns
+     * [AcquireResult.Acquired]) iff the doc is absent OR the existing lease has expired OR
+     * the existing lease is held by [holder]. On success the doc is written with `holder`,
+     * `holderName` (UI label), now / now + ttl. Returns [AcquireResult.HeldByOther] if a
+     * non-expired lease held by someone else exists, or [AcquireResult.Failed] if the
+     * operation itself failed (permission denied, network down — distinguishing genuine
+     * contention from operational failure, M1).
      *
      * [holderName] is the human-readable display label the UI shows in "held by X until Y"
      * badges. Passed inline so the acquire writes the full LockDoc in a single transaction
      * — landing it via a follow-up `setDoc` would double the Firestore write cost and
      * latency for every lease operation.
-     *
-     * The returned bool is sufficient for binary "did we get it?"; richer "who holds it"
-     * comes from [observeDoc] against the same path with [LockDoc.serializer].
      */
     suspend fun acquireLock(
         path: DocPath,
         holder: String,
         ttl: Duration,
         holderName: String = "",
-    ): Boolean
+    ): AcquireResult
 
     /**
      * Heartbeat-extend a lease we already hold. Returns `true` if the doc still names us and
      * the expiry was bumped; `false` if it's been stolen or expired-and-replaced — caller
-     * should treat as a takeover and re-acquire if it wants to keep going.
+     * should treat as a takeover and re-acquire if it wants to keep going. Operational
+     * failures (network down, permission denied) are folded into `false` here because the
+     * heartbeat is a low-stakes background extension; if the lock has *really* been stolen
+     * vs. the call just failed transiently, the next listener emission will surface the
+     * truth.
      */
     suspend fun refreshLock(
         path: DocPath,
@@ -132,3 +143,34 @@ interface MetadataStore {
         holder: String,
     )
 }
+
+/**
+ * Bounded-retry wrapper around [MetadataStore.updateDoc]. Firestore's `runTransaction`
+ * already retries on contention, but the underlying contract is open-ended; in a pathological
+ * write storm an unbounded retry could pin a coroutine indefinitely. This helper applies an
+ * upper bound + exponential backoff (100ms, 200ms, …) before giving up (M7).
+ *
+ * Cancellation propagates: a cancelled scope throws [CancellationException] out of [delay]
+ * without re-trying.
+ */
+suspend fun <T : Any> MetadataStore.updateDocBounded(
+    path: DocPath,
+    serializer: KSerializer<T>,
+    maxAttempts: Int = 5,
+    transform: (T?) -> T,
+): T {
+    var lastError: Throwable? = null
+    repeat(maxAttempts) { attempt ->
+        try {
+            return updateDoc(path, serializer, transform)
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            lastError = t
+            if (attempt == maxAttempts - 1) return@repeat
+            delay((100L * (1 shl attempt)).milliseconds)
+        }
+    }
+    throw lastError ?: IllegalStateException("updateDoc failed after $maxAttempts attempts")
+}
+
