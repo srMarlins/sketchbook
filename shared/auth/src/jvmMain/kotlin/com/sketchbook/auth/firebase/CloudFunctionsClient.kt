@@ -29,7 +29,7 @@ import kotlinx.serialization.json.Json
  * Phase 3 ships one callable: [revokeMySession]. Future callables (per-host kill switch,
  * server-side abuse hooks) plug into the same class.
  */
-class CloudFunctionsClient(
+open class CloudFunctionsClient(
     private val httpClient: HttpClient,
     private val projectId: String,
     private val region: String = "us-central1",
@@ -51,7 +51,7 @@ class CloudFunctionsClient(
      *
      * Returns the parsed result body on success; throws on HTTP failure.
      */
-    suspend fun revokeMySession(idToken: String): RevokeMySessionResult {
+    open suspend fun revokeMySession(idToken: String): RevokeMySessionResult {
         val url = "https://$region-$projectId.cloudfunctions.net/revokeMySession"
         val response =
             httpClient.post(url) {

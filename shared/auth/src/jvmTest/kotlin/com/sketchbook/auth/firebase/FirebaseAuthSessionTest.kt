@@ -11,11 +11,16 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.respondError
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runTest
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -131,7 +136,7 @@ class FirebaseAuthSessionTest {
         }
 
     @Test
-    fun `tryRestore clears the keyring when refresh fails`() =
+    fun `tryRestore clears the keyring when refresh fails with a terminal error code`() =
         runTest {
             val store = FakeTokenStore(initial = "DEAD_REFRESH")
             val session = newSession(store = store, exchangeResponse = REFRESH_FAIL)
@@ -139,6 +144,122 @@ class FirebaseAuthSessionTest {
             session.tryRestore()
 
             assertEquals(1, store.clears.get())
+        }
+
+    @Test
+    fun `tryRestore preserves the keyring on a transient network failure (B5)`() =
+        runTest {
+            val store = FakeTokenStore(initial = "GOOD_REFRESH")
+            // 500-ish response → IdentityToolkitException with no terminal error code (the
+            // error envelope decode falls through to a non-terminal message). Should leave
+            // keyring intact so the next attempt picks up the same refresh token.
+            val session = newSession(store = store, exchangeResponse = REFRESH_TRANSIENT)
+
+            val restored = session.tryRestore()
+
+            assertEquals(false, restored)
+            assertEquals(0, store.clears.get(), "transient failure must not clear keyring")
+        }
+
+    @Test
+    fun `refresh on transient failure throws AuthSessionExpired but preserves keyring (B5)`() =
+        runTest {
+            val clock = ControllableClock()
+            val store = FakeTokenStore()
+            val responses = ResponseQueue(EXCHANGE_OK, REFRESH_TRANSIENT)
+            val session = newSession(clock = clock, store = store, responses = responses)
+            session.signIn().getOrThrow()
+            clock.advance(2.hours)
+
+            assertFailsWith<AuthSessionExpired> { session.idToken() }
+            // Transient failure means the keyring stays — exactly 1 clear from sign-out path
+            // would mean we tore down. Expect 0.
+            assertEquals(0, store.clears.get(), "transient refresh failure must preserve keyring")
+        }
+
+    @Test
+    fun `signOut invokes cloudFunctions revokeMySession and sdkClearSession (B8)`() =
+        runTest {
+            val store = FakeTokenStore()
+            val revokeCalls = AtomicInteger(0)
+            val sdkClearCalls = AtomicInteger(0)
+            val capturedRevokeToken = arrayOf<String?>(null)
+            val cloudFunctions = FakeCloudFunctions { token ->
+                revokeCalls.incrementAndGet()
+                capturedRevokeToken[0] = token
+                RevokeMySessionResult(revoked = true, uid = "FAKE_FIREBASE_UID")
+            }
+            val session =
+                newSession(
+                    store = store,
+                    exchangeResponse = EXCHANGE_OK,
+                    cloudFunctions = cloudFunctions,
+                    sdkClearSession = { sdkClearCalls.incrementAndGet() },
+                )
+            session.signIn().getOrThrow()
+
+            session.signOut()
+
+            assertEquals(1, revokeCalls.get())
+            assertEquals("FAKE_FIREBASE_ID_TOKEN", capturedRevokeToken[0])
+            assertEquals(1, sdkClearCalls.get())
+            assertTrue(session.state.value is AuthState.SignedOut)
+        }
+
+    @Test
+    fun `signOut completes when revokeMySession throws (B8)`() =
+        runTest {
+            val store = FakeTokenStore()
+            val sdkClearCalls = AtomicInteger(0)
+            val cloudFunctions = FakeCloudFunctions { _ ->
+                throw RuntimeException("network down")
+            }
+            val session =
+                newSession(
+                    store = store,
+                    exchangeResponse = EXCHANGE_OK,
+                    cloudFunctions = cloudFunctions,
+                    sdkClearSession = { sdkClearCalls.incrementAndGet() },
+                )
+            session.signIn().getOrThrow()
+
+            session.signOut()
+
+            // Local state clears + sdkClearSession still runs even though revoke threw.
+            assertTrue(session.state.value is AuthState.SignedOut)
+            assertEquals(1, sdkClearCalls.get())
+            assertEquals(1, store.clears.get())
+        }
+
+    @Test
+    fun `currentTokens races against signOut without throwing ClassCastException (B6)`() =
+        runTest {
+            // 50 trips through sign-in → currentTokens || signOut → sign-in → … to give the
+            // ClassCastException race a chance to fire if currentTokens read tokens.value
+            // outside the mutex.
+            repeat(50) {
+                val clock = ControllableClock()
+                val responses = ResponseQueue(EXCHANGE_OK, REFRESH_OK)
+                val session = newSession(clock = clock, responses = responses)
+                session.signIn().getOrThrow()
+                clock.advance(2.hours)
+
+                coroutineScope {
+                    val a = async { runCatching { session.currentTokens() } }
+                    val b = async { session.signOut() }
+                    val (tokens, _) = awaitAll(a, b)
+                    // Either succeeds (refresh won the race) or throws AuthSessionExpired
+                    // (signOut won) — but never ClassCastException.
+                    @Suppress("UNCHECKED_CAST")
+                    val r = tokens as Result<FirebaseTokens>
+                    r.exceptionOrNull()?.let { e ->
+                        assertTrue(
+                            e is AuthSessionExpired,
+                            "expected AuthSessionExpired but got ${e::class.simpleName}",
+                        )
+                    }
+                }
+            }
         }
 
     // ---------------------------------------------------------------------------------------
@@ -152,6 +273,8 @@ class FirebaseAuthSessionTest {
         oauthClient: OAuthFlow = StubOAuthClient,
         exchangeResponse: MockResponseFixture? = null,
         responses: ResponseQueue = ResponseQueue(exchangeResponse ?: EXCHANGE_OK),
+        cloudFunctions: CloudFunctionsClient? = null,
+        sdkClearSession: suspend () -> Unit = {},
     ): FirebaseAuthSession {
         val http = HttpClient(MockEngine { _ -> responses.next().respondVia(this) })
         return FirebaseAuthSession(
@@ -160,7 +283,24 @@ class FirebaseAuthSessionTest {
             identityToolkit = IdentityToolkitClient(http, webApiKey = "TEST_KEY", clock = clock),
             googleIdTokenVerifier = verifier,
             clock = clock,
+            cloudFunctions = cloudFunctions,
+            sdkClearSession = sdkClearSession,
         )
+    }
+
+    /**
+     * Test-only [CloudFunctionsClient] subclass that delegates to a lambda. Beats mocking the
+     * Ktor HttpClient for the revoke call — we want to inspect what FirebaseAuthSession does
+     * with the response, not exercise the wire-shape (covered separately by
+     * [CloudFunctionsClient]-level tests, follow-up).
+     */
+    private class FakeCloudFunctions(
+        private val handler: suspend (idToken: String) -> RevokeMySessionResult,
+    ) : CloudFunctionsClient(
+            httpClient = HttpClient(MockEngine { respondError(HttpStatusCode.NotFound) }),
+            projectId = "fake",
+        ) {
+        override suspend fun revokeMySession(idToken: String): RevokeMySessionResult = handler(idToken)
     }
 
     /** A clock the test moves forward manually — replaces the previous `expireForTest()` hack. */
@@ -276,6 +416,21 @@ class FirebaseAuthSessionTest {
                     }
                     """.trimIndent(),
                 status = HttpStatusCode.BadRequest,
+            )
+
+        /** Non-terminal upstream failure (B5). 503-ish — caller should treat as transient. */
+        val REFRESH_TRANSIENT =
+            MockResponseFixture(
+                body =
+                    """
+                    {
+                      "error": {
+                        "code": 503,
+                        "message": "TEMPORARY_OUTAGE"
+                      }
+                    }
+                    """.trimIndent(),
+                status = HttpStatusCode.ServiceUnavailable,
             )
 
         @Suppress("unused")

@@ -79,9 +79,21 @@ class FirebaseAuthSession(
      * Silently restore from a persisted refresh token if one exists. Returns `true` if the
      * session is now active (tokens cached, ready for [idToken]), `false` otherwise.
      * Called once at app startup by the wrapper
-     * [com.sketchbook.desktop.auth.DesktopAuthSession]. Never throws — restore is best-effort.
+     * [com.sketchbook.desktop.auth.DesktopAuthSession].
+     *
+     * **[emailHint]** is the email we cached at sign-in time (via `PrefsIdentityStore`). The
+     * secureToken refresh endpoint does NOT echo the user's email back; passing the hint here
+     * lets the inner session flip itself to `SignedIn(uid, email = hint)` directly. Without
+     * the hint the inner state would stay at SignedOut after a restore, requiring the wrapper
+     * to re-derive identity from a separate source — the source of the K6 silent-restore bug.
+     *
+     * **Failure-mode split (H3/B5).** Only terminal refresh errors (invalid token, user
+     * disabled, user not found) clear the keyring — a transient blip (offline, regional
+     * outage) preserves the refresh token so the next attempt recovers when connectivity
+     * returns. Network failures on a launch with cached refresh tokens shouldn't force
+     * re-sign-in.
      */
-    suspend fun tryRestore(): Boolean =
+    suspend fun tryRestore(emailHint: String? = null): Boolean =
         refreshMutex.withLock {
             val rt = tokenStore.read() ?: return@withLock false
             identityToolkit
@@ -90,10 +102,20 @@ class FirebaseAuthSession(
                     onSuccess = { fresh ->
                         commitTokens(fresh)
                         if (fresh.refreshToken != rt) tokenStore.write(fresh.refreshToken)
+                        // Refresh endpoint doesn't echo email; fall back to the cached hint
+                        // from PrefsIdentityStore. If neither is available (degenerate case:
+                        // refresh token persisted without a corresponding cached identity)
+                        // we surface an empty string rather than fail the restore — the UI
+                        // shows email opportunistically and tolerates the gap.
+                        _state.value =
+                            AuthState.SignedIn(
+                                userId = UserId(fresh.uid),
+                                email = fresh.email ?: emailHint ?: "",
+                            )
                         true
                     },
-                    onFailure = {
-                        tokenStore.clear()
+                    onFailure = { error ->
+                        if (error.isTerminalRefreshError()) tokenStore.clear()
                         false
                     },
                 )
@@ -182,21 +204,27 @@ class FirebaseAuthSession(
      * Throws [AuthSessionExpired] if refresh fails; [state] has already flipped to
      * `SignedOut` in that case.
      */
+    /**
+     * Return the current Firebase tokens, refreshing if needed. The freshly-refreshed tokens
+     * are produced inside [refreshMutex] and returned directly — reading `tokens.value` after
+     * the mutex released would race a concurrent [signOut] that flipped the state to
+     * `SessionTokens.None`, surfacing as a `ClassCastException` instead of the typed
+     * [AuthSessionExpired] (H2/B6).
+     */
     suspend fun currentTokens(): FirebaseTokens {
         val snap = tokens.value
         if (snap is SessionTokens.Active && clock.now() < snap.expiresAt) {
             return snap.toFirebaseTokens()
         }
-        refresh()
-        return (tokens.value as SessionTokens.Active).toFirebaseTokens()
+        return refresh()
     }
 
-    private suspend fun refresh(): String =
+    private suspend fun refresh(): FirebaseTokens =
         refreshMutex.withLock {
             // Re-check inside the lock — another caller may have just refreshed.
             val snap = tokens.value
             if (snap is SessionTokens.Active && clock.now() < snap.expiresAt) {
-                return@withLock snap.idToken
+                return@withLock snap.toFirebaseTokens()
             }
             val rt =
                 (snap as? SessionTokens.Active)?.refreshToken
@@ -206,16 +234,40 @@ class FirebaseAuthSession(
                         throw AuthSessionExpired()
                     }
             val fresh =
-                identityToolkit.refresh(rt).getOrElse {
-                    tokenStore.clear()
-                    tokens.value = SessionTokens.None
-                    _state.value = AuthState.SignedOut
+                identityToolkit.refresh(rt).getOrElse { error ->
+                    // Only terminal errors (invalid/expired/revoked refresh token, user
+                    // disabled, user-not-found) tear down the cached session. Transient
+                    // failures (network blip, regional outage) throw AuthSessionExpired for
+                    // this attempt but leave the refresh token in the keyring + the state
+                    // in-place, so the next attempt picks up where this one left off (H3/B5).
+                    if (error.isTerminalRefreshError()) {
+                        tokenStore.clear()
+                        tokens.value = SessionTokens.None
+                        _state.value = AuthState.SignedOut
+                    }
                     throw AuthSessionExpired()
                 }
             commitTokens(fresh)
             if (fresh.refreshToken != rt) tokenStore.write(fresh.refreshToken)
-            fresh.idToken
+            fresh
         }
+
+    /**
+     * Identity-Toolkit error codes that mean "this refresh token will never work again."
+     * Source: <https://cloud.google.com/identity-platform/docs/error-codes>.
+     */
+    private fun Throwable.isTerminalRefreshError(): Boolean =
+        this is IdentityToolkitException && errorCode in TERMINAL_REFRESH_ERROR_CODES
+
+    private companion object {
+        val TERMINAL_REFRESH_ERROR_CODES =
+            setOf(
+                "INVALID_REFRESH_TOKEN",
+                "TOKEN_EXPIRED",
+                "USER_DISABLED",
+                "USER_NOT_FOUND",
+            )
+    }
 
     private fun commitTokens(t: FirebaseTokens) {
         // 60s of slack so a request issued right at the boundary doesn't fire with a

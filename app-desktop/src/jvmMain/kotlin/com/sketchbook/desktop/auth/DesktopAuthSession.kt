@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 /**
@@ -35,9 +36,12 @@ class DesktopAuthSession(
     override val state: StateFlow<AuthState> = _state.asStateFlow()
 
     init {
-        // Forward inner state changes, persisting identity on transitions.
+        // Forward inner state changes, persisting identity on transitions. drop(1) skips the
+        // initial SignedOut replay — without it, observing the inner's initial value would
+        // wipe the optimistically-loaded cached identity before tryRestore had a chance to
+        // flip the inner state to SignedIn (B4 / K6).
         scope.launch {
-            inner.state.collectLatest { innerState ->
+            inner.state.drop(1).collectLatest { innerState ->
                 when (innerState) {
                     is AuthState.SignedIn -> {
                         identityStore.save(innerState)
@@ -51,24 +55,23 @@ class DesktopAuthSession(
                 }
             }
         }
-        // Silent restore at startup. tryRestore() never throws; it just caches tokens (or
-        // clears the keyring if the stored refresh token is dead). If we have a cached
-        // identity AND restore succeeds, keep _state at SignedIn (no transition needed — it
-        // was already SignedIn optimistically). If restore fails and we had a cached
-        // identity, fall back to SignedOut.
+        // Silent restore at startup. tryRestore() in B4 now flips the inner state to SignedIn
+        // on success (passing emailHint from the cached identity so the secureToken refresh
+        // response — which doesn't echo email — still yields a fully-populated SignedIn).
+        // If we have a cached identity AND restore fails, fall back to SignedOut. B5 keeps
+        // the keyring populated on transient failures so the next attempt can recover.
         scope.launch {
-            val restored = inner.tryRestore()
+            val restored = inner.tryRestore(emailHint = cachedIdentity?.email)
             if (cachedIdentity != null && !restored) {
                 identityStore.clear()
                 _state.value = AuthState.SignedOut
             }
+            // If restored: inner.state already flipped SignedIn via the collector above; the
+            // optimistic _state.value still matches the cached identity. Nothing to do here.
         }
     }
 
-    override suspend fun signIn(): Result<AuthState.SignedIn> =
-        inner.signIn().also { r ->
-            r.getOrNull()?.let { identityStore.save(it) }
-        }
+    override suspend fun signIn(): Result<AuthState.SignedIn> = inner.signIn()
 
     override suspend fun signOut() {
         inner.signOut()
