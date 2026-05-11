@@ -36,7 +36,21 @@ interface CloudBackend {
         scope: BlobScope = BlobScope.Shared,
     ): RawSource
 
-    /** Read a single manifest by `(uuid, rev)`. */
+    /**
+     * Read a manifest whose Storage path is already known (returned by [listManifests]).
+     *
+     * **Prefer this over the `(uuid, rev)` overload** whenever you have a [ManifestRef] in
+     * hand. The ref carries the exact object name; the legacy overload internally calls
+     * [listManifests] to resolve the path, which is O(N) per call and quadratic when looping
+     * over a range (e.g. `PullPoller` catch-up).
+     */
+    suspend fun readManifest(ref: ManifestRef): Manifest
+
+    /**
+     * Read a single manifest by `(uuid, rev)`. **Legacy** — resolves the Storage path by
+     * calling [listManifests] internally. Use [readManifest] with a [ManifestRef] when you
+     * already have one (e.g. straight off a `listManifests` result).
+     */
     suspend fun readManifest(
         uuid: ProjectUuid,
         rev: SnapshotRev,

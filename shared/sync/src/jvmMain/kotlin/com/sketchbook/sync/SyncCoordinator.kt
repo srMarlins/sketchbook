@@ -102,9 +102,10 @@ class SyncCoordinator(
                 sinceRev = if (localCloudHead > 0) SnapshotRev(localCloudHead) else null,
             )
         if (pulled.isEmpty()) return
-        for (snap in pulled) {
-            syncStateStore.markCloudHead(uuid, snap.rev.value)
-        }
+        // Single watermark advance per batch. PullPoller guarantees the returned list is a
+        // contiguous successful prefix from sinceRev + 1, so the final rev is the safe
+        // watermark — no need to fire the reactive cascade per snapshot (M3).
+        syncStateStore.markCloudHead(uuid, pulled.last().rev.value)
         onPostPull(uuid)
     }
 }

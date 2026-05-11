@@ -200,6 +200,68 @@ class SyncCoordinatorTest {
         }
 
     @Test
+    fun transientReadManifestFailureStopsAtTheHoleAndPreservesWatermark() =
+        runTest {
+            val handle = CatalogDb.openInMemory()
+            val store = SyncStateStore(handle.catalog)
+            val metadataStore = InMemoryMetadataStore()
+            val cloud = FakeCloudBackend()
+            val snapshots = RecordingSnapshotRepository()
+            val poller = PullPoller(cloud, snapshots)
+            val userIdFlow: MutableStateFlow<String?> = MutableStateFlow(uid)
+
+            // Seed manifests for revs 5, 6, 7.
+            for (rev in 5L..7L) {
+                cloud.seedManifest(
+                    uuid,
+                    Manifest(
+                        projectUuid = uuid,
+                        rev = SnapshotRev(rev),
+                        parentRev = if (rev > 5L) SnapshotRev(rev - 1) else null,
+                        timestamp = now,
+                        hostId = "host-b",
+                        hostName = "MacStudio",
+                        kind = SnapshotKind.Auto,
+                        files = emptyMap(),
+                        stats = ManifestStats(0, 0, 0),
+                    ),
+                )
+            }
+            // Configure rev 6 to fail once on readManifest.
+            cloud.failReadManifestOnce(6L, RuntimeException("transient blip"))
+
+            metadataStore.setDoc(
+                DocPath.tree(uid, uuid.value),
+                TreeDoc(
+                    owner_user_id = uid,
+                    display_name = "test",
+                    created_at = now,
+                    created_by_host = "host-b",
+                    head_rev = 7,
+                    head_gen = "7",
+                    head_updated_at = now,
+                    head_updated_by_host = "host-b",
+                ),
+                TreeDoc.serializer(),
+            )
+
+            val coordinator =
+                SyncCoordinator(
+                    userId = userIdFlow.asStateFlow(),
+                    metadataStore = metadataStore,
+                    pollerProvider = { poller },
+                    syncStateStore = store,
+                    scope = backgroundScope,
+                )
+            coordinator.start()
+            delay(10)
+
+            // Watermark advances to 5 only — never past the failed rev.
+            assertEquals(5L, store.stateOf(uuid)?.cloudHeadRev, "watermark must stop at the hole")
+            assertEquals(listOf(SnapshotRev(5)), snapshots.recorded.map { it.rev })
+        }
+
+    @Test
     fun signedOutUidDoesNotListen() =
         runTest {
             val handle = CatalogDb.openInMemory()

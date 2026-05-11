@@ -5,6 +5,7 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.SnapshotRepository
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Per-project pull of newly-landed manifests. Phase 3 collapsed the previous polling Flow
@@ -21,18 +22,35 @@ class PullPoller(
     private val snapshots: SnapshotRepository,
 ) {
     /**
-     * Read everything in cloud at `rev > sinceRev` and record it locally. Idempotent —
-     * re-running with the same `sinceRev` reads the same manifests and produces the same
-     * snapshot rows (SnapshotRepository.recordSnapshot uses INSERT OR REPLACE).
+     * Read everything in cloud at `rev > sinceRev` and record it locally.
      *
-     * Errors during list/read are swallowed; the returned list is what we successfully
-     * pulled. Callers can compare to the expected range to detect partial-pull cases.
+     * **Contract:** the returned list is the **contiguous successful prefix** starting at
+     * `sinceRev + 1`. If [CloudBackend.readManifest] throws for any rev in the range, polling
+     * stops at that rev and the returned list contains only the successfully-pulled prefix;
+     * the caller advances the watermark to `pulled.last().rev` (or leaves it untouched if the
+     * list is empty). This is load-bearing for K1: a transient failure must not silently skip
+     * a rev — the next listener emission will re-issue `pollOnce(uuid, sinceRev = lastSuccess)`
+     * and naturally retry the failed read.
+     *
+     * Idempotent — re-running with the same `sinceRev` reads the same manifests and produces
+     * the same snapshot rows (SnapshotRepository.recordSnapshot uses INSERT OR REPLACE).
+     *
+     * Errors on the initial [CloudBackend.listManifests] are propagated as exceptions (apart
+     * from cancellation, which is always rethrown). Errors during per-rev [readManifest] are
+     * swallowed for the failing rev only and end the pull.
      */
     suspend fun pollOnce(
         uuid: ProjectUuid,
         sinceRev: SnapshotRev? = null,
     ): List<Snapshot> {
-        val refs = runCatching { cloud.listManifests(uuid, sinceRev) }.getOrElse { return emptyList() }
+        val refs =
+            try {
+                cloud.listManifests(uuid, sinceRev)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (_: Throwable) {
+                return emptyList()
+            }
         val sorted = refs.sortedBy { it.rev }
         val out = mutableListOf<Snapshot>()
         var cursor: SnapshotRev? = sinceRev
@@ -40,7 +58,17 @@ class PullPoller(
             val rev = SnapshotRev(ref.rev)
             val c = cursor
             if (c != null && rev <= c) continue
-            val manifest = runCatching { cloud.readManifest(uuid, rev) }.getOrNull() ?: continue
+            val manifest =
+                try {
+                    cloud.readManifest(ref)
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (_: Throwable) {
+                    // Hole in the contiguous range — stop the pull. The watermark stays at the
+                    // last successful rev; the next listener emission will re-issue this poll
+                    // with sinceRev = lastSuccess and retry the failed read.
+                    break
+                }
             val snapshot =
                 Snapshot(
                     projectUuid = manifest.projectUuid,

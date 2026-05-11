@@ -36,16 +36,10 @@ import kotlinx.io.Source
 import kotlinx.io.buffered
 import kotlinx.io.readAtMostTo
 import kotlinx.io.readByteArray
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.long
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
@@ -292,24 +286,27 @@ class FirebaseBlobStore(
         return drainToTempFile(response.bodyAsChannel(), prefix = "sketchbook-blob-")
     }
 
+    override suspend fun readManifest(ref: ManifestRef): Manifest {
+        val response =
+            http.get(objectUrl(ref.path)) {
+                authHeader()
+                parameter("alt", "media")
+            }
+        if (!response.status.isSuccess) throw remoteFailure(response, "GET ${ref.path}")
+        return json.decodeFromString(Manifest.serializer(), response.bodyAsText())
+    }
+
     override suspend fun readManifest(
         uuid: ProjectUuid,
         rev: SnapshotRev,
     ): Manifest {
-        // Mainline manifests are listed; the on-disk path includes timestamp+host so we have to
-        // resolve via list. Most callers invoke this only after listManifests; PR-9 callers use
-        // the ref directly.
+        // Legacy overload. The on-disk path encodes timestamp+host so we resolve via list — O(N).
+        // Prefer the `(ref)` overload when the caller has the ref already.
         val refs = listManifests(uuid, sinceRev = SnapshotRev(rev.value - 1))
         val target =
             refs.firstOrNull { it.rev == rev.value }
                 ?: throw SketchbookError.NotFound("no manifest at uuid=$uuid rev=${rev.value}")
-        val response =
-            http.get(objectUrl(target.path)) {
-                authHeader()
-                parameter("alt", "media")
-            }
-        if (!response.status.isSuccess) throw remoteFailure(response, "GET ${target.path}")
-        return json.decodeFromString(Manifest.serializer(), response.bodyAsText())
+        return readManifest(target)
     }
 
     override suspend fun listManifests(
@@ -317,18 +314,53 @@ class FirebaseBlobStore(
         sinceRev: SnapshotRev?,
     ): List<ManifestRef> {
         val prefix = "$tenantPrefix/manifests/${uuid.value}/"
-        val response =
-            http.get(listUrl()) {
-                authHeader()
-                parameter("prefix", prefix)
+        // Server-side filter: manifest filenames are `<rev:08d>-...` so a `startOffset` past
+        // the zero-padded sinceRev cuts the wire traffic instead of fetching-then-filtering.
+        val startOffset =
+            sinceRev?.let { prefix + (it.value + 1).toString().padStart(8, '0') + "-" }
+        val out = mutableListOf<ManifestRef>()
+        var pageToken: String? = null
+        var pages = 0
+        // Pages-per-call ceiling acts as a circuit breaker — 50 × 1000 manifest cap is
+        // multiple orders of magnitude past any realistic project's history.
+        do {
+            val response =
+                http.get(listUrl()) {
+                    authHeader()
+                    parameter("prefix", prefix)
+                    if (startOffset != null) parameter("startOffset", startOffset)
+                    parameter("maxResults", "1000")
+                    if (pageToken != null) parameter("pageToken", pageToken)
+                }
+            if (!response.status.isSuccess) throw remoteFailure(response, "LIST $prefix")
+            val page = json.decodeFromString(GcsListPage.serializer(), response.bodyAsText())
+            for (item in page.items) {
+                item.toManifestRef(prefix)?.let { out += it }
             }
-        if (!response.status.isSuccess) throw remoteFailure(response, "LIST $prefix")
-        val body = json.parseToJsonElement(response.bodyAsText()).jsonObject
-        val items = body["items"]?.jsonArray ?: return emptyList()
-        return items
-            .mapNotNull { it.toManifestRef(prefix) }
-            .filter { sinceRev == null || it.rev > sinceRev.value }
-            .sortedBy { it.rev }
+            pageToken = page.nextPageToken
+            pages++
+        } while (pageToken != null && pages < LIST_MAX_PAGES)
+        return out.sortedBy { it.rev }
+    }
+
+    @Serializable
+    private data class GcsListPage(
+        val items: List<GcsObject> = emptyList(),
+        val nextPageToken: String? = null,
+    )
+
+    @Serializable
+    private data class GcsObject(
+        val name: String,
+        val generation: String,
+        @SerialName("size") val size: String? = null,
+    )
+
+    private fun GcsObject.toManifestRef(prefix: String): ManifestRef? {
+        val rel = name.removePrefix(prefix)
+        if (rel == "HEAD") return null
+        val rev = rel.substringBefore('-').toLongOrNull() ?: return null
+        return ManifestRef(rev = rev, path = name, generation = Generation(generation))
     }
 
     override suspend fun appendManifestHead(
@@ -426,17 +458,6 @@ class FirebaseBlobStore(
 
     private fun headPath(uuid: ProjectUuid): String = "$tenantPrefix/manifests/${uuid.value}/HEAD"
 
-    private fun JsonElement.toManifestRef(prefix: String): ManifestRef? {
-        val obj = this.jsonObject
-        val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return null
-        val gen = obj["generation"]?.jsonPrimitive?.contentOrNull ?: return null
-        val rel = name.removePrefix(prefix)
-        // Filename shape: `<rev:08d>-<timestamp>-<host>.json` or `HEAD`.
-        if (rel == "HEAD") return null
-        val rev = rel.substringBefore('-').toLongOrNull() ?: return null
-        return ManifestRef(rev = rev, path = name, generation = Generation(gen))
-    }
-
     private suspend fun remoteFailure(
         resp: HttpResponse,
         op: String,
@@ -478,6 +499,13 @@ private class ByteArrayRawSource(
 
     override fun close() {}
 }
+
+/**
+ * Pagination circuit-breaker for [FirebaseBlobStore.listManifests]. 50 pages × 1000 manifests
+ * per page = 50k objects; well past any plausible project history. A higher ceiling would let
+ * a misconfigured rules-allow + a long-tail prefix DoS the catch-up path.
+ */
+private const val LIST_MAX_PAGES = 50
 
 /** 64 KB chunks — large enough to keep the wire saturated, small enough to keep heap bounded. */
 private const val STREAM_CHUNK_BYTES = 64 * 1024
