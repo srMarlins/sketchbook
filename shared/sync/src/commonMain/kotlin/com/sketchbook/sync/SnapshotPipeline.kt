@@ -115,12 +115,16 @@ class SnapshotPipeline(
                         // cadence so a brief outage during a long save doesn't drop the
                         // lease (N6).
                         when (val r = metadataStore.refreshLock(lockPath, holder = hostId, ttl = leaseTtl)) {
-                            RefreshResult.Refreshed -> Unit
+                            RefreshResult.Refreshed -> {
+                                Unit
+                            }
+
                             RefreshResult.Lost -> {
                                 // Doc no longer names us — give up. The CAS at step 5 will
                                 // surface the takeover as a Conflict if it lands.
                                 return@launch
                             }
+
                             is RefreshResult.Failed -> {
                                 System.err.println("[SnapshotPipeline] lease refresh failed (will retry): ${r.cause}")
                             }
@@ -250,7 +254,7 @@ class SnapshotPipeline(
                             }
                         },
                     )
-            if (saved != null) send(saved)
+                if (saved != null) send(saved)
             } finally {
                 // 6) Stop heartbeating + release lease. Cancel the heartbeat first so a
                 //    refresh in flight at this moment doesn't re-extend the TTL after we

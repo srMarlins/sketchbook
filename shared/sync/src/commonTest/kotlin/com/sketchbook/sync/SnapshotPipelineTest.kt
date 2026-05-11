@@ -8,22 +8,22 @@ import com.sketchbook.cloud.metadata.InMemoryMetadataStore
 import com.sketchbook.cloud.metadata.LockDoc
 import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.cloud.metadata.TreeDoc
-import kotlinx.coroutines.flow.Flow
-import kotlinx.serialization.KSerializer
-import kotlin.time.Duration
 import com.sketchbook.core.Manifest
-import com.sketchbook.core.UserId
 import com.sketchbook.core.ManifestFile
 import com.sketchbook.core.ManifestStats
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.UserId
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.KSerializer
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 import kotlin.time.Instant
 
 class SnapshotPipelineTest {

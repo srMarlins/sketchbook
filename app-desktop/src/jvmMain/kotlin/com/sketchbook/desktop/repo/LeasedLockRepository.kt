@@ -14,9 +14,9 @@ import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.LockStatus
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -75,6 +75,7 @@ class LeasedLockRepository(
             }
         }
     }
+
     private data class PerUuid(
         val status: MutableStateFlow<LockStatus> = MutableStateFlow(LockStatus.Free),
         var listenerJob: Job? = null,
@@ -133,13 +134,19 @@ class LeasedLockRepository(
                     holderName = hostName,
                 )
         ) {
-            AcquireResult.Acquired -> Unit
-            is AcquireResult.HeldByOther ->
+            AcquireResult.Acquired -> {
+                Unit
+            }
+
+            is AcquireResult.HeldByOther -> {
                 return Result.failure(
                     IllegalStateException("force-take race: another host re-acquired the lock"),
                 )
-            is AcquireResult.Failed ->
+            }
+
+            is AcquireResult.Failed -> {
                 return Result.failure(acquired.cause)
+            }
         }
         startHeartbeat(uuid, per)
         recordForceTake(uuid, priorOwnerName, priorExpiresAtMs)
@@ -175,8 +182,7 @@ class LeasedLockRepository(
                                 emit(computeStatus(lock, clock.now()))
                             }
                         }
-                    }
-                    .collect { status -> per.status.value = status }
+                    }.collect { status -> per.status.value = status }
             }
     }
 
@@ -207,12 +213,16 @@ class LeasedLockRepository(
                     // cadence — the previous TTL is still in force so a transient network blip
                     // doesn't drop the lease (N6).
                     when (val r = store.refreshLock(path, hostId, leaseTtl)) {
-                        RefreshResult.Refreshed -> Unit
+                        RefreshResult.Refreshed -> {
+                            Unit
+                        }
+
                         RefreshResult.Lost -> {
                             // Listener will flip the UI from Ours → HeldByOther on the next
                             // emission. Stop heartbeating.
                             return@launch
                         }
+
                         is RefreshResult.Failed -> {
                             System.err.println(
                                 "[LeasedLockRepository] heartbeat refresh failed for uuid=${uuid.value} (will retry): ${r.cause}",

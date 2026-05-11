@@ -2,24 +2,13 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ArgumentListWrapping:DirectGcsBackend.kt:DirectGcsBackend$(':', '-')</ID>
-    <ID>ArgumentListWrapping:DirectGcsBackend.kt:DirectGcsBackend$(8, '0')</ID>
-    <ID>ClassSignature:DirectGcsBackend.kt:FileRangeContent : WriteChannelContent</ID>
-    <ID>ClassSignature:DirectGcsBackend.kt:StreamingSourceContent : WriteChannelContent</ID>
-    <ID>EmptyFunctionBlock:DirectGcsBackend.kt:ByteArrayRawSource${}</ID>
-    <ID>FunctionSignature:DirectGcsBackend.kt:DirectGcsBackend$override suspend fun refreshLock: LeaseRefreshResult</ID>
-    <ID>FunctionSignature:DirectGcsBackend.kt:DirectGcsBackend$private fun manifestPath: String</ID>
-    <ID>FunctionSignature:DirectGcsBackend.kt:DirectGcsBackend$private fun objectUrl: String</ID>
-    <ID>MagicNumber:DirectGcsBackend.kt:DirectGcsBackend$200</ID>
-    <ID>MagicNumber:DirectGcsBackend.kt:DirectGcsBackend$201</ID>
-    <ID>MagicNumber:DirectGcsBackend.kt:DirectGcsBackend$308</ID>
-    <ID>MagicNumber:DirectGcsBackend.kt:DirectGcsBackend$412</ID>
-    <ID>MagicNumber:DirectGcsBackend.kt:DirectGcsBackend$8</ID>
-    <ID>MaxLineLength:DirectGcsBackend.kt:DirectGcsBackend$private fun manifestPath: String</ID>
-    <ID>NestedBlockDepth:DirectGcsBackend.kt:private suspend fun drainToTempFile: RawSource</ID>
-    <ID>NoUnusedImports:DirectGcsBackend.kt:com.sketchbook.cloud.DirectGcsBackend.kt</ID>
-    <ID>ReturnCount:DirectGcsBackend.kt:DirectGcsBackend$private fun JsonElement.toManifestRef: ManifestRef?</ID>
-    <ID>ThrowsCount:DirectGcsBackend.kt:DirectGcsBackend$override suspend fun acquireLock: LeaseAcquireResult</ID>
-    <ID>UnusedPrivateClass:DirectGcsBackend.kt:ByteArrayRawSource : RawSource</ID>
+    <ID>EmptyFunctionBlock:FirebaseBlobStore.kt:ByteArrayRawSource${}</ID>
+    <ID>MagicNumber:FirebaseBlobStore.kt:FirebaseBlobStore$200</ID>
+    <ID>MagicNumber:FirebaseBlobStore.kt:FirebaseBlobStore$201</ID>
+    <ID>MagicNumber:FirebaseBlobStore.kt:FirebaseBlobStore$308</ID>
+    <ID>MagicNumber:FirebaseBlobStore.kt:FirebaseBlobStore$412</ID>
+    <ID>MagicNumber:FirebaseBlobStore.kt:FirebaseBlobStore$8</ID>
+    <ID>NestedBlockDepth:FirebaseBlobStore.kt:private suspend fun drainToTempFile: RawSource</ID>
+    <ID>UnusedPrivateClass:FirebaseBlobStore.kt:ByteArrayRawSource : RawSource</ID>
   </CurrentIssues>
 </SmellBaseline>

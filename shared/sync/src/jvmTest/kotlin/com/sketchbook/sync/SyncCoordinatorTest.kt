@@ -306,8 +306,7 @@ class SyncCoordinatorTest {
 private class RecordingSnapshotRepository : SnapshotRepository {
     val recorded = mutableListOf<com.sketchbook.core.Snapshot>()
 
-    override fun observeHistory(uuid: ProjectUuid): Flow<List<com.sketchbook.core.Snapshot>> =
-        MutableStateFlow(emptyList())
+    override fun observeHistory(uuid: ProjectUuid): Flow<List<com.sketchbook.core.Snapshot>> = MutableStateFlow(emptyList())
 
     override suspend fun recordSnapshot(
         snapshot: com.sketchbook.core.Snapshot,

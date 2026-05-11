@@ -96,7 +96,7 @@ class FirebaseAuthSessionTest {
             val session =
                 newSession(
                     store = store,
-                    verifier = AlwaysRejectVerifier,
+                    verifier = alwaysRejectVerifier,
                     exchangeResponse = EXCHANGE_OK,
                 )
 
@@ -183,11 +183,12 @@ class FirebaseAuthSessionTest {
             val revokeCalls = AtomicInteger(0)
             val sdkClearCalls = AtomicInteger(0)
             val capturedRevokeToken = arrayOf<String?>(null)
-            val cloudFunctions = FakeCloudFunctions { token ->
-                revokeCalls.incrementAndGet()
-                capturedRevokeToken[0] = token
-                RevokeMySessionResult(revoked = true, uid = "FAKE_FIREBASE_UID")
-            }
+            val cloudFunctions =
+                FakeCloudFunctions { token ->
+                    revokeCalls.incrementAndGet()
+                    capturedRevokeToken[0] = token
+                    RevokeMySessionResult(revoked = true, uid = "FAKE_FIREBASE_UID")
+                }
             val session =
                 newSession(
                     store = store,
@@ -210,9 +211,10 @@ class FirebaseAuthSessionTest {
         runTest {
             val store = FakeTokenStore()
             val sdkClearCalls = AtomicInteger(0)
-            val cloudFunctions = FakeCloudFunctions { _ ->
-                throw RuntimeException("network down")
-            }
+            val cloudFunctions =
+                FakeCloudFunctions { _ ->
+                    throw RuntimeException("network down")
+                }
             val session =
                 newSession(
                     store = store,
@@ -268,7 +270,7 @@ class FirebaseAuthSessionTest {
     private fun newSession(
         clock: Clock = Clock.System,
         store: FakeTokenStore = FakeTokenStore(),
-        verifier: GoogleIdTokenVerifier = AlwaysAcceptVerifier,
+        verifier: GoogleIdTokenVerifier = alwaysAcceptVerifier,
         oauthClient: OAuthFlow = StubOAuthClient,
         exchangeResponse: MockResponseFixture? = null,
         responses: ResponseQueue = ResponseQueue(exchangeResponse ?: EXCHANGE_OK),
@@ -353,7 +355,7 @@ class FirebaseAuthSessionTest {
      * access. End-to-end JWKS verification is exercised against real Google in the spike runs
      * (and, follow-up, against the Firebase Auth emulator).
      */
-    private val AlwaysAcceptVerifier: GoogleIdTokenVerifier =
+    private val alwaysAcceptVerifier: GoogleIdTokenVerifier =
         GoogleIdTokenVerifier {
             Result.success(
                 VerifiedGoogleIdToken(
@@ -367,7 +369,7 @@ class FirebaseAuthSessionTest {
             )
         }
 
-    private val AlwaysRejectVerifier: GoogleIdTokenVerifier =
+    private val alwaysRejectVerifier: GoogleIdTokenVerifier =
         GoogleIdTokenVerifier { Result.failure(IllegalStateException("untrusted issuer")) }
 
     private companion object {

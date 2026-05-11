@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>MagicNumber:CloudFunctionsClient.kt:CloudFunctionException$200</ID>
+    <ID>MagicNumber:CloudFunctionsClient.kt:CloudFunctionsClient$200</ID>
+    <ID>MagicNumber:CloudFunctionsClient.kt:CloudFunctionsClient$299</ID>
+  </CurrentIssues>
+</SmellBaseline>

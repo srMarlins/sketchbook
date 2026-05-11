@@ -202,11 +202,8 @@ class FirebaseAuthSession(
      * fields (not just the bearer string) to pre-seed the gitlive SDK with Pattern A1.
      *
      * Throws [AuthSessionExpired] if refresh fails; [state] has already flipped to
-     * `SignedOut` in that case.
-     */
-    /**
-     * Return the current Firebase tokens, refreshing if needed. The freshly-refreshed tokens
-     * are produced inside [refreshMutex] and returned directly — reading `tokens.value` after
+     * `SignedOut` in that case. The freshly-refreshed tokens are produced inside
+     * [refreshMutex] and returned directly — reading `tokens.value` after
      * the mutex released would race a concurrent [signOut] that flipped the state to
      * `SessionTokens.None`, surfacing as a `ClassCastException` instead of the typed
      * [AuthSessionExpired] (H2/B6).
@@ -256,8 +253,7 @@ class FirebaseAuthSession(
      * Identity-Toolkit error codes that mean "this refresh token will never work again."
      * Source: <https://cloud.google.com/identity-platform/docs/error-codes>.
      */
-    private fun Throwable.isTerminalRefreshError(): Boolean =
-        this is IdentityToolkitException && errorCode in TERMINAL_REFRESH_ERROR_CODES
+    private fun Throwable.isTerminalRefreshError(): Boolean = this is IdentityToolkitException && errorCode in TERMINAL_REFRESH_ERROR_CODES
 
     private companion object {
         val TERMINAL_REFRESH_ERROR_CODES =

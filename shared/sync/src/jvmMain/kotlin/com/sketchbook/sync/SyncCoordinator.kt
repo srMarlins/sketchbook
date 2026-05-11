@@ -67,8 +67,7 @@ class SyncCoordinator(
      */
     private val perUuidMutex = mutableMapOf<ProjectUuid, Mutex>()
 
-    private fun mutexFor(uuid: ProjectUuid): Mutex =
-        synchronized(perUuidMutex) { perUuidMutex.getOrPut(uuid) { Mutex() } }
+    private fun mutexFor(uuid: ProjectUuid): Mutex = synchronized(perUuidMutex) { perUuidMutex.getOrPut(uuid) { Mutex() } }
 
     fun start(): Job =
         scope.launch {

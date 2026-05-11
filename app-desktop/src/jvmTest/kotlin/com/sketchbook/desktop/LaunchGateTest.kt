@@ -66,7 +66,6 @@ class LaunchGateTest {
 
         override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
 
-
         override suspend fun setSelfContained(
             uuid: ProjectUuid,
             value: Boolean,
@@ -110,7 +109,6 @@ class LaunchGateTest {
         override suspend fun upsertRoot(root: LibraryRoot) = Result.success(Unit)
 
         override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
-
 
         override suspend fun setSelfContained(
             uuid: ProjectUuid,

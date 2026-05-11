@@ -2,9 +2,16 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>ClassSignature:Lock.kt:ManifestRef</ID>
-    <ID>Filename:ServiceAccount.kt:com.sketchbook.cloud.ServiceAccount.kt</ID>
-    <ID>FunctionSignature:CloudBackend.kt:CloudBackend$suspend fun putBlob</ID>
-    <ID>MatchingDeclarationName:ServiceAccount.kt:ServiceAccountKey</ID>
+    <ID>ConstructorParameterNaming:PluginManifestDoc.kt:PluginManifestDoc$val computed_at: Instant</ID>
+    <ID>ConstructorParameterNaming:TreeDoc.kt:TreeDoc$val created_at: Instant</ID>
+    <ID>ConstructorParameterNaming:TreeDoc.kt:TreeDoc$val created_by_host: String = ""</ID>
+    <ID>ConstructorParameterNaming:TreeDoc.kt:TreeDoc$val display_name: String = ""</ID>
+    <ID>ConstructorParameterNaming:TreeDoc.kt:TreeDoc$val head_gen: String = ""</ID>
+    <ID>ConstructorParameterNaming:TreeDoc.kt:TreeDoc$val head_rev: Long = 0</ID>
+    <ID>ConstructorParameterNaming:TreeDoc.kt:TreeDoc$val head_updated_at: Instant</ID>
+    <ID>ConstructorParameterNaming:TreeDoc.kt:TreeDoc$val head_updated_by_host: String = ""</ID>
+    <ID>ConstructorParameterNaming:TreeDoc.kt:TreeDoc$val owner_user_id: String</ID>
+    <ID>ConstructorParameterNaming:TreeDoc.kt:TreeDoc$val scope_key: String = ""</ID>
+    <ID>MatchingDeclarationName:Lock.kt:ManifestRef</ID>
   </CurrentIssues>
 </SmellBaseline>

@@ -6,8 +6,8 @@ import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
-import com.sketchbook.cloud.metadata.InMemoryMetadataStore
 import com.sketchbook.cloud.ManifestRef
+import com.sketchbook.cloud.metadata.InMemoryMetadataStore
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
 import com.sketchbook.core.ProjectUuid
@@ -564,7 +564,9 @@ private class CountingCloudBackend : CloudBackend {
  * Drives the drain-backoff tests that previously counted on CloudBackend.acquireLock calls.
  */
 private class CountingMetadataStore(
-    private val delegate: com.sketchbook.cloud.metadata.InMemoryMetadataStore = com.sketchbook.cloud.metadata.InMemoryMetadataStore(),
+    private val delegate: com.sketchbook.cloud.metadata.InMemoryMetadataStore =
+        com.sketchbook.cloud.metadata
+            .InMemoryMetadataStore(),
 ) : com.sketchbook.cloud.metadata.MetadataStore by delegate {
     var lockAcquireCount: Int = 0
         private set
