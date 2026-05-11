@@ -115,13 +115,13 @@ class InMemoryMetadataStoreTest {
         }
 
     @Test
-    fun `refreshLock fails if a different holder owns the lease`() =
+    fun `refreshLock returns Lost if a different holder owns the lease`() =
         runTest {
             val store = InMemoryMetadataStore()
             val path = DocPath.lock("u", "t1")
             store.acquireLock(path, "host-a", 10.minutes)
 
-            assertFalse(store.refreshLock(path, "host-b", 10.minutes))
+            assertEquals(RefreshResult.Lost, store.refreshLock(path, "host-b", 10.minutes))
             // Original lease is intact.
             assertEquals("host-a", store.getDoc(path, LockDoc.serializer())!!.holder)
         }

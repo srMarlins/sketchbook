@@ -7,6 +7,7 @@ import com.sketchbook.cloud.metadata.AcquireResult
 import com.sketchbook.cloud.metadata.DocPath
 import com.sketchbook.cloud.metadata.LockDoc
 import com.sketchbook.cloud.metadata.MetadataStore
+import com.sketchbook.cloud.metadata.RefreshResult
 import com.sketchbook.cloud.metadata.TreeDoc
 import com.sketchbook.cloud.metadata.updateDocBounded
 import com.sketchbook.core.BlobHash
@@ -109,20 +110,20 @@ class SnapshotPipeline(
                 launch {
                     while (currentCoroutineContext().isActive) {
                         delay(heartbeatInterval)
-                        try {
-                            if (!metadataStore.refreshLock(lockPath, holder = hostId, ttl = leaseTtl)) {
-                                // Lost the lease — abort the heartbeat. The pipeline body
-                                // keeps running; if the CAS at step 5 races a takeover it
-                                // will surface as a Conflict.
+                        // Typed RefreshResult: only Lost is terminal. Failed (operational
+                        // blip — network, 5xx, permission glitch) retries on the next
+                        // cadence so a brief outage during a long save doesn't drop the
+                        // lease (N6).
+                        when (val r = metadataStore.refreshLock(lockPath, holder = hostId, ttl = leaseTtl)) {
+                            RefreshResult.Refreshed -> Unit
+                            RefreshResult.Lost -> {
+                                // Doc no longer names us — give up. The CAS at step 5 will
+                                // surface the takeover as a Conflict if it lands.
                                 return@launch
                             }
-                        } catch (c: CancellationException) {
-                            throw c
-                        } catch (t: Throwable) {
-                            // Transient refresh failure (network blip) — log and retry on
-                            // the next cadence rather than permanently giving up (N6). The
-                            // lease still has its previous TTL; we have slack.
-                            System.err.println("[SnapshotPipeline] lease refresh failed (will retry): $t")
+                            is RefreshResult.Failed -> {
+                                System.err.println("[SnapshotPipeline] lease refresh failed (will retry): ${r.cause}")
+                            }
                         }
                     }
                 }

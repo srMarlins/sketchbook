@@ -174,12 +174,12 @@ class FirestoreMetadataStore(
         path: DocPath,
         holder: String,
         ttl: Duration,
-    ): Boolean {
+    ): RefreshResult {
         ensureInitialized()
         val now = clock.now()
         val ref = firestore.document(path.value)
         return try {
-            firestore.runTransaction<Boolean> {
+            firestore.runTransaction<RefreshResult> {
                 val snap = get(ref)
                 val current = if (snap.exists) snap.data(LockDoc.serializer()) else null
                 if (current != null && current.holder == holder) {
@@ -188,16 +188,19 @@ class FirestoreMetadataStore(
                         LockDoc.serializer(),
                         current.copy(expiresAt = now + ttl),
                     )
-                    true
+                    RefreshResult.Refreshed
                 } else {
-                    // Stolen / absent / replaced — caller treats as takeover.
-                    false
+                    // Stolen / absent / replaced — caller treats as takeover. Terminal.
+                    RefreshResult.Lost
                 }
             }
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
-            false
+            // Operational failure (network, 5xx, permission denied). Don't fold into Lost —
+            // the caller's heartbeat needs to distinguish "lease stolen" (give up) from
+            // "transient blip" (retry on next cadence).
+            RefreshResult.Failed(t)
         }
     }
 

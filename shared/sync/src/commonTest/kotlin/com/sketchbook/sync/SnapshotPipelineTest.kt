@@ -381,7 +381,7 @@ private class FlakyUpdateDocStore(
         path: DocPath,
         holder: String,
         ttl: Duration,
-    ): Boolean = delegate.refreshLock(path, holder, ttl)
+    ): com.sketchbook.cloud.metadata.RefreshResult = delegate.refreshLock(path, holder, ttl)
 
     override suspend fun releaseLock(
         path: DocPath,

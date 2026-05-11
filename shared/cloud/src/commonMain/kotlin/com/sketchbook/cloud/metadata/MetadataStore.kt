@@ -119,19 +119,25 @@ interface MetadataStore {
     ): AcquireResult
 
     /**
-     * Heartbeat-extend a lease we already hold. Returns `true` if the doc still names us and
-     * the expiry was bumped; `false` if it's been stolen or expired-and-replaced — caller
-     * should treat as a takeover and re-acquire if it wants to keep going. Operational
-     * failures (network down, permission denied) are folded into `false` here because the
-     * heartbeat is a low-stakes background extension; if the lock has *really* been stolen
-     * vs. the call just failed transiently, the next listener emission will surface the
-     * truth.
+     * Heartbeat-extend a lease we already hold. Returns a typed [RefreshResult]:
+     *
+     *  - [RefreshResult.Refreshed] — doc still names us, expiry bumped.
+     *  - [RefreshResult.Lost] — doc no longer names us (stolen, expired-and-replaced, or
+     *    deleted). Terminal: caller should abort heartbeating and let the listener path
+     *    surface the new holder.
+     *  - [RefreshResult.Failed] — operational failure (network blip, permission denied).
+     *    The lease's previous TTL is still in force; caller should retry on the next
+     *    heartbeat cadence rather than abandoning the lock.
+     *
+     * The typed result is what lets [com.sketchbook.sync.SnapshotPipeline]'s heartbeat keep
+     * the lease alive through a transient blip during a long save — folding all failures
+     * into a Boolean would have terminated heartbeats on the first network hiccup.
      */
     suspend fun refreshLock(
         path: DocPath,
         holder: String,
         ttl: Duration,
-    ): Boolean
+    ): RefreshResult
 
     /**
      * Release a lease we hold. Best-effort: only deletes the doc if it still names us. Safe

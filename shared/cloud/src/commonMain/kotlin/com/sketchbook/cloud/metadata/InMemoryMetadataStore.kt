@@ -127,14 +127,14 @@ class InMemoryMetadataStore(
         path: DocPath,
         holder: String,
         ttl: Duration,
-    ): Boolean {
+    ): RefreshResult {
         val now: Instant = clock.now()
         return mutex.withLock {
-            val current = decode(docs.value[path.value], LockDoc.serializer()) ?: return@withLock false
-            if (current.holder != holder) return@withLock false
+            val current = decode(docs.value[path.value], LockDoc.serializer()) ?: return@withLock RefreshResult.Lost
+            if (current.holder != holder) return@withLock RefreshResult.Lost
             val doc = current.copy(expiresAt = now + ttl)
             docs.value = docs.value + (path.value to json.encodeToString(LockDoc.serializer(), doc))
-            true
+            RefreshResult.Refreshed
         }
     }
 

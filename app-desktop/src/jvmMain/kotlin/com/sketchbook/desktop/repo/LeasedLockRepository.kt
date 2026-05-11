@@ -5,6 +5,7 @@ import com.sketchbook.cloud.metadata.AcquireResult
 import com.sketchbook.cloud.metadata.DocPath
 import com.sketchbook.cloud.metadata.LockDoc
 import com.sketchbook.cloud.metadata.MetadataStore
+import com.sketchbook.cloud.metadata.RefreshResult
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.ActionRecord
@@ -202,12 +203,21 @@ class LeasedLockRepository(
                 val path = DocPath.lock(uid, uuid.value)
                 while (true) {
                     delay(heartbeatInterval)
-                    val ok = store.refreshLock(path, hostId, leaseTtl)
-                    if (!ok) {
-                        // Lost the lock — let the listener flip status from Ours → HeldByOther
-                        // on the next emission. Stop heartbeating; the listener-driven UI surface
-                        // is the source of truth from here.
-                        return@launch
+                    // Only Lost is terminal. Operational failures (Failed) retry on the next
+                    // cadence — the previous TTL is still in force so a transient network blip
+                    // doesn't drop the lease (N6).
+                    when (val r = store.refreshLock(path, hostId, leaseTtl)) {
+                        RefreshResult.Refreshed -> Unit
+                        RefreshResult.Lost -> {
+                            // Listener will flip the UI from Ours → HeldByOther on the next
+                            // emission. Stop heartbeating.
+                            return@launch
+                        }
+                        is RefreshResult.Failed -> {
+                            System.err.println(
+                                "[LeasedLockRepository] heartbeat refresh failed for uuid=${uuid.value} (will retry): ${r.cause}",
+                            )
+                        }
                     }
                 }
             }
