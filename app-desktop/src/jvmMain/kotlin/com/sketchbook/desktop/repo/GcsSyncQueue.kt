@@ -298,7 +298,7 @@ class GcsSyncQueue(
         runCatching {
             j.append(
                 JournalEntry(
-                    timestamp = Clock.System.now(),
+                    timestamp = clock.now(),
                     projectId = pid,
                     action = ActionRecord.PushConflict(ourRev = ourRev, theirRev = theirRev),
                 ),

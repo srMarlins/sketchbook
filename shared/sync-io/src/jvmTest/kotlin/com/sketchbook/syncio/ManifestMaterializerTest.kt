@@ -4,9 +4,6 @@ import com.sketchbook.catalog.CatalogDb
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
-import com.sketchbook.cloud.LeaseAcquireResult
-import com.sketchbook.cloud.LeaseLock
-import com.sketchbook.cloud.LeaseRefreshResult
 import com.sketchbook.cloud.ManifestRef
 import com.sketchbook.core.BlobHash
 import com.sketchbook.core.Manifest
@@ -208,6 +205,8 @@ private class FakeMaterializerCloud(
         return buf
     }
 
+    override suspend fun readManifest(ref: ManifestRef): Manifest = manifest
+
     override suspend fun readManifest(
         uuid: ProjectUuid,
         rev: SnapshotRev,
@@ -223,20 +222,4 @@ private class FakeMaterializerCloud(
         expectedHead: Generation?,
         manifest: Manifest,
     ) = Result.failure<Generation>(SketchbookError.Conflict("not used"))
-
-    override suspend fun acquireLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-    ) = LeaseAcquireResult.Acquired(Generation("1"))
-
-    override suspend fun refreshLock(
-        uuid: ProjectUuid,
-        lock: LeaseLock,
-        expected: Generation,
-    ) = LeaseRefreshResult.Refreshed(Generation("1"))
-
-    override suspend fun releaseLock(
-        uuid: ProjectUuid,
-        expected: Generation,
-    ) {}
 }

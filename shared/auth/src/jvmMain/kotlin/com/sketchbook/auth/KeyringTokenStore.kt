@@ -20,10 +20,17 @@ class KeyringTokenStore(
 ) : TokenStore {
     override suspend fun read(): String? =
         withContext(Dispatchers.IO) {
-            runCatching {
+            try {
                 val keyring = Keyring.create()
                 keyring.getPassword(serviceName, accountName)
-            }.getOrNull()
+            } catch (e: BackendNotSupportedException) {
+                // Headless / unsupported-keychain environment. Log once so the silent
+                // no-token result isn't impossible to diagnose (N17).
+                System.err.println("[KeyringTokenStore] backend not supported, no token available: $e")
+                null
+            } catch (_: Throwable) {
+                null
+            }
         }
 
     override suspend fun write(refreshToken: String) {

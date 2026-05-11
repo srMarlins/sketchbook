@@ -467,9 +467,22 @@ interface DesktopAppGraph : ViewModelGraph {
  * `aud` claim when verifying the resulting Google ID token before the Identity Toolkit
  * exchange — see `GoogleIdTokenVerifier`.
  */
+private const val OAUTH_CLIENT_ID_PLACEHOLDER = "REPLACE_ME.apps.googleusercontent.com"
+
 private val OAUTH_CLIENT_ID: String =
-    System.getProperty("sketchbook.oauth.client_id")
-        ?: "REPLACE_ME.apps.googleusercontent.com"
+    run {
+        val v = System.getProperty("sketchbook.oauth.client_id") ?: OAUTH_CLIENT_ID_PLACEHOLDER
+        val env = System.getProperty("sketchbook.env", "dev")
+        // Fail fast in production rather than silently shipping a binary whose Google sign-in
+        // immediately rejects (the placeholder is not a registered client ID). Dev / test
+        // launches keep the placeholder so unit tests don't need to set the property (M10/F4).
+        if (env == "prod" && v == OAUTH_CLIENT_ID_PLACEHOLDER) {
+            error(
+                "OAUTH_CLIENT_ID placeholder in production build — set -Dsketchbook.oauth.client_id=...",
+            )
+        }
+        v
+    }
 
 /**
  * Stable per-machine identity used by the sync pipeline as `hostId` (lease ownership) and

@@ -5,6 +5,7 @@ import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.core.BlobHash
 import com.sketchbook.repo.BlobCacheSettings
+import kotlinx.coroutines.sync.withLock
 import kotlinx.io.RawSource
 import kotlinx.io.buffered
 import kotlinx.io.readAtMostTo
@@ -38,6 +39,18 @@ class JvmBlobCache(
         Files.createDirectories(cacheRoot)
     }
 
+    /**
+     * Per-hash mutexes for [getOrFetch]. Without this, two concurrent misses for the same
+     * hash both call [CloudBackend.getBlob] (wasting bandwidth) and race on the final
+     * Files.move (one wins, the other's temp file is orphaned). The map grows monotonically;
+     * production hash count is bounded by project history, so this isn't worth a cleanup
+     * sweep (N15).
+     */
+    private val fetchMutexes = java.util.concurrent.ConcurrentHashMap<BlobHash, kotlinx.coroutines.sync.Mutex>()
+
+    private fun mutexFor(hash: BlobHash): kotlinx.coroutines.sync.Mutex =
+        fetchMutexes.computeIfAbsent(hash) { kotlinx.coroutines.sync.Mutex() }
+
     override suspend fun contains(
         hash: BlobHash,
         scope: BlobScope,
@@ -56,6 +69,22 @@ class JvmBlobCache(
             touch(hash)
             return target
         }
+        // Serialize concurrent first-time fetches for the same hash — see [fetchMutexes].
+        return mutexFor(hash).withLock {
+            // Re-check inside the lock: another concurrent miss may have just populated it.
+            if (Files.exists(target)) {
+                touch(hash)
+                return@withLock target
+            }
+            doFetch(hash, scope, target)
+        }
+    }
+
+    private suspend fun doFetch(
+        hash: BlobHash,
+        scope: BlobScope,
+        target: Path,
+    ): Path {
         Files.createDirectories(target.parent)
         val tempPath = target.resolveSibling("${target.fileName}.fetch-${System.nanoTime()}")
         val source: RawSource = cloud.getBlob(hash, scope)

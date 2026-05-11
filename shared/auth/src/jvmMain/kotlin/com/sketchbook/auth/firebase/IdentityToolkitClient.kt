@@ -1,6 +1,7 @@
 package com.sketchbook.auth.firebase
 
 import io.ktor.client.HttpClient
+import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -9,6 +10,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.parameters
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -72,11 +74,20 @@ class IdentityToolkitClient(
 
     suspend fun refresh(refreshToken: String): Result<FirebaseTokens> =
         runRequest {
+            // submitForm URL-encodes the form parameters, which matters for refresh tokens
+            // that contain characters outside the unreserved set (`+`, `/`, etc). The previous
+            // string-concat path silently double-encoded `%`-prefixed tokens and refused the
+            // refresh (N2).
             val response: HttpResponse =
-                httpClient.post("$secureTokenBase/v1/token") {
+                httpClient.submitForm(
+                    url = "$secureTokenBase/v1/token",
+                    formParameters =
+                        parameters {
+                            append("grant_type", "refresh_token")
+                            append("refresh_token", refreshToken)
+                        },
+                ) {
                     parameter("key", webApiKey)
-                    contentType(ContentType.Application.FormUrlEncoded)
-                    setBody("grant_type=refresh_token&refresh_token=$refreshToken")
                 }
             val payload = decodeOrThrow(response, RefreshTokenResponse.serializer())
             FirebaseTokens(

@@ -3,7 +3,6 @@ package com.sketchbook.auth.firebase
 import com.sketchbook.auth.AuthSessionExpired
 import com.sketchbook.auth.AuthState
 import com.sketchbook.auth.FakeTokenStore
-import com.sketchbook.auth.OAuthClient
 import com.sketchbook.auth.OAuthFlow
 import com.sketchbook.auth.OAuthTokens
 import com.sketchbook.core.UserId
@@ -347,9 +346,6 @@ class FirebaseAuthSessionTest {
                     email = "alice@example.com",
                 ),
             )
-
-        override suspend fun refresh(refreshToken: String): OAuthClient.RefreshResult =
-            OAuthClient.RefreshResult.Ok("fake-google-access-2", 3600)
     }
 
     /**

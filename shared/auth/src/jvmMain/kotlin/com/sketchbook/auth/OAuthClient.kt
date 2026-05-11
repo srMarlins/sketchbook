@@ -66,30 +66,6 @@ class OAuthClient(
             }
         }
 
-    override suspend fun refresh(refreshToken: String): RefreshResult =
-        withContext(Dispatchers.IO) {
-            val response =
-                httpClient.submitForm(
-                    url = tokenUri,
-                    formParameters =
-                        Parameters.build {
-                            append("grant_type", "refresh_token")
-                            append("refresh_token", refreshToken)
-                            append("client_id", clientId)
-                        },
-                )
-            val body = response.bodyAsText()
-            if (!response.status.isSuccess()) {
-                // Google returns 400 invalid_grant when a refresh token is revoked or expired.
-                return@withContext RefreshResult.Invalid(body)
-            }
-            val parsed = JSON.decodeFromString(TokenResponse.serializer(), body)
-            RefreshResult.Ok(
-                accessToken = parsed.accessToken,
-                expiresInSeconds = parsed.expiresIn,
-            )
-        }
-
     @Suppress("FunctionSignature", "FunctionExpressionBody", "MaxLineLength", "ArgumentListWrapping", "ParameterListWrapping")
     private suspend fun exchangeCodeForTokens(
         code: String,
@@ -185,17 +161,6 @@ class OAuthClient(
         return "$authUri?$query"
     }
 
-    sealed interface RefreshResult {
-        data class Ok(
-            val accessToken: String,
-            val expiresInSeconds: Long,
-        ) : RefreshResult
-
-        data class Invalid(
-            val body: String,
-        ) : RefreshResult
-    }
-
     @Serializable
     private data class TokenResponse(
         @SerialName("access_token") val accessToken: String,
@@ -217,10 +182,15 @@ data class OAuthTokens(
     /**
      * Raw Google-issued ID token (JWT, RS256). Forwarded to Identity Toolkit's
      * `signInWithIdp` by [com.sketchbook.auth.firebase.FirebaseAuthSession] after JWKS
-     * verification. Pre-Firebase callers can ignore.
+     * verification (required for the Identity Toolkit exchange — see security-commitment #1).
      */
     val idToken: String,
     val expiresInSeconds: Long,
+    /**
+     * **Unverified** until [com.sketchbook.auth.firebase.FirebaseAuthSession.signIn] runs
+     * Google JWT verification and the Identity Toolkit exchange. Treat as advisory display
+     * data only until that point.
+     */
     val userId: UserId,
     val email: String,
 )
@@ -228,8 +198,6 @@ data class OAuthTokens(
 /** Decoupling seam so tests don't need to spin up a loopback HTTP server. */
 interface OAuthFlow {
     suspend fun signIn(): Result<OAuthTokens>
-
-    suspend fun refresh(refreshToken: String): OAuthClient.RefreshResult
 }
 
 private fun openInSystemBrowser(url: String) {

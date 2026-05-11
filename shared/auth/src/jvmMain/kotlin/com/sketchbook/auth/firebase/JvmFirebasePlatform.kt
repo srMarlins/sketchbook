@@ -33,19 +33,19 @@ internal class JvmFirebasePlatform(
      */
     seed: Map<String, String> = emptyMap(),
 ) : FirebasePlatform() {
-    private val store: ConcurrentHashMap<String, String> = ConcurrentHashMap<String, String>().apply { putAll(seed) }
+    private val entries: ConcurrentHashMap<String, String> = ConcurrentHashMap<String, String>().apply { putAll(seed) }
 
     override fun store(
         key: String,
         value: String,
     ) {
-        store[key] = value
+        entries[key] = value
     }
 
-    override fun retrieve(key: String): String? = store[key]
+    override fun retrieve(key: String): String? = entries[key]
 
     override fun clear(key: String) {
-        store.remove(key)
+        entries.remove(key)
     }
 
     override fun log(msg: String) {
