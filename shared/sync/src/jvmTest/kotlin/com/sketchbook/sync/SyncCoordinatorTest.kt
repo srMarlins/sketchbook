@@ -138,6 +138,68 @@ class SyncCoordinatorTest {
         }
 
     @Test
+    fun unchangedHeadRevOnSecondEmissionDoesNotRePoll() =
+        runTest {
+            val handle = CatalogDb.openInMemory()
+            val store = SyncStateStore(handle.catalog)
+            val metadataStore = InMemoryMetadataStore()
+            val cloud = FakeCloudBackend()
+            val snapshots = RecordingSnapshotRepository()
+            val poller = PullPoller(cloud, snapshots)
+            val userIdFlow: MutableStateFlow<String?> = MutableStateFlow(uid)
+
+            val manifest =
+                Manifest(
+                    projectUuid = uuid,
+                    rev = SnapshotRev(1),
+                    parentRev = null,
+                    timestamp = now,
+                    hostId = "host-b",
+                    hostName = "MacStudio",
+                    kind = SnapshotKind.Auto,
+                    files = emptyMap(),
+                    stats = ManifestStats(0, 0, 0),
+                )
+            cloud.seedManifest(uuid, manifest)
+            val docPath = DocPath.tree(uid, uuid.value)
+            val baseDoc =
+                TreeDoc(
+                    owner_user_id = uid,
+                    display_name = "test",
+                    created_at = now,
+                    created_by_host = "host-b",
+                    head_rev = 1,
+                    head_gen = "1",
+                    head_updated_at = now,
+                    head_updated_by_host = "host-b",
+                )
+            metadataStore.setDoc(docPath, baseDoc, TreeDoc.serializer())
+
+            val coordinator =
+                SyncCoordinator(
+                    userId = userIdFlow.asStateFlow(),
+                    metadataStore = metadataStore,
+                    pollerProvider = { poller },
+                    syncStateStore = store,
+                    scope = backgroundScope,
+                )
+            coordinator.start()
+            delay(10)
+
+            // Second listener emission with same head_rev (other fields differ — simulates a
+            // sibling tree write or any spurious re-emit). The cache should short-circuit
+            // before sync_state is queried; the recorded poll count must stay at 1.
+            metadataStore.setDoc(
+                docPath,
+                baseDoc.copy(head_updated_at = Instant.parse("2026-05-10T13:00:00Z")),
+                TreeDoc.serializer(),
+            )
+            delay(10)
+
+            assertEquals(1, snapshots.recorded.size, "pollOnce must fire once, not on the stale re-emit")
+        }
+
+    @Test
     fun signedOutUidDoesNotListen() =
         runTest {
             val handle = CatalogDb.openInMemory()

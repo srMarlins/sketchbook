@@ -51,12 +51,25 @@ class SyncCoordinator(
         scope.launch {
             userId.distinctUntilChanged().collectLatest { uid ->
                 if (uid == null) return@collectLatest
+                // Per-UID cache of the last head_rev we observed for each tree. observeCollection
+                // re-emits the FULL list on every change; without this cache, one tree's
+                // head_rev advance would trigger an O(N) DB lookup against sync_state for every
+                // unchanged sibling. The cache holds the value Firestore last reported — when
+                // the next emission matches it for a given treeId, we know nothing changed and
+                // can skip the DB call. Lives in the collectLatest scope so UID transitions
+                // naturally clear it.
+                val lastSeenHead = mutableMapOf<String, Long>()
                 runCatching {
                     metadataStore
                         .observeCollection(CollectionPath.trees(uid), TreeDoc.serializer())
                         .collect { entries ->
                             for (entry in entries) {
-                                handleTreeEntry(uid, entry.id, entry.value)
+                                val previousHead = lastSeenHead[entry.id]
+                                if (previousHead != null && previousHead == entry.value.head_rev) {
+                                    continue
+                                }
+                                lastSeenHead[entry.id] = entry.value.head_rev
+                                handleTreeEntry(entry.id, entry.value)
                             }
                         }
                 }.onFailure { e ->
@@ -70,7 +83,6 @@ class SyncCoordinator(
         }
 
     private suspend fun handleTreeEntry(
-        uid: String,
         treeId: String,
         doc: TreeDoc,
     ) {
