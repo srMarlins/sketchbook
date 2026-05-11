@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Replaces the pre-Phase-3 per-project polling fan-out. Listens to `/users/{uid}/trees`
@@ -59,7 +60,7 @@ class SyncCoordinator(
                 // can skip the DB call. Lives in the collectLatest scope so UID transitions
                 // naturally clear it.
                 val lastSeenHead = mutableMapOf<String, Long>()
-                runCatching {
+                try {
                     metadataStore
                         .observeCollection(CollectionPath.trees(uid), TreeDoc.serializer())
                         .collect { entries ->
@@ -72,11 +73,14 @@ class SyncCoordinator(
                                 handleTreeEntry(entry.id, entry.value)
                             }
                         }
-                }.onFailure { e ->
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (e: Throwable) {
                     // Listener pipe broke — typically rules-denied or transient network. Don't
                     // retry-loop forever here; the userId.distinctUntilChanged outer collector
                     // re-emits the same uid only on a true transition, which is the natural
-                    // recovery hook (sign-out → sign-in resubscribes).
+                    // recovery hook (sign-out → sign-in resubscribes). Phase C3 layers a
+                    // bounded backoff/retry on top of this for transient blips.
                     System.err.println("[SyncCoordinator] listener crashed for uid=$uid: $e")
                 }
             }

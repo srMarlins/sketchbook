@@ -53,6 +53,7 @@ import dev.zacsweers.metro.createGraph
 import dev.zacsweers.metrox.viewmodel.ViewModelGraph
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -311,10 +312,24 @@ interface DesktopAppGraph : ViewModelGraph {
      * calls (OAuth, GCS, token revoke). One CIO connection pool app-wide is the right default —
      * each independent client would carry its own selector thread + connection pool, and HTTP/1.1
      * keep-alive across calls dies on a per-instance boundary.
+     *
+     * **Timeouts.** [HttpTimeout] applies globally so no call can stall forever on a hung
+     * socket / regional outage / blocked TLS handshake. Connect (5s) and socket-idle (30s) are
+     * conservative ceilings; per-request timeouts (`requestTimeoutMillis`) are overridden on the
+     * call site for short, latency-sensitive calls — e.g. [CloudFunctionsClient.revokeMySession]
+     * caps its own request at 5s so sign-out doesn't drag during a slow Cloud Function.
      */
     @Provides
     @SingleIn(AppScope::class)
-    fun provideHttpClient(): HttpClient = HttpClient(CIO)
+    fun provideHttpClient(): HttpClient =
+        HttpClient(CIO) {
+            install(HttpTimeout) {
+                connectTimeoutMillis = 5_000
+                requestTimeoutMillis = 60_000
+                socketTimeoutMillis = 30_000
+            }
+            expectSuccess = false
+        }
 
     @Provides
     @SingleIn(AppScope::class)

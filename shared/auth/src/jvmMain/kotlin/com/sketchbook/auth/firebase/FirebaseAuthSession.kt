@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -149,20 +150,26 @@ class FirebaseAuthSession(
         // across many sign-outs; user-visible behavior here is unchanged.
         val cf = cloudFunctions
         if (cf != null && revokeToken != null) {
-            runCatching { cf.revokeMySession(revokeToken) }
-                .onFailure { e ->
-                    System.err.println("[FirebaseAuthSession] revokeMySession failed: $e")
-                }
+            try {
+                cf.revokeMySession(revokeToken)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (e: Throwable) {
+                System.err.println("[FirebaseAuthSession] revokeMySession failed: $e")
+            }
         }
         // Tear down the gitlive SDK so a subsequent sign-in (same or different UID) starts
         // from a clean slate. Without this the SDK's `Firebase.auth.currentUser` would
         // remain populated with the previous user's identity, and listener RPCs would
         // continue carrying the old auth header. Best-effort: a tear-down failure logs
         // and continues — the local-state clear above is the user-visible contract.
-        runCatching { sdkClearSession() }
-            .onFailure { e ->
-                System.err.println("[FirebaseAuthSession] sdkClearSession failed: $e")
-            }
+        try {
+            sdkClearSession()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (e: Throwable) {
+            System.err.println("[FirebaseAuthSession] sdkClearSession failed: $e")
+        }
     }
 
     override suspend fun idToken(): String = currentTokens().idToken

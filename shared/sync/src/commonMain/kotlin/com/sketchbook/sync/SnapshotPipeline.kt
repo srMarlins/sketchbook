@@ -195,8 +195,16 @@ class SnapshotPipeline(
                     )
                 if (saved != null) emit(saved)
             } finally {
-                // 6) Release lease (best-effort; pipeline outcome already emitted).
-                runCatching { metadataStore.releaseLock(lockPath, holder = hostId) }
+                // 6) Release lease (best-effort; pipeline outcome already emitted). Rethrow
+                //    CancellationException so a cancelled flow actually unwinds — runCatching
+                //    would swallow it and break structured concurrency.
+                try {
+                    metadataStore.releaseLock(lockPath, holder = hostId)
+                } catch (c: CancellationException) {
+                    throw c
+                } catch (_: Throwable) {
+                    // Pipeline outcome was already emitted; releaseLock is best-effort cleanup.
+                }
             }
         }
 

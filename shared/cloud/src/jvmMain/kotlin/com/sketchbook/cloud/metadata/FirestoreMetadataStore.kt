@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.KSerializer
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Clock
 import kotlin.time.Duration
 
@@ -139,7 +140,7 @@ class FirestoreMetadataStore(
         ensureInitialized()
         val now = clock.now()
         val ref = firestore.document(path.value)
-        return runCatching {
+        return try {
             firestore.runTransaction<Boolean> {
                 val snap = get(ref)
                 val current = if (snap.exists) snap.data(LockDoc.serializer()) else null
@@ -165,7 +166,11 @@ class FirestoreMetadataStore(
                     false
                 }
             }
-        }.getOrElse { false }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            false
+        }
     }
 
     override suspend fun refreshLock(
@@ -176,7 +181,7 @@ class FirestoreMetadataStore(
         ensureInitialized()
         val now = clock.now()
         val ref = firestore.document(path.value)
-        return runCatching {
+        return try {
             firestore.runTransaction<Boolean> {
                 val snap = get(ref)
                 val current = if (snap.exists) snap.data(LockDoc.serializer()) else null
@@ -195,7 +200,11 @@ class FirestoreMetadataStore(
                     false
                 }
             }
-        }.getOrElse { false }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            false
+        }
     }
 
     override suspend fun releaseLock(
@@ -207,7 +216,7 @@ class FirestoreMetadataStore(
         // releaseLock at the end of a snapshot pipeline run shouldn't bubble a Firestore
         // error up the stack — the pipeline succeeded by then.
         val ref = firestore.document(path.value)
-        runCatching {
+        try {
             firestore.runTransaction<Unit> {
                 val snap = get(ref)
                 if (snap.exists) {
@@ -217,6 +226,10 @@ class FirestoreMetadataStore(
                     }
                 }
             }
+        } catch (c: CancellationException) {
+            throw c
+        } catch (_: Throwable) {
+            // Best-effort release — see KDoc above. Swallow non-cancellation errors.
         }
     }
 }

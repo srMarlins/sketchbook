@@ -1,6 +1,7 @@
 package com.sketchbook.auth.firebase
 
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.timeout
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -57,6 +58,12 @@ class CloudFunctionsClient(
                 bearerAuth(idToken)
                 contentType(ContentType.Application.Json)
                 setBody("""{"data":{}}""")
+                // Sign-out is a single round-trip; tighten budgets so a slow region or
+                // hung function doesn't drag the user-visible sign-out flow.
+                timeout {
+                    connectTimeoutMillis = 2_000
+                    requestTimeoutMillis = 5_000
+                }
             }
         if (response.status.value !in 200..299) {
             throw CloudFunctionException(
