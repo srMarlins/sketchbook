@@ -4,6 +4,7 @@ import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProjectSyncState
+import com.sketchbook.repo.PushNowOutcome
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
 import kotlinx.coroutines.CoroutineScope
@@ -77,10 +78,10 @@ class InMemorySyncQueue(
 
     override fun observeProject(id: ProjectId): Flow<ProjectSyncState> = perProject.map { it[id] ?: defaultStateFor(id) }
 
-    override suspend fun pushNow(uuid: ProjectUuid): Result<Unit> {
+    override suspend fun pushNow(uuid: ProjectUuid): PushNowOutcome {
         // Without a uuid->id map at v1, treat pushNow as a no-op on aggregates. Per-row
         // "Sync now" goes through [pushNowById].
-        return Result.success(Unit)
+        return PushNowOutcome.Pushed
     }
 
     /**

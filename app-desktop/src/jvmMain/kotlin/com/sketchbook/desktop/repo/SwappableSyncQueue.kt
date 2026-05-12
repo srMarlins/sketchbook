@@ -10,6 +10,7 @@ import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.repo.PushNowOutcome
 import com.sketchbook.core.UserId
 import com.sketchbook.desktop.auth.FirebaseCloudCredentials
 import com.sketchbook.repo.BlobCacheSettings
@@ -204,7 +205,7 @@ class SwappableSyncQueue(
 
     override fun observeProject(id: ProjectId): Flow<ProjectSyncState> = delegate.flatMapLatest { it.observeProject(id) }
 
-    override suspend fun pushNow(uuid: ProjectUuid): Result<Unit> = delegate.value.pushNow(uuid)
+    override suspend fun pushNow(uuid: ProjectUuid): PushNowOutcome = delegate.value.pushNow(uuid)
 
     /**
      * Z3 quick-capture: route through the live cloud queue so the forced Named snapshot picks up
@@ -229,7 +230,7 @@ class SwappableSyncQueue(
         }
 
     /** Per-row Sync-now invocation from the desktop detail panel. */
-    suspend fun pushNowById(id: ProjectId): Result<Unit> =
+    suspend fun pushNowById(id: ProjectId): PushNowOutcome =
         when (val current = delegate.value) {
             is GcsSyncQueue -> {
                 current.pushNowById(id)
@@ -237,11 +238,11 @@ class SwappableSyncQueue(
 
             is InMemorySyncQueue -> {
                 current.pushNowById(id)
-                Result.success(Unit)
+                PushNowOutcome.Pushed
             }
 
             else -> {
-                Result.failure(IllegalStateException("unsupported sync queue impl"))
+                throw com.sketchbook.core.SketchbookError.IoFailure("unsupported sync queue impl")
             }
         }
 

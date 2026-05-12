@@ -79,7 +79,8 @@ class SqlProposalsRepositoryTest {
                 val first = awaitItem()
                 assertEquals(ProposalStatus.Pending, first.single().status)
 
-                val approved = repo.approve("archive:1").getOrThrow()
+                val approved =
+                    (repo.approve("archive:1") as com.sketchbook.repo.ApproveOutcome.Approved).proposal
                 assertEquals(ProposalStatus.Approved, approved.status)
 
                 val next = awaitItem()

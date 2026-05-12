@@ -2,6 +2,7 @@ package com.sketchbook.repo
 
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SketchbookError
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -22,7 +23,34 @@ interface SyncQueue {
 
     fun observeProject(id: ProjectId): Flow<ProjectSyncState>
 
-    suspend fun pushNow(uuid: ProjectUuid): Result<Unit>
+    /**
+     * Trigger an immediate upload for [uuid]. Returns a sealed [PushNowOutcome]:
+     *  - [PushNowOutcome.Pushed] — the project's local state is now at the cloud head.
+     *  - [PushNowOutcome.AlreadyInFlight] — another push for this uuid is already running;
+     *    the caller can ignore (the in-flight push will surface its own outcome).
+     *  - [PushNowOutcome.Conflict] — remote diverged; our work was saved as a branch and the
+     *    user needs to resolve.
+     *
+     * Throws [SketchbookError] for transport / disk / unconfigured-cloud failures.
+     */
+    @Throws(SketchbookError::class)
+    suspend fun pushNow(uuid: ProjectUuid): PushNowOutcome
+}
+
+/** Domain outcome for [SyncQueue.pushNow]. */
+sealed interface PushNowOutcome {
+    /** The project's local state is now at the cloud head. */
+    data object Pushed : PushNowOutcome
+
+    /** Another push for the same uuid is already running. */
+    data object AlreadyInFlight : PushNowOutcome
+
+    /**
+     * CAS conflict — remote diverged between our snapshot read and our push. Our work was
+     * saved as a branch under [branchRev]; the cloud head ([theirRev]) is what we lost the
+     * race to. The UI surfaces a "pull + re-push" prompt.
+     */
+    data class Conflict(val theirRev: Long, val branchRev: Long) : PushNowOutcome
 }
 
 data class SyncQueueState(

@@ -159,12 +159,23 @@ class ProposalsViewModel(
             if (single) _effects.tryEmit(Effect.Failed(proposalId, reason))
             return ApplyResult.Failed(reason)
         }
-        val r = repository.approve(proposalId)
-        return if (r.isSuccess) {
-            if (single) _effects.tryEmit(Effect.Approved(proposalId))
-            ApplyResult.Approved
-        } else {
-            val reason = r.exceptionOrNull()?.message ?: "approve failed"
+        return try {
+            when (repository.approve(proposalId)) {
+                is com.sketchbook.repo.ApproveOutcome.Approved -> {
+                    if (single) _effects.tryEmit(Effect.Approved(proposalId))
+                    ApplyResult.Approved
+                }
+                com.sketchbook.repo.ApproveOutcome.NotFound,
+                com.sketchbook.repo.ApproveOutcome.AlreadyDecided,
+                -> {
+                    if (single) _effects.tryEmit(Effect.Failed(proposalId, "approve failed"))
+                    ApplyResult.Failed("approve failed")
+                }
+            }
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            val reason = t.message ?: "approve failed"
             if (single) _effects.tryEmit(Effect.Failed(proposalId, reason))
             ApplyResult.Failed(reason)
         }
@@ -173,17 +184,27 @@ class ProposalsViewModel(
     private suspend fun rejectOne(
         proposalId: String,
         single: Boolean,
-    ): RejectResult {
-        val r = repository.reject(proposalId)
-        return if (r.isSuccess) {
-            if (single) _effects.tryEmit(Effect.Rejected(proposalId))
-            RejectResult.Rejected
-        } else {
-            val reason = r.exceptionOrNull()?.message ?: "reject failed"
+    ): RejectResult =
+        try {
+            when (repository.reject(proposalId)) {
+                com.sketchbook.repo.RejectOutcome.Rejected -> {
+                    if (single) _effects.tryEmit(Effect.Rejected(proposalId))
+                    RejectResult.Rejected
+                }
+                com.sketchbook.repo.RejectOutcome.NotFound,
+                com.sketchbook.repo.RejectOutcome.AlreadyDecided,
+                -> {
+                    if (single) _effects.tryEmit(Effect.Failed(proposalId, "reject failed"))
+                    RejectResult.Failed("reject failed")
+                }
+            }
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            val reason = t.message ?: "reject failed"
             if (single) _effects.tryEmit(Effect.Failed(proposalId, reason))
             RejectResult.Failed(reason)
         }
-    }
 
     private fun matchesSource(
         actor: String,

@@ -4,10 +4,14 @@ import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.AppScope
+import com.sketchbook.core.SketchbookError
+import com.sketchbook.repo.ApproveOutcome
 import com.sketchbook.repo.Proposal
 import com.sketchbook.repo.ProposalAction
 import com.sketchbook.repo.ProposalStatus
 import com.sketchbook.repo.ProposalsRepository
+import com.sketchbook.repo.RejectOutcome
+import kotlinx.coroutines.CancellationException
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
@@ -105,16 +109,20 @@ class SqlProposalsRepository(
         }
     }
 
-    override suspend fun approve(proposalId: String): Result<Proposal> = recordDecision(proposalId, "approved")
+    override suspend fun approve(proposalId: String): ApproveOutcome =
+        ApproveOutcome.Approved(recordDecision(proposalId, "approved"))
 
-    override suspend fun reject(proposalId: String): Result<Unit> = recordDecision(proposalId, "rejected").map { }
+    override suspend fun reject(proposalId: String): RejectOutcome {
+        recordDecision(proposalId, "rejected")
+        return RejectOutcome.Rejected
+    }
 
     private suspend fun recordDecision(
         proposalId: String,
         status: String,
-    ): Result<Proposal> =
+    ): Proposal =
         withContext(ioDispatcher) {
-            runCatching {
+            try {
                 catalog.transaction {
                     catalog.catalogQueries.insertProposalAck(
                         proposal_key = proposalId,
@@ -134,6 +142,12 @@ class SqlProposalsRepository(
                     submittedAt = now(),
                     status = if (status == "approved") ProposalStatus.Approved else ProposalStatus.Rejected,
                 )
+            } catch (c: CancellationException) {
+                throw c
+            } catch (s: SketchbookError) {
+                throw s
+            } catch (t: Throwable) {
+                throw SketchbookError.IoFailure("proposal $status for $proposalId failed", t)
             }
         }
 

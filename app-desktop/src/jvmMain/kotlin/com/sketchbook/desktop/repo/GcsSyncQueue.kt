@@ -6,10 +6,12 @@ import com.sketchbook.cloud.Generation
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.ActionRecord
+import com.sketchbook.repo.PushNowOutcome
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.ProjectRepository
@@ -140,20 +142,43 @@ class GcsSyncQueue(
 
     /**
      * Push by [ProjectUuid]. Looks up the local row, runs the snapshot pipeline against the
-     * project's parent directory, marks state on success.
+     * project's parent directory, marks state on success. Returns [PushNowOutcome.AlreadyInFlight]
+     * if another push for the same uuid is currently running; [PushNowOutcome.Conflict] if the
+     * pipeline saved a branch because the remote diverged; [PushNowOutcome.Pushed] on a clean
+     * push. Throws [SketchbookError] for transport / pipeline failures.
      */
-    override suspend fun pushNow(uuid: ProjectUuid): Result<Unit> {
+    override suspend fun pushNow(uuid: ProjectUuid): PushNowOutcome {
+        if (uuid in uploading.value) return PushNowOutcome.AlreadyInFlight
         val pid =
             syncState.projectIdFor(uuid)
-                ?: return Result.failure(IllegalStateException("no local project for uuid $uuid"))
-        return runPipeline(pid, uuid).map { }
+                ?: throw SketchbookError.IoFailure("no local project for uuid $uuid")
+        return runPipeline(pid, uuid).toPushOutcome(previousCloudRev(uuid))
     }
 
     /** Convenience for the desktop UI's "Sync now" button (works in [ProjectId] terms). */
-    suspend fun pushNowById(id: ProjectId): Result<Unit> {
+    suspend fun pushNowById(id: ProjectId): PushNowOutcome {
         val uuid = withContext(ioDispatcher) { syncState.identityFor(id) }
-        return runPipeline(id, uuid).map { }
+        if (uuid in uploading.value) return PushNowOutcome.AlreadyInFlight
+        return runPipeline(id, uuid).toPushOutcome(previousCloudRev(uuid))
     }
+
+    private suspend fun previousCloudRev(uuid: ProjectUuid): Long =
+        withContext(ioDispatcher) { syncState.stateOf(uuid)?.cloudHeadRev } ?: 0L
+
+    private fun Result<PipelineRunOutcome>.toPushOutcome(priorCloudRev: Long): PushNowOutcome =
+        fold(
+            onSuccess = { o ->
+                if (o.kind == SnapshotKind.Branch) {
+                    PushNowOutcome.Conflict(theirRev = priorCloudRev, branchRev = o.rev.value)
+                } else {
+                    PushNowOutcome.Pushed
+                }
+            },
+            onFailure = { t ->
+                if (t is SketchbookError) throw t
+                throw SketchbookError.IoFailure("pushNow failed", t)
+            },
+        )
 
     /**
      * Z3 quick-capture entry-point: writes a Named manifest of the project's current bytes,
@@ -168,15 +193,22 @@ class GcsSyncQueue(
         val pid =
             withContext(ioDispatcher) { syncState.projectIdFor(uuid) }
                 ?: return Result.failure(IllegalStateException("no local project for uuid $uuid"))
-        return runPipeline(pid, uuid, kind = SnapshotKind.Named, label = label)
+        return runPipeline(pid, uuid, kind = SnapshotKind.Named, label = label).map { it.rev }
     }
+
+    /** What [runPipeline] returns on success — both rev and kind so callers can tell Pushed
+     *  from CAS-branch outcomes. */
+    private data class PipelineRunOutcome(
+        val rev: SnapshotRev,
+        val kind: SnapshotKind,
+    )
 
     private suspend fun runPipeline(
         pid: ProjectId,
         uuid: ProjectUuid,
         kind: SnapshotKind = SnapshotKind.Auto,
         label: String? = null,
-    ): Result<SnapshotRev> {
+    ): Result<PipelineRunOutcome> {
         val row: ProjectRow =
             projects.observeProject(pid).first()
                 ?: return Result.failure(IllegalStateException("project row $pid not found"))
@@ -259,11 +291,12 @@ class GcsSyncQueue(
                 }
             }
             val finalRev = savedRev
-            return if (finalRev != null) {
+            val finalKind = savedKind
+            return if (finalRev != null && finalKind != null) {
                 withContext(ioDispatcher) { syncState.markSynced(uuid, finalRev) }
                 // A saved branch means our push CAS-failed and we wrote a fork — surface it as
                 // Conflict with an inline message so the user can pull + re-push.
-                if (savedKind == SnapshotKind.Branch) {
+                if (finalKind == SnapshotKind.Branch) {
                     conflicts.value = conflicts.value + uuid
                     conflictMessages.value = conflictMessages.value + (
                         uuid to
@@ -271,7 +304,7 @@ class GcsSyncQueue(
                     )
                     recordConflictJournal(pid, ourRev = finalRev, theirRev = finalRev - 1)
                 }
-                Result.success(SnapshotRev(finalRev))
+                Result.success(PipelineRunOutcome(SnapshotRev(finalRev), finalKind))
             } else {
                 conflicts.value = conflicts.value + uuid
                 conflictMessages.value = conflictMessages.value + (
