@@ -58,12 +58,13 @@ internal class JvmFirebasePlatform(
     }
 
     override fun getDatabasePath(name: String): File {
-        // firestore-on-jvm has no client-side persistence (design doc §"Firestore on JVM
-        // works, but with no client-side persistence"), so the SDK only asks for this when
-        // some non-Firestore product wires up. Returning a temp-dir path is safe — the SDK
-        // creates the directory if it writes there, and on next launch we don't depend on
-        // anything that lived inside it.
-        return File(System.getProperty("java.io.tmpdir"), "sketchbook-firebase-$name")
+        // Firestore's SDK on JVM uses SQLite for local persistence even without explicit opt-in.
+        // Include the process ID in the path so concurrent JVM processes (e.g., two live-integration
+        // runs, or a test alongside a running desktop app) never share the same SQLite file.
+        // Sharing causes SQLITE_BUSY (database is locked) errors that crash Firestore init.
+        // Files land in /tmp and are cleaned up by the OS.
+        val pid = ProcessHandle.current().pid()
+        return File(System.getProperty("java.io.tmpdir"), "sketchbook-firebase-$pid-$name")
     }
 
     companion object {

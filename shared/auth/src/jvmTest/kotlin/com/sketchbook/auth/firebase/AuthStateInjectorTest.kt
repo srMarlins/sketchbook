@@ -108,6 +108,12 @@ class AuthStateInjectorTest {
     fun `JvmFirebasePlatform getDatabasePath returns a writable temp path`() {
         val platform = JvmFirebasePlatform()
         val path = platform.getDatabasePath("sample")
-        assertTrue(path.absolutePath.contains("sketchbook-firebase-sample"))
+        // Path shape: <tmp>/sketchbook-firebase-<pid>-sample — PID is interpolated to
+        // isolate concurrent JVMs from sharing a SQLite file (see JvmFirebasePlatform).
+        val pid = ProcessHandle.current().pid()
+        assertTrue(
+            path.absolutePath.contains("sketchbook-firebase-$pid-sample"),
+            "expected path to contain 'sketchbook-firebase-$pid-sample' but was ${path.absolutePath}",
+        )
     }
 }

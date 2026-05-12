@@ -52,6 +52,7 @@ include(
     ":app-mcp",
     ":tests:architecture",
     ":tests:integration",
+    ":tests:live-integration",
 )
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")

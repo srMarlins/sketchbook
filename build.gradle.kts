@@ -115,3 +115,11 @@ tasks.named("check") {
 }
 
 // `clean` is provided by the `base` plugin (transitively applied by spotless).
+
+// Copy scripts/pre-push into .git/hooks so it runs automatically before every push.
+// Run once after cloning: ./gradlew installGitHooks
+tasks.register<Copy>("installGitHooks") {
+    from("scripts/pre-push")
+    into(".git/hooks")
+    filePermissions { unix("rwxr-xr-x") }
+}
