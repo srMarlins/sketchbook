@@ -49,11 +49,13 @@ class FirebaseBlobStoreTest {
             val hash = BlobHash("b3:" + "a".repeat(64))
             val backend =
                 makeBackend { request ->
-                    assertEquals(HttpMethod.Head, request.method)
+                    // Firebase Storage REST doesn't support HEAD; FirebaseBlobStore uses GET
+                    // without ?alt=media (returns metadata JSON or 404).
+                    assertEquals(HttpMethod.Get, request.method)
                     assertTrue(request.url.encodedPath.contains("/b/sk-bucket/o/"))
-                    // Hash hex starts with "aa..." → shard prefix "aa". Full hash + tenant prefix
-                    // appear in the encoded path; we don't assert the exact encoding (Ktor's
-                    // encodeURLPath leaves `:` unencoded in some versions).
+                    // objectUrl() URL-encodes the full object path as a single segment, so
+                    // slashes/colons appear as %2F/%3A. Assert on the un-encoded encodedPath
+                    // by checking %2F-separated tokens.
                     assertTrue("users" in request.url.encodedPath)
                     assertTrue("test" in request.url.encodedPath)
                     assertTrue("blobs" in request.url.encodedPath)
@@ -84,7 +86,9 @@ class FirebaseBlobStoreTest {
 
             val req = checkNotNull(seen)
             assertEquals(HttpMethod.Post, req.method)
-            assertTrue(req.url.toString().startsWith("https://storage.googleapis.com/upload/storage/v1/b/sk-bucket/o"))
+            // Firebase Storage REST: /v0/b/{bucket}/o (no /upload/ prefix); resumable + media
+            // uploads both target this endpoint and differentiate via uploadType / Goog headers.
+            assertTrue(req.url.toString().startsWith("https://firebasestorage.googleapis.com/v0/b/sk-bucket/o"))
             assertEquals("media", req.url.parameters["uploadType"])
             assertEquals("users/test/blobs/bb/b3:${"b".repeat(64)}", req.url.parameters["name"])
             assertEquals("0", req.headers["x-goog-if-generation-match"])
