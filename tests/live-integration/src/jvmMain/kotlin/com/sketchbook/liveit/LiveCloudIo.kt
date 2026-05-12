@@ -89,9 +89,13 @@ object LiveCloudIo {
     ) {
         val options =
             when (overwriteMode) {
-                OverwriteMode.RejectExisting -> arrayOf(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
-                OverwriteMode.ReplaceExisting ->
+                OverwriteMode.RejectExisting -> {
+                    arrayOf(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                }
+
+                OverwriteMode.ReplaceExisting -> {
                     arrayOf(StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
+                }
             }
         val src = cloud.getBlob(hash, scope)
         var written = 0L
