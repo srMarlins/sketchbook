@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.MacImportFinding
 import com.sketchbook.repo.MissingSampleFinding
 import com.sketchbook.repo.RepairRepository
@@ -130,7 +131,7 @@ class NeedsAttentionViewModel(
                 viewModelScope.launch {
                     pending.update { it.copy(macRepairs = it.macRepairs + intent.projectId) }
                     val r =
-                        runCatching { repository.applyMacPathRepair(intent.projectId) }
+                        runCatchingCancellable { repository.applyMacPathRepair(intent.projectId) }
                             .getOrElse { Result.failure(it) }
                     if (r.isSuccess) {
                         // Auto-cleanup will drop pending once the row leaves macImports.
@@ -154,7 +155,7 @@ class NeedsAttentionViewModel(
                     val key = intent.projectId to intent.missingPath
                     pending.update { it.copy(missingApplies = it.missingApplies + key) }
                     val r =
-                        runCatching {
+                        runCatchingCancellable {
                             repository.applyMissingSampleMatch(
                                 projectId = intent.projectId,
                                 missingPath = intent.missingPath,
@@ -176,7 +177,7 @@ class NeedsAttentionViewModel(
                     val failures = mutableListOf<String>()
                     for (id in intent.projectIds) {
                         val r =
-                            runCatching { repository.acknowledgeMacImport(id) }
+                            runCatchingCancellable { repository.acknowledgeMacImport(id) }
                                 .getOrElse { Result.failure(it) }
                         val k = id.value.toString()
                         if (r.isSuccess) successes += k else failures += k
@@ -192,7 +193,7 @@ class NeedsAttentionViewModel(
                     val failures = mutableListOf<String>()
                     for (id in intent.projectIds) {
                         val r =
-                            runCatching { repository.applyMacPathRepair(id) }
+                            runCatchingCancellable { repository.applyMacPathRepair(id) }
                                 .getOrElse { Result.failure(it) }
                         val k = id.value.toString()
                         if (r.isSuccess) {
@@ -222,7 +223,7 @@ class NeedsAttentionViewModel(
                             continue
                         }
                         val r =
-                            runCatching {
+                            runCatchingCancellable {
                                 repository.applyMissingSampleMatch(f.projectId, f.missingPath, auto.path)
                             }.getOrElse { Result.failure(it) }
                         if (r.isSuccess) {
@@ -242,7 +243,7 @@ class NeedsAttentionViewModel(
                     val failures = mutableListOf<String>()
                     for (f in intent.findings) {
                         val r =
-                            runCatching {
+                            runCatchingCancellable {
                                 repository.dismissMissingSample(f.projectId, f.missingPath)
                             }.getOrElse { Result.failure(it) }
                         val k = "${f.projectId.value}|${f.missingPath}"

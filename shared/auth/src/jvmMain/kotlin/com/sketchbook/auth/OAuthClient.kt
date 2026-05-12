@@ -1,6 +1,7 @@
 package com.sketchbook.auth
 
 import com.sketchbook.core.UserId
+import com.sketchbook.core.runCatchingCancellable
 import com.sun.net.httpserver.HttpServer
 import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.submitForm
@@ -46,7 +47,7 @@ class OAuthClient(
     private val browserOpener: (String) -> Unit = ::openInSystemBrowser,
 ) : OAuthFlow {
     override suspend fun signIn(): Result<OAuthTokens> =
-        runCatching {
+        runCatchingCancellable {
             val verifier = randomVerifier()
             val challenge = sha256B64Url(verifier)
             val state = randomState()

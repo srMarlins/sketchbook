@@ -4,6 +4,7 @@ import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.sync.JvmBlobCache
 import java.nio.file.Files
 import java.nio.file.Path
@@ -37,7 +38,7 @@ class ManifestMaterializer(
         rev: SnapshotRev,
     ): Result<Unit> {
         val manifest =
-            runCatching { cloud.readManifest(uuid, rev) }.getOrElse {
+            runCatchingCancellable { cloud.readManifest(uuid, rev) }.getOrElse {
                 return Result.failure(it)
             }
         val scope: BlobScope =

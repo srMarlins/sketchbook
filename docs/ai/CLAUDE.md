@@ -13,6 +13,7 @@ This file is for things you *can't* observe: war stories and don't-rules that ar
 - **No MockK in `commonTest`.** Hand-written fakes only — MockK's KMP edges bite.
 - **GCS scope is `devstorage.read_write`, not `cloud-platform`.** The JWT scope is the second IAM gate; narrow it.
 - **GCS IAM is bucket-scoped, not project-scoped.** `roles/storage.objectAdmin` + `roles/storage.legacyBucketReader` on the data bucket only. Project-level bindings are wrong.
+- **`runCatching` swallows `CancellationException`.** Don't wrap a suspend call in `runCatching` — `Throwable` catches the cancellation signal, the coroutine completes "successfully," and structured concurrency unwinds silently. Use `runCatchingCancellable` (`shared/core/.../Coroutines.kt`) or `try { ... } catch (c: CancellationException) { throw c } catch (t: Throwable) { ... }` at suspend boundaries. Bare `runCatching` is fine when the lambda contains only non-suspend code (file I/O, parsing, system properties).
 
 ## State holders + DI
 
