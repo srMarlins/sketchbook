@@ -132,7 +132,8 @@ Run a single scenario instead of all five:
 
 | Name | What it tests |
 |---|---|
-| `linearSync` | A pushes → B's Firestore listener catches the head_rev advance → B materializes → assert byte equality. Records the wall-clock listener latency (the "sub-second" Phase 3 promise). |
+| `linearSync` | A pushes → B's Firestore *single-doc* listener catches the head_rev advance → B materializes → assert byte equality. Records the wall-clock listener latency (the "sub-second" Phase 3 promise). |
+| `collectionListener` | Same as `linearSync` but B subscribes to the *collection* listener (`observeCollection` on `users/{uid}/trees`). This mirrors the actual `SyncCoordinator` production path — verifies collection-level listener semantics, which differ from single-doc listeners (fires for new docs too). |
 | `editAndResync` | After linearSync, A drops a deterministic edit file and pushes v2 → B's already-running listener catches v2 → B materializes the delta → assert edit file is present. |
 | `lockContention` | A and B simultaneously call `SnapshotPipeline.run` (gated on a `CompletableDeferred` barrier so they race at the `acquireLock` call). Asserts exactly one `Saved` + one `Failed` with `lock held` in the reason. |
 | `bidirectional` | A→cloud rev=1, B materializes + edits + pushes rev=2, A materializes back. Asserts both ends converge on the same byte set. |

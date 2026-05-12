@@ -10,7 +10,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.get
-import io.ktor.client.request.head
 import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
@@ -25,7 +24,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.contentType
-import io.ktor.http.encodeURLPath
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.ByteWriteChannel
 import io.ktor.utils.io.jvm.javaio.toInputStream
@@ -45,13 +43,17 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 
 /**
- * [CloudBackend] over GCS REST against a Firebase-managed bucket. Conditional writes use
- * `x-goog-if-generation-match`; reads use `?alt=media`. v1 single-PUT only — resumable upload
- * lands alongside the snapshot pipeline that needs it.
+ * [CloudBackend] over Firebase Storage REST (`firebasestorage.googleapis.com/v0/b/{bucket}/o`).
+ * Small blobs (≤ [RESUMABLE_THRESHOLD]) use a single POST (`uploadType=media`); larger blobs
+ * use the GOOG-protocol resumable-upload path (X-Goog-Upload-* headers). Reads use `?alt=media`.
+ *
+ * **CAS note:** `x-goog-if-generation-match` headers are sent on writes for GCS-compat, but
+ * Firebase Storage REST ignores them. Concurrent-write safety for manifests relies on the
+ * Firestore lock at `/users/{uid}/locks/{treeId}` (see [com.sketchbook.cloud.metadata.MetadataStore]).
  *
  * **Auth:** [credentials] returns a Firebase ID token (issued by Identity Toolkit; default 1h
- * TTL). GCS accepts Firebase ID tokens as bearer credentials, so the REST shape is unchanged
- * from the pre-Firebase implementation — only the token source differs.
+ * TTL). Firebase Storage REST API accepts Firebase ID tokens as bearer credentials. The GCS
+ * JSON API (`storage.googleapis.com`) does NOT — it requires OAuth2 access tokens.
  *
  * **Bucket:** the bucket name is the Firebase project's auto-provisioned Cloud Storage bucket
  * (e.g. `sketchbook-jtf-2026.firebasestorage.app`), supplied by DI from
@@ -77,11 +79,19 @@ class FirebaseBlobStore(
         scope: BlobScope,
     ): Boolean {
         val path = blobPath(hash, scope)
-        val response = http.head(objectUrl(path)) { authHeader() }
+        // Firebase Storage REST API doesn't support HEAD. GET without ?alt=media returns
+        // metadata JSON (or 404); we check the status and discard the body.
+        val response = http.get(objectUrl(path)) { authHeader() }
         return when (response.status) {
-            HttpStatusCode.OK -> true
-            HttpStatusCode.NotFound -> false
-            else -> throw remoteFailure(response, "HEAD $path")
+            HttpStatusCode.OK -> {
+                response.bodyAsBytes() // discard metadata JSON
+                true
+            }
+            HttpStatusCode.NotFound -> {
+                response.bodyAsBytes()
+                false
+            }
+            else -> throw remoteFailure(response, "GET-meta $path")
         }
     }
 
@@ -115,18 +125,14 @@ class FirebaseBlobStore(
                 authHeader()
                 parameter("uploadType", "media")
                 parameter("name", path)
-                // x-goog-if-generation-match: 0 → "must not exist". Idempotent: an existing
-                // identical blob returns 412 which we treat as success (content-addressed).
+                // Firebase Storage ignores x-goog-if-generation-match; sent for GCS-compat only.
                 headers { append("x-goog-if-generation-match", "0") }
                 contentType(ContentType.Application.OctetStream)
                 setBody(StreamingSourceContent(source, size))
             }
         when (response.status) {
             HttpStatusCode.OK -> Unit
-
-            HttpStatusCode.PreconditionFailed -> Unit
-
-            // already present
+            HttpStatusCode.PreconditionFailed -> Unit // already present — content-addressed
             else -> throw remoteFailure(response, "PUT $path")
         }
     }
@@ -174,6 +180,10 @@ class FirebaseBlobStore(
      * POST the resumable upload session-init request. Returns the session URL on success, or
      * `null` if the precondition rejected the upload (412 — a content-addressable blob that
      * already exists). Throws on any other failure.
+     *
+     * Firebase Storage uses the GOOG upload protocol (X-Goog-Upload-* headers), distinct from
+     * GCS JSON API's X-Upload-Content-* headers. The session URL is returned in the
+     * X-Goog-Upload-URL response header.
      */
     private suspend fun initiateResumableSession(
         path: String,
@@ -182,20 +192,26 @@ class FirebaseBlobStore(
         val response =
             http.post(uploadUrl()) {
                 authHeader()
-                parameter("uploadType", "resumable")
+                // Firebase Storage uses the X-Goog-Upload-Protocol header to select resumable
+                // mode — NOT the uploadType=resumable query param (which is GCS JSON API only).
                 parameter("name", path)
                 headers {
                     append("x-goog-if-generation-match", "0")
-                    append("X-Upload-Content-Type", "application/octet-stream")
-                    append("X-Upload-Content-Length", size.toString())
+                    append("X-Goog-Upload-Protocol", "resumable")
+                    append("X-Goog-Upload-Command", "start")
+                    append("X-Goog-Upload-Header-Content-Type", "application/octet-stream")
+                    append("X-Goog-Upload-Header-Content-Length", size.toString())
                 }
                 contentType(ContentType.Application.Json)
                 setBody("{}")
             }
         return when (response.status) {
             HttpStatusCode.OK -> {
-                response.headers[HttpHeaders.Location]
-                    ?: throw SketchbookError.IntegrityError("missing Location header on resumable session init for $path")
+                // Firebase Storage returns the session URL in X-Goog-Upload-URL;
+                // fall back to Location for GCS-compat responses.
+                response.headers["X-Goog-Upload-URL"]
+                    ?: response.headers[HttpHeaders.Location]
+                    ?: throw SketchbookError.IntegrityError("missing upload URL on resumable session init for $path")
             }
 
             HttpStatusCode.PreconditionFailed -> {
@@ -213,6 +229,9 @@ class FirebaseBlobStore(
      * PUT one chunk of the temp-file-backed body to the resumable [sessionUrl]. Returns true if
      * this was the final chunk (server responded 200/201), false if the upload should continue
      * (308 Resume Incomplete).
+     *
+     * Firebase Storage GOOG protocol uses X-Goog-Upload-Offset + X-Goog-Upload-Command
+     * instead of the GCS Content-Range header. The last chunk must carry "upload, finalize".
      */
     private suspend fun uploadResumableChunk(
         sessionUrl: String,
@@ -221,11 +240,13 @@ class FirebaseBlobStore(
         endInclusive: Long,
         total: Long,
     ): Boolean {
+        val isLast = endInclusive == total - 1
         val length = endInclusive - start + 1
         val response =
             http.put(sessionUrl) {
                 headers {
-                    append("Content-Range", "bytes $start-$endInclusive/$total")
+                    append("X-Goog-Upload-Offset", start.toString())
+                    append("X-Goog-Upload-Command", if (isLast) "upload, finalize" else "upload")
                 }
                 contentType(ContentType.Application.OctetStream)
                 setBody(FileRangeContent(file, start, length))
@@ -318,7 +339,7 @@ class FirebaseBlobStore(
         // the zero-padded sinceRev cuts the wire traffic instead of fetching-then-filtering.
         val startOffset =
             sinceRev?.let { prefix + (it.value + 1).toString().padStart(8, '0') + "-" }
-        val out = mutableListOf<ManifestRef>()
+        val names = mutableListOf<String>()
         var pageToken: String? = null
         var pages = 0
         // Pages-per-call ceiling acts as a circuit breaker — 50 × 1000 manifest cap is
@@ -335,32 +356,55 @@ class FirebaseBlobStore(
             if (!response.status.isSuccess) throw remoteFailure(response, "LIST $prefix")
             val page = json.decodeFromString(GcsListPage.serializer(), response.bodyAsText())
             for (item in page.items) {
-                item.toManifestRef(prefix)?.let { out += it }
+                val rel = item.name.removePrefix(prefix)
+                if (rel == "HEAD") continue
+                if (rel.substringBefore('-').toLongOrNull() == null) continue
+                names += item.name
             }
             pageToken = page.nextPageToken
             pages++
         } while (pageToken != null && pages < LIST_MAX_PAGES)
+
+        // Firebase Storage list responses only include `name` and `bucket` per item — no
+        // `generation`. Fetch per-item metadata (single GET per object) to populate it.
+        // Note: Firebase Storage ignores x-goog-if-generation-match, so generation does not
+        // enforce CAS here; concurrent-write safety comes from the Firestore lock instead.
+        val out = mutableListOf<ManifestRef>()
+        for (name in names) {
+            val rel = name.removePrefix(prefix)
+            val rev = rel.substringBefore('-').toLongOrNull() ?: continue
+            val meta = fetchObjectMetadata(name) ?: continue
+            out += ManifestRef(rev = rev, path = name, generation = Generation(meta.generation))
+        }
         return out.sortedBy { it.rev }
     }
 
+    // Firebase Storage list endpoint returns only name + bucket per item (no generation).
     @Serializable
     private data class GcsListPage(
-        val items: List<GcsObject> = emptyList(),
+        val items: List<GcsListItem> = emptyList(),
         val nextPageToken: String? = null,
     )
 
+    // Minimal list-response item — only `name` is guaranteed by Firebase Storage REST API.
+    @Serializable
+    private data class GcsListItem(val name: String)
+
+    // Full metadata response from single-object GET (includes generation, size, etc.).
     @Serializable
     private data class GcsObject(
         val name: String,
         val generation: String,
-        @SerialName("size") val size: String? = null,
+        val size: String? = null,
     )
 
-    private fun GcsObject.toManifestRef(prefix: String): ManifestRef? {
-        val rel = name.removePrefix(prefix)
-        if (rel == "HEAD") return null
-        val rev = rel.substringBefore('-').toLongOrNull() ?: return null
-        return ManifestRef(rev = rev, path = name, generation = Generation(generation))
+    private suspend fun fetchObjectMetadata(path: String): GcsObject? {
+        val response = http.get(objectUrl(path)) { authHeader() }
+        return when (response.status) {
+            HttpStatusCode.OK -> json.decodeFromString(GcsObject.serializer(), response.bodyAsText())
+            HttpStatusCode.NotFound -> { response.bodyAsBytes(); null }
+            else -> throw remoteFailure(response, "GET-meta $path")
+        }
     }
 
     override suspend fun appendManifestHead(
@@ -392,7 +436,8 @@ class FirebaseBlobStore(
             }
         }
 
-        // HEAD pointer — CAS via expectedHead.
+        // HEAD pointer write. x-goog-if-generation-match is sent for GCS-compat but Firebase
+        // Storage ignores it — actual write ordering is serialized by the Firestore lock.
         val resp =
             http.post(uploadUrl()) {
                 authHeader()
@@ -406,9 +451,14 @@ class FirebaseBlobStore(
             }
         return when (resp.status) {
             HttpStatusCode.OK -> {
+                // Firebase Storage returns the generation in the JSON response body, not in a
+                // header. Parse it from the `generation` field in the upload metadata response.
                 val gen =
                     resp.headers["x-goog-generation"]
-                        ?: return Result.failure(SketchbookError.IntegrityError("missing x-goog-generation on HEAD write"))
+                        ?: runCatching {
+                            json.decodeFromString(GcsObject.serializer(), resp.bodyAsText()).generation
+                        }.getOrNull()
+                        ?: return Result.failure(SketchbookError.IntegrityError("missing generation on HEAD write"))
                 Result.success(Generation(gen))
             }
 
@@ -429,14 +479,23 @@ class FirebaseBlobStore(
     // ---- internals ----
 
     private suspend fun HttpRequestBuilder.authHeader() {
+        // Firebase Storage REST API uses `Authorization: Firebase {id-token}`.
+        // bearerAuth() sends `Authorization: Bearer {token}` — Firebase Storage accepts both.
         bearerAuth(credentials.token())
     }
 
-    private fun objectUrl(path: String): String = "https://storage.googleapis.com/storage/v1/b/$bucket/o/${path.encodeURLPath()}"
+    private fun objectUrl(path: String): String {
+        // Firebase Storage REST API expects the full object name (including slashes) encoded
+        // as a SINGLE path segment — slashes must be %2F, colons %3A, etc. Ktor's
+        // encodeURLPath() preserves slashes as path separators, which breaks the /o/{object}
+        // format. java.net.URLEncoder gives RFC-3986-compatible percent-encoding.
+        val encoded = java.net.URLEncoder.encode(path, "UTF-8")
+        return "https://firebasestorage.googleapis.com/v0/b/$bucket/o/$encoded"
+    }
 
-    private fun uploadUrl(): String = "https://storage.googleapis.com/upload/storage/v1/b/$bucket/o"
+    private fun uploadUrl(): String = "https://firebasestorage.googleapis.com/v0/b/$bucket/o"
 
-    private fun listUrl(): String = "https://storage.googleapis.com/storage/v1/b/$bucket/o"
+    private fun listUrl(): String = uploadUrl()
 
     private fun blobPath(
         hash: BlobHash,
@@ -480,26 +539,6 @@ internal val ManifestJson =
 
 private val HttpStatusCode.isSuccess: Boolean get() = value in 200..299
 
-private fun Source.readAllBytes(): ByteArray = readByteArray()
-
-private class ByteArrayRawSource(
-    private val bytes: ByteArray,
-) : RawSource {
-    private var consumed = false
-
-    override fun readAtMostTo(
-        sink: kotlinx.io.Buffer,
-        byteCount: Long,
-    ): Long {
-        if (consumed) return -1
-        sink.write(bytes)
-        consumed = true
-        return bytes.size.toLong()
-    }
-
-    override fun close() {}
-}
-
 /**
  * Pagination circuit-breaker for [FirebaseBlobStore.listManifests]. 50 pages × 1000 manifests
  * per page = 50k objects; well past any plausible project history. A higher ceiling would let
@@ -511,10 +550,9 @@ private const val LIST_MAX_PAGES = 50
 private const val STREAM_CHUNK_BYTES = 64 * 1024
 
 /**
- * Switch to GCS resumable upload above this size. Picked at the boundary where a single-PUT
- * still completes before GCS's request timeout under typical home upload speeds (5–10 Mbps).
- * Bigger blobs (a 543 MB Live session) MUST go through the resumable path or they OOM the
- * remote idle timer and we lose the whole upload near completion.
+ * Switch to Firebase Storage GOOG-protocol resumable upload above this size. 8 MB keeps
+ * single-PUT under the Firebase Storage per-request limit while letting the resumable path
+ * handle anything that could plausibly stall on a consumer connection.
  */
 private const val RESUMABLE_THRESHOLD: Long = 8L * 1024 * 1024
 
@@ -586,9 +624,9 @@ private class FileRangeContent(
                 channel.writeFully(arr, 0, read)
                 remaining -= read
             }
+            require(remaining == 0L) { "short read on $file: wrote ${length - remaining} of $length bytes" }
         }
         channel.flushAndClose()
-        require(length - 0 >= 0)
     }
 }
 

@@ -2,7 +2,9 @@ package com.sketchbook.cloud.metadata
 
 import dev.gitlive.firebase.Firebase
 import dev.gitlive.firebase.firestore.FirebaseFirestore
+import dev.gitlive.firebase.firestore.FirebaseFirestoreSettings
 import dev.gitlive.firebase.firestore.firestore
+import dev.gitlive.firebase.firestore.memoryCacheSettings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
@@ -56,7 +58,19 @@ class FirestoreMetadataStore(
     private val clock: Clock = Clock.System,
 ) : MetadataStore {
     /** Resolved on first use — guarantees [ensureInitialized] has already run. */
-    private val firestore: FirebaseFirestore by lazy { firestoreProvider() }
+    private val firestore: FirebaseFirestore by lazy {
+        firestoreProvider().also { fs ->
+            // JVM clients don't roam offline — memory-only cache avoids local-commit queuing
+            // that can mask server-side MVCC conflicts in concurrent transactions.
+            runCatching {
+                fs.settings =
+                    FirebaseFirestoreSettings
+                        .Builder()
+                        .apply { cacheSettings = memoryCacheSettings {} }
+                        .build()
+            }
+        }
+    }
 
     override suspend fun <T : Any> getDoc(
         path: DocPath,

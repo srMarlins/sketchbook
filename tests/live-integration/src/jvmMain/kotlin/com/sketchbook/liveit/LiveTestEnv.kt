@@ -106,4 +106,12 @@ object LiveTestEnv {
         }
         return v
     }
+
+    /**
+     * OAuth client secret. Google's token endpoint requires this even for Desktop/PKCE flows.
+     * Loaded from `-Dsketchbook.oauth.client_secret=...`; null if not set (exchange omits it,
+     * which will fail with Google but is acceptable for unit tests).
+     */
+    fun oauthClientSecret(): String? =
+        System.getProperty("sketchbook.oauth.client_secret")?.takeIf { it.isNotBlank() }
 }

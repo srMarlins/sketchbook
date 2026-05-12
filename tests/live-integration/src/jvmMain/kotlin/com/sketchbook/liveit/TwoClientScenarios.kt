@@ -2,7 +2,9 @@ package com.sketchbook.liveit
 
 import com.sketchbook.cloud.Generation
 import com.sketchbook.cloud.metadata.AcquireResult
+import com.sketchbook.cloud.metadata.CollectionEntry
 import com.sketchbook.cloud.metadata.DocPath
+import com.sketchbook.cloud.metadata.TreeDoc
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.sync.SnapshotProgress
 import kotlinx.coroutines.CompletableDeferred
@@ -39,7 +41,7 @@ data class ScenarioResult(
 )
 
 object TwoClientScenarios {
-    val ALL = listOf("linearSync", "editAndResync", "lockContention", "bidirectional", "lockExpiry")
+    val ALL = listOf("linearSync", "collectionListener", "editAndResync", "lockContention", "bidirectional", "lockExpiry")
 
     suspend fun run(
         name: String,
@@ -48,6 +50,7 @@ object TwoClientScenarios {
     ): ScenarioResult =
         when (name) {
             "linearSync" -> linearSync(harness, templateDir)
+            "collectionListener" -> collectionListener(harness, templateDir)
             "editAndResync" -> editAndResync(harness, templateDir)
             "lockContention" -> lockContention(harness, templateDir)
             "bidirectional" -> bidirectional(harness, templateDir)
@@ -113,6 +116,81 @@ object TwoClientScenarios {
                     success = true,
                     narrative =
                         "A pushed rev=${pushed.rev.value}; B's listener fired after " +
+                            "${tListenerFired - tPushDone}ms; materialize took ${tMaterialized - tListenerFired}ms.",
+                    timings =
+                        mapOf(
+                            "push_ms" to (tPushDone - tPushStart),
+                            "listener_latency_ms" to (tListenerFired - tPushDone),
+                            "materialize_ms" to (tMaterialized - tListenerFired),
+                        ),
+                )
+            }
+        }
+
+    /**
+     * Same push/listen/materialize sequence as [linearSync], but B subscribes to the
+     * *collection* listener (`observeCollection` on `users/{uid}/trees`) rather than a
+     * single-doc listener. This mirrors the actual [com.sketchbook.sync.SyncCoordinator]
+     * production path — the desktop app listens to the whole trees collection, not individual
+     * docs. Collection and single-doc Firestore listeners have subtly different semantics:
+     * the collection listener fires for *new* docs (which [linearSync]'s doc listener never
+     * sees since the doc doesn't exist yet when it subscribes) in addition to updates.
+     *
+     * Passes when the collection emission contains an entry for [uuid] with `head_rev ≥ 1`,
+     * the entry names the pushing host, and the materialized bytes equal A's working tree.
+     */
+    private suspend fun collectionListener(
+        harness: TwoClientHarness,
+        templateDir: Path,
+    ): ScenarioResult =
+        scenario("collectionListener", harness) { uuid ->
+            TwoClientFs.seedFromTemplate(templateDir, harness.clientA.workDir)
+
+            coroutineScope {
+                val listenerSawHead =
+                    async {
+                        withTimeoutOrNull(LISTENER_WAIT_TIMEOUT_MS.milliseconds) {
+                            harness
+                                .observeTreesCollection()
+                                .first { entries ->
+                                    entries.any { it.id == uuid.value && it.value.head_rev >= 1L }
+                                }
+                        }
+                    }
+                delay(LOCK_BARRIER_WAIT_MS.milliseconds)
+
+                val tPushStart = nowMs()
+                val pushed =
+                    requireSaved(
+                        harness.snapshot(
+                            harness.clientA,
+                            uuid,
+                            lastKnownManifest = null,
+                            expectedHeadGeneration = Generation.ZERO,
+                        ),
+                    )
+                val tPushDone = nowMs()
+                val emission: List<CollectionEntry<TreeDoc>> =
+                    listenerSawHead.await()
+                        ?: error("collection listener did not see head_rev≥1 for ${uuid.value} within ${LISTENER_WAIT_TIMEOUT_MS}ms")
+                val tListenerFired = nowMs()
+
+                val treeEntry = emission.first { it.id == uuid.value }
+                check(treeEntry.value.head_updated_by_host == harness.clientA.hostId) {
+                    "collection listener: head_updated_by_host=${treeEntry.value.head_updated_by_host}, " +
+                        "expected ${harness.clientA.hostId}"
+                }
+
+                harness.materializeInto(harness.clientB, uuid)
+                val tMaterialized = nowMs()
+
+                assertTreesEqual(harness.clientA.workDir, harness.clientB.workDir)
+
+                ScenarioResult(
+                    name = "collectionListener",
+                    success = true,
+                    narrative =
+                        "A pushed rev=${pushed.rev.value}; collection listener fired after " +
                             "${tListenerFired - tPushDone}ms; materialize took ${tMaterialized - tListenerFired}ms.",
                     timings =
                         mapOf(

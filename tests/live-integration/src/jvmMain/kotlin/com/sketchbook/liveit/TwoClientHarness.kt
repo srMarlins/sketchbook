@@ -1,6 +1,8 @@
 package com.sketchbook.liveit
 
 import com.sketchbook.cloud.Generation
+import com.sketchbook.cloud.metadata.CollectionEntry
+import com.sketchbook.cloud.metadata.CollectionPath
 import com.sketchbook.cloud.metadata.DocPath
 import com.sketchbook.cloud.metadata.TreeDoc
 import com.sketchbook.core.Manifest
@@ -85,6 +87,19 @@ class TwoClientHarness(
     fun observeTreeDoc(uuid: ProjectUuid): Flow<TreeDoc?> =
         graph.metadataStore.observeDoc(
             DocPath.tree(graph.userId.value, uuid.value),
+            TreeDoc.serializer(),
+        )
+
+    /**
+     * Subscribe to the full trees collection for this user. Mirrors the subscription
+     * [com.sketchbook.sync.SyncCoordinator] opens in production — `observeCollection` on
+     * `users/{uid}/trees`. Emits the complete list on every change (new doc, updated doc,
+     * deleted doc). Used by [TwoClientScenarios.collectionListener] to verify the
+     * production sync path, which differs from [observeTreeDoc]'s single-doc listener.
+     */
+    fun observeTreesCollection(): Flow<List<CollectionEntry<TreeDoc>>> =
+        graph.metadataStore.observeCollection(
+            CollectionPath.trees(graph.userId.value),
             TreeDoc.serializer(),
         )
 

@@ -13,13 +13,16 @@ import com.sketchbook.auth.firebase.JwksGoogleIdTokenVerifier
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.CloudCredentials
 import com.sketchbook.cloud.FirebaseBlobStore
+import com.sketchbook.cloud.metadata.DocPath
 import com.sketchbook.cloud.metadata.FirestoreMetadataStore
+import com.sketchbook.cloud.metadata.MachineDoc
 import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.core.UserId
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import kotlinx.coroutines.flow.first
+import kotlin.time.Clock
 
 /**
  * Wires the same Firebase graph the desktop app uses, but against the live-integration
@@ -48,6 +51,7 @@ object LiveTestBootstrap {
             com.sketchbook.auth.OAuthClient(
                 httpClient = http,
                 clientId = LiveTestEnv.oauthClientId(),
+                clientSecret = LiveTestEnv.oauthClientSecret(),
                 // Mirrors DesktopAppGraph.provideOAuthClient exactly — Firebase migration
                 // dropped the GCS scope; we only need openid + email.
                 scopes = listOf("openid", "email"),
@@ -88,13 +92,53 @@ object LiveTestBootstrap {
         val signedIn = authSession.state.first { it is AuthState.SignedIn } as AuthState.SignedIn
         val userId = signedIn.userId
 
+        // Diagnostic: confirm the Firebase ID token is a real JWT before seeding the SDK.
+        val tokensForDiag = authSession.currentTokens()
+        val jwtPayloadSub = runCatching {
+            val parts = tokensForDiag.idToken.split(".")
+            if (parts.size >= 2) {
+                val padding = (4 - parts[1].length % 4) % 4
+                val decoded = String(java.util.Base64.getUrlDecoder().decode(parts[1] + "=".repeat(padding)))
+                // Extract sub, aud, iss from the JSON payload using simple regex
+                val sub = Regex(""""sub"\s*:\s*"([^"]+)"""").find(decoded)?.groupValues?.get(1) ?: "?"
+                val aud = Regex(""""aud"\s*:\s*"([^"]+)"""").find(decoded)?.groupValues?.get(1) ?: "?"
+                "sub=$sub aud=${aud.takeLast(25)}"
+            } else "jwt-malformed"
+        }.getOrDefault("decode-failed")
+        System.err.println(
+            "[LiveTestBootstrap] pre-seed uid=${tokensForDiag.uid} " +
+                "jwtClaims=[$jwtPayloadSub] " +
+                "expiresAt=${tokensForDiag.expiresAt}",
+        )
+
         val bootstrap = FirebaseSdkBootstrap(authSession = authSession, config = config)
         bootstrap.ensureInitialized()
 
-        // FirestoreMetadataStore lazily re-seeds the SDK on every call via the
-        // ensureInitialized hook; we pass bootstrap::ensureInitialized so token rotation
-        // mid-test still works.
+        // Diagnostic: verify auth (Pattern A1) by writing a machine doc — machine rules use
+        // only `isOwner(uid) && withinSizeLimit()`, no hasOnly check. If this fails → auth is
+        // broken (storage seed or token issue). If this passes but lock writes fail → hasOnly
+        // field shape mismatch in the lock rules.
         val metadataStore = FirestoreMetadataStore(ensureInitialized = bootstrap::ensureInitialized)
+        val diagPath = DocPath.machine(userId.value, "live-diag-${Clock.System.now().epochSeconds}")
+        try {
+            metadataStore.setDoc(
+                diagPath,
+                MachineDoc(
+                    hostName = "live-integration-diag",
+                    os = System.getProperty("os.name") ?: "JVM",
+                    lastSeenAt = Clock.System.now(),
+                ),
+                MachineDoc.serializer(),
+            )
+            println("[LiveTestBootstrap] auth diagnostic OK — machine doc write succeeded, auth is working")
+            runCatching { metadataStore.deleteDoc(diagPath) }
+        } catch (e: Exception) {
+            error(
+                "[LiveTestBootstrap] auth diagnostic FAILED (${e::class.simpleName}: ${e.message}). " +
+                    "Pattern A1 (platform storage seeding) or token warm-up is broken — all Firestore " +
+                    "operations will fail with PERMISSION_DENIED. Re-run liveTestLogin if the token is stale.",
+            )
+        }
         val cloud: CloudBackend =
             FirebaseBlobStore(
                 http = http,

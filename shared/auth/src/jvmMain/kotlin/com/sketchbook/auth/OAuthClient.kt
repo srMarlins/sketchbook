@@ -28,11 +28,16 @@ import kotlin.time.Duration.Companion.minutes
  * 127.0.0.1:<random>, opens the system browser to the auth URL, captures the code, exchanges
  * it for tokens, and shuts the server down.
  *
- * Public clients (desktop apps) don't use a client secret per [RFC 8252]; PKCE is the proof.
+ * RFC 8252 permits public (desktop) clients to omit the client secret; PKCE is the proof of
+ * possession. Google's token endpoint, however, requires `client_secret` even for installed-app
+ * clients — it's labelled "not secret" in the Cloud Console because it ships in the binary, but
+ * the endpoint rejects the exchange without it. Pass [clientSecret] from the Cloud Console
+ * credential; leave null only in unit tests that mock the token endpoint.
  */
 class OAuthClient(
     private val httpClient: HttpClient,
     private val clientId: String,
+    private val clientSecret: String? = null,
     private val authUri: String = "https://accounts.google.com/o/oauth2/v2/auth",
     private val tokenUri: String = "https://oauth2.googleapis.com/token",
     private val scopes: List<String>,
@@ -81,6 +86,7 @@ class OAuthClient(
                             append("grant_type", "authorization_code")
                             append("code", code)
                             append("client_id", clientId)
+                            if (clientSecret != null) append("client_secret", clientSecret)
                             append("code_verifier", verifier)
                             append("redirect_uri", redirectUri)
                         },

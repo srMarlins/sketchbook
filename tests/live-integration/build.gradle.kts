@@ -38,6 +38,11 @@ kotlin {
             implementation(project(":shared:sync-io"))
             implementation(project(":shared:parser-als"))
             implementation(libs.kotlinx.coroutines.core)
+            // Required so Firebase's Firestore SDK can launch coroutines on Dispatchers.Main
+            // at init time (FirebaseAuthCredentialsProvider registers an IdToken listener).
+            // Without this, any access to FirestoreMetadataStore.firestore throws
+            // "Module with the Main dispatcher is missing".
+            implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.io.core)
             implementation(libs.ktor.client.core)
@@ -108,8 +113,8 @@ tasks.register<JavaExec>("liveTestTwoClient") {
     description = "Single-process two-simulated-client integration test. Spawns two ClientHandles " +
         "with different hostIds against the live dev Firebase project and runs a battery of " +
         "sync + lock scenarios. Required: -PtemplateDir=\"<abs-path-to-small-Live-project>\". " +
-        "Optional: -Pscenario=<name|all> (default all). Names: linearSync, editAndResync, " +
-        "lockContention, bidirectional, lockExpiry."
+        "Optional: -Pscenario=<name|all> (default all). Names: linearSync, collectionListener, " +
+        "editAndResync, lockContention, bidirectional, lockExpiry."
     mainClass.set("com.sketchbook.liveit.LiveTestTwoClientKt")
     wireLiveEnv()
 }

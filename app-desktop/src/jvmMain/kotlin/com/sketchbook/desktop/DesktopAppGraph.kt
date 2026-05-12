@@ -366,6 +366,7 @@ interface DesktopAppGraph : ViewModelGraph {
         OAuthClient(
             httpClient = httpClient,
             clientId = OAUTH_CLIENT_ID,
+            clientSecret = OAUTH_CLIENT_SECRET,
             // Firebase migration: we no longer need the GCS scope on the Google grant — bearer
             // for GCS reads/writes is now the Firebase ID token (issued by Identity Toolkit).
             // `openid` + `email` is all that's needed for the Identity Toolkit exchange.
@@ -481,6 +482,15 @@ private val OAUTH_CLIENT_ID: String =
         }
         v
     }
+
+/**
+ * Google Desktop-app client secret. Not truly secret (it's in the binary), but Google's token
+ * endpoint requires it even for PKCE flows — see [OAuthClient]. Loaded from
+ * `sketchbook.oauth.client_secret`; null means the exchange omits the field (only safe for
+ * unit tests that stub the token endpoint).
+ */
+private val OAUTH_CLIENT_SECRET: String? =
+    System.getProperty("sketchbook.oauth.client_secret")?.takeIf { it.isNotBlank() }
 
 /**
  * Stable per-machine identity used by the sync pipeline as `hostId` (lease ownership) and
