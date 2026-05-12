@@ -55,7 +55,12 @@ kotlin {
 // (not the Gradle `test` task) because (a) these are scripts, not @Test methods, and (b)
 // `test` task UP-TO-DATE caching is dangerous for code that talks to real cloud — Gradle
 // would happily skip a "test" task that already passed once even when we want a fresh run.
-val jvmMainOutput = kotlin.targets.getByName("jvm").compilations.getByName("main").output.allOutputs
+val jvmMainOutput =
+    kotlin.targets
+        .getByName("jvm")
+        .compilations
+        .getByName("main")
+        .output.allOutputs
 val jvmRuntimeClasspath = configurations.named("jvmRuntimeClasspath")
 
 // Forward `-P` Gradle project properties and any `sketchbook.*` system properties to the

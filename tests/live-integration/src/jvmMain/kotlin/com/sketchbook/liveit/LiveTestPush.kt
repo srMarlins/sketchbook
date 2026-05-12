@@ -22,7 +22,6 @@ private const val RAND_HEX_RANGE = 0xffff
 private const val RAND_HEX_WIDTH = 4
 private const val HEX_RADIX = 16
 
-
 /**
  * Snapshot a real Ableton project folder to the live Firebase project via the production
  * [SnapshotPipeline]. Inputs:
@@ -88,17 +87,35 @@ fun main() =
                         ),
                     ).collect { event ->
                         when (event) {
-                            is SnapshotProgress.LeaseAcquired -> println("  lease acquired")
-                            is SnapshotProgress.LeaseHeld -> println("  lease held by ${event.ownerHostName}")
-                            is SnapshotProgress.Hashing ->
+                            is SnapshotProgress.LeaseAcquired -> {
+                                println("  lease acquired")
+                            }
+
+                            is SnapshotProgress.LeaseHeld -> {
+                                println("  lease held by ${event.ownerHostName}")
+                            }
+
+                            is SnapshotProgress.Hashing -> {
                                 if (event.done == event.total) println("  hashed ${event.total} files")
-                            is SnapshotProgress.Uploading ->
+                            }
+
+                            is SnapshotProgress.Uploading -> {
                                 if (event.bytesDone == event.bytesTotal) {
                                     println("  uploaded blob ${event.hash.value.take(HASH_DISPLAY_PREFIX)}… (${event.bytesTotal} B)")
                                 }
-                            is SnapshotProgress.WritingManifest -> println("  writing manifest rev=${event.rev.value}")
-                            is SnapshotProgress.Saved -> saved = event
-                            is SnapshotProgress.Failed -> failed = event
+                            }
+
+                            is SnapshotProgress.WritingManifest -> {
+                                println("  writing manifest rev=${event.rev.value}")
+                            }
+
+                            is SnapshotProgress.Saved -> {
+                                saved = event
+                            }
+
+                            is SnapshotProgress.Failed -> {
+                                failed = event
+                            }
                         }
                     }
 
@@ -146,5 +163,4 @@ private fun stableHostId(): String {
         ?: "live-integration-host"
 }
 
-private fun stableHostName(): String =
-    runCatching { InetAddress.getLocalHost().hostName }.getOrNull() ?: "live-integration"
+private fun stableHostName(): String = runCatching { InetAddress.getLocalHost().hostName }.getOrNull() ?: "live-integration"

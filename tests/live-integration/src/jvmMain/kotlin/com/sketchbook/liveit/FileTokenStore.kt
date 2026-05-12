@@ -31,7 +31,9 @@ class FileTokenStore(
     private val path: Path = LiveTestEnv.tokenCachePath,
 ) : TokenStore {
     @Serializable
-    private data class Stored(val refreshToken: String)
+    private data class Stored(
+        val refreshToken: String,
+    )
 
     private val json = Json { prettyPrint = false }
 

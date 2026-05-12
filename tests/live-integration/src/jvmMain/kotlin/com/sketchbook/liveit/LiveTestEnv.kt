@@ -88,11 +88,9 @@ object LiveTestEnv {
     }
 
     /** Sweep config: `-PolderThanHours=<N>` and `-Papply=true` to actually delete. */
-    fun sweepOlderThanHours(): Long =
-        System.getProperty("live.olderThanHours")?.toLongOrNull() ?: 0L
+    fun sweepOlderThanHours(): Long = System.getProperty("live.olderThanHours")?.toLongOrNull() ?: 0L
 
-    fun sweepApply(): Boolean =
-        System.getProperty("live.apply")?.equals("true", ignoreCase = true) == true
+    fun sweepApply(): Boolean = System.getProperty("live.apply")?.equals("true", ignoreCase = true) == true
 
     /**
      * OAuth client ID. Mirrors the desktop app's loader — the placeholder is a build
@@ -112,6 +110,5 @@ object LiveTestEnv {
      * Loaded from `-Dsketchbook.oauth.client_secret=...`; null if not set (exchange omits it,
      * which will fail with Google but is acceptable for unit tests).
      */
-    fun oauthClientSecret(): String? =
-        System.getProperty("sketchbook.oauth.client_secret")?.takeIf { it.isNotBlank() }
+    fun oauthClientSecret(): String? = System.getProperty("sketchbook.oauth.client_secret")?.takeIf { it.isNotBlank() }
 }

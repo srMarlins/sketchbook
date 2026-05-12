@@ -19,7 +19,6 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-
 private const val LISTENER_WAIT_TIMEOUT_MS = 30_000L
 private const val LOCK_BARRIER_WAIT_MS = 500L
 private const val LOCK_EXPIRY_TTL_SEC = 2L
@@ -246,7 +245,14 @@ object TwoClientScenarios {
                 val tV2Materialized = nowMs()
 
                 assertTreesEqual(harness.clientA.workDir, harness.clientB.workDir)
-                check(harness.clientB.workDir.resolve("live-integration-edit-rev-2.txt").let { java.nio.file.Files.isRegularFile(it) }) {
+                check(
+                    harness.clientB.workDir
+                        .resolve("live-integration-edit-rev-2.txt")
+                        .let {
+                            java.nio.file.Files
+                                .isRegularFile(it)
+                        },
+                ) {
                     "edit-rev-2 file not present in B's workDir after materialize"
                 }
 
@@ -424,7 +430,8 @@ object TwoClientScenarios {
     private fun mintScenarioUuid(scenarioName: String): ProjectUuid {
         val epoch = Clock.System.now().epochSeconds
         val rand =
-            java.security.SecureRandom()
+            java.security
+                .SecureRandom()
                 .nextInt(TEST_UUID_RAND_RANGE)
                 .toString(HEX_RADIX)
                 .padStart(TEST_UUID_RAND_WIDTH, '0')

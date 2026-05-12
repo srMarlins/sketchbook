@@ -87,11 +87,15 @@ class FirebaseBlobStore(
                 response.bodyAsBytes() // discard metadata JSON
                 true
             }
+
             HttpStatusCode.NotFound -> {
                 response.bodyAsBytes()
                 false
             }
-            else -> throw remoteFailure(response, "GET-meta $path")
+
+            else -> {
+                throw remoteFailure(response, "GET-meta $path")
+            }
         }
     }
 
@@ -132,7 +136,10 @@ class FirebaseBlobStore(
             }
         when (response.status) {
             HttpStatusCode.OK -> Unit
-            HttpStatusCode.PreconditionFailed -> Unit // already present — content-addressed
+
+            HttpStatusCode.PreconditionFailed -> Unit
+
+            // already present — content-addressed
             else -> throw remoteFailure(response, "PUT $path")
         }
     }
@@ -388,7 +395,9 @@ class FirebaseBlobStore(
 
     // Minimal list-response item — only `name` is guaranteed by Firebase Storage REST API.
     @Serializable
-    private data class GcsListItem(val name: String)
+    private data class GcsListItem(
+        val name: String,
+    )
 
     // Full metadata response from single-object GET (includes generation, size, etc.).
     @Serializable
@@ -401,9 +410,18 @@ class FirebaseBlobStore(
     private suspend fun fetchObjectMetadata(path: String): GcsObject? {
         val response = http.get(objectUrl(path)) { authHeader() }
         return when (response.status) {
-            HttpStatusCode.OK -> json.decodeFromString(GcsObject.serializer(), response.bodyAsText())
-            HttpStatusCode.NotFound -> { response.bodyAsBytes(); null }
-            else -> throw remoteFailure(response, "GET-meta $path")
+            HttpStatusCode.OK -> {
+                json.decodeFromString(GcsObject.serializer(), response.bodyAsText())
+            }
+
+            HttpStatusCode.NotFound -> {
+                response.bodyAsBytes()
+                null
+            }
+
+            else -> {
+                throw remoteFailure(response, "GET-meta $path")
+            }
         }
     }
 

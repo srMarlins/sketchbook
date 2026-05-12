@@ -117,7 +117,11 @@ private fun resolvePickedScenarios(): List<String> {
 }
 
 private fun makeRunBase(): Path {
-    val runId = Clock.System.now().epochSeconds.toString()
+    val runId =
+        Clock.System
+            .now()
+            .epochSeconds
+            .toString()
     val base = Paths.get(System.getProperty("user.home"), ".sketchbook-test", "two-client-runs", runId)
     Files.createDirectories(base)
     return base
@@ -131,7 +135,11 @@ private fun printResult(r: ScenarioResult) {
     }
     if (!r.success && r.failure != null) {
         // Print only first 30 lines of stack to keep the report readable.
-        val head = r.failure.lineSequence().take(STACK_HEAD_LINES).joinToString("\n")
+        val head =
+            r.failure
+                .lineSequence()
+                .take(STACK_HEAD_LINES)
+                .joinToString("\n")
         println(head)
     }
 }

@@ -115,8 +115,14 @@ object LiveProjectAssertions {
             for (ref in meta.sampleRefs) {
                 val classification = classify(ref)
                 when (classification) {
-                    is RefClass.Absolute -> absoluteRefs += SampleHit(alsPath, ref, classification.raw)
-                    is RefClass.Library -> libraryRefs += SampleHit(alsPath, ref, classification.raw)
+                    is RefClass.Absolute -> {
+                        absoluteRefs += SampleHit(alsPath, ref, classification.raw)
+                    }
+
+                    is RefClass.Library -> {
+                        libraryRefs += SampleHit(alsPath, ref, classification.raw)
+                    }
+
                     is RefClass.IntraProject -> {
                         // Try multiple separator normalizations so a Windows-stored path
                         // (backslashes) still resolves on macOS, and vice versa.
@@ -144,15 +150,29 @@ object LiveProjectAssertions {
         // 3 = relative-to-library (per the AlsRewriter rewrite invariants). When the
         // parser can't determine type we infer from the raw path shape.
         return when (ref.relativePathType) {
-            RelativePathType.ABSOLUTE -> RefClass.Absolute(raw)
-            RelativePathType.LIBRARY -> RefClass.Library(raw)
-            RelativePathType.PROJECT -> RefClass.IntraProject(raw)
-            else ->
+            RelativePathType.ABSOLUTE -> {
+                RefClass.Absolute(raw)
+            }
+
+            RelativePathType.LIBRARY -> {
+                RefClass.Library(raw)
+            }
+
+            RelativePathType.PROJECT -> {
+                RefClass.IntraProject(raw)
+            }
+
+            else -> {
                 when {
-                    raw.startsWith("/") || ABS_PATH_REGEX.containsMatchIn(raw) ->
+                    raw.startsWith("/") || ABS_PATH_REGEX.containsMatchIn(raw) -> {
                         RefClass.Absolute(raw)
-                    else -> RefClass.IntraProject(raw)
+                    }
+
+                    else -> {
+                        RefClass.IntraProject(raw)
+                    }
                 }
+            }
         }
     }
 
@@ -194,11 +214,17 @@ object LiveProjectAssertions {
     }
 
     private sealed interface RefClass {
-        data class IntraProject(val relPath: String) : RefClass
+        data class IntraProject(
+            val relPath: String,
+        ) : RefClass
 
-        data class Library(val raw: String) : RefClass
+        data class Library(
+            val raw: String,
+        ) : RefClass
 
-        data class Absolute(val raw: String) : RefClass
+        data class Absolute(
+            val raw: String,
+        ) : RefClass
     }
 
     data class HashMismatch(

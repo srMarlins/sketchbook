@@ -98,8 +98,7 @@ class TwoClientHarness(
             TreeDoc.serializer(),
         )
 
-    suspend fun readTreeDoc(uuid: ProjectUuid): TreeDoc? =
-        LiveCloudIo.readTreeDoc(graph.metadataStore, graph.userId, uuid)
+    suspend fun readTreeDoc(uuid: ProjectUuid): TreeDoc? = LiveCloudIo.readTreeDoc(graph.metadataStore, graph.userId, uuid)
 
     suspend fun readHeadManifest(uuid: ProjectUuid): Manifest =
         LiveCloudIo.readHeadManifest(graph.metadataStore, graph.cloud, graph.userId, uuid)

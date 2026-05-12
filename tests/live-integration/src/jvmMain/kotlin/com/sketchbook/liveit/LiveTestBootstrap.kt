@@ -94,17 +94,25 @@ object LiveTestBootstrap {
 
         // Diagnostic: confirm the Firebase ID token is a real JWT before seeding the SDK.
         val tokensForDiag = authSession.currentTokens()
-        val jwtPayloadSub = runCatching {
-            val parts = tokensForDiag.idToken.split(".")
-            if (parts.size >= 2) {
-                val padding = (4 - parts[1].length % 4) % 4
-                val decoded = String(java.util.Base64.getUrlDecoder().decode(parts[1] + "=".repeat(padding)))
-                // Extract sub, aud, iss from the JSON payload using simple regex
-                val sub = Regex(""""sub"\s*:\s*"([^"]+)"""").find(decoded)?.groupValues?.get(1) ?: "?"
-                val aud = Regex(""""aud"\s*:\s*"([^"]+)"""").find(decoded)?.groupValues?.get(1) ?: "?"
-                "sub=$sub aud=${aud.takeLast(25)}"
-            } else "jwt-malformed"
-        }.getOrDefault("decode-failed")
+        val jwtPayloadSub =
+            runCatching {
+                val parts = tokensForDiag.idToken.split(".")
+                if (parts.size >= 2) {
+                    val padding = (4 - parts[1].length % 4) % 4
+                    val decoded =
+                        String(
+                            java.util.Base64
+                                .getUrlDecoder()
+                                .decode(parts[1] + "=".repeat(padding)),
+                        )
+                    // Extract sub, aud, iss from the JSON payload using simple regex
+                    val sub = Regex(""""sub"\s*:\s*"([^"]+)"""").find(decoded)?.groupValues?.get(1) ?: "?"
+                    val aud = Regex(""""aud"\s*:\s*"([^"]+)"""").find(decoded)?.groupValues?.get(1) ?: "?"
+                    "sub=$sub aud=${aud.takeLast(25)}"
+                } else {
+                    "jwt-malformed"
+                }
+            }.getOrDefault("decode-failed")
         System.err.println(
             "[LiveTestBootstrap] pre-seed uid=${tokensForDiag.uid} " +
                 "jwtClaims=[$jwtPayloadSub] " +

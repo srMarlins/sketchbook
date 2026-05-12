@@ -129,9 +129,13 @@ class FirebaseSdkBootstrap(
             // Diagnostic: confirm Pattern A1 seeded the user correctly. Printed to stderr so
             // it surfaces in live-integration runs without polluting production logs. Remove
             // once the auth path is fully stable.
-            val uid = runCatching {
-                com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-            }.getOrNull()
+            val uid =
+                runCatching {
+                    com.google.firebase.auth.FirebaseAuth
+                        .getInstance()
+                        .currentUser
+                        ?.uid
+                }.getOrNull()
             System.err.println("[FirebaseSdkBootstrap] after init: currentUser.uid=$uid (seeded uid=${tokens.uid})")
             initialized = true
         }
