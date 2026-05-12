@@ -14,6 +14,7 @@ import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.BlobCacheSettings
+import com.sketchbook.repo.MaterializeOutcome
 import com.sketchbook.sync.JvmBlobCache
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.Buffer
@@ -67,11 +68,8 @@ class ManifestMaterializerBusyTest {
             val lock = ch.lock()
             try {
                 val r = mat.materialize(uuid, rev)
-                assertTrue(r.isFailure, "expected busy failure")
-                val cause = r.exceptionOrNull()
-                assertNotNull(cause)
-                assertTrue(cause is WorkingTreeBusyException, "expected WorkingTreeBusyException, got ${cause::class}")
-                assertTrue(cause.busyPaths.contains("Project.als"), "expected Project.als in busyPaths, got ${cause.busyPaths}")
+                assertTrue(r is MaterializeOutcome.WorkingTreeBusy, "expected WorkingTreeBusy outcome, got $r")
+                assertTrue(r.paths.contains("Project.als"), "expected Project.als in paths, got ${r.paths}")
 
                 // No blob fetch on busy preflight (saves bandwidth on the no-op pull retry tick).
                 assertEquals(0, cloud.blobFetchCount, "preflight must run before any blob fetch")
@@ -96,7 +94,7 @@ class ManifestMaterializerBusyTest {
 
             // And the same materialize call now succeeds.
             val ok = mat.materialize(uuid, rev)
-            assertTrue(ok.isSuccess, "expected success after lock release: ${ok.exceptionOrNull()}")
+            assertEquals(MaterializeOutcome.Materialized, ok)
             assertEquals("new-bytes", Files.readString(alsPath))
         }
 

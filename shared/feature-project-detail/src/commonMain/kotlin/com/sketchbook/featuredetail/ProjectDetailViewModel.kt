@@ -8,6 +8,7 @@ import com.sketchbook.core.PluginRef
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.Stage
 import com.sketchbook.repo.LockRepository
@@ -153,7 +154,7 @@ class ProjectDetailViewModel(
                 val id = selectedId.value ?: return
                 val trimmed = intent.name.trim()
                 if (trimmed.isEmpty() || trimmed == state.value.row?.name) return
-                viewModelScope.launch { projects.rename(id, trimmed) }
+                viewModelScope.launch { runCatchingCancellable { projects.rename(id, trimmed) } }
             }
 
             is Intent.SetTags -> {
@@ -163,7 +164,7 @@ class ProjectDetailViewModel(
                         .map { it.trim() }
                         .filter { it.isNotEmpty() }
                         .distinct()
-                viewModelScope.launch { projects.setTags(id, cleaned) }
+                viewModelScope.launch { runCatchingCancellable { projects.setTags(id, cleaned) } }
             }
 
             is Intent.Move -> {
@@ -175,17 +176,17 @@ class ProjectDetailViewModel(
                 val target = intent.newParentDir.trim()
                 if (target.isEmpty()) return
                 if (target.replace('\\', '/') == parentDirOfPath(current)) return
-                viewModelScope.launch { projects.move(id, target) }
+                viewModelScope.launch { runCatchingCancellable { projects.move(id, target) } }
             }
 
             is Intent.ToggleArchive -> {
                 val row = state.value.row ?: return
-                viewModelScope.launch { projects.archive(row.id, !row.archived) }
+                viewModelScope.launch { runCatchingCancellable { projects.archive(row.id, !row.archived) } }
             }
 
             is Intent.SetStageOverride -> {
                 val id = selectedId.value ?: return
-                viewModelScope.launch { projects.setStageOverride(id, intent.stage) }
+                viewModelScope.launch { runCatchingCancellable { projects.setStageOverride(id, intent.stage) } }
             }
         }
     }

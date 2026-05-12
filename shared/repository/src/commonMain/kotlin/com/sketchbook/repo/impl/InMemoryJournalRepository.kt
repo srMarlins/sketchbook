@@ -1,6 +1,5 @@
 package com.sketchbook.repo.impl
 
-import com.sketchbook.core.SketchbookError
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
 import kotlinx.coroutines.flow.Flow
@@ -22,21 +21,20 @@ class InMemoryJournalRepository : JournalRepository {
 
     override fun observeRecent(limit: Int): Flow<List<JournalEntry>> = state.map { it.take(limit) }
 
-    override suspend fun append(entry: JournalEntry): Result<JournalEntry> {
+    override suspend fun append(entry: JournalEntry): JournalEntry {
         val seq = seqMutex.withLock { nextSequence++ }
         val stamped = entry.copy(sequence = seq)
         state.update { listOf(stamped) + it }
-        return Result.success(stamped)
+        return stamped
     }
 
-    override suspend fun undoLast(): Result<JournalEntry> {
+    override suspend fun undoLast(): JournalEntry? {
         // getAndUpdate atomically returns the previous list while replacing it with the tail.
         // The lambda is pure (no side effects), so we read the head off the snapshot it returns.
         val previous =
             state.getAndUpdate { current ->
                 if (current.isEmpty()) current else current.drop(1)
             }
-        return previous.firstOrNull()?.let { Result.success(it) }
-            ?: Result.failure(SketchbookError.NotFound("journal is empty"))
+        return previous.firstOrNull()
     }
 }

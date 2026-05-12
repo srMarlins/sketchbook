@@ -14,8 +14,10 @@ import kotlinx.coroutines.flow.Flow
  * **Read API** — Flow-based, hot. Repository owns the dispatcher choice; callers never
  * `flowOn(Dispatchers.IO)` themselves.
  *
- * **Write API** — `suspend` + `Result<JournalEntry>`. Domain-level errors are
- * [SketchbookError] subclasses wrapped via `Result.failure`; unexpected exceptions propagate.
+ * **Write API** — `suspend`, returns the appended `JournalEntry`. Throws
+ * [SketchbookError.NotFound] when the project id is missing; [SketchbookError.IoFailure]
+ * (or another [SketchbookError]) for infra failures. See
+ * `docs/plans/2026-05-12-result-refactor-design.md`.
  */
 interface ProjectRepository {
     /**
@@ -95,28 +97,32 @@ interface ProjectRepository {
     fun observeMissingPluginSummary(): Flow<MissingPluginSummary?> = kotlinx.coroutines.flow.flowOf(null)
 
     /** Move the project's working tree to a new parent directory. Path-rename only; no FS I/O. */
+    @Throws(SketchbookError::class)
     suspend fun move(
         id: ProjectId,
         newParentDir: String,
-    ): Result<JournalEntry>
+    ): JournalEntry
 
     /** Rename the project (catalog-level — folder rename is the caller's job). */
+    @Throws(SketchbookError::class)
     suspend fun rename(
         id: ProjectId,
         newName: String,
-    ): Result<JournalEntry>
+    ): JournalEntry
 
     /** Toggle archived. Same call archives or unarchives based on current state. */
+    @Throws(SketchbookError::class)
     suspend fun archive(
         id: ProjectId,
         archived: Boolean = true,
-    ): Result<JournalEntry>
+    ): JournalEntry
 
     /** Replace the project's tag set (creates missing tags as a side effect). */
+    @Throws(SketchbookError::class)
     suspend fun setTags(
         id: ProjectId,
         tags: List<String>,
-    ): Result<JournalEntry>
+    ): JournalEntry
 
     /**
      * PR-R: set or clear the per-project stage override. `null` clears it (chip falls back to the
@@ -124,14 +130,11 @@ interface ProjectRepository {
      * stage at the time of the override so the audit log can reconstruct user intent (e.g. "user
      * promoted Mixing → Done" vs "user re-tagged null → Sketch").
      */
+    @Throws(SketchbookError::class)
     suspend fun setStageOverride(
         id: ProjectId,
         stage: com.sketchbook.core.Stage?,
-    ): Result<JournalEntry> =
-        Result.failure(
-            com.sketchbook.core.SketchbookError
-                .NotFound("setStageOverride not implemented"),
-        )
+    ): JournalEntry = throw SketchbookError.NotFound("setStageOverride not implemented")
 }
 
 /**
@@ -227,5 +230,3 @@ data class MissingPluginSummary(
     val isEmpty: Boolean get() = missingPluginCount == 0 && affectedProjects == 0
 }
 
-/** Convenience: report a [SketchbookError] as a `Result.failure`. */
-internal fun <T> failed(error: SketchbookError): Result<T> = Result.failure(error)

@@ -182,13 +182,14 @@ interface DesktopAppGraph : ViewModelGraph {
             journal = journal,
             materialize = { uuid, rev ->
                 // Delegates to the SwappableSyncQueue's currently-active materializer (built when
-                // cloud creds land). Returns a friendly failure when cloud is unconfigured so the
-                // Timeline rewind UI doesn't crash on first launch.
+                // cloud creds land). Throws a typed IoFailure when cloud is unconfigured so the
+                // Timeline rewind UI surfaces a clear "Configure cloud first" toast on launch
+                // without crashing.
                 val swap = syncQueue as? com.sketchbook.desktop.repo.SwappableSyncQueue
                 val mat =
                     swap?.currentMaterializer
-                        ?: return@SqlSnapshotRepository Result.failure(
-                            IllegalStateException("Configure cloud credentials in Settings before rewinding."),
+                        ?: throw com.sketchbook.core.SketchbookError.IoFailure(
+                            "Configure cloud credentials in Settings before rewinding.",
                         )
                 mat.materialize(uuid, rev)
             },
@@ -557,15 +558,28 @@ internal suspend fun autoMaterializeAfterPull(
         val state = store.stateOf(uuid) ?: break
         if (state.dirty) break
         if (state.cloudHeadRev <= state.localRev) break
-        val r = snapshots.materializeAt(uuid, SnapshotRev(state.cloudHeadRev))
-        if (r.isSuccess) {
-            store.markSynced(uuid, state.cloudHeadRev)
-            break
+        val outcome =
+            try {
+                snapshots.materializeAt(uuid, SnapshotRev(state.cloudHeadRev))
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (_: Throwable) {
+                // Real failure (network, integrity, disk). Break out — cloud_head_rev > local_rev
+                // keeps the UI in RemoteAhead state and the next pull tick will retry naturally.
+                break
+            }
+        when (outcome) {
+            com.sketchbook.repo.MaterializeOutcome.Materialized -> {
+                store.markSynced(uuid, state.cloudHeadRev)
+                break
+            }
+
+            is com.sketchbook.repo.MaterializeOutcome.WorkingTreeBusy -> {
+                // Live has the file; retry on a 30s cadence so the user can close the project
+                // and the laydown completes without another pull tick.
+                delay(30_000)
+            }
         }
-        // Retry on busy (Live has the file); break on any other error so a real bug doesn't
-        // infinite-loop (and cloud_head_rev > local_rev keeps the UI in RemoteAhead state).
-        if (r.exceptionOrNull() !is com.sketchbook.syncio.WorkingTreeBusyException) break
-        delay(30_000)
     }
 }
 

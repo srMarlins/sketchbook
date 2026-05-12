@@ -14,6 +14,7 @@ import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.repo.BlobCacheSettings
+import com.sketchbook.repo.MaterializeOutcome
 import com.sketchbook.sync.JvmBlobCache
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.Buffer
@@ -23,6 +24,8 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -59,7 +62,7 @@ class ManifestMaterializerTest {
             val mat = ManifestMaterializer(cloud, cache) { projectRoot }
 
             val r = mat.materialize(uuid, rev)
-            assertTrue(r.isSuccess, "materialize failed: ${r.exceptionOrNull()}")
+            assertEquals(MaterializeOutcome.Materialized, r)
 
             assertEquals("als-bytes", Files.readString(projectRoot.resolve("Project.als")))
             assertEquals("wav-bytes", Files.readString(projectRoot.resolve("Samples/k.wav")))
@@ -84,7 +87,7 @@ class ManifestMaterializerTest {
             val mat = ManifestMaterializer(cloud, cache) { projectRoot }
 
             val r = mat.materialize(uuid, rev)
-            assertTrue(r.isSuccess)
+            assertEquals(MaterializeOutcome.Materialized, r)
             assertEquals("new-bytes", Files.readString(pre))
         }
 
@@ -110,8 +113,7 @@ class ManifestMaterializerTest {
             val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = BlobCacheSettings.Default)
             val mat = ManifestMaterializer(cloud, cache) { projectRoot }
 
-            val r = mat.materialize(uuid, rev)
-            assertTrue(r.isFailure)
+            assertFailsWith<SketchbookError> { mat.materialize(uuid, rev) }
             // Original is untouched (no rename happened).
             assertEquals("old-bytes", Files.readString(pre))
             // No leftover temp files anywhere under projectRoot.
@@ -138,8 +140,7 @@ class ManifestMaterializerTest {
             val cache = JvmBlobCache(handle.catalog, cacheRoot, cloud, cacheSettings = BlobCacheSettings.Default)
             val mat = ManifestMaterializer(cloud, cache) { projectRoot }
 
-            val r = mat.materialize(uuid, rev)
-            assertTrue(r.isFailure)
+            assertFails { mat.materialize(uuid, rev) }
             // No file written outside the project root.
             assertFalse(Files.exists(projectRoot.parent.resolve("escape.als")))
         }

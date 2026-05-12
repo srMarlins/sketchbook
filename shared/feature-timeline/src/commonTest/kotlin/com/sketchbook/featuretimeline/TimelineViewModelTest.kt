@@ -69,39 +69,37 @@ class TimelineViewModelTest {
             snapshot: Snapshot,
             manifestPath: String,
             manifestHash: String,
-        ): Result<Unit> = Result.success(Unit)
+        ) = Unit
 
         override suspend fun setSnapshotLabel(
             uuid: ProjectUuid,
             rev: SnapshotRev,
             label: String?,
-        ): Result<com.sketchbook.repo.JournalEntry> {
+        ): com.sketchbook.repo.JournalEntry {
             lastRelabel = Triple(uuid, rev, label)
-            return Result.success(
-                com.sketchbook.repo.JournalEntry(
-                    timestamp = kotlin.time.Instant.fromEpochMilliseconds(0L),
-                    projectId = com.sketchbook.core.ProjectId(1L),
-                    action =
-                        com.sketchbook.repo.ActionRecord.SnapshotRelabeled(
-                            rev = rev.value,
-                            labelBefore = null,
-                            labelAfter = label,
-                            kindBefore = "auto",
-                        ),
-                ),
+            return com.sketchbook.repo.JournalEntry(
+                timestamp = kotlin.time.Instant.fromEpochMilliseconds(0L),
+                projectId = com.sketchbook.core.ProjectId(1L),
+                action =
+                    com.sketchbook.repo.ActionRecord.SnapshotRelabeled(
+                        rev = rev.value,
+                        labelBefore = null,
+                        labelAfter = label,
+                        kindBefore = "auto",
+                    ),
             )
         }
 
         override suspend fun materializeAt(
             uuid: ProjectUuid,
             rev: SnapshotRev,
-        ): Result<Unit> =
+        ): com.sketchbook.repo.MaterializeOutcome =
             if (failNext) {
                 failNext = false
-                Result.failure(IllegalStateException("disk full"))
+                throw IllegalStateException("disk full")
             } else {
                 rewoundTo = rev
-                Result.success(Unit)
+                com.sketchbook.repo.MaterializeOutcome.Materialized
             }
     }
 

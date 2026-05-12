@@ -51,22 +51,22 @@ class McpServerTest {
         override suspend fun move(
             id: ProjectId,
             newParentDir: String,
-        ): Result<JournalEntry> = Result.success(stub())
+        ): JournalEntry = stub()
 
         override suspend fun rename(
             id: ProjectId,
             newName: String,
-        ): Result<JournalEntry> = Result.success(stub())
+        ): JournalEntry = stub()
 
         override suspend fun archive(
             id: ProjectId,
             archived: Boolean,
-        ): Result<JournalEntry> = Result.success(stub())
+        ): JournalEntry = stub()
 
         override suspend fun setTags(
             id: ProjectId,
             tags: List<String>,
-        ): Result<JournalEntry> = Result.success(stub())
+        ): JournalEntry = stub()
 
         private fun stub() =
             JournalEntry(
