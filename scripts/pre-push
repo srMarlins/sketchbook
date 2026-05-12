@@ -1,0 +1,17 @@
+#!/bin/sh
+# pre-push hook — runs Spotless before any push so formatting failures are caught
+# locally rather than in CI. Install via: ./gradlew installGitHooks
+#
+# If Spotless finds violations, run `./gradlew spotlessApply`, stage the fixes,
+# commit them, then push again.
+
+echo "[pre-push] running spotlessCheck..."
+./gradlew spotlessCheck --quiet
+status=$?
+if [ $status -ne 0 ]; then
+  echo ""
+  echo "[pre-push] Spotless found formatting violations."
+  echo "  Fix:  ./gradlew spotlessApply"
+  echo "  Then: git add -u && git commit -m 'style: spotlessApply' && git push"
+  exit 1
+fi
