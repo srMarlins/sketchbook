@@ -72,43 +72,45 @@ object LiveCloudIo {
         for ((rel, mf) in manifest.files) {
             val out = destDir.resolve(rel)
             Files.createDirectories(out.parent)
-            val src = cloud.getBlob(mf.hash, scope)
-            try {
-                val options =
-                    when (overwriteMode) {
-                        OverwriteMode.RejectExisting -> {
-                            arrayOf(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
-                        }
-
-                        OverwriteMode.ReplaceExisting -> {
-                            arrayOf(
-                                StandardOpenOption.CREATE,
-                                StandardOpenOption.TRUNCATE_EXISTING,
-                                StandardOpenOption.WRITE,
-                            )
-                        }
-                    }
-                var written = 0L
-                Files.newOutputStream(out, *options).use { os ->
-                    val buf = ByteArray(STREAM_BUFFER_BYTES)
-                    src.use { source ->
-                        val buffered = source.buffered()
-                        while (true) {
-                            val read = buffered.readAtMostTo(buf, 0, buf.size)
-                            if (read <= 0) break
-                            os.write(buf, 0, read)
-                            written += read
-                        }
-                    }
-                }
-                check(written == mf.size) {
-                    "size mismatch for $rel: manifest=${mf.size} actual=$written"
-                }
-            } finally {
-                runCatching { src.close() }
-            }
+            writeBlobToFile(cloud, mf.hash, scope, out, mf.size, overwriteMode, rel)
             done++
             onProgress?.invoke(done, total, rel)
+        }
+    }
+
+    private suspend fun writeBlobToFile(
+        cloud: CloudBackend,
+        hash: com.sketchbook.core.BlobHash,
+        scope: BlobScope,
+        out: Path,
+        expectedSize: Long,
+        overwriteMode: OverwriteMode,
+        rel: String,
+    ) {
+        val options =
+            when (overwriteMode) {
+                OverwriteMode.RejectExisting -> arrayOf(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                OverwriteMode.ReplaceExisting ->
+                    arrayOf(StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)
+            }
+        val src = cloud.getBlob(hash, scope)
+        var written = 0L
+        try {
+            Files.newOutputStream(out, *options).use { os ->
+                val buf = ByteArray(STREAM_BUFFER_BYTES)
+                val buffered = src.buffered()
+                while (true) {
+                    val read = buffered.readAtMostTo(buf, 0, buf.size)
+                    if (read <= 0) break
+                    os.write(buf, 0, read)
+                    written += read
+                }
+            }
+        } finally {
+            runCatching { src.close() }
+        }
+        check(written == expectedSize) {
+            "size mismatch for $rel: manifest=$expectedSize actual=$written"
         }
     }
 }
