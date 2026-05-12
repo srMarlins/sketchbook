@@ -56,7 +56,7 @@ class SqlSnapshotRepository(
         manifestHash: String,
     ) {
         withContext(ioDispatcher) {
-            try {
+            snapshotOperation("recordSnapshot ${snapshot.projectUuid}@${snapshot.rev}") {
                 catalog.transaction {
                     catalog.catalogQueries.insertSnapshot(
                         project_uuid = snapshot.projectUuid.value,
@@ -73,15 +73,27 @@ class SqlSnapshotRepository(
                         new_bytes = snapshot.newBytes,
                     )
                 }
-            } catch (c: CancellationException) {
-                throw c
-            } catch (s: SketchbookError) {
-                throw s
-            } catch (t: Throwable) {
-                throw SketchbookError.IoFailure("recordSnapshot failed for ${snapshot.projectUuid}@${snapshot.rev}", t)
             }
         }
     }
+
+    /**
+     * Wrap a snapshot-operation body so any non-`SketchbookError` throwable surfaces as
+     * [SketchbookError.IoFailure] (preserving the original cause). `CancellationException`
+     * propagates unchanged; already-typed `SketchbookError` rethrows as-is.
+     */
+    private inline fun <R> snapshotOperation(
+        op: String,
+        block: () -> R,
+    ): R =
+        try {
+            block()
+        } catch (t: Throwable) {
+            when (t) {
+                is CancellationException, is SketchbookError -> throw t
+                else -> throw SketchbookError.IoFailure("$op failed", t)
+            }
+        }
 
     override suspend fun setSnapshotLabel(
         uuid: ProjectUuid,
@@ -89,27 +101,29 @@ class SqlSnapshotRepository(
         label: String?,
     ): JournalEntry =
         withContext(ioDispatcher) {
-            // Capture before-state, write, journal — all atomic under one transaction so a concurrent
-            // observer never sees the row mutated without the journal entry's row also visible.
-            val before =
-                catalog.catalogQueries
-                    .selectSnapshotByRev(uuid.value, rev.value)
-                    .executeAsOneOrNull()
-                    ?: throw SketchbookError.NotFound("snapshot ${uuid.value}@${rev.value} not found")
-            // Resolve the project_id for the JournalEntry. Snapshots key on project_uuid; the
-            // journal keys on project_id (legacy v0.1 schema). project_identity is the bridge.
-            // Fall back to 1L when the identity row is missing — `ProjectId(0)` would fail the
-            // value-class precondition and crash the journal append. The "orphan" case (snapshot
-            // without an identity row) shouldn't happen in practice, but a synthetic-1 audit row
-            // is preferable to a thrown exception for a label-edit hotpath.
-            val resolvedProjectId =
-                catalog.catalogQueries
-                    .selectIdentityByUuid(uuid.value)
-                    .executeAsOneOrNull()
-                    ?.project_id
-                    ?.takeIf { it > 0L }
-                    ?: 1L
-            try {
+            snapshotOperation("setSnapshotLabel ${uuid.value}@${rev.value}") {
+                // Capture before-state, write, journal — all atomic under one transaction so a
+                // concurrent observer never sees the row mutated without the journal entry's row
+                // also visible.
+                val before =
+                    catalog.catalogQueries
+                        .selectSnapshotByRev(uuid.value, rev.value)
+                        .executeAsOneOrNull()
+                        ?: throw SketchbookError.NotFound("snapshot ${uuid.value}@${rev.value} not found")
+                // Resolve the project_id for the JournalEntry. Snapshots key on project_uuid; the
+                // journal keys on project_id (legacy v0.1 schema). project_identity is the bridge.
+                // Fall back to 1L when the identity row is missing — `ProjectId(0)` would fail the
+                // value-class precondition and crash the journal append. The "orphan" case
+                // (snapshot without an identity row) shouldn't happen in practice, but a
+                // synthetic-1 audit row is preferable to a thrown exception for a label-edit
+                // hotpath.
+                val resolvedProjectId =
+                    catalog.catalogQueries
+                        .selectIdentityByUuid(uuid.value)
+                        .executeAsOneOrNull()
+                        ?.project_id
+                        ?.takeIf { it > 0L }
+                        ?: 1L
                 catalog.transaction {
                     catalog.catalogQueries.updateSnapshotLabel(
                         label = label,
@@ -117,28 +131,22 @@ class SqlSnapshotRepository(
                         rev = rev.value,
                     )
                 }
-            } catch (c: CancellationException) {
-                throw c
-            } catch (s: SketchbookError) {
-                throw s
-            } catch (t: Throwable) {
-                throw SketchbookError.IoFailure("setSnapshotLabel update failed", t)
+                val entry =
+                    JournalEntry(
+                        timestamp = clock.now(),
+                        projectId = ProjectId(resolvedProjectId),
+                        action =
+                            ActionRecord.SnapshotRelabeled(
+                                rev = rev.value,
+                                labelBefore = before.label,
+                                labelAfter = label,
+                                kindBefore = before.kind,
+                            ),
+                    )
+                // No journal wired (test path that doesn't care about audit) → return the entry
+                // so callers can still assert action contents without a side-channel.
+                journal?.append(entry) ?: entry
             }
-            val entry =
-                JournalEntry(
-                    timestamp = clock.now(),
-                    projectId = ProjectId(resolvedProjectId),
-                    action =
-                        ActionRecord.SnapshotRelabeled(
-                            rev = rev.value,
-                            labelBefore = before.label,
-                            labelAfter = label,
-                            kindBefore = before.kind,
-                        ),
-                )
-            // No journal wired (test path that doesn't care about audit) → return the entry
-            // so callers can still assert action contents without a side-channel.
-            journal?.append(entry) ?: entry
         }
 
     override suspend fun materializeAt(

@@ -88,21 +88,15 @@ class ManifestMaterializer(
                 }
             }
             return MaterializeOutcome.Materialized
-        } catch (c: CancellationException) {
-            for ((temp, _) in staged) {
-                runCatching { Files.deleteIfExists(temp) }
-            }
-            throw c
-        } catch (s: SketchbookError) {
-            for ((temp, _) in staged) {
-                runCatching { Files.deleteIfExists(temp) }
-            }
-            throw s
         } catch (t: Throwable) {
+            // Roll back any staged temps; finals are untouched if we hadn't started commit yet.
             for ((temp, _) in staged) {
                 runCatching { Files.deleteIfExists(temp) }
             }
-            throw SketchbookError.IoFailure("materialize ${uuid.value}@${rev.value} failed", t)
+            when (t) {
+                is CancellationException, is SketchbookError -> throw t
+                else -> throw SketchbookError.IoFailure("materialize ${uuid.value}@${rev.value} failed", t)
+            }
         }
     }
 

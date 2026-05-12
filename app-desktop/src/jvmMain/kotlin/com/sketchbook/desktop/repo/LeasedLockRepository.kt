@@ -113,8 +113,7 @@ class LeasedLockRepository(
     override fun observe(uuid: ProjectUuid): Flow<LockStatus> = get(uuid).status.asStateFlow()
 
     override suspend fun forceTake(uuid: ProjectUuid): ForceTakeOutcome {
-        val store = metadataStore() ?: throw SketchbookError.IoFailure("cloud not configured")
-        val uid = userIdFlow.value ?: throw SketchbookError.IoFailure("signed out")
+        val (store, uid) = requireCloudContext()
         val per = get(uuid)
         val path = DocPath.lock(uid, uuid.value)
 
@@ -129,23 +128,28 @@ class LeasedLockRepository(
         // current holder"; whoever lands their write last wins.
         runCatchingCancellable { store.releaseLockAsAnyone(path) }
         when (val acquired = store.acquireLock(path, hostId, leaseTtl, hostName)) {
-            AcquireResult.Acquired -> {
-                Unit
-            }
-
-            is AcquireResult.HeldByOther -> {
-                return ForceTakeOutcome.RaceLost
-            }
-
-            is AcquireResult.Failed -> {
-                if (acquired.cause is SketchbookError) throw acquired.cause
-                throw SketchbookError.IoFailure("forceTake failed", acquired.cause)
-            }
+            AcquireResult.Acquired -> Unit
+            is AcquireResult.HeldByOther -> return ForceTakeOutcome.RaceLost
+            is AcquireResult.Failed -> throw acquired.cause.asSketchbookError("forceTake failed")
         }
         startHeartbeat(uuid, per)
         recordForceTake(uuid, priorOwnerName, priorExpiresAtMs)
         return ForceTakeOutcome.Taken
     }
+
+    /**
+     * Resolve the two prerequisites for a cloud write: the [MetadataStore] (cloud configured)
+     * and the current user id (signed in). Throws [SketchbookError.IoFailure] with a precise
+     * message when either is missing.
+     */
+    private fun requireCloudContext(): Pair<MetadataStore, String> {
+        val store = metadataStore() ?: throw SketchbookError.IoFailure("cloud not configured")
+        val uid = userIdFlow.value ?: throw SketchbookError.IoFailure("signed out")
+        return store to uid
+    }
+
+    private fun Throwable.asSketchbookError(message: String): SketchbookError =
+        this as? SketchbookError ?: SketchbookError.IoFailure(message, this)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun startListener(
