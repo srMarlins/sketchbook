@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
@@ -169,7 +170,7 @@ class JournalViewModel(
                     }
 
                     else -> {
-                        projects.move(entry.projectId, parentDirOf(a.pathBefore)).map {}
+                        runCatchingCancellable { projects.move(entry.projectId, parentDirOf(a.pathBefore)) }.map {}
                     }
                 }
             }
@@ -188,21 +189,21 @@ class JournalViewModel(
                     }
 
                     else -> {
-                        projects.rename(entry.projectId, a.nameBefore).map {}
+                        runCatchingCancellable { projects.rename(entry.projectId, a.nameBefore) }.map {}
                     }
                 }
             }
 
             is ActionRecord.Archive -> {
-                projects.archive(entry.projectId, a.wasArchived).map {}
+                runCatchingCancellable { projects.archive(entry.projectId, a.wasArchived) }.map {}
             }
 
             is ActionRecord.SetTags -> {
-                projects.setTags(entry.projectId, a.before).map {}
+                runCatchingCancellable { projects.setTags(entry.projectId, a.before) }.map {}
             }
 
             is ActionRecord.MacPathRepaired -> {
-                repair.restoreMacPathRepair(entry.projectId)
+                runCatchingCancellable { repair.restoreMacPathRepair(entry.projectId) }
             }
 
             else -> {

@@ -1,6 +1,7 @@
 package com.sketchbook.repo
 
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SketchbookError
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Instant
 
@@ -20,8 +21,23 @@ interface LockRepository {
      * Force-take a held lock. Only valid when the current status is [LockStatus.Stale] or — by
      * user override — [LockStatus.HeldByOther]. The impl breaks the existing lock by writing a
      * new lock object with `expectedHead = currentGeneration` and our host as owner.
+     *
+     * Returns [ForceTakeOutcome.Taken] on success or [ForceTakeOutcome.RaceLost] when another
+     * host re-acquired the lock between our release and our acquire (the user clicked the
+     * button knowing they were racing the current holder). Throws [SketchbookError] for
+     * cloud / IO / unconfigured failures.
      */
-    suspend fun forceTake(uuid: ProjectUuid): Result<Unit>
+    @Throws(SketchbookError::class)
+    suspend fun forceTake(uuid: ProjectUuid): ForceTakeOutcome
+}
+
+/** Outcome of [LockRepository.forceTake]. */
+sealed interface ForceTakeOutcome {
+    /** We hold the lock; heartbeats are running. */
+    data object Taken : ForceTakeOutcome
+
+    /** Another host acquired the lock between our release and our acquire. */
+    data object RaceLost : ForceTakeOutcome
 }
 
 /**

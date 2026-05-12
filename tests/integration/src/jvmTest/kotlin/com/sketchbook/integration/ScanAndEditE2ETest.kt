@@ -83,7 +83,7 @@ class ScanAndEditE2ETest {
             val cleanId = ProjectId(byName["clean"]!!.id)
 
             // setTags — observe an emission carrying the new tags.
-            repo.setTags(cleanId, listOf("wip", "mix")).getOrThrow()
+            repo.setTags(cleanId, listOf("wip", "mix"))
             val tags =
                 handle.catalog.catalogQueries
                     .selectTagsForProject(cleanId.value)
@@ -94,7 +94,7 @@ class ScanAndEditE2ETest {
             repo.observeProjects().test {
                 val initial = awaitItem()
                 assertTrue(initial.any { it.id == cleanId })
-                repo.archive(cleanId, archived = true).getOrThrow()
+                repo.archive(cleanId, archived = true)
                 val afterArchive = awaitItem()
                 assertTrue(afterArchive.none { it.id == cleanId })
                 cancelAndIgnoreRemainingEvents()
@@ -102,9 +102,9 @@ class ScanAndEditE2ETest {
 
             // rename + move on a non-archived project.
             val macId = ProjectId(byName["mac_paths"]!!.id)
-            repo.rename(macId, "mac_renamed").getOrThrow()
+            repo.rename(macId, "mac_renamed")
             val newParent = library.resolve("organized").also { it.toFile().mkdirs() }.toString()
-            repo.move(macId, newParent).getOrThrow()
+            repo.move(macId, newParent)
             val afterEdit =
                 handle.catalog.catalogQueries
                     .selectProjectById(macId.value)

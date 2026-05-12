@@ -1,10 +1,21 @@
 #!/bin/sh
-# pre-push hook — auto-formats with Spotless before any push so CI never sees a
-# formatting failure. Install via: ./gradlew installGitHooks
+# pre-push hook — keeps the local push in lockstep with what CI checks:
+#  1. spotlessApply normalises formatting (CI runs spotlessCheck).
+#  2. detekt runs with --rerun-tasks to defeat Gradle's stale "UP-TO-DATE"
+#     cache that bit us once already (PR #150) — CI uses --no-daemon and
+#     re-runs detekt every time; mirroring that here catches rule
+#     violations before CI does.
+# Tests are intentionally NOT run here — they're slow, and CI runs the full
+# matrix on three OSes anyway.
+#
+# Install via: ./gradlew installGitHooks
+
+set -e
 
 echo "[pre-push] running spotlessApply..."
 ./gradlew spotlessApply --quiet
-if [ $? -ne 0 ]; then
+spotless_status=$?
+if [ "$spotless_status" -ne 0 ]; then
   echo "[pre-push] spotlessApply failed — check Gradle output above."
   exit 1
 fi
@@ -20,5 +31,15 @@ if [ -n "$dirty" ]; then
   echo ""
   echo "  Stage and commit the fixes, then push again:"
   echo "    git add -u && git commit -m 'style: spotlessApply' && git push"
+  exit 1
+fi
+
+echo "[pre-push] running detekt (--rerun-tasks to mirror CI's cold runs)..."
+./gradlew detekt --rerun-tasks --quiet
+detekt_status=$?
+if [ "$detekt_status" -ne 0 ]; then
+  echo ""
+  echo "[pre-push] detekt found issues — fix them or update the baseline, then push again."
+  echo "  See per-module reports under */build/reports/detekt/*.html"
   exit 1
 fi

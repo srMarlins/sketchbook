@@ -61,64 +61,56 @@ class SettingsViewModelTest {
 
         override fun observe(): Flow<Settings> = flow
 
-        override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> {
+        override suspend fun upsertRoot(root: LibraryRoot) {
             lastUpsert = root
             flow.value = flow.value.copy(libraryRoots = (flow.value.libraryRoots + root).distinct())
-            return Result.success(Unit)
         }
 
-        override suspend fun removeRoot(root: LibraryRoot): Result<Unit> {
+        override suspend fun removeRoot(root: LibraryRoot) {
             lastRemove = root
             flow.value = flow.value.copy(libraryRoots = flow.value.libraryRoots - root)
-            return Result.success(Unit)
         }
 
         override suspend fun setSelfContained(
             uuid: ProjectUuid,
             value: Boolean,
-        ): Result<Unit> {
+        ) {
             lastSelfContained = uuid to value
             val updated = if (value) flow.value.selfContainedProjects + uuid else flow.value.selfContainedProjects - uuid
             flow.value = flow.value.copy(selfContainedProjects = updated)
-            return Result.success(Unit)
         }
 
-        override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> {
+        override suspend fun setCacheSettings(settings: BlobCacheSettings) {
             flow.value = flow.value.copy(cacheSettings = settings)
-            return Result.success(Unit)
         }
 
-        override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit> {
+        override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) {
             flow.value =
                 flow.value.copy(
                     firstRunCompletedAt = Clock.System.now(),
                     onboardingSkipped = skipFlags,
                 )
-            return Result.success(Unit)
         }
 
-        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> {
+        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) {
             val current = flow.value.onboardingSkipped
             val updated =
                 when (kind) {
                     OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
                 }
             flow.value = flow.value.copy(onboardingSkipped = updated)
-            return Result.success(Unit)
         }
 
-        override suspend fun setPluginFolders(folders: List<String>): Result<Unit> {
+        override suspend fun setPluginFolders(folders: List<String>) {
             flow.value = flow.value.copy(pluginFolders = folders)
-            return Result.success(Unit)
         }
 
-        override suspend fun resetFirstRun(): Result<Unit> {
+        override suspend fun resetFirstRun() {
             flow.value =
                 flow.value.copy(
                     firstRunCompletedAt = null,
                     onboardingSkipped = OnboardingSkipFlags(),
                 )
-            return Result.success(Unit)
         }
     }
 

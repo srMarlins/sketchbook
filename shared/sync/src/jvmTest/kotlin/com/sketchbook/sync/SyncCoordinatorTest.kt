@@ -312,19 +312,18 @@ private class RecordingSnapshotRepository : SnapshotRepository {
         snapshot: com.sketchbook.core.Snapshot,
         manifestPath: String,
         manifestHash: String,
-    ): Result<Unit> {
+    ) {
         recorded += snapshot
-        return Result.success(Unit)
     }
 
     override suspend fun setSnapshotLabel(
         uuid: ProjectUuid,
         rev: SnapshotRev,
         label: String?,
-    ): Result<JournalEntry> = Result.failure(NotImplementedError())
+    ): JournalEntry = throw NotImplementedError()
 
     override suspend fun materializeAt(
         uuid: ProjectUuid,
         rev: SnapshotRev,
-    ): Result<Unit> = Result.success(Unit)
+    ): com.sketchbook.repo.MaterializeOutcome = com.sketchbook.repo.MaterializeOutcome.Materialized
 }

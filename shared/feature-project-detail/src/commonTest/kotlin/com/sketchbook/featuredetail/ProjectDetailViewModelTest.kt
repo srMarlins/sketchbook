@@ -70,35 +70,35 @@ class ProjectDetailViewModelTest {
         override suspend fun move(
             id: ProjectId,
             newParentDir: String,
-        ): Result<JournalEntry> {
+        ): JournalEntry {
             lastMove = id to newParentDir
-            return Result.success(stub())
+            return stub()
         }
 
         override suspend fun rename(
             id: ProjectId,
             newName: String,
-        ) = Result.success(stub())
+        ) = stub()
 
         override suspend fun archive(
             id: ProjectId,
             archived: Boolean,
-        ): Result<JournalEntry> {
+        ): JournalEntry {
             lastArchive = id to archived
-            return Result.success(stub())
+            return stub()
         }
 
         override suspend fun setTags(
             id: ProjectId,
             tags: List<String>,
-        ) = Result.success(stub())
+        ) = stub()
 
         override suspend fun setStageOverride(
             id: ProjectId,
             stage: com.sketchbook.core.Stage?,
-        ): Result<JournalEntry> {
+        ): JournalEntry {
             lastStageOverride = id to stage
-            return Result.success(stub())
+            return stub()
         }
 
         private fun stub() = JournalEntry(Instant.parse("2026-05-05T12:00:00Z"), ProjectId(1), ActionRecord.Archive(false, true))
@@ -113,25 +113,23 @@ class ProjectDetailViewModelTest {
             snapshot: Snapshot,
             manifestPath: String,
             manifestHash: String,
-        ): Result<Unit> = Result.success(Unit)
+        ) = Unit
 
         override suspend fun setSnapshotLabel(
             uuid: ProjectUuid,
             rev: SnapshotRev,
             label: String?,
-        ): Result<JournalEntry> =
-            Result.success(
-                JournalEntry(
-                    Instant.parse("2026-05-05T12:00:00Z"),
-                    ProjectId(1),
-                    ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto"),
-                ),
+        ): JournalEntry =
+            JournalEntry(
+                Instant.parse("2026-05-05T12:00:00Z"),
+                ProjectId(1),
+                ActionRecord.SnapshotRelabeled(rev.value, null, label, "auto"),
             )
 
         override suspend fun materializeAt(
             uuid: ProjectUuid,
             rev: SnapshotRev,
-        ): Result<Unit> = Result.success(Unit)
+        ) = com.sketchbook.repo.MaterializeOutcome.Materialized
     }
 
     @Test

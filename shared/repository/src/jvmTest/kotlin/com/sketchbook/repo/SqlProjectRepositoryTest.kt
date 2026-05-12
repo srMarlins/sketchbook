@@ -106,7 +106,7 @@ class SqlProjectRepositoryTest {
                 assertNotNull(initial)
                 assertEquals("foo", initial.name)
 
-                repo.rename(id, "foo_v2").getOrThrow()
+                repo.rename(id, "foo_v2")
                 val renamed = awaitItem()
                 assertEquals("foo_v2", renamed?.name)
                 cancelAndIgnoreRemainingEvents()
@@ -118,7 +118,7 @@ class SqlProjectRepositoryTest {
         runTest {
             val (catalog, fts, repo) = setup()
             val id = ProjectId(seed(catalog, fts, "foo", "/lib"))
-            val entry = repo.rename(id, "foo_v2").getOrThrow()
+            val entry = repo.rename(id, "foo_v2")
             val action = entry.action as ActionRecord.Rename
             assertEquals("foo", action.nameBefore)
             assertEquals("foo_v2", action.nameAfter)
@@ -131,7 +131,7 @@ class SqlProjectRepositoryTest {
         runTest {
             val (catalog, fts, repo) = setup()
             val id = ProjectId(seed(catalog, fts, "foo", "/lib/old"))
-            val entry = repo.move(id, "/lib/new").getOrThrow()
+            val entry = repo.move(id, "/lib/new")
             val action = entry.action as ActionRecord.Move
             assertEquals("/lib/old/foo.als", action.pathBefore)
             assertEquals("/lib/new/foo.als", action.pathAfter)
@@ -149,7 +149,7 @@ class SqlProjectRepositoryTest {
             repo.observeProjects().test {
                 assertEquals(1, awaitItem().size)
 
-                repo.archive(id, archived = true).getOrThrow()
+                repo.archive(id, archived = true)
                 val afterArchive = awaitItem()
                 assertEquals(0, afterArchive.size)
                 cancelAndIgnoreRemainingEvents()
@@ -161,7 +161,7 @@ class SqlProjectRepositoryTest {
         runTest {
             val (catalog, fts, repo) = setup()
             val id = ProjectId(seed(catalog, fts, "foo", "/lib"))
-            val entry = repo.setTags(id, listOf("mix", "wip")).getOrThrow()
+            val entry = repo.setTags(id, listOf("mix", "wip"))
             val action = entry.action as ActionRecord.SetTags
             assertEquals(emptyList(), action.before)
             assertEquals(listOf("mix", "wip"), action.after)
@@ -171,13 +171,12 @@ class SqlProjectRepositoryTest {
         }
 
     @Test
-    fun missingProjectReturnsNotFound() =
+    fun missingProjectThrowsNotFound() =
         runTest {
             val (_, _, repo) = setup()
-            val result = repo.rename(ProjectId(999), "x")
-            assertTrue(result.isFailure)
-            val cause = result.exceptionOrNull()
-            assertTrue(cause is com.sketchbook.core.SketchbookError.NotFound)
+            kotlin.test.assertFailsWith<com.sketchbook.core.SketchbookError.NotFound> {
+                repo.rename(ProjectId(999), "x")
+            }
         }
 
     @Test
@@ -324,7 +323,7 @@ class SqlProjectRepositoryTest {
                 id = id.value,
             )
 
-            val entry = repo.setStageOverride(id, com.sketchbook.core.Stage.Done).getOrThrow()
+            val entry = repo.setStageOverride(id, com.sketchbook.core.Stage.Done)
             val action = entry.action as ActionRecord.StageOverridden
             assertEquals("Mixing", action.stageInferred)
             assertNull(action.stageBefore)
@@ -335,7 +334,7 @@ class SqlProjectRepositoryTest {
             assertEquals("Done", saved.stage_override)
 
             // Clearing back to Auto journals the prior override as `stageBefore`.
-            val cleared = repo.setStageOverride(id, null).getOrThrow()
+            val cleared = repo.setStageOverride(id, null)
             val clearAction = cleared.action as ActionRecord.StageOverridden
             assertEquals("Done", clearAction.stageBefore)
             assertNull(clearAction.stageAfter)

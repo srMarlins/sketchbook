@@ -111,12 +111,15 @@ class TimelineViewModel(
             // round-trip the result back into local state — the SQL update flows through
             // observeHistory so the row re-renders with the new label automatically.
             val cleaned = newLabel?.trim().takeUnless { it.isNullOrEmpty() }
-            val r = snapshots.setSnapshotLabel(uuid, rev, cleaned)
-            if (r.isFailure) {
+            try {
+                snapshots.setSnapshotLabel(uuid, rev, cleaned)
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (t: Throwable) {
                 _effects.tryEmit(
                     Effect.RelabelFailed(
                         rev = rev,
-                        reason = r.exceptionOrNull()?.message ?: "label update failed",
+                        reason = t.message ?: "label update failed",
                     ),
                 )
             }

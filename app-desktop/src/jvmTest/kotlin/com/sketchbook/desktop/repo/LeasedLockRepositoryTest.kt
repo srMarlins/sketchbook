@@ -26,8 +26,7 @@ class LeasedLockRepositoryTest {
             val metadataStore = InMemoryMetadataStore()
             val store = SyncStateStore(CatalogDb.openInMemory().catalog)
             val repo = newRepo(metadataStore, store)
-            val r = repo.forceTake(uuid)
-            assertTrue(r.isSuccess, "forceTake failed: ${r.exceptionOrNull()}")
+            assertEquals(com.sketchbook.repo.ForceTakeOutcome.Taken, repo.forceTake(uuid))
             // The lock-doc listener emits the doc shape; await the first emission whose
             // status is Ours. Other emissions may have been Free before the listener saw the
             // post-forceTake write.
@@ -73,8 +72,7 @@ class LeasedLockRepositoryTest {
             val metadataStore = InMemoryMetadataStore()
             val repo = newRepo(metadataStore, syncStore, journal = journal)
 
-            val r = repo.forceTake(uuid)
-            assertTrue(r.isSuccess)
+            assertEquals(com.sketchbook.repo.ForceTakeOutcome.Taken, repo.forceTake(uuid))
             val entries = journal.observeRecent().first()
             assertEquals(1, entries.size)
             assertTrue(entries.single().action is ActionRecord.ForceTakeLock)
@@ -94,8 +92,7 @@ class LeasedLockRepositoryTest {
                     hostName = "DesktopA",
                     scope = backgroundScope,
                 )
-            val r = repo.forceTake(uuid)
-            assertTrue(r.isFailure)
+            kotlin.test.assertFailsWith<com.sketchbook.core.SketchbookError> { repo.forceTake(uuid) }
         }
 
     @Test
@@ -111,8 +108,7 @@ class LeasedLockRepositoryTest {
                     hostName = "DesktopA",
                     scope = backgroundScope,
                 )
-            val r = repo.forceTake(uuid)
-            assertTrue(r.isFailure)
+            kotlin.test.assertFailsWith<com.sketchbook.core.SketchbookError> { repo.forceTake(uuid) }
         }
 
     @Test
@@ -133,7 +129,7 @@ class LeasedLockRepositoryTest {
 
             // Acquire as user-a — listener subscription + status flow are now bound to user-a's
             // Firestore path.
-            assertTrue(repo.forceTake(uuid).isSuccess)
+            assertEquals(com.sketchbook.repo.ForceTakeOutcome.Taken, repo.forceTake(uuid))
             assertTrue(awaitOurs(repo) is LockStatus.Ours)
 
             // Switch UIDs. The init-block observer should cancel the prior listener and clear

@@ -65,40 +65,36 @@ class NeedsAttentionViewModelTest {
             limit: Int,
         ): Flow<RepairFindings> = flow
 
-        override suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit> {
+        override suspend fun acknowledgeMacImport(projectId: ProjectId) {
             ackedProjectId = projectId
-            return Result.success(Unit)
         }
 
-        override suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit> {
+        override suspend fun applyMacPathRepair(projectId: ProjectId) {
             repairedProjectId = projectId
-            return Result.success(Unit)
         }
 
         override suspend fun dismissMissingSample(
             projectId: ProjectId,
             missingPath: String,
-        ): Result<Unit> {
+        ) {
             dismissedKey = projectId to missingPath
-            return Result.success(Unit)
         }
 
         override suspend fun applyMissingSampleMatch(
             projectId: ProjectId,
             missingPath: String,
             candidatePath: String,
-        ): Result<Unit> {
+        ) {
             appliedMatch = Triple(projectId, missingPath, candidatePath)
-            return Result.success(Unit)
         }
 
         override suspend fun restoreMissingSampleMatch(
             projectId: ProjectId,
             missingPath: String,
             candidatePath: String,
-        ): Result<Unit> = Result.success(Unit)
+        ) = Unit
 
-        override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> = Result.success(Unit)
+        override suspend fun restoreMacPathRepair(projectId: ProjectId) = Unit
     }
 
     @Test

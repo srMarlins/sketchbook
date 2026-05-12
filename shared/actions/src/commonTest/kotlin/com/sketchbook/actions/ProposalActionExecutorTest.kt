@@ -39,27 +39,27 @@ class ProposalActionExecutorTest {
         override suspend fun move(
             id: ProjectId,
             newParentDir: String,
-        ): Result<JournalEntry> = throw NotImplementedError()
+        ): JournalEntry = throw NotImplementedError()
 
         override suspend fun rename(
             id: ProjectId,
             newName: String,
-        ): Result<JournalEntry> = throw NotImplementedError()
+        ): JournalEntry = throw NotImplementedError()
 
         override suspend fun archive(
             id: ProjectId,
             archived: Boolean,
-        ): Result<JournalEntry> {
+        ): JournalEntry {
             archiveCalls += ArchiveCall(id, archived)
-            return Result.success(stubEntry())
+            return stubEntry()
         }
 
         override suspend fun setTags(
             id: ProjectId,
             tags: List<String>,
-        ): Result<JournalEntry> {
+        ): JournalEntry {
             tagCalls += id to tags
-            return Result.success(stubEntry())
+            return stubEntry()
         }
 
         private fun stubEntry(): JournalEntry =

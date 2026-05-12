@@ -341,7 +341,12 @@ fun RootContent(backStack: NavBackStack<NavKey>) {
                                                             syncStateFor = if (chrome.syncWired) chrome::syncStateFor else null,
                                                             onPushNow =
                                                                 if (chrome.syncWired) {
-                                                                    { pid -> coroutineScope.launch { chrome.pushNow(pid) } }
+                                                                    { pid ->
+                                                                        coroutineScope.launch {
+                                                                            com.sketchbook.core
+                                                                                .runCatchingCancellable { chrome.pushNow(pid) }
+                                                                        }
+                                                                    }
                                                                 } else {
                                                                     null
                                                                 },
