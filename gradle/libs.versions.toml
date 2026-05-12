@@ -32,10 +32,10 @@ ktor = "3.4.3"
 gitlive-firebase = "2.4.0"
 
 # Coroutines / IO / serialization
-coroutines = "1.10.2"
+coroutines = "1.11.0"
 kotlinx-io = "0.9.0"
 kotlinx-serialization = "1.11.0"
-kotlinx-datetime = "0.7.1"
+kotlinx-datetime = "0.8.0"
 
 # Logging
 kermit = "2.1.0"
