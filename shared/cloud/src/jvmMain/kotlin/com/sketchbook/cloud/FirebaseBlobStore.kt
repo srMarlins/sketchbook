@@ -364,8 +364,8 @@ class FirebaseBlobStore(
             val page = json.decodeFromString(GcsListPage.serializer(), response.bodyAsText())
             for (item in page.items) {
                 val rel = item.name.removePrefix(prefix)
-                if (rel == "HEAD") continue
-                if (rel.substringBefore('-').toLongOrNull() == null) continue
+                // Skip the HEAD pointer and anything that doesn't start with a parseable rev.
+                if (rel == "HEAD" || rel.substringBefore('-').toLongOrNull() == null) continue
                 names += item.name
             }
             pageToken = page.nextPageToken
@@ -377,10 +377,10 @@ class FirebaseBlobStore(
         // Note: Firebase Storage ignores x-goog-if-generation-match, so generation does not
         // enforce CAS here; concurrent-write safety comes from the Firestore lock instead.
         val out = mutableListOf<ManifestRef>()
-        for (name in names) {
+        names.forEach { name ->
             val rel = name.removePrefix(prefix)
-            val rev = rel.substringBefore('-').toLongOrNull() ?: continue
-            val meta = fetchObjectMetadata(name) ?: continue
+            val rev = rel.substringBefore('-').toLongOrNull() ?: return@forEach
+            val meta = fetchObjectMetadata(name) ?: return@forEach
             out += ManifestRef(rev = rev, path = name, generation = Generation(meta.generation))
         }
         return out.sortedBy { it.rev }
