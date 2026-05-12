@@ -388,27 +388,26 @@ class JvmPluginPresenceProbeTest {
 
         override fun observe(): Flow<Settings> = flow
 
-        override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> = Result.success(Unit)
+        override suspend fun upsertRoot(root: LibraryRoot) = Unit
 
-        override suspend fun removeRoot(root: LibraryRoot): Result<Unit> = Result.success(Unit)
+        override suspend fun removeRoot(root: LibraryRoot) = Unit
 
         override suspend fun setSelfContained(
             uuid: ProjectUuid,
             value: Boolean,
-        ): Result<Unit> = Result.success(Unit)
+        ) = Unit
 
-        override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> = Result.success(Unit)
+        override suspend fun setCacheSettings(settings: BlobCacheSettings) = Unit
 
-        override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit> = Result.success(Unit)
+        override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Unit
 
-        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> = Result.success(Unit)
+        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) = Unit
 
-        override suspend fun setPluginFolders(folders: List<String>): Result<Unit> {
+        override suspend fun setPluginFolders(folders: List<String>) {
             flow.value = flow.value.copy(pluginFolders = folders)
-            return Result.success(Unit)
         }
 
-        override suspend fun resetFirstRun(): Result<Unit> = Result.success(Unit)
+        override suspend fun resetFirstRun() = Unit
     }
 
     private fun isInstalled(
