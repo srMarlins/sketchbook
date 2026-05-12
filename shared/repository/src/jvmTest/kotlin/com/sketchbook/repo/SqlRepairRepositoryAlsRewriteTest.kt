@@ -329,14 +329,12 @@ class SqlRepairRepositoryAlsRewriteTest {
             val (catalog, journal, repo) = setup(patcher)
             val projectId = seedProjectWithMissingSample(catalog, als, missingPath = "/old/missing.wav")
 
-            val result =
-                repo.applyMissingSampleMatch(
-                    projectId = projectId,
-                    missingPath = "/old/missing.wav",
-                    candidatePath = "/new/found.wav",
-                )
+            repo.applyMissingSampleMatch(
+                projectId = projectId,
+                missingPath = "/old/missing.wav",
+                candidatePath = "/new/found.wav",
+            )
 
-            assertTrue(result.isSuccess, "applyMissingSampleMatch should succeed; was $result")
             assertEquals(1, patcher.calls, "patcher should be invoked exactly once")
             assertEquals(als.toString(), patcher.lastPath)
             // applyMissingSampleMatch routes through the rich SampleRefEdit overload now (PR follow-up
@@ -387,13 +385,11 @@ class SqlRepairRepositoryAlsRewriteTest {
             val (catalog, journal, repo) = setup(patcher)
             val projectId = seedProjectWithMissingSample(catalog, als, missingPath = "/old/missing.wav")
 
-            val result =
-                repo.applyMissingSampleMatch(
-                    projectId = projectId,
-                    missingPath = "/old/missing.wav",
-                    candidatePath = "/new/found.wav",
-                )
-            assertTrue(result.isSuccess, "should succeed even when patcher is busy; was $result")
+            repo.applyMissingSampleMatch(
+                projectId = projectId,
+                missingPath = "/old/missing.wav",
+                candidatePath = "/new/found.wav",
+            )
 
             // File on disk is untouched (forced SkippedBusy means the fake didn't write).
             val text = ungzipToString(Files.readAllBytes(als))
@@ -438,7 +434,7 @@ class SqlRepairRepositoryAlsRewriteTest {
                     projectId = projectId,
                     missingPath = "/old/missing.wav",
                     candidatePath = "/new/found.wav",
-                ).getOrThrow()
+                )
             // Sanity: post-patch bytes differ from originals.
             assertTrue(!Files.readAllBytes(als).contentEquals(originalBytes), "patch should change the bytes")
 
@@ -448,7 +444,7 @@ class SqlRepairRepositoryAlsRewriteTest {
                     projectId = projectId,
                     missingPath = "/old/missing.wav",
                     candidatePath = "/new/found.wav",
-                ).getOrThrow()
+                )
 
             // .als bytes are restored *exactly* to the pre-patch state.
             assertContentEquals(originalBytes, Files.readAllBytes(als), "restore must return exact original bytes")
@@ -505,7 +501,7 @@ class SqlRepairRepositoryAlsRewriteTest {
                     projectId = projectId,
                     missingPath = "/old/missing.wav",
                     candidatePath = "/new/found.wav",
-                ).getOrThrow()
+                )
 
             assertEquals(0, patcher.restoreCalls, "no sidecar means restore should not be invoked")
 
@@ -543,14 +539,14 @@ class SqlRepairRepositoryAlsRewriteTest {
                     projectId = projectId,
                     missingPath = "/old/missing.wav",
                     candidatePath = "/new/found.wav",
-                ).getOrThrow()
+                )
 
             repo
                 .restoreMissingSampleMatch(
                     projectId = projectId,
                     missingPath = "/old/missing.wav",
                     candidatePath = "/new/found.wav",
-                ).getOrThrow()
+                )
 
             assertEquals(1, patcher.restoreCalls)
 
@@ -624,7 +620,7 @@ class SqlRepairRepositoryAlsRewriteTest {
                     projectId = projectId,
                     missingPath = "/old/missing.wav",
                     candidatePath = "/new/found.wav",
-                ).getOrThrow()
+                )
 
             // Both `<Path Value="…"/>` occurrences (primary FileRef + OriginalFileRef sibling) must
             // now point at the candidate. The StAX writer may emit either self-closing or
@@ -668,7 +664,7 @@ class SqlRepairRepositoryAlsRewriteTest {
                     projectId = pid,
                     missingPath = "/old/missing.wav",
                     candidatePath = candidate.toString(),
-                ).getOrThrow()
+                )
 
             // Re-parse via the canonical AlsParser to read structured metadata.
             val md =
