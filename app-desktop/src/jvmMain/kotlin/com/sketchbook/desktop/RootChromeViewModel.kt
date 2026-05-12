@@ -163,7 +163,8 @@ class RootChromeViewModel(
     /** Trigger an immediate push for one project. Throws when cloud isn't configured. */
     suspend fun pushNow(id: ProjectId): com.sketchbook.repo.PushNowOutcome =
         syncImpl?.pushNowById(id)
-            ?: throw com.sketchbook.core.SketchbookError.IoFailure("Cloud not configured")
+            ?: throw com.sketchbook.core.SketchbookError
+                .IoFailure("Cloud not configured")
 
     /** Translate the local id used everywhere in the UI to the cloud-stable [ProjectUuid]. */
     fun timelineUuidFor(id: ProjectId): ProjectUuid = syncStateStore.identityFor(id)

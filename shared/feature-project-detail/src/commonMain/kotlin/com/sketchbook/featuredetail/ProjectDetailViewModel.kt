@@ -8,9 +8,9 @@ import com.sketchbook.core.PluginRef
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
-import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.Stage
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.LockRepository
 import com.sketchbook.repo.LockStatus
 import com.sketchbook.repo.ProjectRepository

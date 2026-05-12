@@ -10,13 +10,13 @@ import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
-import com.sketchbook.repo.PushNowOutcome
 import com.sketchbook.core.UserId
 import com.sketchbook.desktop.auth.FirebaseCloudCredentials
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProjectSyncState
+import com.sketchbook.repo.PushNowOutcome
 import com.sketchbook.repo.SettingsRepository
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
@@ -242,7 +242,8 @@ class SwappableSyncQueue(
             }
 
             else -> {
-                throw com.sketchbook.core.SketchbookError.IoFailure("unsupported sync queue impl")
+                throw com.sketchbook.core.SketchbookError
+                    .IoFailure("unsupported sync queue impl")
             }
         }
 

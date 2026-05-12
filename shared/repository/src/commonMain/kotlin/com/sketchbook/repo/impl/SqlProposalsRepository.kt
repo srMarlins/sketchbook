@@ -11,10 +11,10 @@ import com.sketchbook.repo.ProposalAction
 import com.sketchbook.repo.ProposalStatus
 import com.sketchbook.repo.ProposalsRepository
 import com.sketchbook.repo.RejectOutcome
-import kotlinx.coroutines.CancellationException
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -109,8 +109,7 @@ class SqlProposalsRepository(
         }
     }
 
-    override suspend fun approve(proposalId: String): ApproveOutcome =
-        ApproveOutcome.Approved(recordDecision(proposalId, "approved"))
+    override suspend fun approve(proposalId: String): ApproveOutcome = ApproveOutcome.Approved(recordDecision(proposalId, "approved"))
 
     override suspend fun reject(proposalId: String): RejectOutcome {
         recordDecision(proposalId, "rejected")

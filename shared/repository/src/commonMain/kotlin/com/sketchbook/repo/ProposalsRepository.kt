@@ -32,7 +32,9 @@ interface ProposalsRepository {
 
 /** Outcome of [ProposalsRepository.approve]. */
 sealed interface ApproveOutcome {
-    data class Approved(val proposal: Proposal) : ApproveOutcome
+    data class Approved(
+        val proposal: Proposal,
+    ) : ApproveOutcome
 
     /** No proposal matches the supplied id. */
     data object NotFound : ApproveOutcome

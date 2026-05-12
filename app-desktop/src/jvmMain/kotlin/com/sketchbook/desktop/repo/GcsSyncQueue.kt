@@ -11,11 +11,11 @@ import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.ActionRecord
-import com.sketchbook.repo.PushNowOutcome
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProjectSyncState
+import com.sketchbook.repo.PushNowOutcome
 import com.sketchbook.repo.SyncQueue
 import com.sketchbook.repo.SyncQueueState
 import com.sketchbook.sync.ForceSnapshotPipeline

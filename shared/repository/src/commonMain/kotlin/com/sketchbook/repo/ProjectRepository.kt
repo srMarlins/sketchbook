@@ -229,4 +229,3 @@ data class MissingPluginSummary(
 ) {
     val isEmpty: Boolean get() = missingPluginCount == 0 && affectedProjects == 0
 }
-

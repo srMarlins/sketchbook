@@ -68,15 +68,20 @@ interface SnapshotRepository {
         kotlinx.coroutines.flow.flow {
             emit(MaterializationProgress.Started(uuid, rev))
             val r = runCatchingCancellable { materializeAt(uuid, rev) }
-            r.onSuccess { outcome ->
-                when (outcome) {
-                    MaterializeOutcome.Materialized -> emit(MaterializationProgress.Done(uuid, rev))
-                    is MaterializeOutcome.WorkingTreeBusy ->
-                        emit(MaterializationProgress.Failed(uuid, rev, "Close the project in Ableton, then try again."))
+            r
+                .onSuccess { outcome ->
+                    when (outcome) {
+                        MaterializeOutcome.Materialized -> {
+                            emit(MaterializationProgress.Done(uuid, rev))
+                        }
+
+                        is MaterializeOutcome.WorkingTreeBusy -> {
+                            emit(MaterializationProgress.Failed(uuid, rev, "Close the project in Ableton, then try again."))
+                        }
+                    }
+                }.onFailure { cause ->
+                    emit(MaterializationProgress.Failed(uuid, rev, cause.message ?: "materialize failed"))
                 }
-            }.onFailure { cause ->
-                emit(MaterializationProgress.Failed(uuid, rev, cause.message ?: "materialize failed"))
-            }
         }
 }
 
@@ -97,7 +102,9 @@ sealed interface MaterializeOutcome {
      * The materializer aborted before touching disk so the working tree is unchanged. [paths]
      * lists the busy files (relative to the project root); the UI can surface them.
      */
-    data class WorkingTreeBusy(val paths: List<String>) : MaterializeOutcome
+    data class WorkingTreeBusy(
+        val paths: List<String>,
+    ) : MaterializeOutcome
 }
 
 sealed interface MaterializationProgress {

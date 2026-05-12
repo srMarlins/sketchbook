@@ -129,8 +129,14 @@ class LeasedLockRepository(
         // current holder"; whoever lands their write last wins.
         runCatchingCancellable { store.releaseLockAsAnyone(path) }
         when (val acquired = store.acquireLock(path, hostId, leaseTtl, hostName)) {
-            AcquireResult.Acquired -> Unit
-            is AcquireResult.HeldByOther -> return ForceTakeOutcome.RaceLost
+            AcquireResult.Acquired -> {
+                Unit
+            }
+
+            is AcquireResult.HeldByOther -> {
+                return ForceTakeOutcome.RaceLost
+            }
+
             is AcquireResult.Failed -> {
                 if (acquired.cause is SketchbookError) throw acquired.cause
                 throw SketchbookError.IoFailure("forceTake failed", acquired.cause)

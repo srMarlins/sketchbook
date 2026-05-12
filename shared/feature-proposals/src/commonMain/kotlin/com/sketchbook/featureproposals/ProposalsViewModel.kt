@@ -165,6 +165,7 @@ class ProposalsViewModel(
                     if (single) _effects.tryEmit(Effect.Approved(proposalId))
                     ApplyResult.Approved
                 }
+
                 com.sketchbook.repo.ApproveOutcome.NotFound,
                 com.sketchbook.repo.ApproveOutcome.AlreadyDecided,
                 -> {
@@ -191,6 +192,7 @@ class ProposalsViewModel(
                     if (single) _effects.tryEmit(Effect.Rejected(proposalId))
                     RejectResult.Rejected
                 }
+
                 com.sketchbook.repo.RejectOutcome.NotFound,
                 com.sketchbook.repo.RejectOutcome.AlreadyDecided,
                 -> {

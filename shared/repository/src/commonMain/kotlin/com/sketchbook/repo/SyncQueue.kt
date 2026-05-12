@@ -50,7 +50,10 @@ sealed interface PushNowOutcome {
      * saved as a branch under [branchRev]; the cloud head ([theirRev]) is what we lost the
      * race to. The UI surfaces a "pull + re-push" prompt.
      */
-    data class Conflict(val theirRev: Long, val branchRev: Long) : PushNowOutcome
+    data class Conflict(
+        val theirRev: Long,
+        val branchRev: Long,
+    ) : PushNowOutcome
 }
 
 data class SyncQueueState(

@@ -70,7 +70,8 @@ class ProposalsViewModelTest {
             approved = proposalId
             val updated = flow.value.map { if (it.proposalId == proposalId) it.copy(status = ProposalStatus.Approved) else it }
             flow.value = updated
-            return com.sketchbook.repo.ApproveOutcome.Approved(updated.first { it.proposalId == proposalId })
+            return com.sketchbook.repo.ApproveOutcome
+                .Approved(updated.first { it.proposalId == proposalId })
         }
 
         override suspend fun reject(proposalId: String): com.sketchbook.repo.RejectOutcome {
