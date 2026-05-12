@@ -1,5 +1,6 @@
 package com.sketchbook.auth.firebase
 
+import com.sketchbook.core.runCatchingCancellable
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.bearerAuth
@@ -68,7 +69,7 @@ open class CloudFunctionsClient(
         if (response.status.value !in 200..299) {
             throw CloudFunctionException(
                 statusCode = response.status.value,
-                rawBody = runCatching { response.bodyAsText() }.getOrNull(),
+                rawBody = runCatchingCancellable { response.bodyAsText() }.getOrNull(),
             )
         }
         val envelope = json.decodeFromString(CallableEnvelope.serializer(), response.bodyAsText())

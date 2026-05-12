@@ -6,6 +6,7 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.UserId
+import com.sketchbook.core.runCatchingCancellable
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.bearerAuth
@@ -539,7 +540,7 @@ class FirebaseBlobStore(
         resp: HttpResponse,
         op: String,
     ): SketchbookError.RemoteFailure {
-        val bodySnippet = runCatching { resp.bodyAsText() }.getOrNull()
+        val bodySnippet = runCatchingCancellable { resp.bodyAsText() }.getOrNull()
         return SketchbookError.RemoteFailure(
             status = resp.status.value,
             body = bodySnippet,

@@ -6,6 +6,7 @@ import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.SampleRefEdit
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.AlsPatchService
 import com.sketchbook.repo.JournalEntry
@@ -246,10 +247,7 @@ class SqlRepairRepository(
                                 mapping.map { (mac, posix) ->
                                     SampleRefEdit(oldPath = mac, newPath = posix, newOriginalCrc = 0L)
                                 }
-                            // patch() is suspend; rethrow CancellationException so structured concurrency
-                            // isn't silently swallowed if AlsPatcher ever becomes truly async.
-                            runCatching { patcher.patch(alsPath, edits) }
-                                .onFailure { if (it is CancellationException) throw it }
+                            runCatchingCancellable { patcher.patch(alsPath, edits) }
                                 .getOrElse { AlsPatchService.Outcome.Failed }
                         }
                     }
@@ -376,10 +374,7 @@ class SqlRepairRepository(
                     if (snapshotResult.isFailure) {
                         AlsPatchService.Outcome.Failed
                     } else {
-                        // patch() is suspend; rethrow CancellationException so structured concurrency
-                        // isn't silently swallowed if AlsPatcher ever becomes truly async.
-                        runCatching { patcher.patch(alsPath, listOf(edit)) }
-                            .onFailure { if (it is CancellationException) throw it }
+                        runCatchingCancellable { patcher.patch(alsPath, listOf(edit)) }
                             .getOrElse { AlsPatchService.Outcome.Failed }
                     }
 
@@ -439,11 +434,8 @@ class SqlRepairRepository(
                         NO_UNDO_BYTES
                     } else {
                         val bytes = Files.readAllBytes(sidecar)
-                        // restore() is suspend; rethrow CancellationException so structured concurrency
-                        // isn't silently swallowed if AlsPatcher ever becomes truly async.
                         val outcome =
-                            runCatching { patcher.restore(alsPath, bytes) }
-                                .onFailure { if (it is CancellationException) throw it }
+                            runCatchingCancellable { patcher.restore(alsPath, bytes) }
                                 .getOrElse { AlsPatchService.Outcome.Failed }
                         // Best-effort cleanup; a leftover sidecar is benign (next apply overwrites it).
                         runCatching { Files.deleteIfExists(sidecar) }
@@ -481,7 +473,7 @@ class SqlRepairRepository(
 
     override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> =
         withContext(ioDispatcher) {
-            runCatching {
+            runCatchingCancellable {
                 // Mirror applyMacPathRepair: capture name + path together so the journal entry
                 // carries both denorm columns even if the project_id is orphaned by a concurrent
                 // rescan between this lookup and the journal append below.
@@ -505,7 +497,7 @@ class SqlRepairRepository(
                 } else {
                     val bytes = Files.readAllBytes(sidecar)
                     val outcome =
-                        runCatching { patcher.restore(alsPath, bytes) }
+                        runCatchingCancellable { patcher.restore(alsPath, bytes) }
                             .getOrElse { AlsPatchService.Outcome.Failed }
                     runCatching { Files.deleteIfExists(sidecar) }
                     // Re-scan to confirm how many Mac-style paths the restore brought back —

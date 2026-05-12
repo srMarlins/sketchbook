@@ -3,6 +3,7 @@ package com.sketchbook.featureonboarding
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sketchbook.core.AppScope
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.OnboardingSkipFlags
 import com.sketchbook.repo.SettingsRepository
@@ -220,16 +221,16 @@ class OnboardingViewModel(
             // is unwinding, not pausing for retry. Failures are emitted on [events] so the
             // screen can surface a non-blocking toast instead of swallowing them silently.
             s.projectsRoots.forEach { path ->
-                runCatching { repository.upsertRoot(LibraryRoot.Projects(path)) }
+                runCatchingCancellable { repository.upsertRoot(LibraryRoot.Projects(path)) }
                     .onFailure { emitFailure("Couldn't save Projects folder: $path") }
             }
             s.sampleRoots.forEach { path ->
-                runCatching { repository.upsertRoot(LibraryRoot.UserSamples(path)) }
+                runCatchingCancellable { repository.upsertRoot(LibraryRoot.UserSamples(path)) }
                     .onFailure { emitFailure("Couldn't save Samples folder: $path") }
             }
-            runCatching { repository.setPluginFolders(s.pluginFolders) }
+            runCatchingCancellable { repository.setPluginFolders(s.pluginFolders) }
                 .onFailure { emitFailure("Couldn't save plugin folders") }
-            runCatching {
+            runCatchingCancellable {
                 repository.markFirstRunComplete(
                     OnboardingSkipFlags(samplesSkipped = s.sampleRoots.isEmpty()),
                 )

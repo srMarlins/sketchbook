@@ -6,6 +6,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.FirebasePlatform
 import com.google.firebase.initialize
+import com.sketchbook.core.runCatchingCancellable
 import dev.gitlive.firebase.auth.auth
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -162,7 +163,7 @@ class FirebaseSdkBootstrap(
             // Explicitly use the gitlive Firebase companion — `Firebase` (unqualified) in
             // this file is `com.google.firebase.Firebase`, whose `auth` extension is
             // firebase-java-sdk's, not gitlive's. gitlive's auth is what we initialized.
-            runCatching {
+            runCatchingCancellable {
                 dev.gitlive.firebase.Firebase.auth
                     .signOut()
             }

@@ -8,6 +8,7 @@ import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
@@ -295,7 +296,7 @@ class GcsSyncQueue(
         theirRev: Long,
     ) {
         val j = journal ?: return
-        runCatching {
+        runCatchingCancellable {
             j.append(
                 JournalEntry(
                     timestamp = clock.now(),
@@ -398,7 +399,7 @@ class GcsSyncQueue(
         val row = projects.observeProject(pid).first() ?: return false
         val rawPath = row.path.value
         val alsPath = if (rawPath.length >= 2 && rawPath[1] == ':') rawPath else "/$rawPath"
-        return runCatching {
+        return runCatchingCancellable {
             val mtime =
                 withContext(ioDispatcher) {
                     Instant.fromEpochMilliseconds(

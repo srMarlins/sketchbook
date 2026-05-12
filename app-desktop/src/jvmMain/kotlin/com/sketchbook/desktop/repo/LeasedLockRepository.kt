@@ -8,6 +8,7 @@ import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.cloud.metadata.RefreshResult
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
@@ -124,7 +125,7 @@ class LeasedLockRepository(
         // first. Two writes, not atomic — between them another host could acquire. That's
         // acceptable for force-take semantics: the user already accepted "I am racing the
         // current holder"; whoever lands their write last wins.
-        runCatching { store.releaseLockAsAnyone(path) }
+        runCatchingCancellable { store.releaseLockAsAnyone(path) }
         when (
             val acquired =
                 store.acquireLock(
@@ -263,5 +264,5 @@ class LeasedLockRepository(
  * force-take call sites.
  */
 private suspend fun MetadataStore.releaseLockAsAnyone(path: DocPath) {
-    runCatching { deleteDoc(path) }
+    runCatchingCancellable { deleteDoc(path) }
 }
