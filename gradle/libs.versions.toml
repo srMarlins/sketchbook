@@ -21,7 +21,7 @@ conveyor = "2.0"
 
 # Persistence
 sqldelight = "2.3.2"
-hikaricp = "5.1.0"
+hikaricp = "7.0.2"
 
 # Networking
 ktor = "3.4.3"
