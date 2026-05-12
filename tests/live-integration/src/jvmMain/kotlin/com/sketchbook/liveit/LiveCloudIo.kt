@@ -10,10 +10,12 @@ import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.UserId
 import kotlinx.io.buffered
-import kotlinx.io.readByteArray
+import kotlinx.io.readAtMostTo
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+
+private const val STREAM_BUFFER_BYTES = 64 * 1024
 
 /**
  * Cloud → disk materialization helper shared by [LiveTestPullKt] and the two-client scenarios.
@@ -72,10 +74,6 @@ object LiveCloudIo {
             Files.createDirectories(out.parent)
             val src = cloud.getBlob(mf.hash, scope)
             try {
-                val bytes = src.buffered().readByteArray()
-                check(bytes.size.toLong() == mf.size) {
-                    "size mismatch for $rel: manifest=${mf.size} actual=${bytes.size}"
-                }
                 val options =
                     when (overwriteMode) {
                         OverwriteMode.RejectExisting -> arrayOf(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
@@ -86,7 +84,22 @@ object LiveCloudIo {
                                 StandardOpenOption.WRITE,
                             )
                     }
-                Files.write(out, bytes, *options)
+                var written = 0L
+                Files.newOutputStream(out, *options).use { os ->
+                    val buf = ByteArray(STREAM_BUFFER_BYTES)
+                    src.use { source ->
+                        val buffered = source.buffered()
+                        while (true) {
+                            val read = buffered.readAtMostTo(buf, 0, buf.size)
+                            if (read <= 0) break
+                            os.write(buf, 0, read)
+                            written += read
+                        }
+                    }
+                }
+                check(written == mf.size) {
+                    "size mismatch for $rel: manifest=${mf.size} actual=$written"
+                }
             } finally {
                 runCatching { src.close() }
             }

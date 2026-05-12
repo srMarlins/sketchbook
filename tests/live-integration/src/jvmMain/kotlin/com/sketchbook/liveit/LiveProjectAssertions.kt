@@ -13,6 +13,7 @@ private const val HASH_BUFFER_BYTES = 64 * 1024
 private const val HEX_BYTE_MASK = 0xff
 private const val HEX_RADIX = 16
 private const val HEX_PAD = 2
+private val ABS_PATH_REGEX = Regex("^[A-Za-z]:[\\\\/]")
 private const val PREVIEW_MISSING = 10
 private const val PREVIEW_MISMATCHES = 10
 private const val PREVIEW_SAMPLE_MISSES = 20
@@ -148,7 +149,7 @@ object LiveProjectAssertions {
             RelativePathType.PROJECT -> RefClass.IntraProject(raw)
             else ->
                 when {
-                    raw.startsWith("/") || Regex("^[A-Za-z]:[\\\\/]").containsMatchIn(raw) ->
+                    raw.startsWith("/") || ABS_PATH_REGEX.containsMatchIn(raw) ->
                         RefClass.Absolute(raw)
                     else -> RefClass.IntraProject(raw)
                 }
@@ -178,20 +179,7 @@ object LiveProjectAssertions {
         return candidates.firstOrNull { Files.isRegularFile(it) }
     }
 
-    private fun sha256Hex(path: Path): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        Files.newInputStream(path).use { input ->
-            val buf = ByteArray(HASH_BUFFER_BYTES)
-            while (true) {
-                val n = input.read(buf)
-                if (n <= 0) break
-                md.update(buf, 0, n)
-            }
-        }
-        return md.digest().joinToString("") {
-            (it.toInt() and HEX_BYTE_MASK).toString(HEX_RADIX).padStart(HEX_PAD, '0')
-        }
-    }
+    private fun sha256Hex(path: Path): String = sha256HexFile(path)
 
     /**
      * Live's `<RelativePathType>` field values, per `AlsRewriter`. `0` is an absolute path
@@ -302,5 +290,20 @@ object LiveProjectAssertions {
             println()
             println(if (success) "RESULT: PASS — open the project in Live to confirm." else "RESULT: FAIL")
         }
+    }
+}
+
+internal fun sha256HexFile(path: Path): String {
+    val md = MessageDigest.getInstance("SHA-256")
+    Files.newInputStream(path).use { input ->
+        val buf = ByteArray(HASH_BUFFER_BYTES)
+        while (true) {
+            val n = input.read(buf)
+            if (n <= 0) break
+            md.update(buf, 0, n)
+        }
+    }
+    return md.digest().joinToString("") {
+        (it.toInt() and HEX_BYTE_MASK).toString(HEX_RADIX).padStart(HEX_PAD, '0')
     }
 }

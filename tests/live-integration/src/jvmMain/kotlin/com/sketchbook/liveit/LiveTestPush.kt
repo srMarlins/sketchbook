@@ -21,7 +21,7 @@ private const val HASH_DISPLAY_PREFIX = 12
 private const val RAND_HEX_RANGE = 0xffff
 private const val RAND_HEX_WIDTH = 4
 private const val HEX_RADIX = 16
-private const val MILLIS_PER_SECOND = 1000L
+
 
 /**
  * Snapshot a real Ableton project folder to the live Firebase project via the production
@@ -126,7 +126,7 @@ fun main() =
     }
 
 private fun mintTestUuid(suffix: String?): ProjectUuid {
-    val epochSec = System.currentTimeMillis() / MILLIS_PER_SECOND
+    val epochSec = Clock.System.now().epochSeconds
     val rand =
         SecureRandom()
             .nextInt(RAND_HEX_RANGE)

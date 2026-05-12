@@ -18,7 +18,6 @@ import kotlinx.coroutines.flow.toList
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-import java.security.MessageDigest
 import kotlin.io.path.absolute
 import kotlin.io.path.extension
 import kotlin.io.path.isRegularFile
@@ -27,10 +26,6 @@ import kotlin.io.path.walk
 import kotlin.time.Clock
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
-
-private const val HEX_BYTE_MASK = 0xff
-private const val HEX_RADIX = 16
-private const val HEX_PAD = 2
 
 /**
  * One process, two simulated clients. They share auth (same UID — they're "the same user
@@ -240,28 +235,12 @@ object TwoClientFs {
             if (p.fileName.toString().endsWith(".als.bak", ignoreCase = true)) return@forEach
             val rel = p.relativeTo(root)
             if (rel.any { it.toString() in SKIP_DIRS }) return@forEach
-            out[rel.toString().replace('\\', '/')] = sha256Hex(p)
+            out[rel.toString().replace('\\', '/')] = sha256HexFile(p)
         }
         return out
-    }
-
-    private fun sha256Hex(p: Path): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        Files.newInputStream(p).use { input ->
-            val buf = ByteArray(HASH_BUFFER_BYTES)
-            while (true) {
-                val n = input.read(buf)
-                if (n <= 0) break
-                md.update(buf, 0, n)
-            }
-        }
-        return md.digest().joinToString("") {
-            (it.toInt() and HEX_BYTE_MASK).toString(HEX_RADIX).padStart(HEX_PAD, '0')
-        }
     }
 
     // Mirrors JvmWorkingTree's SKIP_DIRS so the seeded tree + the snapshotted tree agree.
     private val SKIP_DIRS = setOf("Backup", "Samples", "Ableton Project Info")
     private const val EDIT_PAYLOAD_SIZE = 256
-    private const val HASH_BUFFER_BYTES = 64 * 1024
 }

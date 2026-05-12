@@ -18,7 +18,7 @@ import java.nio.file.Path
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.Instant
+
 
 private const val LISTENER_WAIT_TIMEOUT_MS = 30_000L
 private const val LOCK_BARRIER_WAIT_MS = 500L
@@ -455,7 +455,7 @@ object TwoClientScenarios {
         }
     }
 
-    private fun nowMs(): Long = Instant.fromEpochMilliseconds(System.currentTimeMillis()).toEpochMilliseconds()
+    private fun nowMs(): Long = Clock.System.now().toEpochMilliseconds()
 
     private const val HEX_RADIX = 16
 }
