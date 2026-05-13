@@ -3,12 +3,17 @@ package com.sketchbook.desktop.repo
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
+import com.sketchbook.core.BannerKey
+import com.sketchbook.core.ErrorContext
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.UserMessage
+import com.sketchbook.core.UserMessageBus
 import com.sketchbook.core.runCatchingCancellable
+import com.sketchbook.core.toUserMessage
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
@@ -74,6 +79,11 @@ class GcsSyncQueue(
      * scheduler so virtual time stays in lockstep with the loop's cloud calls.
      */
     private val ioDispatcher: kotlin.coroutines.CoroutineContext = Dispatchers.IO,
+    /**
+     * App-global user-message bus. Nullable so drain unit tests can construct the queue without
+     * wiring an entire DI graph; production always passes the singleton from [DesktopAppGraph].
+     */
+    private val bus: UserMessageBus? = null,
 ) : SyncQueue,
     ForceSnapshotPipeline {
     private val uploading = MutableStateFlow<Set<ProjectUuid>>(emptySet())
@@ -261,6 +271,7 @@ class GcsSyncQueue(
             val finalRev = savedRev
             return if (finalRev != null) {
                 withContext(ioDispatcher) { syncState.markSynced(uuid, finalRev) }
+                notifyPushSucceeded()
                 // A saved branch means our push CAS-failed and we wrote a fork — surface it as
                 // Conflict with an inline message so the user can pull + re-push.
                 if (savedKind == SnapshotKind.Branch) {
@@ -274,20 +285,48 @@ class GcsSyncQueue(
                 Result.success(SnapshotRev(finalRev))
             } else {
                 conflicts.value = conflicts.value + uuid
-                conflictMessages.value = conflictMessages.value + (
-                    uuid to
-                        (failureReason ?: "Push failed — retry or check Settings → Cloud.")
-                )
+                val msg = failureReason ?: "Push failed — retry or check Settings → Cloud."
+                conflictMessages.value = conflictMessages.value + (uuid to msg)
+                notifyPushFailed(msg)
                 Result.failure(IllegalStateException(failureReason ?: "pipeline did not complete"))
             }
         } catch (t: Throwable) {
             // Plain throwable = transient (network, IO, GCS 5xx). Do NOT add to `conflicts` —
             // that's reserved for CAS-divergence which the user has to resolve. Drain treats
             // these as backoff candidates and keeps retrying forever per spec.
+            notifyPushThrew(t)
             return Result.failure(t)
         } finally {
             uploading.value = uploading.value - uuid
         }
+    }
+
+    /**
+     * Successful push implies network is reachable AND the access token is good. Clear any
+     * standing Offline/AuthExpired banners other call sites raised; retract is a no-op for
+     * absent keys, so this is cheap to always run.
+     */
+    private fun notifyPushSucceeded() {
+        bus?.retractBanner(BannerKey.Offline)
+        bus?.retractBanner(BannerKey.AuthExpired)
+    }
+
+    /**
+     * Pipeline reported [SnapshotProgress.Failed] without a save. The per-uuid conflict caption
+     * is already set on the detail panel, but the user may be elsewhere — fan a global snackbar
+     * so the failure isn't silent.
+     */
+    private fun notifyPushFailed(message: String) {
+        bus?.emit(UserMessage.Snackbar(text = message))
+    }
+
+    /**
+     * Throwable escaped the pipeline (network, IO, GCS 5xx). The typed mapper picks the right
+     * severity — offline → banner, 5xx → transient snackbar, 401/403 → auth banner — so the
+     * caller doesn't have to inspect the throwable.
+     */
+    private fun notifyPushThrew(t: Throwable) {
+        bus?.let { b -> t.toUserMessage(ErrorContext.Sync)?.let(b::emit) }
     }
 
     private suspend fun recordConflictJournal(

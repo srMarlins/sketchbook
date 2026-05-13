@@ -7,6 +7,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -17,6 +18,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.navigation3.runtime.rememberNavBackStack
+import com.sketchbook.desktop.chrome.UserMessageHost
 import com.sketchbook.featureonboarding.OnboardingScreen
 import com.sketchbook.featureonboarding.OnboardingViewModel
 import com.sketchbook.repo.LibraryRoot
@@ -119,30 +121,46 @@ private fun runApp(resetFirstRun: Boolean) =
                 // including the chrome and per-NavEntry VMs — can call `metroViewModel<X>()` without
                 // seeing the graph.
                 CompositionLocalProvider(LocalMetroViewModelFactory provides graph.metroViewModelFactory) {
-                    when (decision) {
-                        null -> {
-                            // Boot splash while the SettingsRepository flow is resolving.
-                            PaperPage {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    InkLoading()
+                    // App-global error chrome wraps both onboarding and the main app surface so
+                    // background failures (sync drain, auth refresh, scan) reach the user no
+                    // matter which surface is active. The host handles Sign-in / Open-settings
+                    // CTAs on its banners; emitters elsewhere just fire `bus.emit(...)`.
+                    val chromeScope = rememberCoroutineScope()
+                    UserMessageHost(
+                        bus = graph.userMessageBus,
+                        onSignIn = {
+                            chromeScope.launch { graph.authSession.signIn() }
+                        },
+                        onOpenSettings = {
+                            backStack.clear()
+                            backStack.add(Screen.Settings)
+                        },
+                    ) {
+                        when (decision) {
+                            null -> {
+                                // Boot splash while the SettingsRepository flow is resolving.
+                                PaperPage {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        InkLoading()
+                                    }
                                 }
                             }
-                        }
 
-                        LaunchDecision.Onboarding -> {
-                            val onboardingVm: OnboardingViewModel = metroViewModel()
-                            OnboardingScreen(
-                                vm = onboardingVm,
-                                onPickFolder = ::pickFolderJvm,
-                                onPickFile = ::pickFileJvm,
-                            )
-                        }
+                            LaunchDecision.Onboarding -> {
+                                val onboardingVm: OnboardingViewModel = metroViewModel()
+                                OnboardingScreen(
+                                    vm = onboardingVm,
+                                    onPickFolder = ::pickFolderJvm,
+                                    onPickFile = ::pickFileJvm,
+                                )
+                            }
 
-                        LaunchDecision.MainApp -> {
-                            RootContent(backStack = backStack)
+                            LaunchDecision.MainApp -> {
+                                RootContent(backStack = backStack)
+                            }
                         }
                     }
                 }
