@@ -290,6 +290,11 @@ class GcsSyncQueue(
                 notifyPushFailed(msg)
                 Result.failure(IllegalStateException(failureReason ?: "pipeline did not complete"))
             }
+        } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+            // Cooperative cancellation — must propagate. Swallowing here would defeat the drain's
+            // collectLatest replacement semantics and produce a bogus "something went wrong"
+            // snackbar for a cancellation the system itself initiated.
+            throw c
         } catch (t: Throwable) {
             // Plain throwable = transient (network, IO, GCS 5xx). Do NOT add to `conflicts` —
             // that's reserved for CAS-divergence which the user has to resolve. Drain treats

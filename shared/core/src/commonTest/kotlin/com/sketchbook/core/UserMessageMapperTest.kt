@@ -89,6 +89,15 @@ class UserMessageMapperTest {
         assertTrue("diagnostics" in snackbar.text.lowercase(), "Generic copy mentions diagnostics: ${snackbar.text}")
     }
 
+    @Test
+    fun cancellationExceptionReturnsNullSoCancelledOpsDoNotShowAGenericError() {
+        val msg =
+            kotlin.coroutines.cancellation
+                .CancellationException("user navigated away")
+                .toUserMessage(ErrorContext.Sync)
+        kotlin.test.assertNull(msg)
+    }
+
     private fun remote(status: Int?): SketchbookError.RemoteFailure =
         SketchbookError.RemoteFailure(
             status = status,

@@ -29,6 +29,13 @@ private const val HTTP_SERVER_ERROR_RANGE_END = 599
  */
 fun Throwable.toUserMessage(context: ErrorContext): UserMessage? =
     when (this) {
+        is kotlin.coroutines.cancellation.CancellationException -> {
+            // Cancellation is cooperative; the system initiated it. Emitters should rethrow at the
+            // catch site, but if one slips through, never surface a generic "something went wrong"
+            // snackbar for a cancellation the user themselves triggered (or a collectLatest swap).
+            null
+        }
+
         is SketchbookError.RemoteFailure -> {
             mapRemoteFailure(this, context)
         }
