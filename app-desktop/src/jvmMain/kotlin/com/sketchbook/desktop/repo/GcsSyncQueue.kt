@@ -302,13 +302,18 @@ class GcsSyncQueue(
     }
 
     /**
-     * Successful push implies network is reachable AND the access token is good. Clear any
-     * standing Offline/AuthExpired banners other call sites raised; retract is a no-op for
-     * absent keys, so this is cheap to always run.
+     * Successful push proves network is reachable, so we own retraction of [BannerKey.Offline] —
+     * Sketchbook has no separate network-state observer; sync requests *are* the liveness probe.
+     *
+     * We deliberately do NOT retract [BannerKey.AuthExpired] here. A 200 on this request says
+     * the bearer was valid *at the moment it left*, not that the refresh-token chain is healthy:
+     * the next token swap can still fail with the same 401 the worker observed mid-flight.
+     * Retraction belongs to the subsystem that owns the auth condition — the auth-refresh
+     * observer to be added in the follow-up (step 9 of the chrome plan). Until then, banners
+     * carry a "Dismiss" affordance so a stuck AuthExpired banner has a manual escape hatch.
      */
     private fun notifyPushSucceeded() {
         bus?.retractBanner(BannerKey.Offline)
-        bus?.retractBanner(BannerKey.AuthExpired)
     }
 
     /**

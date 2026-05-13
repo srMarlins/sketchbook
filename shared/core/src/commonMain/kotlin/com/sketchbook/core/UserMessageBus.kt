@@ -22,10 +22,14 @@ import kotlinx.coroutines.flow.update
  * pin error reporting to per-screen lifetimes and lose messages on navigation. The chrome (which
  * spans onboarding + main app) is the only consumer that's always alive when the app is.
  *
- * **Snackbars are events**, replay-0 with [BufferOverflow.DROP_OLDEST] (capacity 8). Late
- * subscribers don't see history; bursts under load drop the oldest rather than blocking the
- * emitter. **Banners are state** keyed by [BannerKey] — re-emitting the same key replaces;
- * [retractBanner] clears once the underlying condition resolves.
+ * **Snackbars are events.** `replay = 1` + [BufferOverflow.DROP_OLDEST] (total capacity 8). The
+ * single-slot replay closes the boot race where a snackbar emitted from an AppScope `init { … }`
+ * lands before `UserMessageHost` enters composition — without it the message would drop silently
+ * (per the failure modes documented in https://github.com/AungThiha/SnackbarChannel and the
+ * Vivo/`Dispatchers.Main.immediate` discussion in kotlinx.coroutines #2886). Bursts under load
+ * still drop the oldest rather than block the emitter. **Banners are state** keyed by
+ * [BannerKey] — re-emitting the same key replaces; [retractBanner] clears once the underlying
+ * condition resolves.
  */
 interface UserMessageBus {
     val snackbars: SharedFlow<UserMessage.Snackbar>
@@ -42,8 +46,8 @@ interface UserMessageBus {
 class DefaultUserMessageBus : UserMessageBus {
     private val _snackbars =
         MutableSharedFlow<UserMessage.Snackbar>(
-            replay = 0,
-            extraBufferCapacity = 8,
+            replay = 1,
+            extraBufferCapacity = 7,
             onBufferOverflow = BufferOverflow.DROP_OLDEST,
         )
     override val snackbars: SharedFlow<UserMessage.Snackbar> = _snackbars.asSharedFlow()

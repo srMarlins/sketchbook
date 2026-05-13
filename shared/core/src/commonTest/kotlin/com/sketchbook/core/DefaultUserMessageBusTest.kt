@@ -76,4 +76,17 @@ class DefaultUserMessageBusTest {
         val bus = DefaultUserMessageBus()
         repeat(100) { bus.emit(UserMessage.Snackbar("n=$it")) }
     }
+
+    @Test
+    fun lateSubscriberReceivesMostRecentSnackbar() =
+        runTest {
+            // Closes the boot race: an AppScope singleton can emit before UserMessageHost enters
+            // composition. With replay=1 the most-recent snackbar is buffered for the first
+            // subscriber so the user actually sees the failure.
+            val bus = DefaultUserMessageBus()
+            bus.emit(UserMessage.Snackbar("dropped"))
+            bus.emit(UserMessage.Snackbar("buffered"))
+            val received = bus.snackbars.first()
+            assertEquals(UserMessage.Snackbar("buffered"), received)
+        }
 }
