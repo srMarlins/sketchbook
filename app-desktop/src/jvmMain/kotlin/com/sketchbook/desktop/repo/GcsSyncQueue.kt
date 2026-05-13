@@ -214,28 +214,7 @@ class GcsSyncQueue(
                     // writer. v1.2 will track generation alongside cloud_head_rev.
                     null
                 }
-            // Prefetch the cloud-side last-known manifest so the pipeline's unchanged-file
-            // diff actually fires. Without this, every push full-hashes the project tree and
-            // pays a HEAD-per-blob roundtrip even when nothing changed (H8). On the first
-            // sync (cloudHeadRev == 0) there's nothing to fetch; transient failures fall back
-            // to null + the no-dedup path so a network blip never blocks a save.
-            val lastKnownManifest =
-                if (current != null && current.cloudHeadRev > 0L) {
-                    try {
-                        withContext(ioDispatcher) {
-                            cloud.readManifest(uuid, SnapshotRev(current.cloudHeadRev))
-                        }
-                    } catch (c: kotlin.coroutines.cancellation.CancellationException) {
-                        throw c
-                    } catch (t: Throwable) {
-                        System.err.println(
-                            "[GcsSyncQueue] could not fetch lastKnownManifest for uuid=${uuid.value}, falling back to full hash: $t",
-                        )
-                        null
-                    }
-                } else {
-                    null
-                }
+            val lastKnownManifest = prefetchLastKnownManifest(uuid, current?.cloudHeadRev ?: 0L)
             val input =
                 PipelineInput(
                     uuid = uuid,
@@ -303,6 +282,32 @@ class GcsSyncQueue(
             return Result.failure(t)
         } finally {
             uploading.value = uploading.value - uuid
+        }
+    }
+
+    /**
+     * Prefetch the cloud-side last-known manifest so the pipeline's unchanged-file diff actually
+     * fires. Without this, every push full-hashes the project tree and pays a HEAD-per-blob
+     * roundtrip even when nothing changed (H8). On the first sync ([cloudHeadRev] == 0) there's
+     * nothing to fetch; transient failures fall back to `null` + the no-dedup path so a network
+     * blip never blocks a save.
+     */
+    private suspend fun prefetchLastKnownManifest(
+        uuid: ProjectUuid,
+        cloudHeadRev: Long,
+    ): com.sketchbook.core.Manifest? {
+        if (cloudHeadRev <= 0L) return null
+        return try {
+            withContext(ioDispatcher) {
+                cloud.readManifest(uuid, SnapshotRev(cloudHeadRev))
+            }
+        } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            System.err.println(
+                "[GcsSyncQueue] could not fetch lastKnownManifest for uuid=${uuid.value}, falling back to full hash: $t",
+            )
+            null
         }
     }
 

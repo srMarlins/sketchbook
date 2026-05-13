@@ -131,6 +131,28 @@ class UserMessageHostScreenshots {
         }
 
     @Test
+    fun snackbar_with_action_cta() =
+        runDesktopComposeUiTest(width = 1280, height = 800) {
+            setContent {
+                AppTheme {
+                    val bus =
+                        DefaultUserMessageBus().apply {
+                            emit(
+                                UserMessage.Snackbar(
+                                    text = "Couldn't push — cloud is having trouble.",
+                                    action = Action("Open settings", ActionKind.OpenSettings),
+                                ),
+                            )
+                        }
+                    UserMessageHost(bus = bus, onSignIn = {}, onOpenSettings = {}) {
+                        PlaceholderPage("Snackbar with action")
+                    }
+                }
+            }
+            onRoot().captureRoboImage("build/roborazzi/user_message_host_snackbar_with_action.png")
+        }
+
+    @Test
     fun banner_plus_snackbar() =
         runDesktopComposeUiTest(width = 1280, height = 800) {
             setContent {
