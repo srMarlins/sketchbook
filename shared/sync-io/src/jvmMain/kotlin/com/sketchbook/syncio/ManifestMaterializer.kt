@@ -3,9 +3,11 @@ package com.sketchbook.syncio
 import com.sketchbook.cloud.BlobScope
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotRev
-import com.sketchbook.core.runCatchingCancellable
+import com.sketchbook.repo.MaterializeOutcome
 import com.sketchbook.sync.JvmBlobCache
+import kotlinx.coroutines.CancellationException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -30,17 +32,17 @@ class ManifestMaterializer(
 ) {
     /**
      * Materialize the project at [rev] into the working tree at `projectRoot(uuid)`. Returns
-     * `Result.success(Unit)` on full laydown; `Result.failure` (with leftover temps cleaned)
-     * on any error.
+     * [MaterializeOutcome.Materialized] on full laydown, [MaterializeOutcome.WorkingTreeBusy]
+     * when one or more destination files are held open by Live, and throws
+     * [SketchbookError.IoFailure] / [SketchbookError.IntegrityError] on transport / disk
+     * failures. Leftover temps are always cleaned up; the working tree is left in either the
+     * original or the new state — never partial.
      */
     suspend fun materialize(
         uuid: ProjectUuid,
         rev: SnapshotRev,
-    ): Result<Unit> {
-        val manifest =
-            runCatchingCancellable { cloud.readManifest(uuid, rev) }.getOrElse {
-                return Result.failure(it)
-            }
+    ): MaterializeOutcome {
+        val manifest = cloud.readManifest(uuid, rev)
         val scope: BlobScope =
             if (manifest.selfContained) BlobScope.Private(uuid) else BlobScope.Shared
         val root = projectRoot(uuid)
@@ -50,18 +52,13 @@ class ManifestMaterializer(
         // another process (Live with the project loaded on Windows). Doing this BEFORE the
         // staging loop avoids wasted bandwidth + leaves zero on-disk side effects in the busy
         // case — caller (PullPoller wiring or Rewind UI) decides whether to retry or surface.
-        // `resolveSafely` throws on traversal-escapes (`..`); surface that as Result.failure
-        // rather than letting it escape this function.
+        // `resolveSafely` throws on traversal-escapes (`..`); let it propagate.
         val busy =
-            runCatching {
-                manifest.files.keys.mapNotNull { rel ->
-                    val finalPath = resolveSafely(root, rel)
-                    if (Files.exists(finalPath) && isInUse(finalPath)) rel else null
-                }
-            }.getOrElse { return Result.failure(it) }
-        if (busy.isNotEmpty()) {
-            return Result.failure(WorkingTreeBusyException(busy))
-        }
+            manifest.files.keys.mapNotNull { rel ->
+                val finalPath = resolveSafely(root, rel)
+                if (Files.exists(finalPath) && isInUse(finalPath)) rel else null
+            }
+        if (busy.isNotEmpty()) return MaterializeOutcome.WorkingTreeBusy(busy)
 
         // Pair (temp, final) — temps written first; renames happen only after every file is
         // staged so a mid-fetch failure leaves the working tree intact.
@@ -90,13 +87,16 @@ class ManifestMaterializer(
                     Files.move(temp, final, StandardCopyOption.REPLACE_EXISTING)
                 }
             }
-            return Result.success(Unit)
-        } catch (e: Throwable) {
+            return MaterializeOutcome.Materialized
+        } catch (t: Throwable) {
             // Roll back any staged temps; finals are untouched if we hadn't started commit yet.
             for ((temp, _) in staged) {
                 runCatching { Files.deleteIfExists(temp) }
             }
-            return Result.failure(e)
+            when (t) {
+                is CancellationException, is SketchbookError -> throw t
+                else -> throw SketchbookError.IoFailure("materialize ${uuid.value}@${rev.value} failed", t)
+            }
         }
     }
 

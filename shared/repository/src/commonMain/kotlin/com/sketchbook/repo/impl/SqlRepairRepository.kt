@@ -6,6 +6,7 @@ import com.sketchbook.catalog.db.Catalog
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.SampleRefEdit
+import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.AlsPatchService
@@ -160,12 +161,9 @@ class SqlRepairRepository(
         }
     }
 
-    override suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit> =
+    override suspend fun acknowledgeMacImport(projectId: ProjectId) {
         withContext(ioDispatcher) {
-            // Don't use `runCatching` at suspend boundaries: it catches `Throwable` including
-            // `CancellationException`, silently breaking structured concurrency. Pattern matches
-            // `SqlJournalRepository.append` / `SqlSnapshotRepository.setSnapshotLabel`.
-            try {
+            repairOperation("acknowledgeMacImport") {
                 catalog.transaction {
                     catalog.catalogQueries.insertRepairAck(
                         scope = SCOPE_MAC,
@@ -175,17 +173,13 @@ class SqlRepairRepository(
                     )
                 }
                 ackTick.value = ackTick.value + 1
-                Result.success(Unit)
-            } catch (c: CancellationException) {
-                throw c
-            } catch (t: Throwable) {
-                Result.failure(t)
             }
         }
+    }
 
-    override suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit> =
+    override suspend fun applyMacPathRepair(projectId: ProjectId) {
         withContext(ioDispatcher) {
-            try {
+            repairOperation("applyMacPathRepair") {
                 // Capture name + path together up front. Both feed the journal entry's denorm
                 // columns so the History row stays resolvable even if a concurrent rescan orphans
                 // the project_id between this lookup and the journal append below. Without this,
@@ -275,20 +269,16 @@ class SqlRepairRepository(
                             ),
                     ),
                 )
-                Result.success(Unit)
-            } catch (c: CancellationException) {
-                throw c
-            } catch (t: Throwable) {
-                Result.failure(t)
             }
         }
+    }
 
     override suspend fun dismissMissingSample(
         projectId: ProjectId,
         missingPath: String,
-    ): Result<Unit> =
+    ) {
         withContext(ioDispatcher) {
-            try {
+            repairOperation("dismissMissingSample") {
                 catalog.transaction {
                     catalog.catalogQueries.insertRepairAck(
                         scope = SCOPE_MISS,
@@ -298,21 +288,17 @@ class SqlRepairRepository(
                     )
                 }
                 ackTick.value = ackTick.value + 1
-                Result.success(Unit)
-            } catch (c: CancellationException) {
-                throw c
-            } catch (t: Throwable) {
-                Result.failure(t)
             }
         }
+    }
 
     override suspend fun applyMissingSampleMatch(
         projectId: ProjectId,
         missingPath: String,
         candidatePath: String,
-    ): Result<Unit> =
+    ) {
         withContext(ioDispatcher) {
-            try {
+            repairOperation("applyMissingSampleMatch") {
                 // Resolve the on-disk .als path before any catalog mutation so the patcher and the
                 // journal entry agree on which file the user actually edited (a concurrent rename
                 // would otherwise split the audit trail).
@@ -403,21 +389,17 @@ class SqlRepairRepository(
                             ),
                     ),
                 )
-                Result.success(Unit)
-            } catch (c: CancellationException) {
-                throw c
-            } catch (t: Throwable) {
-                Result.failure(t)
             }
         }
+    }
 
     override suspend fun restoreMissingSampleMatch(
         projectId: ProjectId,
         missingPath: String,
         candidatePath: String,
-    ): Result<Unit> =
+    ) {
         withContext(ioDispatcher) {
-            try {
+            repairOperation("restoreMissingSampleMatch") {
                 val alsPath =
                     catalog.catalogQueries
                         .selectProjectById(projectId.value)
@@ -463,17 +445,13 @@ class SqlRepairRepository(
                             ),
                     ),
                 )
-                Result.success(Unit)
-            } catch (c: CancellationException) {
-                throw c
-            } catch (t: Throwable) {
-                Result.failure(t)
             }
         }
+    }
 
-    override suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit> =
+    override suspend fun restoreMacPathRepair(projectId: ProjectId) {
         withContext(ioDispatcher) {
-            runCatchingCancellable {
+            repairOperation("restoreMacPathRepair") {
                 // Mirror applyMacPathRepair: capture name + path together so the journal entry
                 // carries both denorm columns even if the project_id is orphaned by a concurrent
                 // rescan between this lookup and the journal append below.
@@ -532,8 +510,28 @@ class SqlRepairRepository(
                             ),
                     ),
                 )
-                Unit
             }
+        }
+    }
+
+    /**
+     * Wrap a repair-operation body so any non-`SketchbookError` throwable surfaces as
+     * [SketchbookError.IoFailure] (preserving the original cause). `CancellationException`
+     * propagates unchanged. Already-typed `SketchbookError` rethrows as-is so callers can
+     * pattern-match on `NotFound` / `Conflict` / etc.
+     */
+    private inline fun <R> repairOperation(
+        op: String,
+        block: () -> R,
+    ): R =
+        try {
+            block()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (s: SketchbookError) {
+            throw s
+        } catch (t: Throwable) {
+            throw SketchbookError.IoFailure("repair $op failed", t)
         }
 
     private companion object {

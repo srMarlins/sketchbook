@@ -12,7 +12,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -100,8 +100,7 @@ class SqlSnapshotRepositoryTest {
             seedIdentity(catalog, projectId = 1L)
             seedSnapshot(catalog, rev = 7L, kind = "auto", label = null)
 
-            val result = repo.setSnapshotLabel(uuid, SnapshotRev(7L), "demo for jay")
-            assertTrue(result.isSuccess, "expected success, got ${result.exceptionOrNull()}")
+            repo.setSnapshotLabel(uuid, SnapshotRev(7L), "demo for jay")
 
             // Observe via the public flow — same path the Timeline uses.
             repo.observeHistory(uuid).test {
@@ -133,7 +132,7 @@ class SqlSnapshotRepositoryTest {
             seedIdentity(catalog, projectId = 1L)
             seedSnapshot(catalog, rev = 3L, kind = "named", label = "old")
 
-            repo.setSnapshotLabel(uuid, SnapshotRev(3L), "new").getOrThrow()
+            repo.setSnapshotLabel(uuid, SnapshotRev(3L), "new")
 
             val row = catalog.catalogQueries.selectSnapshotByRev(uuid.value, 3L).executeAsOne()
             assertEquals("new", row.label)
@@ -147,7 +146,7 @@ class SqlSnapshotRepositoryTest {
             seedIdentity(catalog, projectId = 1L)
             seedSnapshot(catalog, rev = 5L, kind = "auto", label = "scratch")
 
-            repo.setSnapshotLabel(uuid, SnapshotRev(5L), null).getOrThrow()
+            repo.setSnapshotLabel(uuid, SnapshotRev(5L), null)
 
             val row = catalog.catalogQueries.selectSnapshotByRev(uuid.value, 5L).executeAsOne()
             assertNull(row.label)
@@ -163,7 +162,7 @@ class SqlSnapshotRepositoryTest {
             seedIdentity(catalog, projectId = 1L)
             seedSnapshot(catalog, rev = 5L, kind = "auto", label = "scratch")
 
-            repo.setSnapshotLabel(uuid, SnapshotRev(5L), "").getOrThrow()
+            repo.setSnapshotLabel(uuid, SnapshotRev(5L), "")
 
             val row = catalog.catalogQueries.selectSnapshotByRev(uuid.value, 5L).executeAsOne()
             assertEquals("", row.label)
@@ -171,16 +170,12 @@ class SqlSnapshotRepositoryTest {
         }
 
     @Test
-    fun setSnapshotLabelOnMissingRevReturnsNotFound() =
+    fun setSnapshotLabelOnMissingRevThrowsNotFound() =
         runTest {
             val (catalog, _, repo) = setup()
             seedIdentity(catalog, projectId = 1L)
             // No snapshot rows seeded.
 
-            val result = repo.setSnapshotLabel(uuid, SnapshotRev(99L), "nope")
-            assertTrue(result.isFailure)
-            val err = result.exceptionOrNull()
-            assertNotNull(err)
-            assertTrue(err is SketchbookError.NotFound, "expected NotFound, got ${err::class.simpleName}")
+            assertFailsWith<SketchbookError.NotFound> { repo.setSnapshotLabel(uuid, SnapshotRev(99L), "nope") }
         }
 }

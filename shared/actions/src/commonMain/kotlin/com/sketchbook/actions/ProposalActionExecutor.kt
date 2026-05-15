@@ -2,6 +2,7 @@ package com.sketchbook.actions
 
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectId
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.ProjectRepository
 import com.sketchbook.repo.ProposalAction
 import dev.zacsweers.metro.Inject
@@ -27,13 +28,16 @@ class ProposalActionExecutor(
 ) {
     suspend fun apply(actions: List<ProposalAction>): Result<Unit> {
         for (a in actions) {
-            val r: Result<*> =
+            val r: Result<Unit> =
                 when (a.type) {
                     "ArchiveProject" -> {
-                        projects.archive(
-                            id = ProjectId(a.args.projectIdLong()),
-                            archived = true,
-                        )
+                        runCatchingCancellable {
+                            projects.archive(
+                                id = ProjectId(a.args.projectIdLong()),
+                                archived = true,
+                            )
+                            Unit
+                        }
                     }
 
                     "SetTags" -> {
@@ -42,13 +46,14 @@ class ProposalActionExecutor(
                             (a.args["tags"] as? JsonArray)
                                 ?.map { it.jsonPrimitive.content }
                                 ?: emptyList()
-                        projects.setTags(id, tags)
+                        runCatchingCancellable {
+                            projects.setTags(id, tags)
+                            Unit
+                        }
                     }
 
                     else -> {
-                        Result.failure<Unit>(
-                            IllegalArgumentException("unknown proposal action ${a.type}"),
-                        )
+                        Result.failure(IllegalArgumentException("unknown proposal action ${a.type}"))
                     }
                 }
             if (r.isFailure) return Result.failure(r.exceptionOrNull()!!)

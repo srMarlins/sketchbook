@@ -1,6 +1,7 @@
 package com.sketchbook.desktop.repo
 
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SketchbookError
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.ExternalKind
 import com.sketchbook.repo.LibraryRoot
@@ -8,6 +9,7 @@ import com.sketchbook.repo.OnboardingPromptKind
 import com.sketchbook.repo.OnboardingSkipFlags
 import com.sketchbook.repo.Settings
 import com.sketchbook.repo.SettingsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,129 +61,162 @@ class PreferencesSettingsRepository(
 
     override fun observe(): Flow<Settings> = state
 
-    override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> =
+    override suspend fun upsertRoot(root: LibraryRoot) {
         withContext(ioDispatcher) {
             mutex.withLock {
-                val current = readRoots().toMutableList()
-                current.removeAll { it.path == root.path }
-                current += root
-                writeRoots(current)
-                state.value = state.value.copy(libraryRoots = current.toList())
-            }
-            Result.success(Unit)
-        }
-
-    override suspend fun removeRoot(root: LibraryRoot): Result<Unit> =
-        withContext(ioDispatcher) {
-            mutex.withLock {
-                val current = readRoots().toMutableList()
-                // Match by path — UI passes the full data class, but path is the stable identity.
-                val changed = current.removeAll { it.path == root.path }
-                if (changed) {
+                ioFailureBoundary("upsertRoot ${root.path}") {
+                    val current = readRoots().toMutableList()
+                    current.removeAll { it.path == root.path }
+                    current += root
                     writeRoots(current)
                     state.value = state.value.copy(libraryRoots = current.toList())
                 }
             }
-            Result.success(Unit)
         }
+    }
+
+    override suspend fun removeRoot(root: LibraryRoot) {
+        withContext(ioDispatcher) {
+            mutex.withLock {
+                ioFailureBoundary("removeRoot ${root.path}") {
+                    val current = readRoots().toMutableList()
+                    // Match by path — UI passes the full data class, but path is the stable identity.
+                    val changed = current.removeAll { it.path == root.path }
+                    if (changed) {
+                        writeRoots(current)
+                        state.value = state.value.copy(libraryRoots = current.toList())
+                    }
+                }
+            }
+        }
+    }
 
     override suspend fun setSelfContained(
         uuid: ProjectUuid,
         value: Boolean,
-    ): Result<Unit> =
+    ) {
         withContext(ioDispatcher) {
             mutex.withLock {
-                val current = readSelfContained().toMutableSet()
-                val changed = if (value) current.add(uuid) else current.remove(uuid)
-                if (changed) {
-                    writeSelfContained(current)
-                    state.value = state.value.copy(selfContainedProjects = current.toSet())
+                ioFailureBoundary("setSelfContained $uuid") {
+                    val current = readSelfContained().toMutableSet()
+                    val changed = if (value) current.add(uuid) else current.remove(uuid)
+                    if (changed) {
+                        writeSelfContained(current)
+                        state.value = state.value.copy(selfContainedProjects = current.toSet())
+                    }
                 }
             }
-            Result.success(Unit)
         }
+    }
 
-    override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> =
+    override suspend fun setCacheSettings(settings: BlobCacheSettings) {
         withContext(ioDispatcher) {
-            node.putLong(KEY_CACHE_MAX_BYTES, settings.maxSizeBytes)
-            node.putBoolean(KEY_CACHE_LRU, settings.lruEnabled)
-            node.flush()
-            state.value = state.value.copy(cacheSettings = settings)
-            Result.success(Unit)
+            ioFailureBoundary("setCacheSettings") {
+                node.putLong(KEY_CACHE_MAX_BYTES, settings.maxSizeBytes)
+                node.putBoolean(KEY_CACHE_LRU, settings.lruEnabled)
+                node.flush()
+                state.value = state.value.copy(cacheSettings = settings)
+            }
         }
+    }
 
-    override suspend fun markFirstRunComplete(flags: OnboardingSkipFlags): Result<Unit> =
+    override suspend fun markFirstRunComplete(flags: OnboardingSkipFlags) {
         withContext(ioDispatcher) {
             mutex.withLock {
-                val now = Clock.System.now()
-                // Atomic: write all keys, flush once, then publish a single Settings emission so
-                // observers see timestamp + flags together (never one without the other).
-                node.put(KEY_FIRST_RUN_COMPLETED_AT, now.toString())
-                node.putBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, flags.samplesSkipped)
-                node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, flags.samplesPromptDismissed)
-                node.flush()
-                state.value =
-                    state.value.copy(
-                        firstRunCompletedAt = now,
-                        onboardingSkipped = flags,
-                    )
+                ioFailureBoundary("markFirstRunComplete") {
+                    val now = Clock.System.now()
+                    // Atomic: write all keys, flush once, then publish a single Settings emission so
+                    // observers see timestamp + flags together (never one without the other).
+                    node.put(KEY_FIRST_RUN_COMPLETED_AT, now.toString())
+                    node.putBoolean(KEY_ONBOARDING_SAMPLES_SKIPPED, flags.samplesSkipped)
+                    node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, flags.samplesPromptDismissed)
+                    node.flush()
+                    state.value =
+                        state.value.copy(
+                            firstRunCompletedAt = now,
+                            onboardingSkipped = flags,
+                        )
+                }
             }
-            Result.success(Unit)
         }
+    }
 
-    override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> =
+    override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) {
         withContext(ioDispatcher) {
             mutex.withLock {
-                val current = state.value.onboardingSkipped
-                val updated =
-                    when (kind) {
-                        OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
-                    }
-                node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, updated.samplesPromptDismissed)
-                node.flush()
-                state.value = state.value.copy(onboardingSkipped = updated)
+                ioFailureBoundary("dismissOnboardingPrompt $kind") {
+                    val current = state.value.onboardingSkipped
+                    val updated =
+                        when (kind) {
+                            OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
+                        }
+                    node.putBoolean(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED, updated.samplesPromptDismissed)
+                    node.flush()
+                    state.value = state.value.copy(onboardingSkipped = updated)
+                }
             }
-            Result.success(Unit)
         }
+    }
 
-    override suspend fun resetFirstRun(): Result<Unit> =
+    override suspend fun resetFirstRun() {
         withContext(ioDispatcher) {
             mutex.withLock {
-                // Atomic: clear all three onboarding-gate keys, flush once, then publish a single
-                // Settings emission so observers see the reset state in one shot. Roots / plugin
-                // folders / cloud config are intentionally untouched — this is only for re-triggering
-                // the onboarding flow in dev.
-                node.remove(KEY_FIRST_RUN_COMPLETED_AT)
-                node.remove(KEY_ONBOARDING_SAMPLES_SKIPPED)
-                node.remove(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED)
-                node.flush()
-                state.value =
-                    state.value.copy(
-                        firstRunCompletedAt = null,
-                        onboardingSkipped = OnboardingSkipFlags(),
-                    )
+                ioFailureBoundary("resetFirstRun") {
+                    // Atomic: clear all three onboarding-gate keys, flush once, then publish a single
+                    // Settings emission so observers see the reset state in one shot. Roots / plugin
+                    // folders / cloud config are intentionally untouched — this is only for re-triggering
+                    // the onboarding flow in dev.
+                    node.remove(KEY_FIRST_RUN_COMPLETED_AT)
+                    node.remove(KEY_ONBOARDING_SAMPLES_SKIPPED)
+                    node.remove(KEY_ONBOARDING_SAMPLES_PROMPT_DISMISSED)
+                    node.flush()
+                    state.value =
+                        state.value.copy(
+                            firstRunCompletedAt = null,
+                            onboardingSkipped = OnboardingSkipFlags(),
+                        )
+                }
             }
-            Result.success(Unit)
         }
+    }
 
-    override suspend fun setPluginFolders(folders: List<String>): Result<Unit> =
+    override suspend fun setPluginFolders(folders: List<String>) {
         withContext(ioDispatcher) {
-            val normalized =
-                folders
-                    .asSequence()
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
-                    .map {
-                        Paths
-                            .get(it)
-                            .toAbsolutePath()
-                            .normalize()
-                            .toString()
-                    }.distinct()
-                    .toList()
-            writePluginFolders(normalized)
-            state.value = state.value.copy(pluginFolders = normalized)
-            Result.success(Unit)
+            ioFailureBoundary("setPluginFolders") {
+                val normalized =
+                    folders
+                        .asSequence()
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .map {
+                            Paths
+                                .get(it)
+                                .toAbsolutePath()
+                                .normalize()
+                                .toString()
+                        }.distinct()
+                        .toList()
+                writePluginFolders(normalized)
+                state.value = state.value.copy(pluginFolders = normalized)
+            }
+        }
+    }
+
+    /**
+     * Wrap a block whose only realistic failure is a prefs backing-store I/O error.
+     * `CancellationException` propagates; everything else surfaces as [SketchbookError.IoFailure]
+     * so callers can pattern-match the seam-specific exception type.
+     */
+    private inline fun <R> ioFailureBoundary(
+        op: String,
+        block: () -> R,
+    ): R =
+        try {
+            block()
+        } catch (c: CancellationException) {
+            throw c
+        } catch (t: Throwable) {
+            throw SketchbookError.IoFailure("settings $op failed", t)
         }
 
     // ---- read helpers --------------------------------------------------------------------------

@@ -42,8 +42,8 @@ class PreferencesSettingsRepositoryTest {
             val a = LibraryRoot.Projects("/a")
             val b = LibraryRoot.External(path = "/b", alias = "splice", kind = ExternalKind.Splice)
             val first = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
-            first.upsertRoot(a).getOrThrow()
-            first.upsertRoot(b).getOrThrow()
+            first.upsertRoot(a)
+            first.upsertRoot(b)
 
             val second = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
             val roots = second.observe().first().libraryRoots
@@ -68,12 +68,12 @@ class PreferencesSettingsRepositoryTest {
         runTest {
             val uuid = ProjectUuid("11111111-2222-3333-4444-555555555555")
             val first = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
-            first.setSelfContained(uuid, value = true).getOrThrow()
+            first.setSelfContained(uuid, value = true)
 
             val mid = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
             assertEquals(setOf(uuid), mid.observe().first().selfContainedProjects)
 
-            first.setSelfContained(uuid, value = false).getOrThrow()
+            first.setSelfContained(uuid, value = false)
             val after = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
             assertEquals(emptySet(), after.observe().first().selfContainedProjects)
         }
@@ -84,7 +84,7 @@ class PreferencesSettingsRepositoryTest {
             val repo = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
             val flags = OnboardingSkipFlags(samplesSkipped = true)
 
-            repo.markFirstRunComplete(flags).getOrThrow()
+            repo.markFirstRunComplete(flags)
 
             val snapshot = repo.observe().first()
             assertNotNull(snapshot.firstRunCompletedAt)
@@ -101,9 +101,9 @@ class PreferencesSettingsRepositoryTest {
     fun `dismissOnboardingPrompt flips the matching flag`() =
         runTest {
             val repo = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
-            repo.markFirstRunComplete(OnboardingSkipFlags(samplesSkipped = true)).getOrThrow()
+            repo.markFirstRunComplete(OnboardingSkipFlags(samplesSkipped = true))
 
-            repo.dismissOnboardingPrompt(OnboardingPromptKind.Samples).getOrThrow()
+            repo.dismissOnboardingPrompt(OnboardingPromptKind.Samples)
 
             val snapshot = repo.observe().first()
             assertTrue(snapshot.onboardingSkipped.samplesPromptDismissed)
@@ -124,7 +124,7 @@ class PreferencesSettingsRepositoryTest {
                         .toString()
                 }
 
-            repo.setPluginFolders(raw).getOrThrow()
+            repo.setPluginFolders(raw)
 
             assertEquals(expected, repo.observe().first().pluginFolders)
         }
@@ -133,11 +133,11 @@ class PreferencesSettingsRepositoryTest {
     fun `resetFirstRun clears firstRunCompletedAt and onboarding skip flags but keeps roots`() =
         runTest {
             val repo = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
-            repo.upsertRoot(LibraryRoot.Projects("/foo")).getOrThrow()
-            repo.markFirstRunComplete(OnboardingSkipFlags(samplesSkipped = true)).getOrThrow()
-            repo.dismissOnboardingPrompt(OnboardingPromptKind.Samples).getOrThrow()
+            repo.upsertRoot(LibraryRoot.Projects("/foo"))
+            repo.markFirstRunComplete(OnboardingSkipFlags(samplesSkipped = true))
+            repo.dismissOnboardingPrompt(OnboardingPromptKind.Samples)
 
-            repo.resetFirstRun().getOrThrow()
+            repo.resetFirstRun()
 
             val s = repo.observe().first()
             assertNull(s.firstRunCompletedAt)
@@ -153,9 +153,9 @@ class PreferencesSettingsRepositoryTest {
             val a = LibraryRoot.Projects("/a")
             val b = LibraryRoot.UserSamples("/b")
             val first = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
-            first.upsertRoot(a).getOrThrow()
-            first.upsertRoot(b).getOrThrow()
-            first.removeRoot(a).getOrThrow()
+            first.upsertRoot(a)
+            first.upsertRoot(b)
+            first.removeRoot(a)
 
             val second = PreferencesSettingsRepository(node, Dispatchers.Unconfined)
             assertEquals(listOf(b), second.observe().first().libraryRoots)

@@ -7,6 +7,7 @@ import com.sketchbook.auth.AuthSession
 import com.sketchbook.auth.AuthState
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.SettingsRepository
@@ -112,15 +113,12 @@ class SettingsViewModel(
 
     private inline fun launchWithEffect(
         key: String,
-        crossinline block: suspend () -> Result<*>,
+        crossinline block: suspend () -> Unit,
     ) {
         viewModelScope.launch {
-            val r = block()
-            if (r.isSuccess) {
-                _effects.tryEmit(Effect.Saved(key))
-            } else {
-                _effects.tryEmit(Effect.Failed(key, r.exceptionOrNull()?.message ?: "save failed"))
-            }
+            runCatchingCancellable { block() }
+                .onSuccess { _effects.tryEmit(Effect.Saved(key)) }
+                .onFailure { _effects.tryEmit(Effect.Failed(key, it.message ?: "save failed")) }
         }
     }
 

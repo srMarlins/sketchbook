@@ -1,6 +1,7 @@
 package com.sketchbook.repo
 
 import com.sketchbook.core.ProjectId
+import com.sketchbook.core.SketchbookError
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -11,6 +12,12 @@ import kotlinx.coroutines.flow.Flow
  *
  * Truncation: missing-sample lists can hit 100k+ entries on large libraries; impls cap to the
  * caller-supplied limit and report `total` separately so the UI can show "N more not shown".
+ *
+ * **Error contract.** Repair operations throw on failure rather than returning a typed
+ * outcome. The patcher's domain outcomes (Patched / NoChange / SkippedBusy / Failed) are
+ * pattern-matched and journalled *inside* the implementation — the method itself only
+ * throws when something catastrophic happens (project row missing, DB unreachable). See
+ * `docs/plans/2026-05-12-result-refactor-design.md`.
  */
 interface RepairRepository {
     fun observeFindings(
@@ -19,7 +26,8 @@ interface RepairRepository {
     ): Flow<RepairFindings>
 
     /** Mark a Mac-import finding as repaired (drops it from subsequent flow emissions). */
-    suspend fun acknowledgeMacImport(projectId: ProjectId): Result<Unit>
+    @Throws(SketchbookError::class)
+    suspend fun acknowledgeMacImport(projectId: ProjectId)
 
     /**
      * Repair Mac-style absolute paths (e.g. `Macintosh HD:/Users/jay/...`) inside the project's
@@ -31,13 +39,15 @@ interface RepairRepository {
      * `/Users/` prefixes too, so this isn't unusual), the patcher is skipped and the journal
      * records `mappingCount = 0` / `alsOutcome = "NoChange"`. The finding still acks.
      */
-    suspend fun applyMacPathRepair(projectId: ProjectId): Result<Unit>
+    @Throws(SketchbookError::class)
+    suspend fun applyMacPathRepair(projectId: ProjectId)
 
     /** Drop a missing-sample finding from the queue without changing on-disk state. */
+    @Throws(SketchbookError::class)
     suspend fun dismissMissingSample(
         projectId: ProjectId,
         missingPath: String,
-    ): Result<Unit>
+    )
 
     /**
      * Map a missing sample to a candidate the user picked. The .als isn't rewritten here — the
@@ -46,11 +56,12 @@ interface RepairRepository {
      * the row drops out of Needs Attention; the next project parse will see the new path on
      * disk.
      */
+    @Throws(SketchbookError::class)
     suspend fun applyMissingSampleMatch(
         projectId: ProjectId,
         missingPath: String,
         candidatePath: String,
-    ): Result<Unit>
+    )
 
     /**
      * Reverse a previous [applyMissingSampleMatch]. PR-L L7's Undo pill calls this to undo a
@@ -62,11 +73,12 @@ interface RepairRepository {
      * never applied is a no-op on the catalog (the WHERE clause won't match) and only the
      * journal entry advances.
      */
+    @Throws(SketchbookError::class)
     suspend fun restoreMissingSampleMatch(
         projectId: ProjectId,
         missingPath: String,
         candidatePath: String,
-    ): Result<Unit>
+    )
 
     /**
      * Reverse a previous [applyMacPathRepair]. The on-disk `.als` is restored from the
@@ -78,7 +90,8 @@ interface RepairRepository {
      * that was already restored) is a no-op on the catalog and writes a `NoUndoBytes` journal
      * entry — the History column then has a record of the attempt either way.
      */
-    suspend fun restoreMacPathRepair(projectId: ProjectId): Result<Unit>
+    @Throws(SketchbookError::class)
+    suspend fun restoreMacPathRepair(projectId: ProjectId)
 }
 
 data class RepairFindings(

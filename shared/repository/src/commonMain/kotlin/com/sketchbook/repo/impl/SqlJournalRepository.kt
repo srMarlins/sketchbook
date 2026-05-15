@@ -49,12 +49,8 @@ class SqlJournalRepository(
             .mapToList(ioDispatcher)
             .map { rows -> rows.map(::toDomain) }
 
-    override suspend fun append(entry: JournalEntry): Result<JournalEntry> =
+    override suspend fun append(entry: JournalEntry): JournalEntry =
         withContext(ioDispatcher) {
-            // Don't use `runCatching` here: it catches `Throwable`, including
-            // `CancellationException`, which would silently break structured concurrency the
-            // moment anyone adds a suspend call inside the body. Pattern matches JvmScanner /
-            // McpServer: explicit re-throw of cancellation, Result.failure for everything else.
             try {
                 // Centralized denormalization: capture the project's current name + path at write
                 // time. Repository callers (project mutators, repair flows, MCP) never need to
@@ -90,49 +86,44 @@ class SqlJournalRepository(
                         )
                         catalog.catalogQueries.lastJournalEntryId().executeAsOne()
                     }
-                Result.success(
-                    entry.copy(
-                        sequence = newId,
-                        projectName = resolvedName,
-                        projectPath = resolvedPath,
-                    ),
+                entry.copy(
+                    sequence = newId,
+                    projectName = resolvedName,
+                    projectPath = resolvedPath,
                 )
             } catch (c: CancellationException) {
                 throw c
+            } catch (s: SketchbookError) {
+                throw s
             } catch (t: Throwable) {
-                Result.failure(t)
+                throw SketchbookError.IoFailure("journal append failed", t)
             }
         }
 
-    override suspend fun undoLast(): Result<JournalEntry> =
+    override suspend fun undoLast(): JournalEntry? =
         withContext(ioDispatcher) {
             // Insert + delete must not interleave with another append/undo: read the head and
             // delete it inside one transaction so undo against an empty journal is a clean
-            // miss rather than a TOCTOU between two callers. Same cancellation discipline as
-            // append: re-throw CancellationException, wrap everything else.
+            // miss rather than a TOCTOU between two callers.
             try {
-                val popped =
-                    catalog.transactionWithResult<JournalEntry?> {
-                        val row =
-                            catalog.catalogQueries
-                                .selectJournalRecent(limit_ = 1L)
-                                .executeAsOneOrNull()
-                        if (row == null) {
-                            null
-                        } else {
-                            catalog.catalogQueries.deleteJournalEntryById(row.id)
-                            toDomain(row)
-                        }
+                catalog.transactionWithResult<JournalEntry?> {
+                    val row =
+                        catalog.catalogQueries
+                            .selectJournalRecent(limit_ = 1L)
+                            .executeAsOneOrNull()
+                    if (row == null) {
+                        null
+                    } else {
+                        catalog.catalogQueries.deleteJournalEntryById(row.id)
+                        toDomain(row)
                     }
-                if (popped == null) {
-                    Result.failure(SketchbookError.NotFound("journal is empty"))
-                } else {
-                    Result.success(popped)
                 }
             } catch (c: CancellationException) {
                 throw c
+            } catch (s: SketchbookError) {
+                throw s
             } catch (t: Throwable) {
-                Result.failure(t)
+                throw SketchbookError.IoFailure("journal undoLast failed", t)
             }
         }
 

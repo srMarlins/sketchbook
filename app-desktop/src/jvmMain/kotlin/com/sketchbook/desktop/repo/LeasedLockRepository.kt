@@ -8,8 +8,10 @@ import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.cloud.metadata.RefreshResult
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.runCatchingCancellable
 import com.sketchbook.repo.ActionRecord
+import com.sketchbook.repo.ForceTakeOutcome
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
 import com.sketchbook.repo.LockRepository
@@ -110,9 +112,8 @@ class LeasedLockRepository(
 
     override fun observe(uuid: ProjectUuid): Flow<LockStatus> = get(uuid).status.asStateFlow()
 
-    override suspend fun forceTake(uuid: ProjectUuid): Result<Unit> {
-        val store = metadataStore() ?: return Result.failure(IllegalStateException("cloud not configured"))
-        val uid = userIdFlow.value ?: return Result.failure(IllegalStateException("signed out"))
+    override suspend fun forceTake(uuid: ProjectUuid): ForceTakeOutcome {
+        val (store, uid) = requireCloudContext()
         val per = get(uuid)
         val path = DocPath.lock(uid, uuid.value)
 
@@ -126,33 +127,29 @@ class LeasedLockRepository(
         // acceptable for force-take semantics: the user already accepted "I am racing the
         // current holder"; whoever lands their write last wins.
         runCatchingCancellable { store.releaseLockAsAnyone(path) }
-        when (
-            val acquired =
-                store.acquireLock(
-                    path = path,
-                    holder = hostId,
-                    ttl = leaseTtl,
-                    holderName = hostName,
-                )
-        ) {
-            AcquireResult.Acquired -> {
-                Unit
-            }
-
-            is AcquireResult.HeldByOther -> {
-                return Result.failure(
-                    IllegalStateException("force-take race: another host re-acquired the lock"),
-                )
-            }
-
-            is AcquireResult.Failed -> {
-                return Result.failure(acquired.cause)
-            }
+        when (val acquired = store.acquireLock(path, hostId, leaseTtl, hostName)) {
+            AcquireResult.Acquired -> Unit
+            is AcquireResult.HeldByOther -> return ForceTakeOutcome.RaceLost
+            is AcquireResult.Failed -> throw acquired.cause.asSketchbookError("forceTake failed")
         }
         startHeartbeat(uuid, per)
         recordForceTake(uuid, priorOwnerName, priorExpiresAtMs)
-        return Result.success(Unit)
+        return ForceTakeOutcome.Taken
     }
+
+    /**
+     * Resolve the two prerequisites for a cloud write: the [MetadataStore] (cloud configured)
+     * and the current user id (signed in). Throws [SketchbookError.IoFailure] with a precise
+     * message when either is missing.
+     */
+    private fun requireCloudContext(): Pair<MetadataStore, String> {
+        val store = metadataStore() ?: throw SketchbookError.IoFailure("cloud not configured")
+        val uid = userIdFlow.value ?: throw SketchbookError.IoFailure("signed out")
+        return store to uid
+    }
+
+    private fun Throwable.asSketchbookError(message: String): SketchbookError =
+        this as? SketchbookError ?: SketchbookError.IoFailure(message, this)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun startListener(

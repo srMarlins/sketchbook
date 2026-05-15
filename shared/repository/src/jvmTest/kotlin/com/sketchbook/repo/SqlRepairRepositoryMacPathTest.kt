@@ -232,9 +232,8 @@ class SqlRepairRepositoryMacPathTest {
             val (catalog, journal, repo) = setup(patcher)
             val projectId = seedMacImportProject(catalog, als)
 
-            val result = repo.applyMacPathRepair(projectId)
+            repo.applyMacPathRepair(projectId)
 
-            assertTrue(result.isSuccess, "applyMacPathRepair should succeed; was $result")
             assertEquals(1, patcher.calls, "patcher should be invoked exactly once")
             assertEquals(als.toString(), patcher.lastPath)
             // Mac-path repair routes through the rich SampleRefEdit overload (PR follow-up to PR #102).
@@ -287,8 +286,7 @@ class SqlRepairRepositoryMacPathTest {
             val (catalog, journal, repo) = setup(patcher)
             val projectId = seedMacImportProject(catalog, als)
 
-            val result = repo.applyMacPathRepair(projectId)
-            assertTrue(result.isSuccess)
+            repo.applyMacPathRepair(projectId)
 
             // Patcher was never invoked — empty mapping short-circuits.
             assertEquals(0, patcher.calls, "patcher should not be invoked when there's nothing to map")
@@ -324,8 +322,7 @@ class SqlRepairRepositoryMacPathTest {
             val (catalog, journal, repo) = setup(patcher)
             val projectId = seedMacImportProject(catalog, als)
 
-            val result = repo.applyMacPathRepair(projectId)
-            assertTrue(result.isSuccess, "should succeed even when patcher is busy; was $result")
+            repo.applyMacPathRepair(projectId)
 
             // File on disk is untouched.
             val text = ungzipToString(Files.readAllBytes(als))
@@ -442,7 +439,7 @@ class SqlRepairRepositoryMacPathTest {
             val (catalog, _, repo) = setup(patcher)
             val projectId = seedMacImportProject(catalog, als, macPathsCount = 1)
 
-            repo.applyMacPathRepair(projectId).getOrThrow()
+            repo.applyMacPathRepair(projectId)
 
             // Re-parse the rewritten file: path is POSIX-ified and OriginalCrc was zeroed (was 7866).
             val md = Files.newInputStream(als).use { AlsParser.parse(it) }

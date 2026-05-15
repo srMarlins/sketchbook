@@ -77,7 +77,7 @@ class RepairWorkflowTest {
                             projectId = miss.projectId,
                             missingPath = miss.missingPath,
                             candidatePath = miss.candidates.first().path,
-                        ).getOrThrow()
+                        )
                 }
                 while (true) {
                     val item = awaitItem()
@@ -85,7 +85,7 @@ class RepairWorkflowTest {
                 }
 
                 // Acknowledge the mac finding.
-                repair.acknowledgeMacImport(initial.macImports.single().projectId).getOrThrow()
+                repair.acknowledgeMacImport(initial.macImports.single().projectId)
                 while (true) {
                     val item = awaitItem()
                     if (item.macImports.isEmpty()) break

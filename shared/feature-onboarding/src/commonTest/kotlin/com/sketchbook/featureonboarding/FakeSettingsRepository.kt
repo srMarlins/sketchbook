@@ -1,6 +1,7 @@
 package com.sketchbook.featureonboarding
 
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SketchbookError
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.LibraryRoot
 import com.sketchbook.repo.OnboardingPromptKind
@@ -18,8 +19,8 @@ internal class FakeSettingsRepository(
             selfContainedProjects = emptySet(),
         ),
     /**
-     * Paths in this set will cause [upsertRoot] to return [Result.failure] without mutating the
-     * settings flow. The attempt is still recorded in [attemptedUpserts].
+     * Paths in this set will cause [upsertRoot] to throw [SketchbookError.IoFailure] without
+     * mutating the settings flow. The attempt is still recorded in [attemptedUpserts].
      */
     val failingPaths: Set<String> = emptySet(),
 ) : SettingsRepository {
@@ -28,7 +29,7 @@ internal class FakeSettingsRepository(
     /** Roots whose upsert succeeded. Mirrors the prior `upserts` field — kept for back-compat. */
     var upserts: MutableList<LibraryRoot> = mutableListOf()
 
-    /** Every upsert call recorded, including ones that returned [Result.failure]. */
+    /** Every upsert call recorded, including ones that failed. */
     var attemptedUpserts: MutableList<LibraryRoot> = mutableListOf()
     var removals: MutableList<LibraryRoot> = mutableListOf()
     var pluginFolderWrites: MutableList<List<String>> = mutableListOf()
@@ -40,54 +41,49 @@ internal class FakeSettingsRepository(
 
     override fun observe(): Flow<Settings> = flow
 
-    override suspend fun upsertRoot(root: LibraryRoot): Result<Unit> {
+    override suspend fun upsertRoot(root: LibraryRoot) {
         attemptedUpserts += root
         if (root.path in failingPaths) {
-            return Result.failure(IllegalStateException("simulated failure for ${root.path}"))
+            throw SketchbookError.IoFailure("simulated failure for ${root.path}")
         }
         upserts += root
         flow.value = flow.value.copy(libraryRoots = (flow.value.libraryRoots + root).distinct())
-        return Result.success(Unit)
     }
 
-    override suspend fun removeRoot(root: LibraryRoot): Result<Unit> {
+    override suspend fun removeRoot(root: LibraryRoot) {
         removals += root
         flow.value = flow.value.copy(libraryRoots = flow.value.libraryRoots - root)
-        return Result.success(Unit)
     }
 
     override suspend fun setSelfContained(
         uuid: ProjectUuid,
         value: Boolean,
-    ): Result<Unit> = Result.success(Unit)
+    ) = Unit
 
-    override suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit> = Result.success(Unit)
+    override suspend fun setCacheSettings(settings: BlobCacheSettings) = Unit
 
-    override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit> {
+    override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) {
         markCompleteCalls += skipFlags
         flow.value =
             flow.value.copy(
                 firstRunCompletedAt = Clock.System.now(),
                 onboardingSkipped = skipFlags,
             )
-        return Result.success(Unit)
     }
 
-    override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> = Result.success(Unit)
+    override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) = Unit
 
-    override suspend fun setPluginFolders(folders: List<String>): Result<Unit> {
+    override suspend fun setPluginFolders(folders: List<String>) {
         pluginFolderWrites += folders
         flow.value = flow.value.copy(pluginFolders = folders)
-        return Result.success(Unit)
     }
 
-    override suspend fun resetFirstRun(): Result<Unit> {
+    override suspend fun resetFirstRun() {
         flow.value =
             flow.value.copy(
                 firstRunCompletedAt = null,
                 onboardingSkipped = OnboardingSkipFlags(),
             )
-        return Result.success(Unit)
     }
 }
 

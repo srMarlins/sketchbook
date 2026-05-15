@@ -65,9 +65,9 @@ class SqlJournalRepositoryTest {
     fun appendAssignsAscendingSequenceValues() =
         runTest {
             val (_, repo) = setup()
-            val a = repo.append(entry(offsetMs = 0L)).getOrThrow()
-            val b = repo.append(entry(offsetMs = 1L)).getOrThrow()
-            val c = repo.append(entry(offsetMs = 2L)).getOrThrow()
+            val a = repo.append(entry(offsetMs = 0L))
+            val b = repo.append(entry(offsetMs = 1L))
+            val c = repo.append(entry(offsetMs = 2L))
 
             val seqA = assertNotNull(a.sequence)
             val seqB = assertNotNull(b.sequence)
@@ -82,9 +82,9 @@ class SqlJournalRepositoryTest {
             val (catalog, repo) = setup()
             repo.append(entry(offsetMs = 0L, projectId = 1L))
             repo.append(entry(offsetMs = 1_000L, projectId = 2L))
-            val newest = repo.append(entry(offsetMs = 2_000L, projectId = 3L)).getOrThrow()
+            val newest = repo.append(entry(offsetMs = 2_000L, projectId = 3L))
 
-            val popped = repo.undoLast().getOrThrow()
+            val popped = assertNotNull(repo.undoLast())
             assertEquals(newest.sequence, popped.sequence)
             assertEquals(ProjectId(3L), popped.projectId)
 
@@ -99,16 +99,10 @@ class SqlJournalRepositoryTest {
         }
 
     @Test
-    fun undoLastOnEmptyReturnsNotFound() =
+    fun undoLastOnEmptyReturnsNull() =
         runTest {
             val (_, repo) = setup()
-            val result = repo.undoLast()
-            assertTrue(result.isFailure)
-            val error = result.exceptionOrNull()
-            assertTrue(
-                error is SketchbookError.NotFound,
-                "expected NotFound, got ${error?.let { it::class.simpleName }}: ${error?.message}",
-            )
+            assertNull(repo.undoLast())
         }
 
     @Test
@@ -179,7 +173,7 @@ class SqlJournalRepositoryTest {
             assertEquals(1L, rows[2].project_id)
 
             // undoLast reads the same head, so it pops project 3.
-            val popped = repo.undoLast().getOrThrow()
+            val popped = assertNotNull(repo.undoLast())
             assertEquals(ProjectId(3L), popped.projectId)
         }
 
@@ -218,7 +212,7 @@ class SqlJournalRepositoryTest {
                 repo
                     .append(
                         entry(offsetMs = 0L, projectId = projectId, action = ActionRecord.MacPathRepaired(2, "Patched")),
-                    ).getOrThrow()
+                    )
 
             assertEquals("Hot Track", appended.projectName)
             assertEquals("/lib/Hot Track.als", appended.projectPath)
@@ -243,7 +237,7 @@ class SqlJournalRepositoryTest {
                             projectPath = "/lib/Stale Track.als",
                             action = ActionRecord.MacPathRepaired(1, "Patched"),
                         ),
-                    ).getOrThrow()
+                    )
 
             assertEquals("Stale Track", appended.projectName)
             assertEquals("/lib/Stale Track.als", appended.projectPath)
@@ -262,8 +256,8 @@ class SqlJournalRepositoryTest {
     fun actorDefaultsToUserButCustomValueIsPersisted() =
         runTest {
             val (_, repo) = setup()
-            val defaulted = repo.append(entry(offsetMs = 0L, projectId = 1L)).getOrThrow()
-            val custom = repo.append(entry(offsetMs = 1_000L, projectId = 2L, actor = "sketchbook")).getOrThrow()
+            val defaulted = repo.append(entry(offsetMs = 0L, projectId = 1L))
+            val custom = repo.append(entry(offsetMs = 1_000L, projectId = 2L, actor = "sketchbook"))
 
             assertEquals("user", defaulted.actor)
             assertEquals("sketchbook", custom.actor)

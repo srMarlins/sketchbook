@@ -103,20 +103,20 @@ private class FakeSettingsRepository(
 
     override fun observe(): Flow<Settings> = flow
 
-    override suspend fun upsertRoot(root: LibraryRoot) = Result.success(Unit)
+    override suspend fun upsertRoot(root: LibraryRoot) = Unit
 
-    override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
+    override suspend fun removeRoot(root: LibraryRoot) = Unit
 
     override suspend fun setSelfContained(
         uuid: ProjectUuid,
         value: Boolean,
-    ) = Result.success(Unit)
+    ) = Unit
 
-    override suspend fun setCacheSettings(settings: BlobCacheSettings) = Result.success(Unit)
+    override suspend fun setCacheSettings(settings: BlobCacheSettings) = Unit
 
-    override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Result.success(Unit)
+    override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Unit
 
-    override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit> {
+    override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) {
         dismissed += kind
         val current = flow.value.onboardingSkipped
         val updated =
@@ -124,17 +124,15 @@ private class FakeSettingsRepository(
                 OnboardingPromptKind.Samples -> current.copy(samplesPromptDismissed = true)
             }
         flow.value = flow.value.copy(onboardingSkipped = updated)
-        return Result.success(Unit)
     }
 
-    override suspend fun setPluginFolders(folders: List<String>) = Result.success(Unit)
+    override suspend fun setPluginFolders(folders: List<String>) = Unit
 
-    override suspend fun resetFirstRun(): Result<Unit> {
+    override suspend fun resetFirstRun() {
         flow.value =
             flow.value.copy(
                 firstRunCompletedAt = null,
                 onboardingSkipped = OnboardingSkipFlags(),
             )
-        return Result.success(Unit)
     }
 }

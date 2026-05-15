@@ -1,8 +1,10 @@
 package com.sketchbook.repo
 
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.Snapshot
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.runCatchingCancellable
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -15,35 +17,43 @@ interface SnapshotRepository {
 
     /**
      * Persist a snapshot row from a manifest (or a locally-just-uploaded one). Idempotent —
-     * an existing `(uuid, rev)` is a no-op.
+     * an existing `(uuid, rev)` is a no-op. Throws [SketchbookError.IoFailure] on catalog write
+     * failure.
      */
+    @Throws(SketchbookError::class)
     suspend fun recordSnapshot(
         snapshot: Snapshot,
         manifestPath: String,
         manifestHash: String,
-    ): Result<Unit>
+    )
 
     /**
-     * Materialize a project's working tree at the given rev. The actual sync work lives in the
-     * sync engine (PR-9); this is the entry point repositories expose to the UI.
+     * Materialize a project's working tree at the given rev. Returns a sealed
+     * [MaterializeOutcome]: `Materialized` on full laydown, `WorkingTreeBusy(paths)` when one or
+     * more destination files are held open by Ableton (caller decides whether to surface the
+     * "close in Ableton and retry" message). Throws [SketchbookError.IoFailure] on transport /
+     * disk failures, `IntegrityError` on manifest checksum mismatch, etc.
      */
+    @Throws(SketchbookError::class)
     suspend fun materializeAt(
         uuid: ProjectUuid,
         rev: SnapshotRev,
-    ): Result<Unit>
+    ): MaterializeOutcome
 
     /**
      * PR-Z Z1: edit the human-readable label on a snapshot row. Side-effect: promotes `kind` to
      * `Named` so the row stops being a candidate for auto-coalescing (matches PR-O O4 semantics).
      * [label] may be `null` or `""` to clear; both forms persist as `NULL`/`""` respectively per
      * the SQL column. Implementations append a [JournalEntry] with [ActionRecord.SnapshotRelabeled]
-     * so the audit log captures the edit.
+     * so the audit log captures the edit. Throws [SketchbookError.NotFound] when the snapshot
+     * doesn't exist.
      */
+    @Throws(SketchbookError::class)
     suspend fun setSnapshotLabel(
         uuid: ProjectUuid,
         rev: SnapshotRev,
         label: String?,
-    ): Result<JournalEntry>
+    ): JournalEntry
 
     /**
      * Streaming variant of [materializeAt] for the rewind/restore UI: emits per-stage progress
@@ -57,33 +67,45 @@ interface SnapshotRepository {
     ): Flow<MaterializationProgress> =
         kotlinx.coroutines.flow.flow {
             emit(MaterializationProgress.Started(uuid, rev))
-            val r = materializeAt(uuid, rev)
-            if (r.isSuccess) {
-                emit(MaterializationProgress.Done(uuid, rev))
-            } else {
-                emit(MaterializationProgress.Failed(uuid, rev, friendlyReason(r.exceptionOrNull())))
-            }
+            val r = runCatchingCancellable { materializeAt(uuid, rev) }
+            r
+                .onSuccess { outcome ->
+                    when (outcome) {
+                        MaterializeOutcome.Materialized -> {
+                            emit(MaterializationProgress.Done(uuid, rev))
+                        }
+
+                        is MaterializeOutcome.WorkingTreeBusy -> {
+                            emit(MaterializationProgress.Failed(uuid, rev, "Close the project in Ableton, then try again."))
+                        }
+                    }
+                }.onFailure { cause ->
+                    emit(MaterializationProgress.Failed(uuid, rev, cause.message ?: "materialize failed"))
+                }
         }
 }
 
 /**
- * Human-friendly failure reason for the rewind UI. The busy case is matched by simple class
- * name so commonMain doesn't have to depend on the JVM-only `WorkingTreeBusyException` type.
+ * Domain outcomes for [SnapshotRepository.materializeAt] / `ManifestMaterializer.materialize`.
+ *
+ * `WorkingTreeBusy` is a meaningful branch — when Ableton has one or more destination files
+ * open on Windows, the Rewind UI shows a dedicated "Close the project in Live and retry" hint
+ * naming the files. Other failures throw a [SketchbookError] subtype so they surface as a
+ * generic error toast.
  */
-private fun friendlyReason(cause: Throwable?): String =
-    when {
-        cause == null -> {
-            "materialize failed"
-        }
+sealed interface MaterializeOutcome {
+    /** Full laydown completed; the working tree is at the requested rev. */
+    data object Materialized : MaterializeOutcome
 
-        cause::class.simpleName == "WorkingTreeBusyException" -> {
-            "Close the project in Ableton, then try again."
-        }
-
-        else -> {
-            cause.message ?: "materialize failed"
-        }
-    }
+    /**
+     * One or more files were held open by another process (typically Ableton Live on Windows).
+     * The materializer aborted before touching disk so the working tree is unchanged. [paths]
+     * lists the busy files (relative to the project root); the UI can surface them.
+     */
+    data class WorkingTreeBusy(
+        val paths: List<String>,
+    ) : MaterializeOutcome
+}
 
 sealed interface MaterializationProgress {
     val uuid: ProjectUuid

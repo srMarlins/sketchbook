@@ -160,9 +160,11 @@ class RootChromeViewModel(
     /** Optional friendly message for the per-project conflict surface. */
     fun conflictMessage(id: ProjectId): String? = syncImpl?.conflictMessage(id)
 
-    /** Trigger an immediate push for one project. No-op without cloud. */
-    suspend fun pushNow(id: ProjectId): Result<Unit> =
-        syncImpl?.pushNowById(id) ?: Result.failure(IllegalStateException("Cloud not configured"))
+    /** Trigger an immediate push for one project. Throws when cloud isn't configured. */
+    suspend fun pushNow(id: ProjectId): com.sketchbook.repo.PushNowOutcome =
+        syncImpl?.pushNowById(id)
+            ?: throw com.sketchbook.core.SketchbookError
+                .IoFailure("Cloud not configured")
 
     /** Translate the local id used everywhere in the UI to the cloud-stable [ProjectUuid]. */
     fun timelineUuidFor(id: ProjectId): ProjectUuid = syncStateStore.identityFor(id)

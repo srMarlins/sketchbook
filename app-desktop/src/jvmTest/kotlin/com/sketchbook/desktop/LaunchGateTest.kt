@@ -62,24 +62,24 @@ class LaunchGateTest {
 
         override fun observe(): Flow<Settings> = flow
 
-        override suspend fun upsertRoot(root: LibraryRoot) = Result.success(Unit)
+        override suspend fun upsertRoot(root: LibraryRoot) = Unit
 
-        override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
+        override suspend fun removeRoot(root: LibraryRoot) = Unit
 
         override suspend fun setSelfContained(
             uuid: ProjectUuid,
             value: Boolean,
-        ) = Result.success(Unit)
+        ) = Unit
 
-        override suspend fun setCacheSettings(settings: BlobCacheSettings) = Result.success(Unit)
+        override suspend fun setCacheSettings(settings: BlobCacheSettings) = Unit
 
-        override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Result.success(Unit)
+        override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Unit
 
-        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) = Result.success(Unit)
+        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) = Unit
 
-        override suspend fun setPluginFolders(folders: List<String>) = Result.success(Unit)
+        override suspend fun setPluginFolders(folders: List<String>) = Unit
 
-        override suspend fun resetFirstRun() = Result.success(Unit)
+        override suspend fun resetFirstRun() = Unit
     }
 
     /**
@@ -106,23 +106,23 @@ class LaunchGateTest {
 
         override fun observe(): Flow<Settings> = flow
 
-        override suspend fun upsertRoot(root: LibraryRoot) = Result.success(Unit)
+        override suspend fun upsertRoot(root: LibraryRoot) = Unit
 
-        override suspend fun removeRoot(root: LibraryRoot) = Result.success(Unit)
+        override suspend fun removeRoot(root: LibraryRoot) = Unit
 
         override suspend fun setSelfContained(
             uuid: ProjectUuid,
             value: Boolean,
-        ) = Result.success(Unit)
+        ) = Unit
 
-        override suspend fun setCacheSettings(settings: BlobCacheSettings) = Result.success(Unit)
+        override suspend fun setCacheSettings(settings: BlobCacheSettings) = Unit
 
-        override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Result.success(Unit)
+        override suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags) = Unit
 
-        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) = Result.success(Unit)
+        override suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind) = Unit
 
-        override suspend fun setPluginFolders(folders: List<String>) = Result.success(Unit)
+        override suspend fun setPluginFolders(folders: List<String>) = Unit
 
-        override suspend fun resetFirstRun() = Result.success(Unit)
+        override suspend fun resetFirstRun() = Unit
     }
 }

@@ -80,30 +80,28 @@ class ProjectListViewModelTest {
         override suspend fun move(
             id: ProjectId,
             newParentDir: String,
-        ): Result<JournalEntry> = stub()
+        ): JournalEntry = stub()
 
         override suspend fun rename(
             id: ProjectId,
             newName: String,
-        ): Result<JournalEntry> = stub()
+        ): JournalEntry = stub()
 
         override suspend fun archive(
             id: ProjectId,
             archived: Boolean,
-        ): Result<JournalEntry> = stub()
+        ): JournalEntry = stub()
 
         override suspend fun setTags(
             id: ProjectId,
             tags: List<String>,
-        ): Result<JournalEntry> = stub()
+        ): JournalEntry = stub()
 
         private fun stub() =
-            Result.success(
-                JournalEntry(
-                    timestamp = Instant.parse("2026-05-05T12:00:00Z"),
-                    projectId = ProjectId(1),
-                    action = ActionRecord.Archive(false, true),
-                ),
+            JournalEntry(
+                timestamp = Instant.parse("2026-05-05T12:00:00Z"),
+                projectId = ProjectId(1),
+                action = ActionRecord.Archive(false, true),
             )
     }
 

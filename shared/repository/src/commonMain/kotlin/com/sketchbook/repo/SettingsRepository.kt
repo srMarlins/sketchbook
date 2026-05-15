@@ -1,6 +1,7 @@
 package com.sketchbook.repo
 
 import com.sketchbook.core.ProjectUuid
+import com.sketchbook.core.SketchbookError
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -12,40 +13,51 @@ import kotlinx.coroutines.flow.Flow
  * (Splice / Factory / personal sample drives) — never synced, but referenced via
  * `<alias>://<rel>` paths in manifests so a project that imports a Splice loop on Mac plays back
  * on Windows after the alias map is configured per-host.
+ *
+ * **Error contract.** All mutator methods throw [SketchbookError.IoFailure] on a persistence
+ * error (prefs backing-store, keychain, disk). `CancellationException` propagates. See
+ * `docs/plans/2026-05-12-result-refactor-design.md` for the rationale.
  */
 interface SettingsRepository {
     fun observe(): Flow<Settings>
 
-    suspend fun upsertRoot(root: LibraryRoot): Result<Unit>
+    @Throws(SketchbookError.IoFailure::class)
+    suspend fun upsertRoot(root: LibraryRoot)
 
-    suspend fun removeRoot(root: LibraryRoot): Result<Unit>
+    @Throws(SketchbookError.IoFailure::class)
+    suspend fun removeRoot(root: LibraryRoot)
 
+    @Throws(SketchbookError.IoFailure::class)
     suspend fun setSelfContained(
         uuid: ProjectUuid,
         value: Boolean,
-    ): Result<Unit>
+    )
 
-    suspend fun setCacheSettings(settings: BlobCacheSettings): Result<Unit>
+    @Throws(SketchbookError.IoFailure::class)
+    suspend fun setCacheSettings(settings: BlobCacheSettings)
 
     /**
      * Marks onboarding complete with the given [skipFlags]. Atomic: `firstRunCompletedAt` and
      * `onboardingSkipped` are emitted together so observers never see one without the other.
      * After this call, `LaunchGate.resolve()` returns `MainApp`.
      */
-    suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags): Result<Unit>
+    @Throws(SketchbookError.IoFailure::class)
+    suspend fun markFirstRunComplete(skipFlags: OnboardingSkipFlags)
 
     /**
      * Sticky-dismisses the soft re-prompt banner for [kind]. After dismissal, the corresponding
      * banner does not reappear; the user can still re-discover the deferred setting via Settings.
      */
-    suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind): Result<Unit>
+    @Throws(SketchbookError.IoFailure::class)
+    suspend fun dismissOnboardingPrompt(kind: OnboardingPromptKind)
 
     /**
      * Replaces the user-configured plugin install directories. Paths are normalized (absolute,
      * distinct, blanks dropped) on write. Empty list = use platform defaults (the JVM presence
      * probe falls back to `defaultInstalledDirs()`).
      */
-    suspend fun setPluginFolders(folders: List<String>): Result<Unit>
+    @Throws(SketchbookError.IoFailure::class)
+    suspend fun setPluginFolders(folders: List<String>)
 
     /**
      * Dev-only escape hatch. Resets `firstRunCompletedAt` and `onboardingSkipped` to defaults so
@@ -53,7 +65,8 @@ interface SettingsRepository {
      * CLI flag in the desktop app. Does NOT touch library roots, plugin folders, or other
      * settings — only the onboarding gate state.
      */
-    suspend fun resetFirstRun(): Result<Unit>
+    @Throws(SketchbookError.IoFailure::class)
+    suspend fun resetFirstRun()
 }
 
 enum class OnboardingPromptKind { Samples }

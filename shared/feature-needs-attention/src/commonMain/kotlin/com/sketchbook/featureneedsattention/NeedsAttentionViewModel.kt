@@ -122,7 +122,7 @@ class NeedsAttentionViewModel(
 
             is Intent.AckMacImport -> {
                 viewModelScope.launch {
-                    val r = repository.acknowledgeMacImport(intent.projectId)
+                    val r = runCatchingCancellable { repository.acknowledgeMacImport(intent.projectId) }
                     emitAck(r.isSuccess, intent.projectId.value.toString(), "ack")
                 }
             }
@@ -130,9 +130,7 @@ class NeedsAttentionViewModel(
             is Intent.RepairMacPaths -> {
                 viewModelScope.launch {
                     pending.update { it.copy(macRepairs = it.macRepairs + intent.projectId) }
-                    val r =
-                        runCatchingCancellable { repository.applyMacPathRepair(intent.projectId) }
-                            .getOrElse { Result.failure(it) }
+                    val r = runCatchingCancellable { repository.applyMacPathRepair(intent.projectId) }
                     if (r.isSuccess) {
                         // Auto-cleanup will drop pending once the row leaves macImports.
                         _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
@@ -145,7 +143,7 @@ class NeedsAttentionViewModel(
 
             is Intent.DismissMissingSample -> {
                 viewModelScope.launch {
-                    val r = repository.dismissMissingSample(intent.projectId, intent.missingPath)
+                    val r = runCatchingCancellable { repository.dismissMissingSample(intent.projectId, intent.missingPath) }
                     emitAck(r.isSuccess, intent.projectId.value.toString(), "dismiss")
                 }
             }
@@ -161,7 +159,7 @@ class NeedsAttentionViewModel(
                                 missingPath = intent.missingPath,
                                 candidatePath = intent.candidatePath,
                             )
-                        }.getOrElse { Result.failure(it) }
+                        }
                     if (r.isSuccess) {
                         _effects.tryEmit(Effect.MatchApplied(intent.projectId.value.toString()))
                     } else {
@@ -176,9 +174,7 @@ class NeedsAttentionViewModel(
                     val successes = mutableListOf<String>()
                     val failures = mutableListOf<String>()
                     for (id in intent.projectIds) {
-                        val r =
-                            runCatchingCancellable { repository.acknowledgeMacImport(id) }
-                                .getOrElse { Result.failure(it) }
+                        val r = runCatchingCancellable { repository.acknowledgeMacImport(id) }
                         val k = id.value.toString()
                         if (r.isSuccess) successes += k else failures += k
                     }
@@ -192,9 +188,7 @@ class NeedsAttentionViewModel(
                     val successes = mutableListOf<String>()
                     val failures = mutableListOf<String>()
                     for (id in intent.projectIds) {
-                        val r =
-                            runCatchingCancellable { repository.applyMacPathRepair(id) }
-                                .getOrElse { Result.failure(it) }
+                        val r = runCatchingCancellable { repository.applyMacPathRepair(id) }
                         val k = id.value.toString()
                         if (r.isSuccess) {
                             successes += k
@@ -225,7 +219,7 @@ class NeedsAttentionViewModel(
                         val r =
                             runCatchingCancellable {
                                 repository.applyMissingSampleMatch(f.projectId, f.missingPath, auto.path)
-                            }.getOrElse { Result.failure(it) }
+                            }
                         if (r.isSuccess) {
                             successes += resultKey
                         } else {
@@ -245,7 +239,7 @@ class NeedsAttentionViewModel(
                         val r =
                             runCatchingCancellable {
                                 repository.dismissMissingSample(f.projectId, f.missingPath)
-                            }.getOrElse { Result.failure(it) }
+                            }
                         val k = "${f.projectId.value}|${f.missingPath}"
                         if (r.isSuccess) successes += k else failures += k
                     }

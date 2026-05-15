@@ -62,22 +62,23 @@ class ProposalsViewModelTest {
 
         override fun observe(): Flow<List<Proposal>> = flow
 
-        override suspend fun approve(proposalId: String): Result<Proposal> {
+        override suspend fun approve(proposalId: String): com.sketchbook.repo.ApproveOutcome {
             if (failNext) {
                 failNext = false
-                return Result.failure<Proposal>(IllegalStateException("approve boom"))
+                throw IllegalStateException("approve boom")
             }
             approved = proposalId
             val updated = flow.value.map { if (it.proposalId == proposalId) it.copy(status = ProposalStatus.Approved) else it }
             flow.value = updated
-            return Result.success(updated.first { it.proposalId == proposalId })
+            return com.sketchbook.repo.ApproveOutcome
+                .Approved(updated.first { it.proposalId == proposalId })
         }
 
-        override suspend fun reject(proposalId: String): Result<Unit> {
+        override suspend fun reject(proposalId: String): com.sketchbook.repo.RejectOutcome {
             rejected = proposalId
             val updated = flow.value.map { if (it.proposalId == proposalId) it.copy(status = ProposalStatus.Rejected) else it }
             flow.value = updated
-            return Result.success(Unit)
+            return com.sketchbook.repo.RejectOutcome.Rejected
         }
     }
 

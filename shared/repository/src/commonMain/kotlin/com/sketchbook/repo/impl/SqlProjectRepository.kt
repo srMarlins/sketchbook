@@ -268,7 +268,7 @@ class SqlProjectRepository(
     override suspend fun move(
         id: ProjectId,
         newParentDir: String,
-    ): Result<JournalEntry> =
+    ): JournalEntry =
         mutate(id) { row ->
             val pathBefore = row.path
             val newPath = "$newParentDir/${row.name}.als"
@@ -283,7 +283,7 @@ class SqlProjectRepository(
     override suspend fun rename(
         id: ProjectId,
         newName: String,
-    ): Result<JournalEntry> =
+    ): JournalEntry =
         mutate(id) { row ->
             val nameBefore = row.name
             val newPath = row.path.substringBeforeLast('/') + "/$newName.als"
@@ -298,7 +298,7 @@ class SqlProjectRepository(
     override suspend fun archive(
         id: ProjectId,
         archived: Boolean,
-    ): Result<JournalEntry> =
+    ): JournalEntry =
         mutate(id) { row ->
             val wasArchived = row.is_archived != 0L
             // Direct UPDATE rather than insertOrReplace (avoids re-writing every column).
@@ -311,7 +311,7 @@ class SqlProjectRepository(
     override suspend fun setStageOverride(
         id: ProjectId,
         stage: Stage?,
-    ): Result<JournalEntry> =
+    ): JournalEntry =
         mutate(id) { row ->
             val before = row.stage_override
             val inferred = row.stage_inferred
@@ -329,13 +329,10 @@ class SqlProjectRepository(
     override suspend fun setTags(
         id: ProjectId,
         tags: List<String>,
-    ): Result<JournalEntry> {
-        return withContext(ioDispatcher) {
-            val row =
-                catalog.catalogQueries.selectProjectById(id.value).executeAsOneOrNull()
-                    ?: return@withContext Result.failure<JournalEntry>(
-                        SketchbookError.NotFound("project $id not found"),
-                    )
+    ): JournalEntry =
+        withContext(ioDispatcher) {
+            catalog.catalogQueries.selectProjectById(id.value).executeAsOneOrNull()
+                ?: throw SketchbookError.NotFound("project $id not found")
             val before = catalog.catalogQueries.selectTagsForProject(id.value).executeAsList()
             catalog.transaction {
                 catalog.catalogQueries.clearTagsForProject(id.value)
@@ -353,18 +350,15 @@ class SqlProjectRepository(
             ftsTrigger.update { it + 1 }
             journal.append(entry)
         }
-    }
 
     private suspend inline fun mutate(
         id: ProjectId,
         crossinline build: (com.sketchbook.catalog.db.Projects) -> ActionRecord,
-    ): Result<JournalEntry> {
-        return withContext(ioDispatcher) {
+    ): JournalEntry =
+        withContext(ioDispatcher) {
             val row =
                 catalog.catalogQueries.selectProjectById(id.value).executeAsOneOrNull()
-                    ?: return@withContext Result.failure<JournalEntry>(
-                        SketchbookError.NotFound("project $id not found"),
-                    )
+                    ?: throw SketchbookError.NotFound("project $id not found")
             val record = catalog.transactionWithResult<ActionRecord> { build(row) }
             ftsTrigger.update { it + 1 }
             journal.append(
@@ -375,7 +369,6 @@ class SqlProjectRepository(
                 ),
             )
         }
-    }
 
     private fun loadByIds(ids: List<Long>): Flow<List<ProjectRow>> {
         // Batch fetch + preserve relevance order from the FTS list. Tags are joined via the
