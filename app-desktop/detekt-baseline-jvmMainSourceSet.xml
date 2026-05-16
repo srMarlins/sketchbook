@@ -43,6 +43,10 @@
     <ID>FunctionNaming:RootContent.kt:@Composable private fun SyncPill</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun TagsEditorRow</ID>
     <ID>FunctionNaming:RootContent.kt:@Composable private fun VersionRow</ID>
+    <ID>FunctionNaming:UserMessageHost.kt:@Composable fun UserMessageHost</ID>
+    <ID>FunctionNaming:UserMessageHost.kt:@Composable private fun BannerRow</ID>
+    <ID>FunctionNaming:UserMessageHost.kt:@Composable private fun BannerStack</ID>
+    <ID>FunctionNaming:UserMessageHost.kt:@Composable private fun SnackbarRow</ID>
     <ID>FunctionParameterNaming:RootContent.kt:override_: com.sketchbook.core.Stage?</ID>
     <ID>LongMethod:InboxScreen.kt:@Composable fun InboxScreen</ID>
     <ID>LongMethod:InboxScreen.kt:@Composable internal fun InboxContent</ID>

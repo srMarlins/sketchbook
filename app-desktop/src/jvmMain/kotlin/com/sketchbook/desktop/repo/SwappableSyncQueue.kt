@@ -11,6 +11,7 @@ import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
 import com.sketchbook.core.UserId
+import com.sketchbook.core.UserMessageBus
 import com.sketchbook.desktop.auth.FirebaseCloudCredentials
 import com.sketchbook.repo.BlobCacheSettings
 import com.sketchbook.repo.JournalRepository
@@ -69,6 +70,7 @@ class SwappableSyncQueue(
     private val journal: JournalRepository? = null,
     private val httpClient: HttpClient,
     private val metadataStore: MetadataStore,
+    private val userMessageBus: UserMessageBus? = null,
 ) : SyncQueue,
     ForceSnapshotPipeline {
     private val fallback = InMemorySyncQueue(projects = projects, scope = scope)
@@ -187,6 +189,7 @@ class SwappableSyncQueue(
                 projects = projects,
                 scope = scope,
                 journal = journal,
+                bus = userMessageBus,
             )
         } catch (c: CancellationException) {
             throw c

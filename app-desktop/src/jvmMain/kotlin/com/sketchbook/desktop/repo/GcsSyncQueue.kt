@@ -3,13 +3,18 @@ package com.sketchbook.desktop.repo
 import com.sketchbook.catalog.SyncStateStore
 import com.sketchbook.cloud.CloudBackend
 import com.sketchbook.cloud.Generation
+import com.sketchbook.core.BannerKey
+import com.sketchbook.core.ErrorContext
 import com.sketchbook.core.ProjectId
 import com.sketchbook.core.ProjectRow
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SketchbookError
 import com.sketchbook.core.SnapshotKind
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.UserMessage
+import com.sketchbook.core.UserMessageBus
 import com.sketchbook.core.runCatchingCancellable
+import com.sketchbook.core.toUserMessage
 import com.sketchbook.repo.ActionRecord
 import com.sketchbook.repo.JournalEntry
 import com.sketchbook.repo.JournalRepository
@@ -76,6 +81,11 @@ class GcsSyncQueue(
      * scheduler so virtual time stays in lockstep with the loop's cloud calls.
      */
     private val ioDispatcher: kotlin.coroutines.CoroutineContext = Dispatchers.IO,
+    /**
+     * App-global user-message bus. Nullable so drain unit tests can construct the queue without
+     * wiring an entire DI graph; production always passes the singleton from [DesktopAppGraph].
+     */
+    private val bus: UserMessageBus? = null,
 ) : SyncQueue,
     ForceSnapshotPipeline {
     private val uploading = MutableStateFlow<Set<ProjectUuid>>(emptySet())
@@ -299,6 +309,7 @@ class GcsSyncQueue(
             val finalKind = savedKind
             return if (finalRev != null && finalKind != null) {
                 withContext(ioDispatcher) { syncState.markSynced(uuid, finalRev) }
+                notifyPushSucceeded()
                 // A saved branch means our push CAS-failed and we wrote a fork — surface it as
                 // Conflict with an inline message so the user can pull + re-push.
                 if (finalKind == SnapshotKind.Branch) {
@@ -312,20 +323,58 @@ class GcsSyncQueue(
                 Result.success(PipelineRunOutcome(SnapshotRev(finalRev), finalKind))
             } else {
                 conflicts.value = conflicts.value + uuid
-                conflictMessages.value = conflictMessages.value + (
-                    uuid to
-                        (failureReason ?: "Push failed — retry or check Settings → Cloud.")
-                )
+                val msg = failureReason ?: "Push failed — retry or check Settings → Cloud."
+                conflictMessages.value = conflictMessages.value + (uuid to msg)
+                notifyPushFailed(msg)
                 Result.failure(IllegalStateException(failureReason ?: "pipeline did not complete"))
             }
+        } catch (c: kotlin.coroutines.cancellation.CancellationException) {
+            // Cooperative cancellation — must propagate. Swallowing here would defeat the drain's
+            // collectLatest replacement semantics and produce a bogus "something went wrong"
+            // snackbar for a cancellation the system itself initiated.
+            throw c
         } catch (t: Throwable) {
             // Plain throwable = transient (network, IO, GCS 5xx). Do NOT add to `conflicts` —
             // that's reserved for CAS-divergence which the user has to resolve. Drain treats
             // these as backoff candidates and keeps retrying forever per spec.
+            notifyPushThrew(t)
             return Result.failure(t)
         } finally {
             uploading.value = uploading.value - uuid
         }
+    }
+
+    /**
+     * Successful push proves network is reachable, so we own retraction of [BannerKey.Offline] —
+     * Sketchbook has no separate network-state observer; sync requests *are* the liveness probe.
+     *
+     * We deliberately do NOT retract [BannerKey.AuthExpired] here. A 200 on this request says
+     * the bearer was valid *at the moment it left*, not that the refresh-token chain is healthy:
+     * the next token swap can still fail with the same 401 the worker observed mid-flight.
+     * Retraction belongs to the subsystem that owns the auth condition — the auth-refresh
+     * observer to be added in the follow-up (step 9 of the chrome plan). Until then, banners
+     * carry a "Dismiss" affordance so a stuck AuthExpired banner has a manual escape hatch.
+     */
+    private fun notifyPushSucceeded() {
+        bus?.retractBanner(BannerKey.Offline)
+    }
+
+    /**
+     * Pipeline reported [SnapshotProgress.Failed] without a save. The per-uuid conflict caption
+     * is already set on the detail panel, but the user may be elsewhere — fan a global snackbar
+     * so the failure isn't silent.
+     */
+    private fun notifyPushFailed(message: String) {
+        bus?.emit(UserMessage.Snackbar(text = message))
+    }
+
+    /**
+     * Throwable escaped the pipeline (network, IO, GCS 5xx). The typed mapper picks the right
+     * severity — offline → banner, 5xx → transient snackbar, 401/403 → auth banner — so the
+     * caller doesn't have to inspect the throwable.
+     */
+    private fun notifyPushThrew(t: Throwable) {
+        bus?.let { b -> t.toUserMessage(ErrorContext.Sync)?.let(b::emit) }
     }
 
     private suspend fun recordConflictJournal(

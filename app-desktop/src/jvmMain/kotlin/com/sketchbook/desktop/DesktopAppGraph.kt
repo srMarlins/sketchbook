@@ -24,6 +24,7 @@ import com.sketchbook.cloud.metadata.MetadataStore
 import com.sketchbook.core.AppScope
 import com.sketchbook.core.ProjectUuid
 import com.sketchbook.core.SnapshotRev
+import com.sketchbook.core.UserMessageBus
 import com.sketchbook.desktop.auth.DesktopAuthSession
 import com.sketchbook.desktop.auth.PrefsIdentityStore
 import com.sketchbook.desktop.repo.LeasedLockRepository
@@ -114,6 +115,7 @@ interface DesktopAppGraph : ViewModelGraph {
     val userGraphHolder: UserGraphHolder
     val launchGate: LaunchGate
     val syncCoordinator: SyncCoordinator
+    val userMessageBus: UserMessageBus
 
     // `metroViewModelFactory` is inherited from [ViewModelGraph] — the contributed
     // `@ContributesIntoMap(AppScope::class) @ViewModelKey @Inject` ViewModel map is plumbed
@@ -300,6 +302,7 @@ interface DesktopAppGraph : ViewModelGraph {
         scope: CoroutineScope,
         metadataStore: MetadataStore,
         hostIdentity: HostIdentity,
+        userMessageBus: UserMessageBus,
     ): SyncQueue =
         SwappableSyncQueue(
             authSession = authSession,
@@ -315,6 +318,7 @@ interface DesktopAppGraph : ViewModelGraph {
             journal = journal,
             httpClient = httpClient,
             metadataStore = metadataStore,
+            userMessageBus = userMessageBus,
         )
 
     /**

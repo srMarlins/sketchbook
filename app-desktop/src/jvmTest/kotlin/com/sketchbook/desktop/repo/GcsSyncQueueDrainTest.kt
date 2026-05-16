@@ -19,6 +19,7 @@ import com.sketchbook.repo.impl.SqlProjectRepository
 import com.sketchbook.sync.SnapshotPipeline
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -71,7 +72,10 @@ class GcsSyncQueueDrainTest {
      * caller can stamp an mtime on each project's `.als` (default: well outside the quiet
      * period) and toggle [cloud.failuresRemaining] for transient-failure tests.
      */
-    private fun TestCoroutineScheduler.env(scope: CoroutineScope): Env {
+    private fun TestCoroutineScheduler.env(
+        scope: CoroutineScope,
+        bus: com.sketchbook.core.UserMessageBus? = null,
+    ): Env {
         val handle = CatalogDb.openInMemory()
         val catalog = handle.catalog
         val fts = CatalogFts(handle.driver)
@@ -108,6 +112,7 @@ class GcsSyncQueueDrainTest {
                 journal = null,
                 clock = clock,
                 ioDispatcher = testDispatcher,
+                bus = bus,
             )
         return Env(catalog, fts, projects, syncState, cloud, metadataStore, queue, clock)
     }
@@ -441,6 +446,30 @@ class GcsSyncQueueDrainTest {
             advanceUntilIdle()
 
             assertEquals(countAfterFirstPush, env.cloud.appendCount, "stopped drain must not push")
+        }
+
+    @Test
+    fun pushFailureEmitsViaUserMessageBus() =
+        runTest {
+            val bus = com.sketchbook.core.DefaultUserMessageBus()
+            val received = mutableListOf<com.sketchbook.core.UserMessage>()
+            val collectorJob =
+                backgroundScope.launch {
+                    bus.snackbars.collect { received += it }
+                }
+            val env = testScheduler.env(backgroundScope, bus = bus)
+            seedDirtyProject(env, "emit", updatedAtMs = -60_000, fileMtimeMs = -60_000)
+            env.cloud.failuresRemaining = 1
+
+            env.queue.start()
+            runCurrent()
+            advanceUntilIdle()
+
+            assertTrue(
+                received.isNotEmpty(),
+                "GcsSyncQueue should fan a UserMessage to the bus on push failure, got: $received",
+            )
+            collectorJob.cancel()
         }
 }
 
