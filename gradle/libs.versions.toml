@@ -102,7 +102,7 @@ sqldelight-jvm-driver = { module = "app.cash.sqldelight:sqlite-driver", version.
 sqldelight-jdbc-driver = { module = "app.cash.sqldelight:jdbc-driver", version.ref = "sqldelight" }
 sqldelight-fts5-dialect = { module = "app.cash.sqldelight:sqlite-3-38-dialect", version.ref = "sqldelight" }
 hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikaricp" }
-xerial-sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version = "3.51.3.0" }
+xerial-sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version = "3.53.1.0" }
 
 # Networking
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
